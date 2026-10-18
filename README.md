@@ -11,7 +11,8 @@ Engine DJ players.
 - Imports an existing rekordbox collection via `collection.xml` (including
   beatgrids, cues, loops, keys and playlists).
 - Exports a USB stick in the legacy rekordbox format (`export.pdb` + ANLZ
-  analysis files) that CDJ-2000 / NXS / NXS2 / CDJ-3000 / XDJ players read.
+  analysis files), targeting CDJ-2000 / NXS / NXS2 / CDJ-3000 / XDJ players
+  (not yet hardware-tested; see `docs/hw-test-log.md`).
 - Analyses tracks itself (BPM, beatgrid, key, waveforms) in Pioneer formats.
 - Later: the newer rekordbox "Device Library Plus" (`exportLibrary.db`) format
   and Denon Engine DJ libraries.
@@ -19,8 +20,18 @@ Engine DJ players.
 ## Status
 
 Pre-alpha. Phase 1 scaffold only: workspace, empty Tauri window, CI and
-licence gate; no library features yet. See `docs/research.md`,
-`docs/decisions.md` and `docs/phases/`.
+licence gate; no library features yet.
+
+## Documentation
+
+| Doc | What it holds |
+| --- | --- |
+| [`CLAUDE.md`](CLAUDE.md) | Brief for contributors and coding agents: stack, rules, conventions |
+| [`docs/decisions.md`](docs/decisions.md) | Architecture and product decisions, with status |
+| [`docs/phases/`](docs/phases/) | Phase 1–5 plans with task checklists |
+| [`docs/research.md`](docs/research.md) | Evidence and sources behind the decisions |
+| [`docs/research/`](docs/research/) | Raw research notes per topic |
+| [`docs/hw-test-log.md`](docs/hw-test-log.md) | Real-player test results |
 
 ## Building from source
 
