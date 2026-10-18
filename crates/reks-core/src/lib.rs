@@ -2,10 +2,12 @@
 //!
 //! See `docs/phases/` for what lands here and when.
 
+pub mod artwork;
 pub mod db;
 pub mod error;
 pub mod keys;
 
+pub use artwork::ArtworkId;
 pub use db::Library;
 pub use error::{Error, Result};
 pub use keys::{Key, Mode};

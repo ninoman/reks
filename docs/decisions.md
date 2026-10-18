@@ -42,7 +42,8 @@ Date of decisions: 2026-10-18.
 - Licence: MPL-2.0 (GPL-compatible via its secondary-licence clause).
 - Rationale: pure Rust, excellent MP3/FLAC/WAV/AIFF/ALAC/Vorbis with gapless,
   AAC-LC good; same decoder for preview, analysis and export probes (R§6).
-  Features enabled: `mp3`, `aac`, `alac`, `isomp4`, `aiff`, `flac`, `wav`.
+  Features enabled: `mp3`, `aac`, `alac`, `isomp4`, `aiff`, `flac`, `wav`,
+  plus `pcm` (the PCM codec inside WAV/AIFF); default features off.
 - Rejected: FFmpeg (`ffmpeg-next`): heavy multi-platform bundling,
   inconsistent crate licence metadata; WebView `<audio>`: codec set differs
   per OS and webkit2gtk needs host GStreamer plugins.
