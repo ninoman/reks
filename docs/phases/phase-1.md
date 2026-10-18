@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (task 1 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–2 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -235,12 +235,13 @@ Response(bytes)`.
    `rust-toolchain.toml`; `deny.toml` with the licence allowlist; GitHub
    Actions: fmt, clippy, test, `cargo deny`, Vite build on macOS/Windows/Linux.
    Done when `cargo tauri dev` opens an empty window and CI is green.
-2. [ ] **Fixtures generator**: `fixtures/gen` (Rust bin) producing a 30-second
+2. [x] **Fixtures generator**: `fixtures/gen` (Rust bin) producing a 30-second
    sine+click WAV at 128 BPM and the same as MP3/FLAC/AIFF/M4A (encode with
    `hound` for WAV; for compressed formats, check in tiny pre-generated files
    produced once with ffmpeg, documented in `fixtures/README.md`); a minimal
    `fixtures/rekordbox/collection-small.xml` referencing them (3 tracks, 1
-   folder, 2 playlists, grids, hot cues, a loop, memory cues).
+   folder, 2 playlists, grids, hot cues, a loop, memory cues). See
+   [`fixtures/README.md`](../../fixtures/README.md).
 3. [ ] **Schema + migrations**: migration 0001 above, `Library::open`, FTS triggers,
    `keys.rs` with parsing/normalisation and tests for every notation.
 4. [ ] **Audio probe + tags + artwork**: `probe`, `tags` (`lofty`), artwork

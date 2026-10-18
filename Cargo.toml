@@ -9,6 +9,7 @@ members = [
   "crates/reks-export-onelibrary",
   "crates/reks-export-engine",
   "crates/reks-cli",
+  "fixtures/gen",
   "src-tauri",
 ]
 
@@ -30,6 +31,7 @@ reks-export-engine = { version = "0.1.0", path = "crates/reks-export-engine" }
 
 # Shared external dependencies (pin here, reference with `workspace = true`).
 anyhow = "1"
+hound = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
