@@ -1,0 +1,17 @@
+# Normalise line endings to LF on every platform so Prettier, rustfmt and
+# golden-file comparisons behave the same on Windows CI as on macOS/Linux.
+* text=auto eol=lf
+
+# Binary fixtures and icons.
+*.png binary
+*.ico binary
+*.icns binary
+*.wav binary
+*.mp3 binary
+*.flac binary
+*.aiff binary
+*.m4a binary
+*.pdb binary
+*.DAT binary
+*.EXT binary
+*.2EX binary
