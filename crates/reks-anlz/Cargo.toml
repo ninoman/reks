@@ -1,0 +1,12 @@
+[package]
+name = "reks-anlz"
+description = "reks ANLZ: Pioneer ANLZ model plus writer/reader helpers (Phase 2/3)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

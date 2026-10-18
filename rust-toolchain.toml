@@ -1,0 +1,4 @@
+# Pinned stable toolchain (CLAUDE.md "Coding conventions"). Bump deliberately.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]

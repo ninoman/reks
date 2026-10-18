@@ -1,0 +1,12 @@
+[package]
+name = "reks-export-onelibrary"
+description = "reks OneLibrary (exportLibrary.db) export (Phase 4)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
