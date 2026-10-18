@@ -1,6 +1,14 @@
 //! reks library model: SQLite schema and migrations, scan/import, tags, artwork, playlists, rekordbox XML, services
 //!
-//! Scaffold only (Phase 1 task 1). See `docs/phases/` for what lands here.
+//! See `docs/phases/` for what lands here and when.
+
+pub mod db;
+pub mod error;
+pub mod keys;
+
+pub use db::Library;
+pub use error::{Error, Result};
+pub use keys::{Key, Mode};
 
 /// Crate version, from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

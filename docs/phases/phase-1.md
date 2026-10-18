@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (tasks 1–2 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–3 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -150,8 +150,15 @@ Design notes
   3 decimals and ANLZ stores ms integers; we keep sub-ms precision from analysis
   (Phase 3) and round only on export.
 - `key` is canonical (`keys.rs`: parse Camelot `8A`, Open Key `1m`, classical
-  `Am`/`A minor`/`F#m`/`Gb`; expose conversions). rekordbox `Tonality` arrives
-  as whatever the user's rekordbox preference emitted; we normalise.
+  `Am`/`A minor`/`F#m`/`Gb`; expose conversions). One spelling per key, following
+  the Camelot wheel labels (`Abm`, `Dbm`, `F#m`, `Db`, `F#`; table in
+  [`keys.rs`](../../crates/reks-core/src/keys.rs)). rekordbox `Tonality` arrives
+  as whatever the user's rekordbox preference emitted; we normalise. The exact
+  strings rekordbox emits are UNVERIFIED until task 7 checks a real export.
+- The two PRAGMAs above are per-connection settings, so `Library::open` sets
+  them (plus `synchronous=NORMAL`, `busy_timeout`); migration 0001
+  ([`0001_init.sql`](../../crates/reks-core/migrations/0001_init.sql)) holds the
+  rest. Its FTS update trigger fires only when an indexed column changes.
 - Waveform/analysis caches are *not* in the library DB; they go in
   `app_cache_dir/analysis/<track_id>/...` (Phase 3) so the DB stays small and
   portable.
@@ -242,7 +249,7 @@ Response(bytes)`.
    `fixtures/rekordbox/collection-small.xml` referencing them (3 tracks, 1
    folder, 2 playlists, grids, hot cues, a loop, memory cues). See
    [`fixtures/README.md`](../../fixtures/README.md).
-3. [ ] **Schema + migrations**: migration 0001 above, `Library::open`, FTS triggers,
+3. [x] **Schema + migrations**: migration 0001 above, `Library::open`, FTS triggers,
    `keys.rs` with parsing/normalisation and tests for every notation.
 4. [ ] **Audio probe + tags + artwork**: `probe`, `tags` (`lofty`), artwork
    extraction and de-dup into cache, unit tests on the fixtures.
