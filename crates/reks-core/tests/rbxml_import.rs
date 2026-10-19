@@ -518,6 +518,11 @@ fn prefix_remap_relinks_tracks_stored_as_missing() {
     let before = env.import(&c, ImportOptions::default());
     assert_eq!((before.added, before.missing), (3, 3));
     assert_eq!(before.unmatched.len(), 3);
+    // The suggested remap source is the XML's music folder.
+    assert_eq!(
+        before.missing_root.as_deref().map(Path::new),
+        Some(Path::new(XML_PREFIX))
+    );
     let missing: i64 = env
         .db()
         .query_row("SELECT sum(missing) FROM track", [], |r| r.get(0))
@@ -529,6 +534,7 @@ fn prefix_remap_relinks_tracks_stored_as_missing() {
     assert_eq!(after.matched_by_location, 3);
     assert_eq!((after.added, after.missing), (0, 0));
     assert!(after.unmatched.is_empty());
+    assert_eq!(after.missing_root, None);
     assert_eq!(env.count("track"), 3);
     assert_eq!((1..=3).map(|i| env.track_id(i)).collect::<Vec<_>>(), ids);
     let (path, missing, kind, size): (String, i64, String, i64) = env

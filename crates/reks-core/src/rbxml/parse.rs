@@ -26,6 +26,15 @@ pub fn parse(reader: impl BufRead) -> crate::Result<Collection> {
     Ok(p.document()?)
 }
 
+/// [`parse`] the file at `path`.
+pub fn parse_file(path: &std::path::Path) -> crate::Result<Collection> {
+    let f = std::fs::File::open(path).map_err(|source| crate::Error::Io {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    parse(std::io::BufReader::new(f))
+}
+
 enum Ev {
     /// A start tag; `true` if it has content (`<X>`), `false` if self-closing (`<X/>`).
     Open(BytesStart<'static>, bool),

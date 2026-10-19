@@ -19,7 +19,7 @@ use std::time::Instant;
 
 use rusqlite::types::Value;
 use rusqlite::{named_params, params, Transaction};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 
 use super::colour::colour_name;
@@ -36,7 +36,7 @@ const SOURCE: &str = "rekordbox";
 
 /// Replace a path prefix in every `Location` (the music folder moved since
 /// rekordbox exported the XML). Compared component-wise.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct PrefixRemap {
     pub from: PathBuf,
     /// Made absolute against the current directory if relative.
@@ -138,6 +138,10 @@ pub struct ImportReport {
     pub playlist_entries: usize,
     /// Playlist entries whose track has no library row.
     pub playlist_entries_skipped: usize,
+    /// Deepest folder containing every file not found, if that is deeper than
+    /// a filesystem root: the `from` to suggest for a [`PrefixRemap`] when the
+    /// music folder has moved.
+    pub missing_root: Option<String>,
     pub elapsed_ms: u64,
 }
 
@@ -190,6 +194,7 @@ pub fn import(
     tx.commit()?;
     drop(conn);
 
+    imp.report.missing_root = missing_root(&imp.report.unmatched);
     imp.report.elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     tracing::info!(
         total = imp.report.total,
@@ -202,6 +207,26 @@ pub fn import(
         "rekordbox XML imported"
     );
     Ok(imp.report)
+}
+
+/// Deepest common folder of the `FileNotFound` paths; `None` if there are
+/// none or they only share a root (`/`, `C:\\`), which is too broad to remap.
+fn missing_root(unmatched: &[Unmatched]) -> Option<String> {
+    let mut paths = unmatched.iter().filter_map(|u| match &u.reason {
+        UnmatchedReason::FileNotFound { path } => Some(Path::new(path)),
+        _ => None,
+    });
+    let mut common: PathBuf = paths.next()?.parent()?.to_path_buf();
+    for p in paths {
+        while !p.starts_with(&common) {
+            common = common.parent()?.to_path_buf();
+        }
+    }
+    let named = common
+        .components()
+        .filter(|c| matches!(c, std::path::Component::Normal(_)))
+        .count();
+    (named > 0).then(|| common.to_string_lossy().into_owned())
 }
 
 struct Import<'a> {
@@ -1095,6 +1120,53 @@ fn is_date(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn not_found(paths: &[&str]) -> Vec<Unmatched> {
+        paths
+            .iter()
+            .enumerate()
+            .map(|(i, p)| Unmatched {
+                track_id: i as u32,
+                name: None,
+                artist: None,
+                location: None,
+                reason: UnmatchedReason::FileNotFound {
+                    path: Path::new(p).to_string_lossy().into_owned(),
+                },
+            })
+            .collect()
+    }
+
+    #[test]
+    fn missing_root_is_the_deepest_common_folder() {
+        let root = |paths: &[&str]| missing_root(&not_found(paths)).map(PathBuf::from);
+        assert_eq!(root(&[]), None);
+        assert_eq!(root(&["/m/a/x.mp3"]), Some(PathBuf::from("/m/a")));
+        assert_eq!(
+            root(&["/m/a/x.mp3", "/m/a/b/y.mp3", "/m/a/c/z.mp3"]),
+            Some(PathBuf::from("/m/a"))
+        );
+        // Sibling names that share a string prefix are not a common folder.
+        assert_eq!(
+            root(&["/m/ab/x.mp3", "/m/ac/y.mp3"]),
+            Some(PathBuf::from("/m"))
+        );
+        // Only the filesystem root in common: too broad to suggest.
+        assert_eq!(root(&["/a/x.mp3", "/b/y.mp3"]), None);
+        // Other reasons don't count.
+        let mut u = not_found(&["/m/a/x.mp3"]);
+        u.push(Unmatched {
+            track_id: 9,
+            name: None,
+            artist: None,
+            location: None,
+            reason: UnmatchedReason::NotAFile,
+        });
+        assert_eq!(
+            missing_root(&u).map(PathBuf::from),
+            Some(PathBuf::from("/m/a"))
+        );
+    }
 
     #[test]
     fn ratings_round_to_stars() {
