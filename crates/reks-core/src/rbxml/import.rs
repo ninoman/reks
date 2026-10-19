@@ -485,7 +485,9 @@ impl Import<'_> {
         let path = location_to_path(url).map_err(|e| UnmatchedReason::InvalidLocation {
             message: e.to_string(),
         })?;
-        let path = apply_remap(&self.remap, &path);
+        // Re-collecting the components gives native separators, so a
+        // Windows Location (`C:/Music/x.mp3`) matches the scan's `C:\Music\x.mp3`.
+        let path: PathBuf = apply_remap(&self.remap, &path).components().collect();
         let Some(nfc) = path.to_str() else {
             return Err(UnmatchedReason::InvalidLocation {
                 message: "remapped path is not valid UTF-8".into(),
@@ -1171,9 +1173,10 @@ mod tests {
             from: "/Music/old".into(),
             to: "/Volumes/new".into(),
         }]);
+        // `to` is made absolute: on Windows "/Volumes/new" gains a drive.
         assert_eq!(
             apply_remap(&remap, Path::new("/Music/old/a b.mp3")),
-            Path::new("/Volumes/new/a b.mp3")
+            std::path::absolute("/Volumes/new").unwrap().join("a b.mp3")
         );
         assert_eq!(
             apply_remap(&remap, Path::new("/Music/older/a.mp3")),

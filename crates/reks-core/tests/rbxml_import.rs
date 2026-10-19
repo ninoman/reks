@@ -430,7 +430,8 @@ fn unmatched_tracks_are_reported() {
     assert_eq!(reasons.len(), 5, "{reasons:?}");
     assert!(matches!(
         reasons[0],
-        (10, UnmatchedReason::FileNotFound { path }) if path == "/nowhere/reks/missing track.mp3"
+        (10, UnmatchedReason::FileNotFound { path })
+            if Path::new(path) == Path::new("/nowhere/reks/missing track.mp3")
     ));
     assert_eq!(reasons[1], (11, &UnmatchedReason::NotAFile));
     assert_eq!(reasons[2], (12, &UnmatchedReason::NoLocation));

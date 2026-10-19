@@ -248,7 +248,8 @@ Notes (task 7, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs))
   probe, tags, artwork; shared with the scan in `fileinfo.rs`) before the DB is
   locked; all track, grid, cue and playlist writes are one transaction.
 - Location → `location_to_path` → first matching `PrefixRemap` (component-wise,
-  `to` made absolute) → NFC path (NFD if only that exists). Match order: path,
+  `to` made absolute) → native separators (so Windows `C:/…` matches the
+  scan's `C:\…`) → NFC path (NFD if only that exists). Match order: path,
   then `rb_location` from an earlier import (relinks after a remap), then
   (artist, title, size), case-folded, only if exactly one row fits. A matched
   row moves to the XML path only if its own file is gone and the XML's exists.
