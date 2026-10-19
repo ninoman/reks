@@ -3069,6 +3069,7 @@ dependencies = [
  "hound",
  "lofty",
  "rubato",
+ "serde",
  "symphonia",
  "tempfile",
  "thiserror 2.0.21",
@@ -3122,12 +3123,14 @@ name = "reks-export-rb"
 version = "0.1.0"
 dependencies = [
  "reks-audio",
+ "reks-core",
  "serde",
  "serde_json",
  "sysinfo",
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
+ "unicode-normalization",
  "windows-sys 0.61.2",
 ]
 

@@ -11,10 +11,12 @@ workspace = true
 
 [dependencies]
 reks-audio = { workspace = true }
+reks-core = { workspace = true }
 serde = { workspace = true }
 sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+unicode-normalization = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true }
