@@ -5,6 +5,7 @@
 pub mod artwork;
 pub mod db;
 pub mod error;
+mod fileinfo;
 pub mod keys;
 pub mod rbxml;
 pub mod scan;

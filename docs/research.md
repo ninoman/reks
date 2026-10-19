@@ -434,7 +434,10 @@ Verified against pyrekordbox's format page (which mirrors Pioneer's XML spec):
   AverageBpm, DateModified, DateAdded (yyyy-mm-dd), BitRate, SampleRate,
   Comments, PlayCount, LastPlayed, Rating (0/51/102/153/204/255), Location
   (`file://localhost/...` URI, percent-encoded), Remixer, Tonality, Label,
-  Mix, Colour (RGB; fixed palette Rose/Red/Orange/Lemon/Green/Turquoise/Blue/Violet).
+  Mix, Colour (RGB; fixed palette Rose `0xFF007F`, Red `0xFF0000`, Orange
+  `0xFFA500`, Lemon `0xFFFF00`, Green `0x00FF00`, Turquoise `0x25FDE9`, Blue
+  `0x0000FF`, Violet `0x660099`; pyrekordbox format page, fetched 2026-10-19.
+  A real rekordbox 6.8.6 export uses exactly the Red/Green/Turquoise/Blue values).
 - `TEMPO` children: Inizio (s), Bpm, Metro ("4/4"), Battito (beat in bar
   1–4). Multiple per track for dynamic grids.
 - `POSITION_MARK` children: Name, Type (0 cue, 1 fade-in, 2 fade-out, 3
@@ -446,6 +449,12 @@ Verified against pyrekordbox's format page (which mirrors Pioneer's XML spec):
 - rekordbox 6 removed XML *export* from the File menu; 7 exposes it under
   Preferences/Advanced ("rekordbox xml" / export) and still imports XML
   (`File > Library > Import Collection in xml format` path **UNVERIFIED** for 7.2).
+
+- Real rekordbox 6.8.6 export (maintainer's library, 2026-10-19; read locally,
+  not committed): attribute order, empty vs omitted attributes, decimals,
+  `Location` encoding and streaming entries are recorded in
+  `docs/phases/phase-1.md` (task 6 notes). Memory cues there are all
+  `Type="4"` loops with `End` and no RGB; hot cues always carry RGB.
 
 Sources: https://pyrekordbox.readthedocs.io/en/latest/formats/xml.html ·
 https://pyrekordbox.readthedocs.io/en/latest/generated/pyrekordbox.rbxml.html ·
@@ -478,6 +487,7 @@ hardware run, and the result recorded in `docs/decisions.md` or
 10. `libkeyfinder` accuracy figures; `stratum-dsp` quality; Mixxx downbeat support in 2.6/2.7.
 11. rekordbox 7.2 XML import menu path.
 12. rekordbox XML output details: attribute order, omitted vs empty
-    attributes, `Location` percent-encoding set, decimal precision of
-    positions, acceptance of `&apos;`/`&#10;` on import (added 2026-10-19,
-    Phase 1 task 6; see `docs/phases/phase-1.md` task 6 notes).
+    attributes, `Location` percent-encoding set and decimal precision were
+    resolved against a real 6.8.6 export on 2026-10-19 (Phase 1 task 7). Still
+    open: whether rekordbox imports `&#10;` and our stricter `Location`
+    encoding, and the RGB of the pink/orange/yellow/purple track colours.

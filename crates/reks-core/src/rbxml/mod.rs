@@ -1,18 +1,26 @@
 //! rekordbox XML (`collection.xml`): model, streaming parser and writer.
 //!
 //! Format reference: `docs/research.md` §7. Model and round-trip rules:
-//! `docs/phases/phase-1.md` (task 6 notes). Import into the library is task 7.
+//! `docs/phases/phase-1.md` (task 6 notes). Import into the library:
+//! [`import()`] (task 7 notes).
 //!
 //! Every attribute we don't model is kept in an `extra` map, and a known
 //! numeric attribute whose value doesn't parse is kept there too (raw), so
 //! `parse(write(c)) == c` holds for any parsed collection.
 
+mod colour;
+mod import;
 mod location;
 mod parse;
 mod write;
 
 use std::collections::BTreeMap;
 
+pub use colour::{colour_name, colour_rgb, TRACK_COLOURS};
+pub use import::{
+    import, ImportEvent, ImportOptions, ImportReport, ImportStage, ImportWarning, PrefixRemap,
+    Unmatched, UnmatchedReason,
+};
 pub use location::{location_to_path, path_to_location};
 pub use parse::parse;
 pub use write::write;
