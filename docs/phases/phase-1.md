@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (tasks 1–6 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–7 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -230,11 +230,54 @@ Notes (task 6, [`rbxml`](../../crates/reks-core/src/rbxml/))
 - `Location`: `file://localhost/` (and `file:///`) only; percent-decoded to
   UTF-8, then NFC. `#`, `?`, `+` and stray `%` are literal. `/C:/...` becomes
   `C:/...`. `path_to_location` encodes everything except `A–Z a–z 0–9 - . _ ~ /`.
-- UNVERIFIED until checked against a real rekordbox 6/7 export (task 7):
-  rekordbox's own attribute order and which attributes it omits vs writes
-  empty; which characters it leaves unencoded in `Location`; whether it ever
-  writes more than 3 decimals for Inizio/Start/End; whether it accepts `&apos;`
-  and `&#10;` in attribute values on import.
+- Checked against a real rekordbox 6.8.6 export (3,062 tracks, 2026-10-19;
+  not committed): the `TRACK` attribute order is the spec order our writer
+  uses; `Composer`/`Grouping`/`Remixer`/`Label`/`Mix`/`Comments`/`Tonality`
+  etc. are written empty, while `Colour`, `DateModified` and `LastPlayed` are
+  omitted when unset. Inizio/Start/End always have 3 decimals, Bpm/AverageBpm 2.
+  `Tonality` is classical (`Am`, `F#m`, `Abm`, `Db`, …), all parsed by `keys.rs`.
+  `Location` leaves `( ) , + ? ! ~ # - . _ :` unencoded and encodes space,
+  `& ' [ ]` and all non-ASCII (UTF-8). rekordbox itself writes `&apos;`.
+  Streaming entries use `file://localhostsoundcloud:…` with `Kind="Unknown Format"`.
+  The root `NODE` is written `Type` before `Name`, other folders `Name` first.
+- Still UNVERIFIED: whether rekordbox *imports* `&#10;` in attribute values,
+  and the import of our `Location` encoding (stricter than rekordbox's).
+
+Notes (task 7, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs))
+- `import(c, lib, ImportOptions { remap }, progress)`: files are read (hash,
+  probe, tags, artwork; shared with the scan in `fileinfo.rs`) before the DB is
+  locked; all track, grid, cue and playlist writes are one transaction.
+- Location → `location_to_path` → first matching `PrefixRemap` (component-wise,
+  `to` made absolute) → NFC path (NFD if only that exists). Match order: path,
+  then `rb_location` from an earlier import (relinks after a remap), then
+  (artist, title, size), case-folded, only if exactly one row fits. A matched
+  row moves to the XML path only if its own file is gone and the XML's exists.
+  Two XML tracks on one row: the second is reported `DuplicateOf`.
+- Not stored, reported: no `Location`, non-file URLs (streaming), undecodable
+  Locations. Stored and reported: file not found (`missing = 1`, `file_size` =
+  XML `Size` or 0, `file_mtime` = `''`, `kind` from extension or XML `Kind`)
+  and files that exist but don't probe (XML `TotalTime`/`SampleRate`/`BitRate`).
+- Fields: XML values win; an absent or blank attribute never clears a value;
+  tags fill only what is still NULL. Rating `round(r/51)`; `Tonality` → `keys.rs`
+  (`key_source = rekordbox`, unparsable → warning, key kept); `AverageBpm` → `bpm_x100`
+  (0 = none); 0 for track/disc number and year = none; dates must be `yyyy-mm-dd`.
+- `TEMPO` → `beatgrid` (seconds × 1000, `Metro` n/d, bad `Metro` → 4/4 + warning),
+  `POSITION_MARK` → `cue` (`Num` −1 → slot NULL, 0..7 → slot, else skipped;
+  `End` → `end_ms`; RGB → `color_rgb`). Only `source = 'rekordbox'` rows are
+  replaced, and only when they differ, so re-imports keep ids.
+- Playlists: matched by name and kind within their parent (n-th same-named
+  sibling ↔ n-th existing); new ones appended. Contents are the XML entries in
+  order, then any tracks added in reks that the XML lacks. Playlists not in the
+  XML are untouched. KeyType 0 via TrackID, 1 via Location.
+- Colour: `track.color` stores the lowercase rekordbox names in PDB id order
+  (`pink red orange yellow green aqua blue purple`; table in
+  [`colour.rs`](../../crates/reks-core/src/rbxml/colour.rs)). Exact RGB match only;
+  other values → NULL + warning. Pink/orange/yellow/purple RGB are UNVERIFIED
+  against rekordbox output (R§7).
+- Timings (release build, maintainer's Mac): real 3,062-entry collection (2,646 files
+  present) 8.1 s, re-import 0.08 s; generated 3,000 tracks 2.2 s. 20 sampled
+  tracks matched the XML exactly on key, rating, BPM, colour, cues and grid.
+  Debug builds are ~15× slower (the 3,000-track test takes ~35 s there).
 
 ### Audio (`reks-audio`)
 
@@ -317,7 +360,7 @@ Response(bytes)`.
    `file://localhost/` Location form (percent-encoding rules from the XML
    spec); round-trip test on `collection-small.xml` and on a 3,000-track
    sample (generated).
-7. [ ] **rekordbox XML import**: map `XmlTrack` → `track`, `TEMPO` → `beatgrid`,
+7. [x] **rekordbox XML import**: map `XmlTrack` → `track`, `TEMPO` → `beatgrid`,
    `POSITION_MARK` → `cue` (Num −1 memory, 0..7 hot, Type 4 loop with End),
    playlists tree, options: match by Location path, fall back to
    (artist,title,size); report unmatched tracks; idempotent re-import updates

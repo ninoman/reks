@@ -19,8 +19,9 @@ Engine DJ players.
 
 ## Status
 
-Pre-alpha. Phase 1 scaffold only: workspace, empty Tauri window, CI and
-licence gate; no library features yet.
+Pre-alpha. Phase 1 in progress: the library core (SQLite schema, folder scan,
+rekordbox XML parse/write/import) works headless and is tested; no UI yet.
+Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
 
 ## Documentation
 

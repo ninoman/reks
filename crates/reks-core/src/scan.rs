@@ -11,20 +11,19 @@
 //! - Rows are never deleted; missing files keep their cues, grids and playlists.
 
 use std::collections::{BTreeSet, HashMap};
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use rusqlite::named_params;
 use serde::Serialize;
-use unicode_normalization::UnicodeNormalization;
 use walkdir::WalkDir;
 
 use crate::db::Library;
 use crate::error::Result;
-use crate::keys::Key;
+use crate::fileinfo::{
+    self, bpm_cols, content_hash, key_cols, library_path, probe_cols, FileInfo, ProbeCols,
+};
 use crate::timefmt;
 
 /// Row id in the `track` table.
@@ -33,9 +32,6 @@ pub type TrackId = i64;
 /// File extensions the scan picks up (lower case). Must match what
 /// `reks-audio` can probe.
 const AUDIO_EXTENSIONS: &[&str] = &["mp3", "m4a", "aac", "flac", "wav", "wave", "aif", "aiff"];
-
-/// Bytes hashed from each end of a file for `content_hash`.
-const HASH_EDGE: u64 = 1 << 20;
 
 /// Cooperative cancellation for a running scan. Clones share one flag.
 #[derive(Debug, Clone, Default)]
@@ -233,16 +229,6 @@ struct ExistingTrack {
     file_mtime: String,
     content_hash: Option<String>,
     missing: bool,
-}
-
-/// What a file contributes to its track row.
-struct FileInfo {
-    size: i64,
-    mtime: String,
-    hash: String,
-    probe: reks_audio::Probe,
-    tags: reks_audio::Tags,
-    artwork_id: Option<i64>,
 }
 
 impl Scan<'_> {
@@ -509,24 +495,8 @@ impl Scan<'_> {
 
     /// Size and mtime, or `None` after reporting an error.
     fn stat(&mut self, path: &str) -> Option<(i64, String)> {
-        let meta = match std::fs::metadata(path) {
-            Ok(m) => m,
-            Err(e) => {
-                self.error(path, format!("cannot read file: {e}"));
-                return None;
-            }
-        };
-        let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
-        let mtime = meta
-            .modified()
-            .map(timefmt::iso8601_utc)
-            .unwrap_or_default();
-        Some((size, mtime))
-    }
-
-    fn read_file(&mut self, path: &str, size: i64, mtime: String) -> Option<FileInfo> {
-        match content_hash(Path::new(path)) {
-            Ok(hash) => self.read_file_hashed(path, size, mtime, hash),
+        match fileinfo::stat(path) {
+            Ok(s) => Some(s),
             Err(e) => {
                 self.error(path, format!("cannot read file: {e}"));
                 None
@@ -536,6 +506,11 @@ impl Scan<'_> {
 
     /// Probe, tags and artwork, done outside the DB lock. `None` if the file
     /// is not playable audio (reported as an error, not added).
+    fn read_file(&mut self, path: &str, size: i64, mtime: String) -> Option<FileInfo> {
+        let info = fileinfo::read_file(self.lib, path, size, mtime);
+        self.checked(path, info)
+    }
+
     fn read_file_hashed(
         &mut self,
         path: &str,
@@ -543,87 +518,16 @@ impl Scan<'_> {
         mtime: String,
         hash: String,
     ) -> Option<FileInfo> {
-        let p = Path::new(path);
-        let probe = match reks_audio::probe(p) {
-            Ok(probe) => probe,
-            Err(e) => {
-                self.error(path, e.to_string());
-                return None;
-            }
-        };
-        let tags = reks_audio::tags(p).unwrap_or_else(|e| {
-            tracing::warn!(path, error = %e, "no tags read");
-            reks_audio::Tags::default()
-        });
-        let artwork_id = match reks_audio::embedded_artwork(p) {
-            Ok(Some(pic)) => self.lib.store_artwork(&pic.data).unwrap_or_else(|e| {
-                tracing::warn!(path, error = %e, "artwork not stored");
-                None
-            }),
-            Ok(None) => None,
-            Err(e) => {
-                tracing::warn!(path, error = %e, "no artwork read");
-                None
-            }
-        };
-        Some(FileInfo {
-            size,
-            mtime,
-            hash,
-            probe,
-            tags,
-            artwork_id,
-        })
+        let info = fileinfo::read_file_hashed(self.lib, path, size, mtime, hash);
+        self.checked(path, info)
     }
-}
 
-/// Probe fields as SQL values.
-struct ProbeCols {
-    kind: &'static str,
-    duration_ms: i64,
-    sample_rate: u32,
-    bit_depth: Option<u8>,
-    bit_rate_kbps: Option<u32>,
-    channels: u8,
-}
-
-fn probe_cols(p: &reks_audio::Probe) -> ProbeCols {
-    ProbeCols {
-        kind: p.kind.as_str(),
-        duration_ms: i64::try_from(p.duration_ms).unwrap_or(i64::MAX),
-        sample_rate: p.sample_rate,
-        bit_depth: p.bit_depth,
-        bit_rate_kbps: p.bit_rate_kbps,
-        channels: p.channels,
-    }
-}
-
-/// Canonical key from the tag, if it parses.
-fn key_cols(tags: &reks_audio::Tags) -> (Option<&'static str>, Option<&'static str>) {
-    match tags.key.as_deref().map(Key::parse) {
-        Some(Ok(k)) => (Some(k.canonical()), Some("tag")),
-        Some(Err(e)) => {
-            tracing::debug!(error = %e, "ignoring key tag");
-            (None, None)
-        }
-        None => (None, None),
-    }
-}
-
-fn bpm_cols(tags: &reks_audio::Tags) -> (Option<u32>, Option<&'static str>) {
-    (tags.bpm_x100, tags.bpm_x100.map(|_| "tag"))
-}
-
-/// The library form of a path: UTF-8 and NFC, as long as the NFC spelling
-/// still opens the same file (true on macOS; on other systems an NFD name is
-/// kept as it is on disk).
-fn library_path(path: &Path) -> Option<String> {
-    let s = path.to_str()?;
-    let nfc: String = s.nfc().collect();
-    if nfc != s && Path::new(&nfc).exists() {
-        Some(nfc)
-    } else {
-        Some(s.to_owned())
+    fn checked(
+        &mut self,
+        path: &str,
+        info: std::result::Result<FileInfo, String>,
+    ) -> Option<FileInfo> {
+        info.map_err(|message| self.error(path, message)).ok()
     }
 }
 
@@ -642,25 +546,4 @@ fn is_hidden(name: &std::ffi::OsStr) -> bool {
 /// `path` is `dir` or inside it (component-wise, not a bare string prefix).
 fn is_under(path: &str, dir: &str) -> bool {
     Path::new(path).starts_with(dir)
-}
-
-/// blake3 over the first and last 1 MiB plus the file size: cheap, and
-/// stable across renames and tag-free copies. Hex-encoded.
-fn content_hash(path: &Path) -> std::io::Result<String> {
-    let mut f = File::open(path)?;
-    let len = f.metadata()?.len();
-    let mut hasher = blake3::Hasher::new();
-    let mut buf = Vec::new();
-    (&mut f).take(HASH_EDGE).read_to_end(&mut buf)?;
-    hasher.update(&buf);
-    if len > HASH_EDGE {
-        buf.clear();
-        f.seek(SeekFrom::Start(
-            len.saturating_sub(HASH_EDGE).max(HASH_EDGE),
-        ))?;
-        f.take(HASH_EDGE).read_to_end(&mut buf)?;
-        hasher.update(&buf);
-    }
-    hasher.update(&len.to_le_bytes());
-    Ok(hasher.finalize().to_hex().to_string())
 }
