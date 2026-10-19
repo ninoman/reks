@@ -101,7 +101,9 @@ describe("TrackDetailPanel", () => {
     expect(await screen.findByLabelText("Title")).toHaveProperty("value", "Old Title");
     expect(libraryTrack).toHaveBeenCalledWith(7);
     expect(screen.getByText("Hot A")).toBeTruthy();
-    const positions = [...document.querySelectorAll(".cue-list .pos")].map((e) => e.textContent);
+    const positions = [...document.querySelectorAll('[data-slot="cue-pos"]')].map(
+      (e) => e.textContent,
+    );
     expect(positions).toEqual(["0:00.121", "0:01.000 – 0:08.500"]);
     expect(screen.getByText("128.00")).toBeTruthy();
     expect(screen.getByLabelText("No artwork")).toBeTruthy();

@@ -71,21 +71,24 @@ export default function App() {
   }, []);
 
   return (
-    <div className="shell">
+    <div className="flex h-full flex-col">
       <AppHeader />
-      <div className="app">
-        <aside className="sidebar">
+      <div className="flex min-h-0 flex-1">
+        <aside className="flex w-(--sidebar-w) shrink-0 flex-col border-r border-border bg-bg-subtle">
           <PlaylistTree />
         </aside>
-        <main className="main">
+        <main className="flex min-w-0 flex-1 flex-col">
           <LibraryToolbar table={table} />
           {filterBarOpen && <FilterBar />}
           {error !== null && (
-            <div className="error" role="alert">
+            <div
+              className="border-b border-border px-2.5 py-1 text-danger select-text"
+              role="alert"
+            >
               {error}
             </div>
           )}
-          <div className="table-area">
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             <TrackTable columns={visibleColumns(table)} />
             <Sheet open={infoOpen}>
               <TrackInfoPanel />

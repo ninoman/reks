@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { formatBpm, formatDuration, formatRating } from "../lib/format";
 import type { SortColumn, TrackRow } from "../lib/ipc";
 import { KeyLabel } from "./KeyLabel";
+import { Swatch } from "./ui/Swatch";
 
 export interface ColumnSpec {
   id: string;
@@ -25,11 +26,11 @@ export const COLUMNS: ColumnSpec[] = [
     sort: null,
     cell: (r) =>
       r.missing ? (
-        <span className="status missing" title="File missing">
+        <span className="font-semibold text-danger" title="File missing">
           !
         </span>
       ) : r.needsAnalysis ? (
-        <span className="status needs-analysis" title="Needs analysis (no beatgrid)">
+        <span className="text-fg-subtle" title="Needs analysis (no beatgrid)">
           ○
         </span>
       ) : null,
@@ -68,7 +69,7 @@ export const COLUMNS: ColumnSpec[] = [
     header: "Rating",
     width: 76,
     sort: "rating",
-    cell: (r) => <span className="rating">{formatRating(r.rating)}</span>,
+    cell: (r) => <span className="tracking-[-1px] text-rating">{formatRating(r.rating)}</span>,
   },
   {
     id: "color",
@@ -77,12 +78,7 @@ export const COLUMNS: ColumnSpec[] = [
     sort: "color",
     cell: (r) =>
       r.color === null ? null : (
-        <span
-          className={`swatch swatch-${r.color}`}
-          role="img"
-          title={r.color}
-          aria-label={r.color}
-        />
+        <Swatch color={r.color} role="img" title={r.color} aria-label={r.color} />
       ),
   },
   {

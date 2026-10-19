@@ -8,6 +8,13 @@ import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } fr
 import { formatDuration } from "../lib/format";
 import { fitColumns } from "../lib/overview";
 import { usePlayer } from "../store/player";
+import { PauseIcon, PlayIcon } from "./icons";
+import { focusRing } from "./ui/control";
+import { IconButton } from "./ui/IconButton";
+import { Select } from "./ui/Select";
+import { Slider } from "./ui/Slider";
+
+const time = "min-w-11 flex-none text-center font-mono text-xs text-fg-muted tabular-nums";
 
 /** Arrow-key step on the position slider. */
 const SEEK_STEP_MS = 5_000;
@@ -31,29 +38,33 @@ export function TransportBar() {
   const title = track === null ? "" : (track.title ?? "Untitled");
 
   return (
-    <section className="transport" aria-label="Player">
-      <button
-        type="button"
-        className="transport-play"
+    <section
+      className="flex h-(--transport-h) flex-none items-center gap-2.5 border-t border-border bg-bg-subtle px-3"
+      aria-label="Player"
+    >
+      <IconButton
+        size="lg"
+        shape="round"
+        variant="secondary"
         disabled={!status.loaded}
         aria-label={status.playing ? "Pause" : "Play"}
         onClick={() => void toggle()}
       >
-        {status.playing ? "❚❚" : "▶"}
-      </button>
-      <div className="transport-track" title={title}>
+        {status.playing ? <PauseIcon /> : <PlayIcon />}
+      </IconButton>
+      <div className="w-55 flex-none truncate" title={title}>
         {loading !== null ? (
-          <span className="muted">Loading…</span>
+          <span className="text-fg-muted">Loading…</span>
         ) : track === null ? (
-          <span className="muted">Double-click a track to play it</span>
+          <span className="text-fg-muted">Double-click a track to play it</span>
         ) : (
           <>
-            <span className="transport-title">{title}</span>
-            {track.artist !== null && <span className="muted"> — {track.artist}</span>}
+            <span className="font-semibold">{title}</span>
+            {track.artist !== null && <span className="text-fg-muted"> — {track.artist}</span>}
           </>
         )}
       </div>
-      <span className="transport-time">{formatDuration(status.positionMs)}</span>
+      <span className={time}>{formatDuration(status.positionMs)}</span>
       <OverviewSlider
         columns={overview}
         positionMs={status.positionMs}
@@ -61,19 +72,19 @@ export function TransportBar() {
         disabled={!status.loaded}
         onSeek={(ms) => void seek(ms)}
       />
-      <span className="transport-time">-{formatDuration(remaining)}</span>
-      <input
-        className="transport-volume"
-        type="range"
+      <span className={time}>-{formatDuration(remaining)}</span>
+      <Slider
+        className="w-22.5 flex-none"
         min={0}
         max={1}
         step={0.01}
         value={status.volume}
         aria-label="Volume"
-        onChange={(e) => void setVolume(Number(e.target.value))}
+        onValueChange={(v) => void setVolume(v)}
       />
-      <select
-        className="transport-device"
+      <Select
+        size="sm"
+        className="max-w-40 flex-none"
         aria-label="Output device"
         value={status.device ?? ""}
         onFocus={() => void refreshDevices()}
@@ -85,9 +96,9 @@ export function TransportBar() {
             {d}
           </option>
         ))}
-      </select>
+      </Select>
       {(error !== null || status.deviceLost) && (
-        <span className="transport-error" role="alert">
+        <span className="flex-none text-danger" role="alert">
           {status.deviceLost ? "Audio device disconnected" : error}
         </span>
       )}
@@ -142,8 +153,9 @@ function OverviewSlider({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
     const style = getComputedStyle(canvas);
-    const accent = style.getPropertyValue("--accent").trim() || "#2f6fde";
-    const muted = style.getPropertyValue("--muted").trim() || "#6e6e73";
+    // Colours from tokens.css (the canvas can't use classes).
+    const playedColour = style.getPropertyValue("--color-waveform-played").trim();
+    const restColour = style.getPropertyValue("--color-waveform-rest").trim();
     const mid = height / 2;
     const playhead = Math.round(played * width);
     if (columns !== null) {
@@ -151,15 +163,15 @@ function OverviewSlider({
       for (let x = 0; x < width; x++) {
         const top = mid - (peaks[2 * x + 1] ?? 0) * mid;
         const bottom = mid - (peaks[2 * x] ?? 0) * mid;
-        ctx.fillStyle = x < playhead ? accent : muted;
+        ctx.fillStyle = x < playhead ? playedColour : restColour;
         ctx.fillRect(x, top, 1, Math.max(1, bottom - top));
       }
     } else {
-      ctx.fillStyle = muted;
+      ctx.fillStyle = restColour;
       ctx.fillRect(0, mid, width, 1);
     }
     if (durationMs > 0) {
-      ctx.fillStyle = style.getPropertyValue("--fg").trim() || "#1d1d1f";
+      ctx.fillStyle = style.getPropertyValue("--color-waveform-playhead").trim();
       ctx.fillRect(Math.min(playhead, width - 1), 0, 1, height);
     }
   }, [columns, played, width, durationMs]);
@@ -183,7 +195,7 @@ function OverviewSlider({
   return (
     <canvas
       ref={canvasRef}
-      className="transport-overview"
+      className={`h-9 min-w-0 flex-1 cursor-pointer aria-disabled:cursor-default ${focusRing}`}
       role="slider"
       tabIndex={disabled ? -1 : 0}
       aria-label="Position"

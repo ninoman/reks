@@ -7,6 +7,7 @@
 import {
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useRef,
@@ -40,27 +41,35 @@ import {
   TEXT_FIELDS,
   toForm,
 } from "./trackDetailForm";
+import { Button } from "./ui/Button";
+import { Field } from "./ui/Field";
+import { Input } from "./ui/Input";
+import { ScrollArea } from "./ui/ScrollArea";
+import { Select } from "./ui/Select";
+import { SheetHeader } from "./ui/Sheet";
+import { Swatch } from "./ui/Swatch";
+import { Textarea } from "./ui/Textarea";
 
-const NO_COLOURS: string[] = [];
-
-function PanelHead() {
+/** The panel: a fixed head, then everything else scrolls. */
+function Panel({ children }: { children: ReactNode }) {
   const toggleInfo = usePanels((s) => s.toggleInfo);
   return (
-    <div className="panel-head">
-      <h2>Track info</h2>
-      <span className="spacer" />
-      <button
-        type="button"
-        className="panel-close"
-        aria-label="Close track info"
-        title="Close"
-        onClick={toggleInfo}
-      >
-        ×
-      </button>
-    </div>
+    <aside className="flex min-h-0 flex-1 flex-col" aria-label="Track details">
+      <div className="px-3 pt-2">
+        <SheetHeader title="Track info" closeLabel="Close track info" onClose={toggleInfo} />
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="flex flex-col gap-2.5 px-3 pt-1 pb-3">{children}</div>
+      </ScrollArea>
+    </aside>
   );
 }
+
+const muted = "m-0 text-fg-muted";
+const sectionTitle = "mt-0 mb-1 text-sm font-semibold";
+const facts = "m-0 grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 [&_dt]:text-fg-muted [&_dd]:m-0";
+
+const NO_COLOURS: string[] = [];
 
 /** The info panel for the primary selected track, or a hint when none is. */
 export function TrackInfoPanel() {
@@ -70,10 +79,9 @@ export function TrackInfoPanel() {
   });
   if (primaryId === null) {
     return (
-      <aside className="side-panel detail-panel" aria-label="Track details">
-        <PanelHead />
-        <p className="muted">Select a track to see and edit its details.</p>
-      </aside>
+      <Panel>
+        <p className={muted}>Select a track to see and edit its details.</p>
+      </Panel>
     );
   }
   return <TrackDetailPanel key={primaryId} trackId={primaryId} />;
@@ -117,16 +125,15 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
 
   if (detail === null || initial === null || form === null) {
     return (
-      <aside className="side-panel detail-panel" aria-label="Track details">
-        <PanelHead />
+      <Panel>
         {error !== null ? (
-          <div className="error" role="alert">
+          <div className="text-danger select-text" role="alert">
             {error}
           </div>
         ) : (
-          <p className="muted">Loading…</p>
+          <p className={muted}>Loading…</p>
         )}
-      </aside>
+      </Panel>
     );
   }
 
@@ -175,10 +182,9 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
   }
 
   return (
-    <aside className="side-panel detail-panel" aria-label="Track details">
-      <PanelHead />
+    <Panel>
       <ArtworkView id={t.artwork?.id ?? null} mime={t.artwork?.mime ?? ""} />
-      <div className="detail-facts">
+      <div className="text-xs text-fg-muted">
         <div>
           {t.kind.toUpperCase()}
           {t.bitRateKbps !== null && ` · ${t.bitRateKbps} kbps`}
@@ -186,53 +192,48 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
           {t.durationMs !== null && ` · ${formatDuration(t.durationMs)}`}
           {t.bpmX100 !== null && ` · ${formatBpm(t.bpmX100)} BPM`}
         </div>
-        <div className="path" title={t.path}>
+        <div className="truncate font-mono select-text" title={t.path}>
           {t.missing ? "Missing: " : ""}
           {t.path}
         </div>
       </div>
 
-      <form className="detail-form" onSubmit={(e) => void save(e)} onKeyDown={onKeyDown}>
+      <form className="flex flex-col gap-1.5" onSubmit={(e) => void save(e)} onKeyDown={onKeyDown}>
         {TEXT_FIELDS.map(({ id, label, multiline }) =>
           multiline ? (
-            <label key={id}>
-              {label}
-              <textarea rows={3} value={form[id]} onChange={(e) => set(id, e.target.value)} />
-            </label>
+            <Field key={id} label={label}>
+              <Textarea rows={3} value={form[id]} onChange={(e) => set(id, e.target.value)} />
+            </Field>
           ) : (
-            <label key={id}>
-              {label}
-              <input type="text" value={form[id]} onChange={(e) => set(id, e.target.value)} />
-            </label>
+            <Field key={id} label={label}>
+              <Input type="text" value={form[id]} onChange={(e) => set(id, e.target.value)} />
+            </Field>
           ),
         )}
-        <div className="detail-row">
+        <div className="flex gap-1.5 [&>*]:flex-1">
           {NUMBER_FIELDS.map(({ id, label }) => (
-            <label key={id}>
-              {label}
-              <input
+            <Field key={id} label={label}>
+              <Input
                 type="number"
                 step={1}
                 value={form[id]}
                 onChange={(e) => set(id, e.target.value, e.target.validity.badInput)}
               />
-            </label>
+            </Field>
           ))}
         </div>
-        <div className="detail-row">
-          <label>
-            Rating
-            <select value={form.rating} onChange={(e) => set("rating", e.target.value)}>
+        <div className="flex gap-1.5 [&>*]:flex-1">
+          <Field label="Rating">
+            <Select value={form.rating} onChange={(e) => set("rating", e.target.value)}>
               {[0, 1, 2, 3, 4, 5].map((r) => (
                 <option key={r} value={String(r)}>
                   {r === 0 ? "None" : "★".repeat(r)}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
-            Colour
-            <select value={form.color} onChange={(e) => set("color", e.target.value)}>
+            </Select>
+          </Field>
+          <Field label="Colour">
+            <Select value={form.color} onChange={(e) => set("color", e.target.value)}>
               <option value="">None</option>
               {/* Keep a stored colour selectable even before facets load. */}
               {(colours.includes(form.color) || form.color === ""
@@ -243,40 +244,41 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
                   {c}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
-            Key
-            <input
+            </Select>
+          </Field>
+          <Field label="Key">
+            <Input
               type="text"
               value={form.key}
               placeholder="Am, 8A, 1m"
               onChange={(e) => set("key", e.target.value)}
             />
-          </label>
+          </Field>
         </div>
         {error !== null && (
-          <div className="error" role="alert">
+          <div className="text-danger select-text" role="alert">
             {error}
           </div>
         )}
-        {badInput.size > 0 && <div className="error">Numbers only in Track #, Disc #, Year.</div>}
-        <div className="detail-actions">
-          <button type="button" onClick={revert} disabled={!dirty || saving}>
+        {badInput.size > 0 && (
+          <div className="text-danger">Numbers only in Track #, Disc #, Year.</div>
+        )}
+        <div className="mt-1 flex justify-end gap-1.5">
+          <Button onClick={revert} disabled={!dirty || saving}>
             Revert
-          </button>
-          <button type="submit" disabled={!dirty || saving || badInput.size > 0}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={!dirty || saving || badInput.size > 0}>
             {saving ? "Saving…" : "Save"}
-          </button>
+          </Button>
         </div>
       </form>
 
-      <section className="detail-section">
-        <h3>Beatgrid</h3>
+      <section>
+        <h3 className={sectionTitle}>Beatgrid</h3>
         {detail.beatgrid === null ? (
-          <p className="muted">No beatgrid (needs analysis)</p>
+          <p className={muted}>No beatgrid (needs analysis)</p>
         ) : (
-          <dl>
+          <dl className={facts}>
             <dt>BPM</dt>
             <dd>{formatBpmRange(detail.beatgrid.bpmMinX100, detail.beatgrid.bpmMaxX100)}</dd>
             <dt>First beat</dt>
@@ -287,12 +289,15 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
         )}
       </section>
 
-      <section className="detail-section">
-        <h3>Cues</h3>
+      <section>
+        <h3 className={sectionTitle}>Cues</h3>
         {detail.cues.length === 0 ? (
-          <p className="muted">No cues</p>
+          <p className={muted}>No cues</p>
         ) : (
-          <table className="cue-list">
+          <table
+            className="w-full border-collapse [&_td]:py-0.5 [&_td]:pr-1 [&_td]:align-top"
+            aria-label="Cues"
+          >
             <tbody>
               {detail.cues.map((c) => (
                 <CueRow key={c.id} cue={c} />
@@ -301,7 +306,7 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
           </table>
         )}
       </section>
-    </aside>
+    </Panel>
   );
 }
 
@@ -311,12 +316,12 @@ function CueRow({ cue }: { cue: Cue }) {
     <tr>
       <td>
         {cue.colorRgb !== null && (
-          <span className="cue-swatch" style={{ background: formatRgb(cue.colorRgb) }} />
+          <Swatch size="xs" className="mr-1" style={{ background: formatRgb(cue.colorRgb) }} />
         )}
         {what}
         {cue.endMs !== null && " loop"}
       </td>
-      <td className="pos">
+      <td className="whitespace-nowrap tabular-nums" data-slot="cue-pos">
         {formatPosition(cue.startMs)}
         {cue.endMs !== null && ` – ${formatPosition(cue.endMs)}`}
       </td>
@@ -352,10 +357,14 @@ function ArtworkView({ id, mime }: { id: number | null; mime: string }) {
   // A stale picture from the previous id is not shown while the new one loads.
   const url = loaded !== null && loaded.id === id ? loaded.url : null;
   return url === null ? (
-    <div className="artwork placeholder" role="img" aria-label="No artwork">
+    <div
+      className="flex aspect-square w-full items-center justify-center rounded-xs border border-border bg-bg text-[64px] text-fg-muted"
+      role="img"
+      aria-label="No artwork"
+    >
       ♪
     </div>
   ) : (
-    <img className="artwork" src={url} alt="Artwork" />
+    <img className="aspect-square w-full rounded-xs object-cover" src={url} alt="Artwork" />
   );
 }

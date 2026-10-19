@@ -34,6 +34,27 @@ import {
   ContextMenuTrigger,
 } from "./ui/ContextMenu";
 
+/*
+ * Row and cell classes are constant strings; per-row state is data
+ * attributes, so a scroll re-render builds no class names.
+ */
+const CELL =
+  "flex-none overflow-hidden text-ellipsis whitespace-nowrap px-1.5 h-(--row-h) leading-(--row-h)";
+const CELL_RIGHT = `${CELL} text-right`;
+const HEAD_CELL = `${CELL} data-[sort]:cursor-pointer data-[sort]:hover:text-fg`;
+const HEAD_CELL_RIGHT = `${HEAD_CELL} text-right`;
+const ROW = [
+  "absolute inset-x-0 top-0 flex cursor-default items-center",
+  "data-[odd]:bg-row-alt data-[selected]:bg-selected data-[missing]:text-fg-muted",
+  // The track in the player: accent bar and text, apart from the selection
+  // background and still visible when both apply.
+  "data-[loaded]:font-medium data-[loaded]:text-accent data-[loaded]:data-[selected]:text-fg",
+  "data-[loaded]:before:absolute data-[loaded]:before:inset-y-0 data-[loaded]:before:left-0 data-[loaded]:before:w-[3px] data-[loaded]:before:bg-accent",
+  "group-focus:data-[focused]:shadow-[inset_0_0_0_1px_var(--color-focus-ring)]",
+  "data-[drop=before]:shadow-[inset_0_2px_0_var(--color-accent)]",
+  "data-[drop=after]:shadow-[inset_0_-2px_0_var(--color-accent)]",
+].join(" ");
+
 export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const total = useLibrary((s) => s.total);
   const pages = useLibrary((s) => s.pages);
@@ -193,7 +214,7 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
       <ContextMenuTrigger asChild disabled={view === null}>
         <div
           ref={scrollRef}
-          className="track-table"
+          className="group relative flex-1 overflow-auto outline-none [contain:strict]"
           role="grid"
           aria-rowcount={total}
           aria-multiselectable
@@ -204,12 +225,17 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
             if (view === null) e.preventDefault();
           }}
         >
-          <div className="tt-header" role="row" style={{ width }}>
+          <div
+            className="sticky top-0 z-(--z-sticky) flex border-b border-border bg-bg-subtle text-xs font-semibold text-fg-muted"
+            role="row"
+            style={{ width }}
+          >
             {columns.map((c) => (
               <div
                 key={c.id}
                 role="columnheader"
-                className={`tt-cell${c.align === "right" ? " right" : ""}${c.sort ? " sortable" : ""}`}
+                className={c.align === "right" ? HEAD_CELL_RIGHT : HEAD_CELL}
+                data-sort={c.sort !== null || undefined}
                 style={{ width: c.width }}
                 aria-sort={
                   c.sort !== null && sort.column === c.sort
@@ -229,7 +255,7 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
               </div>
             ))}
           </div>
-          <div className="tt-body" style={{ height: virtualizer.getTotalSize(), width }}>
+          <div className="relative" style={{ height: virtualizer.getTotalSize(), width }}>
             {items.map((item) => {
               const row = rowAt(pages, item.index);
               const selected = selection.selected.has(item.index);
@@ -241,15 +267,16 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
                   role="row"
                   aria-rowindex={item.index + 1}
                   aria-selected={selected}
-                  className={`tt-row${item.index % 2 === 1 ? " odd" : ""}${selected ? " selected" : ""}${focused ? " focused" : ""}${
-                    loaded ? " loaded" : ""
-                  }${row === undefined ? " loading" : ""}${row?.missing ? " missing" : ""}${
-                    dropAt?.index === item.index
-                      ? dropAt.after
-                        ? " drop-after"
-                        : " drop-before"
-                      : ""
-                  }`}
+                  className={ROW}
+                  data-odd={item.index % 2 === 1 || undefined}
+                  data-selected={selected || undefined}
+                  data-focused={focused || undefined}
+                  data-loaded={loaded || undefined}
+                  data-loading={row === undefined || undefined}
+                  data-missing={row?.missing || undefined}
+                  data-drop={
+                    dropAt?.index === item.index ? (dropAt.after ? "after" : "before") : undefined
+                  }
                   style={{ transform: `translateY(${item.start}px)`, height: ROW_HEIGHT }}
                   draggable={row !== undefined}
                   onMouseDown={(e) => onRowMouseDown(e, item.index)}
@@ -272,7 +299,7 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
                     <div
                       key={c.id}
                       role="gridcell"
-                      className={`tt-cell${c.align === "right" ? " right" : ""}`}
+                      className={c.align === "right" ? CELL_RIGHT : CELL}
                       style={{ width: c.width }}
                     >
                       {row === undefined ? null : c.cell(row)}
