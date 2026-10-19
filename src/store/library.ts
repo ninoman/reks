@@ -123,6 +123,12 @@ export interface LibraryState extends QueryInputs {
   /** Loads every page overlapping rows `start..=end` that isn't loaded yet. */
   ensureRange(start: number, end: number): void;
   select(action: SelectionAction): void;
+  /**
+   * Swaps in a changed row (after an edit) wherever it is loaded, without
+   * re-querying: selection and scroll stay put, and a row that no longer
+   * matches the filter or sort stays where it is until the next refresh.
+   */
+  replaceRow(row: TrackRow): void;
   loadFacets(): Promise<void>;
 }
 
@@ -204,6 +210,21 @@ export const useLibrary = create<LibraryState>()((set, get) => {
     },
     select(action) {
       set((s) => ({ selection: selectionReducer(s.selection, action) }));
+    },
+    replaceRow(row) {
+      set((s) => {
+        let changed = false;
+        const pages = new Map(s.pages);
+        for (const [p, rows] of pages) {
+          const i = rows.findIndex((r) => r.id === row.id);
+          if (i === -1) continue;
+          const copy = [...rows];
+          copy[i] = row;
+          pages.set(p, copy);
+          changed = true;
+        }
+        return changed ? { pages } : {};
+      });
     },
     async loadFacets() {
       try {

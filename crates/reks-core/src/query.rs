@@ -172,7 +172,8 @@ pub struct PlaylistNode {
     pub depth: u32,
 }
 
-const ROW_COLUMNS: &str = "t.id, t.title, t.artist, t.album, t.genre, t.label, t.remixer, \
+pub(crate) const ROW_COLUMNS: &str =
+    "t.id, t.title, t.artist, t.album, t.genre, t.label, t.remixer, \
      t.comment, t.key, t.bpm_x100, t.rating, t.color, t.duration_ms, t.year, t.kind, \
      t.bit_rate_kbps, t.date_added, t.play_count, t.missing, \
      NOT EXISTS (SELECT 1 FROM beatgrid b WHERE b.track_id = t.id)";
@@ -236,7 +237,7 @@ impl Library {
     }
 }
 
-fn track_row(r: &Row<'_>) -> rusqlite::Result<TrackRow> {
+pub(crate) fn track_row(r: &Row<'_>) -> rusqlite::Result<TrackRow> {
     Ok(TrackRow {
         id: r.get(0)?,
         title: r.get(1)?,
