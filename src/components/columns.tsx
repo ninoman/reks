@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { formatBpm, formatDuration, formatRating } from "../lib/format";
 import type { SortColumn, TrackRow } from "../lib/ipc";
+import { KeyLabel } from "./KeyLabel";
 
 export interface ColumnSpec {
   id: string;
@@ -55,7 +56,13 @@ export const COLUMNS: ColumnSpec[] = [
     align: "right",
     cell: (r) => formatBpm(r.bpmX100),
   },
-  { id: "key", header: "Key", width: 56, sort: "key", cell: (r) => text(r.key) },
+  {
+    id: "key",
+    header: "Key",
+    width: 56,
+    sort: "key",
+    cell: (r) => (r.key === null ? "" : <KeyLabel value={r.key} />),
+  },
   {
     id: "rating",
     header: "Rating",

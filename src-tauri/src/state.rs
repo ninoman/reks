@@ -35,13 +35,19 @@ impl AppState {
     pub fn open(data_dir: &Path, cache_dir: &Path) -> reks_core::Result<Self> {
         let library = Library::open(&data_dir.join(DB_FILE), cache_dir)?;
         tracing::info!(db = %data_dir.join(DB_FILE).display(), "library opened");
+        // A chosen cache dir that cannot be created (an unplugged drive):
+        // run on the default one rather than not at all.
+        match library.use_stored_cache_dir() {
+            Ok(dir) => tracing::info!(cache = %dir.display(), "cache dir"),
+            Err(err) => tracing::warn!(%err, "stored cache dir unusable, using the default"),
+        }
+        let settings = library.settings()?;
         Ok(Self {
             library: Arc::new(library),
             scan_cancel: Mutex::new(None),
             import_cancel: Mutex::new(None),
-            // Output device setting: Phase 1 task 13. The system default until then.
             player: Mutex::new(PlayerSlot {
-                player: Player::new(None),
+                player: Player::new(settings.audio_device).with_volume(settings.ui.volume),
                 track: None,
                 generation: 0,
             }),

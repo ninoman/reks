@@ -73,6 +73,11 @@ select {
 .app-header .spacer {
   flex: 1;
 }
+.app-header .header-icon {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 6px;
+}
 
 /* Left sidebar: the playlist tree */
 .sidebar {
@@ -491,6 +496,157 @@ select {
 }
 .wizard-group {
   margin-top: 8px;
+}
+.dialog.settings {
+  width: min(560px, calc(100vw - 32px));
+  padding: 20px 20px 16px;
+}
+.settings h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.settings .dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.settings-group h4 {
+  margin: 0 0 8px 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.settings-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-alt);
+}
+.settings-item {
+  padding: 14px 16px;
+}
+.settings-item + .settings-item {
+  border-top: 1px solid var(--border);
+}
+.settings-item h5,
+.settings .item-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.settings .hint {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.settings .path {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.settings-field {
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 0;
+}
+.settings-field select {
+  min-width: 220px;
+}
+.settings button {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+.settings button:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+.settings button.quiet {
+  padding: 2px 6px;
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+.settings button.quiet:hover:not(:disabled) {
+  border-color: transparent;
+  color: #d0342c;
+}
+.settings button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.settings-roots {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+.settings-roots li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 6px 6px 10px;
+}
+.settings-roots li + li {
+  border-top: 1px solid var(--border);
+}
+.settings-roots .scanned {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.settings-current {
+  margin: 10px 0 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+.settings-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.settings-radios label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-radios input {
+  margin: 0;
+}
+.settings-radios .example {
+  color: var(--muted);
+  font-size: 12px;
+}
+.settings-confirm {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+.settings-confirm p {
+  margin: 0;
+  line-height: 1.4;
+}
+.settings .dialog-buttons {
+  margin-top: 20px;
 }
 .wizard-group table {
   width: 100%;

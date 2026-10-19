@@ -8,8 +8,9 @@ use reks_core::rbxml::{
     self, ImportEvent, ImportOptions, ImportPreview, ImportReport, PrefixRemap,
 };
 use reks_core::{
-    ArtworkId, CancelToken, Facets, Library, PlaylistOp, PlaylistOutcome, PlaylistTree, ScanEvent,
-    ScanReport, TrackDetail, TrackId, TrackPage, TrackPatch, TrackQuery,
+    ArtworkId, CancelToken, Facets, Library, LibraryRoot, PlaylistOp, PlaylistOutcome,
+    PlaylistTree, ScanEvent, ScanReport, Settings, SettingsPatch, TrackDetail, TrackId, TrackPage,
+    TrackPatch, TrackQuery,
 };
 use reks_mix::{PlayerState, Reopened};
 use serde::Serialize;
@@ -93,7 +94,8 @@ pub async fn artwork_get(state: State<'_, AppState>, id: ArtworkId) -> CmdResult
         .map(Response::new)
 }
 
-/// Scans `roots` into the library, streaming progress to `on_event`.
+/// Scans `roots` (none: every library folder) into the library, streaming
+/// progress to `on_event`.
 #[tauri::command]
 pub async fn scan_start(
     state: State<'_, AppState>,
@@ -112,6 +114,14 @@ pub async fn scan_start(
         *running = Some(cancel.clone());
     }
     let result = blocking(&state, move |lib| {
+        let roots = if roots.is_empty() {
+            lib.library_roots()?
+                .into_iter()
+                .map(|r| PathBuf::from(r.path))
+                .collect()
+        } else {
+            roots
+        };
         reks_core::scan(&roots, lib, &cancel, |e| {
             if let Err(err) = on_event.send(e.clone()) {
                 tracing::warn!(%err, "scan progress channel closed");
@@ -202,6 +212,49 @@ pub fn rbxml_import_cancel(state: State<'_, AppState>) {
     }
 }
 
+#[tauri::command]
+pub async fn settings_get(state: State<'_, AppState>) -> CmdResult<Settings> {
+    blocking(&state, Library::settings).await
+}
+
+/// Applies a partial update; returns the new settings.
+#[tauri::command]
+pub async fn settings_set(state: State<'_, AppState>, patch: SettingsPatch) -> CmdResult<Settings> {
+    blocking(&state, move |lib| lib.update_settings(patch)).await
+}
+
+#[tauri::command]
+pub async fn library_roots(state: State<'_, AppState>) -> CmdResult<Vec<LibraryRoot>> {
+    blocking(&state, Library::library_roots).await
+}
+
+#[tauri::command]
+pub async fn library_root_add(state: State<'_, AppState>, path: PathBuf) -> CmdResult<LibraryRoot> {
+    blocking(&state, move |lib| lib.add_library_root(&path)).await
+}
+
+/// Stops watching a folder; its tracks stay.
+#[tauri::command]
+pub async fn library_root_remove(state: State<'_, AppState>, id: i64) -> CmdResult<()> {
+    blocking(&state, move |lib| lib.remove_library_root(id)).await
+}
+
+/// Moves the cache to `path`. Refused while a scan or import writes to it.
+#[tauri::command]
+pub async fn cache_dir_move(state: State<'_, AppState>, path: PathBuf) -> CmdResult<Settings> {
+    let busy = |m: &std::sync::Mutex<Option<CancelToken>>| m.lock().map_or(true, |g| g.is_some());
+    if busy(&state.scan_cancel) || busy(&state.import_cancel) {
+        return Err(CmdError(
+            "wait for the scan or import to finish before moving the cache".into(),
+        ));
+    }
+    blocking(&state, move |lib| {
+        lib.move_cache_dir(&path)?;
+        lib.settings()
+    })
+    .await
+}
+
 /// The player state plus the track on it.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -280,9 +333,16 @@ pub async fn player_set_device(
     device: Option<String>,
 ) -> CmdResult<PlayerStatus> {
     let (reopened, track) = with_player(&state, |slot| {
-        let r = slot.player.set_device(device)?;
+        let r = slot.player.set_device(device.clone())?;
         Ok((r, slot.track))
     })?;
+    blocking(&state, move |lib| {
+        lib.update_settings(SettingsPatch {
+            audio_device: Some(device),
+            ..SettingsPatch::default()
+        })
+    })
+    .await?;
     match (reopened, track) {
         (
             Reopened::Reload {

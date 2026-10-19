@@ -64,6 +64,14 @@ pub enum Error {
     #[error("index {index} out of range (length {len})")]
     IndexOutOfRange { index: u32, len: u32 },
 
+    /// The cache dir cannot move to `path`; nothing was changed.
+    #[error("cannot move the cache to {path}: {reason}")]
+    CacheDirRefused { path: PathBuf, reason: &'static str },
+
+    /// No library root with this id.
+    #[error("library folder {0} not found")]
+    LibraryRootNotFound(i64),
+
     /// A thread panicked while holding the connection lock.
     #[error("library connection lock poisoned")]
     LockPoisoned,

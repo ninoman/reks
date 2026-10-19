@@ -135,6 +135,15 @@ impl Key {
         format!("{n}{letter}")
     }
 
+    /// The key as shown in `notation`.
+    pub fn label(self, notation: KeyNotation) -> String {
+        match notation {
+            KeyNotation::Classical => self.canonical().to_owned(),
+            KeyNotation::Camelot => self.camelot(),
+            KeyNotation::OpenKey => self.open_key(),
+        }
+    }
+
     fn from_camelot(n: u8, mode: Mode) -> Self {
         let base = match mode {
             Mode::Major => CAMELOT_1B,
@@ -142,6 +151,20 @@ impl Key {
         };
         Self::new(base + 7 * (n - 1), mode)
     }
+}
+
+/// How keys are shown in the UI (a display preference; storage is always
+/// canonical).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum KeyNotation {
+    /// Canonical classical names, `Am`; rekordbox's default "Classic".
+    #[default]
+    Classical,
+    /// `8A`; rekordbox's "Alphanumeric".
+    Camelot,
+    /// `1m`.
+    OpenKey,
 }
 
 /// Camelot (`8A`) or Open Key (`1m`): 1–12 then one letter.
@@ -252,6 +275,16 @@ mod tests {
 
     fn k(s: &str) -> Key {
         Key::parse(s).unwrap()
+    }
+
+    #[test]
+    fn labels_follow_notation() {
+        for (camelot, open, canonical) in WHEEL {
+            let key = k(camelot);
+            assert_eq!(key.label(KeyNotation::Classical), canonical);
+            assert_eq!(key.label(KeyNotation::Camelot), camelot);
+            assert_eq!(key.label(KeyNotation::OpenKey), open);
+        }
     }
 
     #[test]

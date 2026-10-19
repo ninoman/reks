@@ -1,4 +1,4 @@
-/** Small line icons (16 px, `currentColor`) for toolbar buttons. */
+/** Small line icons (16 px unless sized, `currentColor`) for toolbar buttons. */
 
 export function InfoIcon() {
   return (
@@ -20,6 +20,21 @@ export function FilterIcon() {
         strokeWidth="1.3"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+/** Settings cog: eight teeth round a ring, drawn at `size` px. */
+export function GearIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden="true">
+      <g stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => (
+          <line key={a} x1="8" y1="1.6" x2="8" y2="3.4" transform={`rotate(${a} 8 8)`} />
+        ))}
+      </g>
+      <circle cx="8" cy="8" r="4.3" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="8" cy="8" r="1.7" fill="none" stroke="currentColor" strokeWidth="1.3" />
     </svg>
   );
 }

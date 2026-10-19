@@ -83,6 +83,16 @@ impl Player {
         }
     }
 
+    /// Starts at `volume` (0..=1) instead of full; sent when the output opens.
+    pub fn with_volume(mut self, volume: f32) -> Self {
+        self.volume = if volume.is_finite() {
+            volume.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        self
+    }
+
     /// The output's sample rate; opens the output if needed.
     pub fn sample_rate(&mut self) -> Result<u32> {
         Ok(self.engine()?.info().sample_rate)
@@ -183,8 +193,6 @@ impl Player {
         self.engine = None;
         self.device = device;
         let rate = self.sample_rate()?;
-        let volume = self.volume;
-        self.send(Control::Volume { value: volume })?;
         let Some(l) = &self.loaded else {
             return Ok(Reopened::Empty);
         };
@@ -214,9 +222,17 @@ impl Player {
         match &mut self.engine {
             Some(e) => Ok(e),
             slot @ None => {
-                let e = Engine::start(EngineConfig {
-                    device: self.device.clone(),
-                })?;
+                let start = |device| Engine::start(EngineConfig { device });
+                let mut e = match start(self.device.clone()) {
+                    // A chosen device that is not connected: play on the
+                    // system default, keep the choice for when it is back.
+                    Err(Error::NoDevice(Some(name))) => {
+                        tracing::warn!(device = %name, "output device not found, using the default");
+                        start(None)?
+                    }
+                    r => r?,
+                };
+                e.send(Control::Volume { value: self.volume })?;
                 // A new graph counts seeks from zero.
                 self.seeks = 0;
                 self.last_seek = None;

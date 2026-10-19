@@ -83,6 +83,7 @@ export interface TrackPage {
 export interface KeyInfo {
   key: Key;
   camelot: string;
+  openKey: string;
 }
 
 export interface PlaylistNode {
@@ -424,4 +425,67 @@ export function playerState(): Promise<PlayerStatus> {
  */
 export function overviewWaveform(id: number): Promise<ArrayBuffer> {
   return invoke("overview_waveform", { id });
+}
+
+/** `settings_*`, `library_root*`, `cache_dir_move` (reks-core `settings.rs`). */
+export type KeyNotation = "classical" | "camelot" | "openKey";
+
+/** Library window state kept across launches. */
+export interface UiState {
+  /** Hidden column ids; `null` until changed (UI defaults). */
+  hiddenColumns: string[] | null;
+  filterBarOpen: boolean;
+  filtersEnabled: boolean;
+  infoOpen: boolean;
+  /** 0..1. */
+  volume: number;
+}
+
+export interface Settings {
+  /** `null`: the system default. */
+  audioDevice: string | null;
+  keyNotation: KeyNotation;
+  /** The cache dir in use. */
+  cacheDir: string;
+  ui: UiState;
+}
+
+/** Absent fields stay; `audioDevice: null` goes back to the system default. */
+export interface SettingsPatch {
+  audioDevice?: string | null;
+  keyNotation?: KeyNotation;
+  ui?: UiState;
+}
+
+export interface LibraryRoot {
+  id: number;
+  path: string;
+  /** UTC ISO-8601. */
+  lastScan: string | null;
+}
+
+export function settingsGet(): Promise<Settings> {
+  return invoke("settings_get");
+}
+
+export function settingsSet(patch: SettingsPatch): Promise<Settings> {
+  return invoke("settings_set", { patch });
+}
+
+export function libraryRoots(): Promise<LibraryRoot[]> {
+  return invoke("library_roots");
+}
+
+export function libraryRootAdd(path: string): Promise<LibraryRoot> {
+  return invoke("library_root_add", { path });
+}
+
+/** Stops watching the folder; its tracks stay. */
+export function libraryRootRemove(id: number): Promise<void> {
+  return invoke("library_root_remove", { id });
+}
+
+/** Moves the cache (artwork, waveforms) to `path` and returns the new settings. */
+export function cacheDirMove(path: string): Promise<Settings> {
+  return invoke("cache_dir_move", { path });
 }

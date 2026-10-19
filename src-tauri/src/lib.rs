@@ -57,6 +57,12 @@ pub fn run() {
             commands::player_volume,
             commands::player_state,
             commands::overview_waveform,
+            commands::settings_get,
+            commands::settings_set,
+            commands::library_roots,
+            commands::library_root_add,
+            commands::library_root_remove,
+            commands::cache_dir_move,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

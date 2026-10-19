@@ -52,12 +52,14 @@ const ALL_FIELDS: EditField[] = [
   "key",
 ];
 
-export function toForm(t: Track): EditForm {
+/** `keyLabel` shows the key in the chosen notation; any notation is accepted back. */
+export function toForm(t: Track, keyLabel: (key: string) => string = (k) => k): EditForm {
   const form = {} as EditForm;
   for (const f of ALL_FIELDS) {
     const v = t[f];
     form[f] = v === null ? "" : String(v);
   }
+  if (t.key !== null) form.key = keyLabel(t.key);
   return form;
 }
 

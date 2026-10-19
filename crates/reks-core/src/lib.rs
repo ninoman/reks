@@ -12,13 +12,14 @@ pub mod preview;
 pub mod query;
 pub mod rbxml;
 pub mod scan;
+pub mod settings;
 pub mod timefmt;
 pub mod track;
 
 pub use artwork::ArtworkId;
 pub use db::Library;
 pub use error::{Error, Result};
-pub use keys::{Key, Mode};
+pub use keys::{Key, KeyNotation, Mode};
 pub use playlist::{DuplicateMode, PlaylistOp, PlaylistOutcome, PlaylistTree};
 pub use preview::PreviewAudio;
 pub use query::{
@@ -26,6 +27,7 @@ pub use query::{
     TrackRow,
 };
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
+pub use settings::{LibraryRoot, Settings, SettingsPatch, UiState};
 pub use track::{ArtworkInfo, BeatgridSummary, Cue, Track, TrackDetail, TrackPatch};
 
 /// Crate version, from Cargo metadata.

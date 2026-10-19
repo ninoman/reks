@@ -162,6 +162,7 @@ pub struct Facets {
 pub struct KeyInfo {
     pub key: Key,
     pub camelot: String,
+    pub open_key: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -250,6 +251,7 @@ impl Library {
                 .map(|key| KeyInfo {
                     key,
                     camelot: key.camelot(),
+                    open_key: key.open_key(),
                 })
                 .collect(),
             colours: TRACK_COLOURS.iter().map(|(n, _)| (*n).to_owned()).collect(),

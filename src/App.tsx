@@ -3,7 +3,8 @@
  * playlist tree on the left; toolbar, filter bar and track table in the
  * middle, with the track info panel sliding over the table's right edge when
  * its toolbar button is on; the transport bar along the bottom. Space plays
- * and pauses unless a text field has focus.
+ * and pauses unless a text field has focus; Cmd/Ctrl+, opens Settings.
+ * Settings load first and restore the window state (columns, panels, volume).
  */
 import { useEffect } from "react";
 import { AppHeader } from "./components/AppHeader";
@@ -13,6 +14,7 @@ import { ImportWizard } from "./components/ImportWizard";
 import { LibraryToolbar } from "./components/LibraryToolbar";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
+import { SettingsDialog } from "./components/SettingsDialog";
 import { SlideOver } from "./components/SlideOver";
 import { TrackInfoPanel } from "./components/TrackDetailPanel";
 import { TrackTable } from "./components/TrackTable";
@@ -22,6 +24,7 @@ import { useLibrary } from "./store/library";
 import { usePanels } from "./store/panels";
 import { usePlayer } from "./store/player";
 import { usePlaylists } from "./store/playlists";
+import { startUiSync, useSettings } from "./store/settings";
 
 export default function App() {
   const table = useTrackTable();
@@ -30,15 +33,35 @@ export default function App() {
   const infoOpen = usePanels((s) => s.infoOpen);
 
   useEffect(() => {
+    // Defaults first so the table does not flash every column; settings may replace them.
+    useLibrary
+      .getState()
+      .setColumnVisibility(Object.fromEntries(DEFAULT_HIDDEN.map((id) => [id, false])));
+    let stopSync: (() => void) | null = null;
+    let live = true;
+    void useSettings
+      .getState()
+      .load(DEFAULT_HIDDEN)
+      .then(() => {
+        if (live) stopSync = startUiSync();
+      });
     const s = useLibrary.getState();
-    s.setColumnVisibility(Object.fromEntries(DEFAULT_HIDDEN.map((id) => [id, false])));
     s.refresh();
     void s.loadFacets();
     void usePlaylists.getState().load();
+    return () => {
+      live = false;
+      stopSync?.();
+    };
   }, []);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "," && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        useSettings.getState().setDialogOpen(true);
+        return;
+      }
       if (e.code !== "Space" || e.repeat || isEditable(e.target)) return;
       e.preventDefault();
       void usePlayer.getState().toggle();
@@ -74,6 +97,7 @@ export default function App() {
       <DuplicateDialog />
       <DeleteDialog />
       <ImportWizard />
+      <SettingsDialog />
     </div>
   );
 }

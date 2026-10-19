@@ -5,7 +5,7 @@
 //! thread.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, RwLock};
 use std::time::Duration;
 
 use rusqlite::Connection;
@@ -27,7 +27,8 @@ const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 #[derive(Debug)]
 pub struct Library {
     conn: Mutex<Connection>,
-    cache_dir: PathBuf,
+    /// Changed only by `use_cache_dir` / `move_cache_dir` (settings.rs).
+    pub(crate) cache_dir: RwLock<PathBuf>,
 }
 
 impl Library {
@@ -70,13 +71,16 @@ impl Library {
         }
         Ok(Self {
             conn: Mutex::new(conn),
-            cache_dir: cache_dir.to_path_buf(),
+            cache_dir: RwLock::new(cache_dir.to_path_buf()),
         })
     }
 
     /// Directory for derived files (artwork, analysis caches).
-    pub fn cache_dir(&self) -> &Path {
-        &self.cache_dir
+    pub fn cache_dir(&self) -> PathBuf {
+        match self.cache_dir.read() {
+            Ok(dir) => dir.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
 
     /// Locks the connection. Crate-internal: service modules build on this.
@@ -85,7 +89,7 @@ impl Library {
     }
 }
 
-fn create_dir(path: &Path) -> Result<()> {
+pub(crate) fn create_dir(path: &Path) -> Result<()> {
     std::fs::create_dir_all(path).map_err(|source| Error::Io {
         path: path.to_path_buf(),
         source,

@@ -6,7 +6,25 @@ vi.mock("../lib/ipc", () => ({ libraryFacets: vi.fn(), libraryQuery: vi.fn() }))
 
 const ipc = await import("../lib/ipc");
 const { noFilters, useLibrary } = await import("../store/library");
+const { useSettings } = await import("../store/settings");
 const { FilterBar, FiltersSwitch } = await import("./FilterBar");
+
+function notation(keyNotation: "classical" | "camelot" | "openKey") {
+  useSettings.setState({
+    settings: {
+      audioDevice: null,
+      keyNotation,
+      cacheDir: "/cache",
+      ui: {
+        hiddenColumns: null,
+        filterBarOpen: true,
+        filtersEnabled: true,
+        infoOpen: false,
+        volume: 1,
+      },
+    },
+  });
+}
 
 beforeEach(() => {
   vi.mocked(ipc.libraryQuery).mockResolvedValue({ rows: [], total: 0 });
@@ -17,8 +35,8 @@ beforeEach(() => {
     facets: {
       genres: ["House", "Techno"],
       keys: [
-        { key: "Am", camelot: "8A" },
-        { key: "C", camelot: "8B" },
+        { key: "Am", camelot: "8A", openKey: "1m" },
+        { key: "C", camelot: "8B", openKey: "1d" },
       ],
       colours: ["red"],
     } as never,
@@ -36,6 +54,7 @@ describe("FilterBar", () => {
   });
 
   it("picks keys from a popover and sums them up on its button", () => {
+    notation("camelot");
     render(<FilterBar />);
     const button = screen.getByRole("button", { name: "Key" });
     expect(button.textContent).toBe("Any ▾");
@@ -45,6 +64,20 @@ describe("FilterBar", () => {
     expect(button.textContent).toBe("8A ▾");
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("group", { name: "Keys" })).toBeNull();
+  });
+
+  it("labels keys in the notation chosen in Settings", () => {
+    useLibrary.setState((s) => ({ filters: { ...s.filters, keys: ["Am"] } }));
+    notation("openKey");
+    render(<FilterBar />);
+    const button = screen.getByRole("button", { name: "Key" });
+    expect(button.textContent).toBe("1m ▾");
+    fireEvent.click(button);
+    expect(screen.getByRole("button", { name: "1d" }).getAttribute("aria-pressed")).toBe("false");
+    cleanup();
+    notation("classical");
+    render(<FilterBar />);
+    expect(screen.getByRole("button", { name: "Key" }).textContent).toBe("Am ▾");
   });
 
   it("the switch turns filters off and on, keeping their values", () => {

@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (tasks 1–10 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–13 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -315,8 +315,8 @@ Notes (task 8, [`query.rs`](../../crates/reks-core/src/query.rs), [`src/`](../..
 - UI: Zustand store (`src/store/library.ts`) builds the `TrackQuery`; a generation
   counter drops stale pages. Selection is a pure reducer over row indices of the current
   result (click, cmd/ctrl toggle, shift range, arrows/Page/Home/End with shift-extend,
-  cmd/ctrl+A, Esc) and is cleared when the query changes. Column visibility is not
-  persisted yet (task 13). Vitest covers query building, the selection reducer and the
+  cmd/ctrl+A, Esc) and is cleared when the query changes. Column visibility is saved
+  with the other window state (Settings, task 13). Vitest covers query building, the selection reducer and the
   search debounce; a `tauri-driver` smoke test is skipped (optional).
 - 10k manual check: `reks synth-xml 10000 synth.xml` writes a synthetic collection (files
   missing) to import in the app. The fixture XML imports with its files missing until
@@ -376,7 +376,7 @@ Notes (task 10, [`playlist.rs`](../../crates/reks-core/src/playlist.rs), [`Playl
   none → added. `allow` adds all; `skip` adds only the rest. The UI always sends `ask` and on
   `duplicates` shows "N of M tracks are already in <playlist>" with Add anyway (`allow`),
   Skip duplicates (`skip`) and Cancel (nothing sent); Skip is left out when all M are
-  duplicates. A remembered choice is task 13.
+  duplicates. A remembered choice was left out of task 13; add it if the question gets in the way.
 - XML re-import: matching (task 7) is unchanged and works on edited trees, since sort orders stay
   dense. XML entry order wins; entries added in reks follow it, counted per track, so a second
   copy added in reks survives. A renamed or moved playlist no longer matches its XML node, so a
@@ -394,7 +394,7 @@ Notes (task 10, [`playlist.rs`](../../crates/reks-core/src/playlist.rs), [`Playl
   keep their width, and shows the primary selected track. Scan and import
   live in an app header across the whole window (the home for future library-wide actions),
   with their status line under it; the list toolbar holds only list controls. Both start as bar shown, filters on, info
-  hidden; saving that is task 13.
+  hidden; Settings (task 13) saves and restores them.
 - UI: the tree is a Zustand store over a pure reducer (Playlists root open, expanded folders,
   selection, rename). Selecting a playlist sets the `playlist` filter and sorts by
   `playlistPosition`; a folder shows everything below it; Collection clears it. Clear (filters)
@@ -436,6 +436,30 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
   (8 ms parse, 9 ms preview), so the file is parsed again on every preview with no cache.
   The import of the real collection was 8.1 s (task 7). The wizard run on it is still to
   be checked by hand (manual checklist).
+
+### Settings (`reks-core::settings`, task 13)
+
+- One `setting` row per key, value JSON: `audio.device` (name, absent = system default),
+  `display.key_notation` (`classical` default, `camelot`, `openKey`), `storage.cache_dir`
+  (absent = `app_cache_dir`), `ui.state` (hidden columns, filter bar shown, filters on, track
+  info open, volume). A missing or unreadable value is its default (unreadable ones are logged).
+  `settings_get` / `settings_set(patch)`; `player_set_device` stores the device itself.
+- Key notation is display only: the Key column, the track info key field and the key picker
+  (still laid out as the Camelot wheel) use `Facets.keys` labels; storage stays canonical and
+  edits accept any notation.
+- Library folders are `library_root` rows. "Scan folder…" adds the folder, then scans it;
+  Settings adds and removes folders and rescans all (`scan_start` with no roots). Removing a
+  folder keeps its tracks as they are.
+- Moving the cache (`cache_dir_move`): the target must not exist or be empty, and must not be
+  the cache, inside it or contain it. Files are copied and counted, the setting stored, then
+  the old folder deleted; a failed copy is removed and nothing changes. Refused while a scan or
+  import runs. At start-up a stored cache dir that cannot be created falls back to the default
+  (logged). Artwork paths are relative to the cache, so the database is untouched.
+- Window state is saved 300 ms after the last change (`startUiSync`) and restored before the
+  table shows; window size and position are task 14.
+- UI: Settings dialog (header gear button, Cmd/Ctrl+,), one view in titled groups: Folders
+  (library folders, cache folder), Playback (output device), Display (key notation). A stored device that is not connected stays listed as such.
+- Covered by reks-core and Vitest tests; not yet checked by hand in `cargo tauri dev`.
 
 ### Audio (`reks-audio`)
 
@@ -504,8 +528,9 @@ Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5)
   2026-10-19: a hard cut was too rough, fade-out/fade-in too slow). Until the
   audio thread takes a seek, `player_state` reports the target, so the
   playhead never snaps back.
-  Loading stops the deck at the start. Volume is a 0..1 knob with a squared taper.
-- Output: the system default until Settings (task 13) stores a device, at
+  Loading stops the deck at the start. Volume is a 0..1 knob with a squared taper; it starts at the saved one (`Player::with_volume`).
+- Output: the device stored in Settings (`audio.device`; the system default when none, or
+  when the stored one is not connected, which is logged and kept for next time), at
   44.1 kHz when the device offers it (`reks_mix::PREFERRED_RATE`), else its
   default rate. L/R go
   to the first two channels, mono outputs get (L + R) / 2. A lost device
@@ -526,7 +551,8 @@ Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5)
 `rbxml_preview(path, remap)`, `rbxml_import_start` (progress via Channel), `rbxml_import_cancel`, `rbxml_export`,
 `player_load(id, play)`, `player_play/pause/seek/volume/devices/set_device`,
 `player_state` (polled every 100 ms while playing), `artwork_get(artwork_id) -> Response(bytes)`, `overview_waveform(id) ->
-Response(bytes)`.
+Response(bytes)`, `settings_get`, `settings_set(patch)`, `library_roots`, `library_root_add(path)`,
+`library_root_remove(id)`, `cache_dir_move(path)`.
 
 ## Tasks (each sized for one coding session)
 
@@ -574,7 +600,7 @@ Response(bytes)`.
     progress, show report (matched, unmatched, missing files) and a "map
     folder" option when the XML paths point at a moved music folder (prefix
     replacement).
-13. [ ] **Settings**: library roots, cache dir, audio device, rekordbox key
+13. [x] **Settings**: library roots, cache dir, audio device, rekordbox key
     notation preference; stored in `setting`.
 14. [ ] **Polish + release pipeline**: app icon, window state persistence, unsigned
     dev builds via `tauri-action` on tags (signing is Phase 2+ concern; see

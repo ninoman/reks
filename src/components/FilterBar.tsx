@@ -9,6 +9,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { activeFilterCount, type FilterState, useLibrary } from "../store/library";
+import { useKeyLabel } from "../store/settings";
 
 function triState(v: boolean | null): string {
   return v === null ? "" : String(v);
@@ -50,7 +51,10 @@ function Field({ label, set, children }: { label: string; set: boolean; children
   );
 }
 
-/** Key picker: a button showing the chosen keys and a Camelot grid popover. */
+/**
+ * Key picker: a button showing the chosen keys and a popover laid out as the
+ * Camelot wheel, labelled in the notation chosen in Settings.
+ */
 function KeyPicker() {
   const keys = useLibrary((s) => s.facets?.keys);
   const chosen = useLibrary((s) => s.filters.keys);
@@ -74,12 +78,12 @@ function KeyPicker() {
     };
   }, [open]);
 
-  const camelot = (key: string) => keys?.find((k) => k.key === key)?.camelot ?? key;
+  const label = useKeyLabel();
   const summary =
     chosen.length === 0
       ? "Any"
       : chosen.length <= 2
-        ? chosen.map(camelot).join(", ")
+        ? chosen.map(label).join(", ")
         : `${chosen.length} keys`;
   const toggle = (key: string) =>
     setFilters({
@@ -106,10 +110,10 @@ function KeyPicker() {
               type="button"
               className={chosen.includes(k.key) ? "on" : ""}
               aria-pressed={chosen.includes(k.key)}
-              title={k.key}
+              title={`${k.key} · ${k.camelot} · ${k.openKey}`}
               onClick={() => toggle(k.key)}
             >
-              {k.camelot}
+              {label(k.key)}
             </button>
           ))}
         </fieldset>

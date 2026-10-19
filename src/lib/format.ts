@@ -1,5 +1,7 @@
 /** Display helpers for table cells. Presentation only. */
 
+import type { Key, KeyInfo, KeyNotation } from "./ipc";
+
 export function formatBpm(bpmX100: number | null): string {
   return bpmX100 === null ? "" : (bpmX100 / 100).toFixed(2);
 }
@@ -35,4 +37,12 @@ export function formatBpmRange(minX100: number, maxX100: number): string {
 /** 0xRRGGBB → `#rrggbb`. */
 export function formatRgb(rgb: number): string {
   return `#${rgb.toString(16).padStart(6, "0")}`;
+}
+
+/** A canonical key in the chosen notation, looked up in the facets' labels. */
+export function keyLabel(key: Key, notation: KeyNotation, keys: KeyInfo[] | undefined): string {
+  if (notation === "classical") return key;
+  const k = keys?.find((i) => i.key === key);
+  if (k === undefined) return key;
+  return notation === "camelot" ? k.camelot : k.openKey;
 }

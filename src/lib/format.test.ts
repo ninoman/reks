@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBpmRange, formatPosition, formatRgb, hotCueLabel } from "./format";
+import { formatBpmRange, formatPosition, formatRgb, hotCueLabel, keyLabel } from "./format";
 
 describe("detail formatters", () => {
   it("formats positions as m:ss.mmm", () => {
@@ -22,5 +22,17 @@ describe("detail formatters", () => {
   it("formats RGB", () => {
     expect(formatRgb(0xff0000)).toBe("#ff0000");
     expect(formatRgb(0x25)).toBe("#000025");
+  });
+});
+
+describe("keyLabel", () => {
+  const keys = [{ key: "Am", camelot: "8A", openKey: "1m" }];
+  it("looks the key up in the chosen notation", () => {
+    expect(keyLabel("Am", "classical", keys)).toBe("Am");
+    expect(keyLabel("Am", "camelot", keys)).toBe("8A");
+    expect(keyLabel("Am", "openKey", keys)).toBe("1m");
+  });
+  it("falls back to the canonical name before facets load", () => {
+    expect(keyLabel("Am", "camelot", undefined)).toBe("Am");
   });
 });

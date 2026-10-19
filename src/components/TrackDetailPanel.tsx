@@ -4,7 +4,14 @@
  * `TrackDetailPanel` is mounted with `key={trackId}` so switching tracks
  * starts from a fresh form (unsaved edits are dropped).
  */
-import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   formatBpm,
@@ -24,6 +31,7 @@ import {
 import { rowAt, useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
 import { primaryIndex } from "../store/selection";
+import { useKeyLabel } from "../store/settings";
 import {
   buildPatch,
   type EditField,
@@ -83,8 +91,13 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Latest label without reloading the form when the notation changes.
+  const label = useKeyLabel();
+  const keyLabel = useRef(label);
+  keyLabel.current = label;
+
   const load = useCallback((d: TrackDetail) => {
-    const f = toForm(d.track);
+    const f = toForm(d.track, keyLabel.current);
     setDetail(d);
     setInitial(f);
     setForm(f);
