@@ -23,6 +23,13 @@ use rekordcrate::pdb::string::DeviceSQLString;
 use rekordcrate::pdb::{Header, Page, PageType, Row, Table};
 use serde::{Deserialize, Serialize};
 
+pub mod read;
+
+pub use read::{
+    read_play_history, DatesStatus, HistoryReadOptions, HistorySource, PdbEntry, PdbSession,
+    PdbTrack, PlayHistory,
+};
+
 /// Folder under the app data dir that holds stick backups.
 pub const BACKUPS_DIR: &str = "stick-backups";
 /// Folder name used when the OS gave no volume serial.
@@ -573,33 +580,51 @@ fn history_playlist_fields(raw: &[u8]) -> Result<(u32, String), String> {
 }
 
 /// Calls `f` for every row of the history tables (11/12) in an `export.pdb`.
-/// Walks each table's page chain itself, bounded by the file size and with a
-/// cycle check, because a player- or tool-damaged file must not hang us.
 fn walk_history(bytes: &[u8], mut f: impl FnMut(&Row)) -> Result<(), String> {
+    walk_pages(
+        bytes,
+        &[PageType::HistoryPlaylists, PageType::HistoryEntries],
+        |page, _| {
+            for group in &page.row_groups {
+                for row in group.present_rows() {
+                    f(&row);
+                }
+            }
+        },
+    )
+}
+
+/// Calls `f` with every page (parsed, and its raw bytes) of the tables of
+/// `types` in an `export.pdb`, in header and page-chain order. Walks each
+/// table's page chain itself, bounded by the file size and with a cycle
+/// check, because a player- or tool-damaged file must not hang us.
+fn walk_pages(
+    bytes: &[u8],
+    types: &[PageType],
+    mut f: impl FnMut(&Page, &[u8]),
+) -> Result<(), String> {
     let mut reader = Cursor::new(bytes);
     let header = Header::read(&mut reader).map_err(|e| format!("PDB header: {e}"))?;
     if !(512..=65_536).contains(&header.page_size) {
         return Err(format!("implausible page size {}", header.page_size));
     }
     for table in &header.tables {
-        if matches!(
-            table.page_type,
-            PageType::HistoryPlaylists | PageType::HistoryEntries
-        ) {
-            walk_rows(&mut reader, &header, table, &mut f)?;
+        if types.contains(&table.page_type) {
+            walk_table(&mut reader, &header, table, &mut f)?;
         }
     }
     Ok(())
 }
 
-fn walk_rows(
+fn walk_table(
     reader: &mut Cursor<&[u8]>,
     header: &Header,
     table: &Table,
-    f: &mut impl FnMut(&Row),
+    f: &mut impl FnMut(&Page, &[u8]),
 ) -> Result<(), String> {
     let page_size = u64::from(header.page_size);
-    let len = reader.get_ref().len() as u64;
+    let bytes: &[u8] = reader.get_ref();
+    let len = bytes.len() as u64;
     let mut seen = HashSet::new();
     let mut index = table.first_page.clone();
     loop {
@@ -628,11 +653,11 @@ fn walk_rows(
                 table.page_type
             ));
         }
-        for group in &page.row_groups {
-            for row in group.present_rows() {
-                f(&row);
-            }
-        }
+        // In bounds: checked against `len` above.
+        let raw = bytes
+            .get(offset as usize..(offset + page_size) as usize)
+            .unwrap_or_default();
+        f(&page, raw);
         if page.page_index == table.last_page {
             return Ok(());
         }
@@ -648,7 +673,7 @@ mod tests {
 
     use crate::testutil::*;
 
-    fn stick(files: &[(&str, &[u8])]) -> tempfile::TempDir {
+    pub(super) fn stick(files: &[(&str, &[u8])]) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
         for (rel, bytes) in files {
             let path = join_rel(dir.path(), rel);
@@ -659,7 +684,7 @@ mod tests {
     }
 
     /// Every file under `root` with its bytes and mtime.
-    fn snapshot(root: &Path) -> Vec<(PathBuf, Vec<u8>, SystemTime)> {
+    pub(super) fn snapshot(root: &Path) -> Vec<(PathBuf, Vec<u8>, SystemTime)> {
         let mut out = Vec::new();
         let mut stack = vec![root.to_path_buf()];
         while let Some(dir) = stack.pop() {
