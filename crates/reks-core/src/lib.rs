@@ -6,6 +6,7 @@ pub mod artwork;
 pub mod db;
 pub mod error;
 pub mod keys;
+pub mod rbxml;
 pub mod scan;
 pub mod timefmt;
 
