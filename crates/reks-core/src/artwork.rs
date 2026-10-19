@@ -106,7 +106,7 @@ fn sha256_hex(data: &[u8]) -> String {
 }
 
 /// Writes via a temp file + rename so a crash never leaves a truncated image.
-fn write_atomic(path: &Path, data: &[u8]) -> Result<()> {
+pub(crate) fn write_atomic(path: &Path, data: &[u8]) -> Result<()> {
     let io = |source| Error::Io {
         path: path.to_path_buf(),
         source,

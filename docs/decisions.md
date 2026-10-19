@@ -51,16 +51,28 @@ Date of decisions: 2026-10-18.
   decoder-delay convention must be calibrated against rekordbox cue positions
   (R§3, R§4). Record the measured offset in D13.
 
-## D5. Preview playback: `rodio` 0.23 (over cpal), decoding with Symphonia
+## D5. Preview playback: our own `cpal` engine (`reks-mix`), decoding with Symphonia
 
-- Licence: rodio MIT/Apache-2.0; cpal Apache-2.0.
-- Rationale: one codec path on all OSes; rodio provides the output thread,
-  mixing and `try_seek`; device selection via cpal (R§6). Enough for Phase 1
-  preview; swap to raw cpal + own ring buffer if sample-accurate cueing is
-  ever needed.
-- Rejected: kira (game-oriented, overkill); web-audio-api crate (niche);
-  WebView audio (see D4).
-- Risks: Linux needs ALSA/Pulse/PipeWire client libs (standard).
+- Date: 2026-10-19 (maintainer's call; replaces rodio 0.23 from 2026-10-18).
+- Decision: the Phase 1 player is the first slice of the Phase 6 engine (D21):
+  crate `reks-mix` on a raw `cpal` 0.18 stream, `rtrb` 0.4 queues for control,
+  state and retired sources, an offline `render()` and an allocation guard
+  test. One deck, play/pause/seek/volume. The output opens at 44.1 kHz when the
+  device offers it (most DJ music is 44.1 kHz, so those tracks skip the
+  resampler; on macOS this sets the device clock, as rekordbox does), else at
+  the device's default rate (2026-10-19). Tracks are decoded whole to stereo
+  `i16` in memory by `reks-audio` and resampled to the output rate at load with `rubato` 5 (FFT, off the audio thread). Sync, tempo, EQ,
+  filters and cue routing stay in Phase 6.
+- Licence: cpal Apache-2.0; rtrb MIT/Apache-2.0; rubato MIT/Apache-2.0.
+- Rationale: Phase 6 replaces any rodio player, so building on rodio first is
+  throwaway work; the engine's real-time rules get tested in daily use before
+  the mixer depends on them. Cost: we own resampling, device loss and the
+  no-allocation rule that rodio would hide.
+- Rejected: rodio (removed by Phase 6 anyway; no per-sample control); kira
+  (game-oriented); web-audio-api crate (niche); WebView audio (see D4).
+- Risks: Linux needs ALSA/Pulse/PipeWire client libs (standard); whole-track
+  decode costs about 10 MB per minute at 44.1 kHz, so tracks over 60 minutes
+  are refused for preview; a device-rate change needs a reload.
 
 ## D6. Tags and artwork: `lofty`
 
@@ -272,8 +284,9 @@ Date of decisions: 2026-10-18.
   4-band asymmetric EQ with HI/LO kill, two state-variable filters with LFOs,
   X/Y crossfader with curve, headphone cue (R§9.1). New crate `reks-mix` owns a
   raw `cpal` stream with `rtrb` queues for control and state. Tempo is varispeed
-  through `rubato` (already in the tree via `beat-this`, D10). When it lands it
-  replaces the rodio preview player (D5), so one engine owns the audio device.
+  through `rubato` (already in the tree via `beat-this`, D10). The engine's
+  first slice ships in Phase 1 as the preview player (D5), so one engine owns
+  the audio device from the start.
 - Order: after Phase 5. It depends only on Phase 1 (imported grids, decode)
   and Phase 3 (waveform columns, grid editor); moving it earlier needs a new
   decision.

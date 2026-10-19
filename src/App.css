@@ -6,7 +6,7 @@
 html,
 body,
 #root,
-.app {
+.shell {
   margin: 0;
   height: 100%;
 }
@@ -54,12 +54,6 @@ select {
 }
 
 .app {
-  display: flex;
-  flex-direction: column;
-}
-.app-body {
-  flex: 1;
-  min-height: 0;
   display: flex;
 }
 
@@ -719,4 +713,78 @@ select {
 /* After `.error`, which it narrows. */
 .playlists > .error {
   margin: 6px 8px;
+}
+
+/* Window: library above, transport bar below */
+.shell {
+  display: flex;
+  flex-direction: column;
+}
+.shell > .app {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Transport bar: the preview player */
+.transport {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+.transport .muted {
+  color: var(--muted);
+}
+.transport-play {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+}
+.transport-play:disabled {
+  opacity: 0.5;
+}
+.transport-track {
+  width: 220px;
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transport-title {
+  font-weight: 600;
+}
+.transport-time {
+  flex: none;
+  min-width: 44px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-align: center;
+}
+.transport-overview {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  cursor: pointer;
+}
+.transport-overview[aria-disabled="true"] {
+  cursor: default;
+}
+.transport-volume {
+  width: 90px;
+  flex: none;
+}
+.transport-device {
+  max-width: 160px;
+  flex: none;
+}
+.transport-error {
+  flex: none;
+  color: #d93025;
 }

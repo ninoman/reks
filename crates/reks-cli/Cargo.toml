@@ -12,4 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+reks-audio = { workspace = true }
 reks-core = { workspace = true }
+reks-mix = { workspace = true }

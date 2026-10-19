@@ -5,7 +5,8 @@
  *
  * Rows drag (the whole selection) onto playlists in the tree. In a playlist
  * view sorted by position (ascending) they also drag to reorder, and Delete or
- * the context menu removes the selected entries.
+ * the context menu removes the selected entries. Double-click or Enter loads
+ * a row into the player and plays it.
  */
 
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -22,6 +23,7 @@ import {
 
 import { hasType, readTracks, TRACKS_MIME, type TrackDrag, zoneAt } from "../lib/dnd";
 import { rowAt, useLibrary } from "../store/library";
+import { usePlayer } from "../store/player";
 import { shownPlaylist, usePlaylists } from "../store/playlists";
 import { ContextMenu, type MenuState } from "./ContextMenu";
 import type { ColumnSpec } from "./columns";
@@ -102,6 +104,10 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
       select({ type: "selectAll", count: total });
     } else if (e.key === "Escape") {
       select({ type: "clear" });
+    } else if (e.key === "Enter") {
+      const focus = useLibrary.getState().selection.focus;
+      const row = focus === null ? undefined : rowAt(pages, focus);
+      if (row !== undefined) void usePlayer.getState().load(row);
     } else if ((e.key === "Delete" || e.key === "Backspace") && view !== null) {
       e.preventDefault();
       removeSelected();
@@ -238,6 +244,9 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
               style={{ transform: `translateY(${item.start}px)`, height: ROW_HEIGHT }}
               draggable={row !== undefined}
               onMouseDown={(e) => onRowMouseDown(e, item.index)}
+              onDoubleClick={() => {
+                if (row !== undefined) void usePlayer.getState().load(row);
+              }}
               onClick={() => {
                 if (pendingClick.current === item.index)
                   select({ type: "click", index: item.index });

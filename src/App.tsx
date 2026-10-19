@@ -1,8 +1,9 @@
 /**
- * Library window: the app header (library-wide actions) across the top; below
- * it the playlist tree on the left; toolbar, filter bar and track
- * table in the middle; the track info panel slides over the table's right
- * edge when its toolbar button is on. The player lands in a later task (docs/phases/phase-1.md).
+ * Library window: the app header (library-wide actions) across the top; the
+ * playlist tree on the left; toolbar, filter bar and track table in the
+ * middle, with the track info panel sliding over the table's right edge when
+ * its toolbar button is on; the transport bar along the bottom. Space plays
+ * and pauses unless a text field has focus.
  */
 import { useEffect } from "react";
 import { AppHeader } from "./components/AppHeader";
@@ -14,9 +15,11 @@ import { PlaylistTree } from "./components/PlaylistTree";
 import { SlideOver } from "./components/SlideOver";
 import { TrackInfoPanel } from "./components/TrackDetailPanel";
 import { TrackTable } from "./components/TrackTable";
+import { TransportBar } from "./components/TransportBar";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
 import { useLibrary } from "./store/library";
 import { usePanels } from "./store/panels";
+import { usePlayer } from "./store/player";
 import { usePlaylists } from "./store/playlists";
 
 export default function App() {
@@ -33,10 +36,20 @@ export default function App() {
     void usePlaylists.getState().load();
   }, []);
 
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.code !== "Space" || e.repeat || isEditable(e.target)) return;
+      e.preventDefault();
+      void usePlayer.getState().toggle();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
-    <div className="app">
+    <div className="shell">
       <AppHeader />
-      <div className="app-body">
+      <div className="app">
         <aside className="sidebar">
           <PlaylistTree />
         </aside>
@@ -56,8 +69,17 @@ export default function App() {
           </div>
         </main>
       </div>
+      <TransportBar />
       <DuplicateDialog />
       <DeleteDialog />
     </div>
+  );
+}
+
+/** Text fields, selects, buttons and editable content keep Space for themselves. */
+function isEditable(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName)
   );
 }
