@@ -215,6 +215,7 @@ fn div(position: i64, label: &str) -> DividerRow {
     DividerRow {
         position,
         label: label.into(),
+        ascii: label.is_ascii(),
     }
 }
 
@@ -450,6 +451,7 @@ fn query_lists_dividers_only_in_plain_playlist_order() {
         vec![(t[0], Some(1)), (t[1], Some(3)), (t[2], Some(4))]
     );
     assert_eq!(page.dividers, vec![div(0, "OPEN Track"), div(2, "PEAK")]);
+    assert!(page.divider_view);
 
     // Every page carries every divider; paging and total count tracks only.
     let page = env
@@ -494,6 +496,7 @@ fn query_lists_dividers_only_in_plain_playlist_order() {
         let page = env.lib.tracks(&q).unwrap();
         assert_eq!(page.total, 3, "{q:?}");
         assert!(page.dividers.is_empty(), "{q:?}");
+        assert!(!page.divider_view, "{q:?}");
     }
     // Search text with no words is no search.
     let page = env
@@ -509,6 +512,7 @@ fn query_lists_dividers_only_in_plain_playlist_order() {
     let all = env.lib.tracks(&TrackQuery::default()).unwrap();
     assert_eq!(all.total, 3);
     assert!(all.dividers.is_empty());
+    assert!(!all.divider_view);
     let search = |text: &str| {
         env.lib
             .tracks(&TrackQuery {
@@ -526,6 +530,25 @@ fn query_lists_dividers_only_in_plain_playlist_order() {
     let facets = env.lib.facets().unwrap();
     let node = facets.playlists.iter().find(|n| n.id == p).unwrap();
     assert_eq!(node.entries, 3);
+}
+
+#[test]
+fn divider_view_and_ascii_flag() {
+    let env = Env::new();
+    let p = env.playlist("Empty", false);
+    // An empty playlist in order is a divider view with no dividers yet.
+    let page = env.lib.tracks(&in_order(p)).unwrap();
+    assert!(page.divider_view);
+    assert!(page.dividers.is_empty());
+
+    env.divider(p, None, "---- PEAK ----");
+    env.divider(p, None, "──── Café ────");
+    let page = env.lib.tracks(&in_order(p)).unwrap();
+    let flags: Vec<bool> = page.dividers.iter().map(|d| d.ascii).collect();
+    assert_eq!(flags, [true, false]);
+    let v = serde_json::to_value(&page).unwrap();
+    assert_eq!(v["dividerView"], true);
+    assert_eq!(v["dividers"][1]["ascii"], false);
 }
 
 #[test]
@@ -576,7 +599,7 @@ fn serde_shapes() {
     assert!(matches!(op, PlaylistOp::RenameDivider { position: 0, .. }));
     assert_eq!(
         serde_json::to_value(div(2, "PEAK")).unwrap(),
-        serde_json::json!({"position": 2, "label": "PEAK"})
+        serde_json::json!({"position": 2, "label": "PEAK", "ascii": true})
     );
 }
 

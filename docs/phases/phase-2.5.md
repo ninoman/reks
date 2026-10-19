@@ -2,7 +2,7 @@
 
 Status: started 2026-10-20 ahead of the Phase 2 hardware campaign with the
 maintainer's approval (software only; anything that needs a player stays
-UNVERIFIED); tasks 1–2 done. Depends on: Phase 2 done, including its hardware campaign,
+UNVERIFIED); tasks 1–3 and 5 done. Depends on: Phase 2 done, including its hardware campaign,
 history safeguard and `export_manifest` (tasks 12–14). Runs before Phase 3.
 Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
@@ -182,8 +182,20 @@ Divider rules
    `MAX_DIVIDER_LABEL_CHARS`, `Error::NotADivider`) and
    [query.rs](../../crates/reks-core/src/query.rs) (`DividerRow`); tests in
    [tests/dividers.rs](../../crates/reks-core/tests/dividers.rs).
-3. **Divider UI**: "Insert divider" in the playlist context menu, inline
+3. [x] **Divider UI**: "Insert divider" in the playlist context menu, inline
    rename, drag like an entry, full-width row; hidden when sorted or filtered.
+   Done: the track table's context menu (playlist views) inserts above the
+   first selected row, or at the end, and renames in place ("Rename divider",
+   double-click or Enter); rows select, drag, reorder and delete like entries
+   ([TrackTable.tsx](../../src/components/TrackTable.tsx),
+   [DividerLabel.tsx](../../src/components/DividerLabel.tsx)). Table rows map
+   to tracks and dividers in `itemAt` ([library.ts](../../src/store/library.ts)),
+   assuming dense entry positions. The ops go through the existing
+   `playlists_mutate`; `TrackPage.dividerView` says when dividers show (and
+   Insert is enabled), and `DividerRow.ascii` flags labels with other
+   characters with an UNVERIFIED badge (DIV2). The `#` column is the entry
+   position, so it counts dividers. Edits of the shown playlist keep the
+   table's scroll position.
 4. **Divider export**: WAV generator (round-trip through Symphonia probe and
    `audiocheck`), planner expansion, temp XML rows, `generate_analysis`,
    manifest kind, dry-run group, `export.dividers` flag (off with an UNVERIFIED

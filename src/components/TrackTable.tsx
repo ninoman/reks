@@ -5,7 +5,10 @@
  *
  * Rows drag (the whole selection) onto playlists in the tree. In a playlist
  * view sorted by position (ascending) they also drag to reorder, and Delete or
- * the context menu removes the selected entries. Double-click or Enter loads
+ * the context menu removes the selected entries. With no search or other
+ * filter that view also shows the playlist's dividers (D22) as full-width
+ * rows, which select, drag and delete like entries; the context menu inserts
+ * one above the selection, and double-click, Enter or the menu renames one. Double-click or Enter loads
  * a row into the player and plays it; the loaded track's row is marked with
  * an accent bar and accent text, separate from the selection background.
  */
@@ -22,15 +25,18 @@ import {
 } from "react";
 
 import { hasType, readTracks, TRACKS_MIME, type TrackDrag, zoneAt } from "../lib/dnd";
-import { rowAt, useLibrary } from "../store/library";
+import { entryPosition, itemAt, useLibrary, type ViewItem, viewCount } from "../store/library";
 import { usePlayer } from "../store/player";
 import { shownPlaylist, usePlaylists } from "../store/playlists";
+import { primaryIndex } from "../store/selection";
 import type { ColumnSpec } from "./columns";
+import { DividerLabel } from "./DividerLabel";
 import { ROW_HEIGHT } from "./trackTableModel";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "./ui/ContextMenu";
 
@@ -53,10 +59,13 @@ const ROW = [
   "group-focus:data-[focused]:shadow-[inset_0_0_0_1px_var(--color-focus-ring)]",
   "data-[drop=before]:shadow-[inset_0_2px_0_var(--color-accent)]",
   "data-[drop=after]:shadow-[inset_0_-2px_0_var(--color-accent)]",
+  "data-[divider]:bg-bg-subtle data-[divider]:data-[selected]:bg-selected",
 ].join(" ");
 
 export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const total = useLibrary((s) => s.total);
+  const dividers = useLibrary((s) => s.dividers);
+  const dividerView = useLibrary((s) => s.dividerView);
   const pages = useLibrary((s) => s.pages);
   const pagesGeneration = useLibrary((s) => s.pagesGeneration);
   const sort = useLibrary((s) => s.sort);
@@ -67,17 +76,22 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const playlistId = useLibrary((s) => s.filters.playlistId);
   const loadedId = usePlayer((s) => s.status.trackId);
   const nodes = usePlaylists((s) => s.nodes);
+  const rename = usePlaylists((s) => s.dividerRename);
   const view = shownPlaylist(nodes, playlistId);
+  const loaded = { pages, total, dividers };
+  const count = viewCount(loaded);
   const canReorder = view !== null && sort.column === "playlistPosition" && !sort.descending;
   const [dropAt, setDropAt] = useState<{ index: number; after: boolean } | null>(null);
   // A plain press on a selected row selects only it on release, unless it starts a drag.
   const pendingClick = useRef<number | null>(null);
+  // The menu choice starts a rename: the closing menu must not take focus back from its input.
+  const menuRenames = useRef(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   // Plain React (no compiler), so the virtualizer's unmemoisable API is fine here.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
-    count: total,
+    count,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 20,
@@ -88,21 +102,25 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const first = items[0]?.index ?? 0;
   const last = items[items.length - 1]?.index ?? 0;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new total or result generation must re-check the visible range.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new count or result generation must re-check the visible range.
   useEffect(() => {
     ensureRange(first, last);
-  }, [first, last, total, pagesGeneration, ensureRange]);
+  }, [first, last, count, pagesGeneration, ensureRange]);
 
-  // A new result starts at the top.
+  // A new result starts at the top; an edit of the shown playlist keeps the place, and
+  // a divider just inserted is scrolled to, where its rename input waits.
   // biome-ignore lint/correctness/useExhaustiveDependencies: pagesGeneration is the trigger, not an input.
   useEffect(() => {
-    virtualizer.scrollToOffset(0);
+    const { keepPlace, selection: sel } = useLibrary.getState();
+    if (usePlaylists.getState().dividerRename !== null && sel.focus !== null)
+      virtualizer.scrollToIndex(sel.focus, { align: "auto" });
+    else if (!keepPlace) virtualizer.scrollToOffset(0);
   }, [pagesGeneration, virtualizer]);
 
   const width = useMemo(() => columns.reduce((w, c) => w + c.width, 0), [columns]);
 
   function moveFocus(delta: number, extend: boolean) {
-    select({ type: "move", delta, extend, count: total });
+    select({ type: "move", delta, extend, count });
     const focus = useLibrary.getState().selection.focus;
     if (focus !== null) virtualizer.scrollToIndex(focus, { align: "auto" });
   }
@@ -126,13 +144,13 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
       moveFocus(delta, e.shiftKey);
     } else if (e.key.toLowerCase() === "a" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      select({ type: "selectAll", count: total });
+      select({ type: "selectAll", count });
     } else if (e.key === "Escape") {
       select({ type: "clear" });
     } else if (e.key === "Enter") {
       const focus = useLibrary.getState().selection.focus;
-      const row = focus === null ? undefined : rowAt(pages, focus);
-      if (row !== undefined) void usePlayer.getState().load(row);
+      const item = focus === null ? undefined : itemAt(loaded, focus);
+      if (item !== undefined) activate(item);
     } else if ((e.key === "Delete" || e.key === "Backspace") && view !== null) {
       e.preventDefault();
       removeSelected();
@@ -153,31 +171,57 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
     else select({ type: "click", index });
   }
 
-  /** The selected rows that are loaded, in table order. */
-  function selectedRows() {
+  /** Double-click or Enter: a track plays, a divider is renamed. */
+  function activate(item: ViewItem) {
+    if (item.kind === "track") void usePlayer.getState().load(item.row);
+    else if (view !== null)
+      usePlaylists
+        .getState()
+        .startDividerRename(view.id, item.divider.position, item.divider.label);
+  }
+
+  /** The selected rows that are loaded (tracks and dividers), in table order. */
+  function selectedItems() {
     const current = useLibrary.getState();
     return [...current.selection.selected]
       .sort((a, b) => a - b)
-      .map((i) => rowAt(current.pages, i))
+      .map((i) => itemAt(current, i))
       .filter((r) => r !== undefined);
+  }
+
+  /** Entry positions of the selected rows, dividers included. */
+  function selectedPositions() {
+    return selectedItems()
+      .map(entryPosition)
+      .filter((p) => p !== null);
   }
 
   function removeSelected() {
     if (view === null) return;
-    const positions = selectedRows()
-      .map((r) => r.entryPosition)
-      .filter((p) => p !== null);
-    void usePlaylists.getState().removeEntries(view.id, positions);
+    void usePlaylists.getState().removeEntries(view.id, selectedPositions());
   }
+
+  /** Above the first selected row, or at the end. Table rows are entry positions here. */
+  function insertDivider() {
+    if (view === null || !dividerView) return;
+    const { selected } = useLibrary.getState().selection;
+    const position = selected.size === 0 ? count : Math.min(...selected);
+    void usePlaylists.getState().insertDivider(view.id, position);
+  }
+
+  /** The divider the context menu would rename: the primary selected row, if a divider. */
+  const primary = primaryIndex(selection);
+  const primaryItem = primary === null ? undefined : itemAt(loaded, primary);
+  const menuDivider = primaryItem?.kind === "divider" ? primaryItem.divider : null;
 
   function onRowDragStart(e: DragEvent<HTMLElement>, index: number) {
     pendingClick.current = null;
     if (!useLibrary.getState().selection.selected.has(index)) select({ type: "click", index });
-    const rows = selectedRows();
+    const items = selectedItems();
     const payload: TrackDrag = {
-      trackIds: rows.map((r) => r.id),
+      trackIds: items.flatMap((r) => (r.kind === "track" ? [r.row.id] : [])),
       playlistId: view?.id ?? null,
-      entryPositions: rows.map((r) => r.entryPosition).filter((p) => p !== null),
+      entryPositions: items.map(entryPosition).filter((p) => p !== null),
     };
     e.dataTransfer.setData(TRACKS_MIME, JSON.stringify(payload));
     e.dataTransfer.effectAllowed = "copyMove";
@@ -196,12 +240,12 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
     const after = dropAt?.index === index && dropAt.after;
     setDropAt(null);
     const drag = readTracks(e.dataTransfer);
-    const row = rowAt(pages, index);
-    if (!canReorder || drag === null || drag.playlistId !== view?.id || row?.entryPosition == null)
-      return;
+    const item = itemAt(loaded, index);
+    const target = item === undefined ? null : entryPosition(item);
+    if (!canReorder || drag === null || drag.playlistId !== view?.id || target === null) return;
     void usePlaylists
       .getState()
-      .reorderEntries(view.id, drag.entryPositions, row.entryPosition + (after ? 1 : 0));
+      .reorderEntries(view.id, drag.entryPositions, target + (after ? 1 : 0));
   }
 
   /** Right-click selects the row first; the menu (playlists only) opens on the table. */
@@ -216,7 +260,7 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
           ref={scrollRef}
           className="group relative flex-1 overflow-auto outline-none [contain:strict]"
           role="grid"
-          aria-rowcount={total}
+          aria-rowcount={count}
           aria-multiselectable
           tabIndex={0}
           onKeyDown={onKeyDown}
@@ -257,10 +301,19 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
           </div>
           <div className="relative" style={{ height: virtualizer.getTotalSize(), width }}>
             {items.map((item) => {
-              const row = rowAt(pages, item.index);
+              const entry = itemAt(loaded, item.index);
+              const row = entry?.kind === "track" ? entry.row : undefined;
+              const divider = entry?.kind === "divider" ? entry.divider : null;
+              const draft =
+                divider !== null &&
+                rename !== null &&
+                rename.playlistId === view?.id &&
+                rename.position === divider.position
+                  ? rename.draft
+                  : null;
               const selected = selection.selected.has(item.index);
               const focused = selection.focus === item.index;
-              const loaded = row !== undefined && row.id === loadedId;
+              const playing = row !== undefined && row.id === loadedId;
               return (
                 <div
                   key={item.index}
@@ -271,17 +324,18 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
                   data-odd={item.index % 2 === 1 || undefined}
                   data-selected={selected || undefined}
                   data-focused={focused || undefined}
-                  data-loaded={loaded || undefined}
-                  data-loading={row === undefined || undefined}
+                  data-loaded={playing || undefined}
+                  data-loading={entry === undefined || undefined}
+                  data-divider={divider !== null || undefined}
                   data-missing={row?.missing || undefined}
                   data-drop={
                     dropAt?.index === item.index ? (dropAt.after ? "after" : "before") : undefined
                   }
                   style={{ transform: `translateY(${item.start}px)`, height: ROW_HEIGHT }}
-                  draggable={row !== undefined}
+                  draggable={entry !== undefined && draft === null}
                   onMouseDown={(e) => onRowMouseDown(e, item.index)}
                   onDoubleClick={() => {
-                    if (row !== undefined) void usePlayer.getState().load(row);
+                    if (entry !== undefined) activate(entry);
                   }}
                   onClick={() => {
                     if (pendingClick.current === item.index)
@@ -295,16 +349,22 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
                   onDrop={(e) => onRowDrop(e, item.index)}
                   onDragEnd={() => setDropAt(null)}
                 >
-                  {columns.map((c) => (
-                    <div
-                      key={c.id}
-                      role="gridcell"
-                      className={c.align === "right" ? CELL_RIGHT : CELL}
-                      style={{ width: c.width }}
-                    >
-                      {row === undefined ? null : c.cell(row)}
+                  {divider !== null ? (
+                    <div role="gridcell" aria-colspan={columns.length} className="flex flex-1">
+                      <DividerLabel divider={divider} draft={draft} />
                     </div>
-                  ))}
+                  ) : (
+                    columns.map((c) => (
+                      <div
+                        key={c.id}
+                        role="gridcell"
+                        className={c.align === "right" ? CELL_RIGHT : CELL}
+                        style={{ width: c.width }}
+                      >
+                        {row === undefined ? null : c.cell(row)}
+                      </div>
+                    ))
+                  )}
                 </div>
               );
             })}
@@ -312,7 +372,34 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
         </div>
       </ContextMenuTrigger>
       {view !== null && (
-        <ContextMenuContent>
+        <ContextMenuContent
+          onCloseAutoFocus={(e) => {
+            if (menuRenames.current) e.preventDefault();
+            menuRenames.current = false;
+          }}
+        >
+          <ContextMenuItem
+            disabled={!dividerView}
+            onSelect={() => {
+              menuRenames.current = true;
+              insertDivider();
+            }}
+          >
+            Insert divider
+          </ContextMenuItem>
+          {menuDivider !== null && (
+            <ContextMenuItem
+              onSelect={() => {
+                menuRenames.current = true;
+                usePlaylists
+                  .getState()
+                  .startDividerRename(view.id, menuDivider.position, menuDivider.label);
+              }}
+            >
+              Rename divider
+            </ContextMenuItem>
+          )}
+          <ContextMenuSeparator />
           <ContextMenuItem onSelect={removeSelected}>Remove from {view.name}</ContextMenuItem>
         </ContextMenuContent>
       )}

@@ -3,10 +3,16 @@
  * visibility, the loaded pages of the current result, and the selection.
  * Rows are fetched a page at a time as the table scrolls; the WebView never
  * holds the whole library.
+ *
+ * Table rows are the tracks plus, in a playlist in playlist order, its
+ * dividers (D22), which every page carries in full. Selection and the
+ * virtualiser count table rows; pages hold tracks only. `itemAt` maps one to
+ * the other.
  */
 import { create } from "zustand";
 
 import {
+  type DividerRow,
   type Facets,
   type Filter,
   type Key,
@@ -110,14 +116,20 @@ export function buildQuery(inputs: QueryInputs, page: number): TrackQuery {
 
 export interface LibraryState extends QueryInputs {
   columnVisibility: Record<string, boolean>;
-  /** Matching tracks over all pages. */
+  /** Matching tracks over all pages (dividers not counted). */
   total: number;
+  /** The shown playlist's dividers, when `dividerView`. */
+  dividers: DividerRow[];
+  /** The result shows dividers (playlist order, no search or other filter). */
+  dividerView: boolean;
   /** Loaded pages of the current result, by page index. */
   pages: ReadonlyMap<number, TrackRow[]>;
   /** Bumped on every query change; responses for older generations are dropped. */
   generation: number;
   /** Generation the loaded `pages` and `total` belong to. */
   pagesGeneration: number;
+  /** The current generation is an edit of the same view: the table keeps its place. */
+  keepPlace: boolean;
   inFlight: ReadonlySet<number>;
   selection: Selection;
   facets: Facets | null;
@@ -137,9 +149,12 @@ export interface LibraryState extends QueryInputs {
   /** Header click: same column flips direction, another column sorts ascending. */
   toggleSort(column: Sort["column"]): void;
   setColumnVisibility(v: Record<string, boolean>): void;
-  /** Re-runs the query from page 0 (after a query change or an import). */
-  refresh(): void;
-  /** Loads every page overlapping rows `start..=end` that isn't loaded yet. */
+  /**
+   * Re-runs the query from page 0 (after a query change or an import).
+   * `keepPlace`: the same view after an edit, so the table keeps its scroll.
+   */
+  refresh(keepPlace?: boolean): void;
+  /** Loads every page overlapping table rows `start..=end` that isn't loaded yet. */
   ensureRange(start: number, end: number): void;
   select(action: SelectionAction): void;
   /**
@@ -161,7 +176,14 @@ export const useLibrary = create<LibraryState>()((set, get) => {
         // Keep showing the old result until the new one's first page lands.
         const pages = new Map(s.pagesGeneration === generation ? s.pages : []);
         pages.set(page, result.rows);
-        return { pages, total: result.total, pagesGeneration: generation, error: null };
+        return {
+          pages,
+          total: result.total,
+          dividers: result.dividers,
+          dividerView: result.dividerView,
+          pagesGeneration: generation,
+          error: null,
+        };
       });
     } catch (e) {
       if (get().generation === generation) set({ error: String(e) });
@@ -183,9 +205,12 @@ export const useLibrary = create<LibraryState>()((set, get) => {
     sort: defaultSort,
     columnVisibility: {},
     total: 0,
+    dividers: [],
+    dividerView: false,
     pages: new Map(),
     generation: 0,
     pagesGeneration: -1,
+    keepPlace: false,
     inFlight: new Set(),
     selection: emptySelection,
     facets: null,
@@ -226,17 +251,17 @@ export const useLibrary = create<LibraryState>()((set, get) => {
     setColumnVisibility(columnVisibility) {
       set({ columnVisibility });
     },
-    refresh() {
+    refresh(keepPlace = false) {
       const generation = get().generation + 1;
-      set({ generation, inFlight: new Set(), selection: emptySelection });
+      set({ generation, keepPlace, inFlight: new Set(), selection: emptySelection });
       void fetchPage(0, generation);
     },
     ensureRange(start, end) {
       const s = get();
       // Until the current generation's first page arrives, rows belong to the old result.
       if (s.pagesGeneration !== s.generation) return;
-      const first = Math.max(0, Math.floor(start / PAGE_SIZE));
-      const last = Math.floor(Math.max(start, end) / PAGE_SIZE);
+      const first = Math.max(0, Math.floor(trackIndex(s, start) / PAGE_SIZE));
+      const last = Math.floor(trackIndex(s, Math.max(start, end)) / PAGE_SIZE);
       for (let p = first; p <= last; p++) {
         if (p * PAGE_SIZE >= s.total) break;
         if (!s.pages.has(p) && !s.inFlight.has(p)) void fetchPage(p, s.generation);
@@ -271,7 +296,65 @@ export const useLibrary = create<LibraryState>()((set, get) => {
   };
 });
 
-/** Row at `index` of the current result, if its page is loaded. */
-export function rowAt(pages: ReadonlyMap<number, TrackRow[]>, index: number): TrackRow | undefined {
-  return pages.get(Math.floor(index / PAGE_SIZE))?.[index % PAGE_SIZE];
+/** The loaded part of the current result that table rows map onto. */
+export interface LoadedView {
+  pages: ReadonlyMap<number, TrackRow[]>;
+  total: number;
+  dividers: readonly DividerRow[];
+}
+
+/** One table row: a track entry or a divider. */
+export type ViewItem = { kind: "track"; row: TrackRow } | { kind: "divider"; divider: DividerRow };
+
+/** Table rows: tracks plus dividers. */
+export function viewCount(v: LoadedView): number {
+  return v.total + v.dividers.length;
+}
+
+/**
+ * Table row of each divider, in order. Entry positions are dense (reks-core
+ * rewrites them on every edit), so `position - k` tracks precede divider `k`;
+ * the clamp keeps rows in range if they ever are not.
+ */
+function dividerSlots(v: LoadedView): number[] {
+  let before = 0;
+  return v.dividers.map((d, k) => {
+    before = Math.min(v.total, Math.max(before, d.position - k));
+    return before + k;
+  });
+}
+
+/** Track index of table row `index`; a divider row gives the track after it. */
+export function trackIndex(v: LoadedView, index: number): number {
+  let n = 0;
+  for (const slot of dividerSlots(v)) {
+    if (slot >= index) break;
+    n++;
+  }
+  return index - n;
+}
+
+/** Table row `index`: a divider, or a track if its page is loaded. */
+export function itemAt(v: LoadedView, index: number): ViewItem | undefined {
+  const slots = dividerSlots(v);
+  let n = 0;
+  for (const [k, slot] of slots.entries()) {
+    if (slot === index) return { kind: "divider", divider: v.dividers[k] as DividerRow };
+    if (slot > index) break;
+    n++;
+  }
+  const t = index - n;
+  const row = v.pages.get(Math.floor(t / PAGE_SIZE))?.[t % PAGE_SIZE];
+  return row === undefined ? undefined : { kind: "track", row };
+}
+
+/** The track at table row `index`, if it is a track and its page is loaded. */
+export function rowAt(v: LoadedView, index: number): TrackRow | undefined {
+  const item = itemAt(v, index);
+  return item?.kind === "track" ? item.row : undefined;
+}
+
+/** Entry position of a table row in a playlist view (tracks and dividers alike). */
+export function entryPosition(item: ViewItem): number | null {
+  return item.kind === "divider" ? item.divider.position : item.row.entryPosition;
 }

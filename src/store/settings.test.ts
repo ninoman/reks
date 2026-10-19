@@ -31,7 +31,12 @@ const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.mocked(ipc.libraryQuery).mockResolvedValue({ rows: [], total: 0 });
+  vi.mocked(ipc.libraryQuery).mockResolvedValue({
+    rows: [],
+    total: 0,
+    dividers: [],
+    dividerView: false,
+  });
   vi.mocked(ipc.libraryRoots).mockResolvedValue([]);
   vi.mocked(ipc.settingsSet).mockReset();
   useSettings.setState({ settings: null });
