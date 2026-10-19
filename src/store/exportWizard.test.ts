@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DryRun, ExportProgress, ExportReportView, PlaylistNode } from "../lib/ipc";
+import type { Device, DryRun, ExportProgress, ExportReportView, PlaylistNode } from "../lib/ipc";
 
 vi.mock("../lib/ipc", async (original) => ({
   ...(await original<typeof import("../lib/ipc")>()),
@@ -9,6 +9,9 @@ vi.mock("../lib/ipc", async (original) => ({
   exportCancel: vi.fn(),
   deviceEject: vi.fn(),
   devicesList: vi.fn(),
+  profileSelection: vi.fn(),
+  profileSetSelection: vi.fn(),
+  profileSetTarget: vi.fn(),
 }));
 
 const ipc = await import("../lib/ipc");
@@ -17,6 +20,9 @@ const exportApply = vi.mocked(ipc.exportApply);
 const exportCancel = vi.mocked(ipc.exportCancel);
 const deviceEject = vi.mocked(ipc.deviceEject);
 vi.mocked(ipc.devicesList).mockResolvedValue([]);
+const profileSelection = vi.mocked(ipc.profileSelection);
+const profileSetSelection = vi.mocked(ipc.profileSetSelection);
+const profileSetTarget = vi.mocked(ipc.profileSetTarget);
 const { coveredIds, DEFAULT_EXPORT_OPTIONS, selectionOf, useExportWizard } = await import(
   "./exportWizard"
 );
@@ -33,6 +39,24 @@ const node = (id: number, parentId: number | null, isFolder = false): PlaylistNo
 
 /** Gigs/ (1) → Friday (2), Old/ (3) → Older (4); Other (5). Depth first. */
 const NODES = [node(1, null, true), node(2, 1), node(3, 1, true), node(4, 3), node(5, null)];
+
+/** The known stick at /Volumes/REKS. */
+const DEVICE: Device = {
+  id: 1,
+  volumeSerial: "4993-1CFB",
+  label: "REKS",
+  sizeBytes: 32_000_000_000,
+  name: "Main",
+  target: "Generic",
+  createdAt: "2026-10-19T12:00:00.000Z",
+  lastSyncedAt: null,
+};
+
+/** Opens the wizard on the known stick /Volumes/REKS (empty profile) with `playlists` ticked. */
+async function openOnStick(playlists: number[]) {
+  useExportWizard.getState().open({ mountPoint: "/Volumes/REKS", playlists });
+  await useExportWizard.getState().takeProfile(DEVICE);
+}
 
 const plan = (status: string): DryRun => ({ status }) as DryRun;
 const ready = (planId: number): DryRun => ({ planId, ready: true, status: "ready" }) as DryRun;
@@ -55,7 +79,7 @@ const report = (over: Partial<ExportReportView> = {}): ExportReportView =>
 async function toDryRun(planId = 7) {
   const w = useExportWizard.getState;
   exportPlan.mockResolvedValue(ready(planId));
-  w().open({ mountPoint: "/Volumes/REKS", playlists: [5] });
+  await openOnStick([5]);
   await w().next(NODES);
   await w().next(NODES);
   await w().next(NODES);
@@ -67,6 +91,9 @@ beforeEach(() => {
   exportApply.mockReset();
   exportCancel.mockReset().mockResolvedValue();
   deviceEject.mockReset();
+  profileSelection.mockReset().mockResolvedValue({ playlists: [] });
+  profileSetSelection.mockReset().mockResolvedValue();
+  profileSetTarget.mockReset().mockImplementation(async (_id, target) => ({ ...DEVICE, target }));
   useExportWizard.getState().close();
 });
 
@@ -95,6 +122,10 @@ describe("useExportWizard", () => {
     await w().next(NODES);
     expect(w().step).toBe("device");
     w().setDevice("/Volumes/REKS");
+    // Not identified as a known stick yet.
+    await w().next(NODES);
+    expect(w().step).toBe("device");
+    await w().takeProfile(DEVICE);
     await w().next(NODES);
     expect(w().step).toBe("playlists");
     await w().next(NODES);
@@ -112,7 +143,7 @@ describe("useExportWizard", () => {
   it("plans on entering the dry run with the selection and options", async () => {
     const w = useExportWizard.getState;
     exportPlan.mockResolvedValue(plan("ready"));
-    w().open({ mountPoint: "/Volumes/REKS", playlists: [1, 2] });
+    await openOnStick([1, 2]);
     await w().next(NODES);
     await w().next(NODES);
     w().setOptions({ history: "discard", discardHistoryConfirmed: true, artwork: true });
@@ -127,12 +158,69 @@ describe("useExportWizard", () => {
         discardHistoryConfirmed: true,
         artwork: true,
       },
+      1,
     );
     expect(w().dryRun?.status).toBe("ready");
 
     w().back();
     expect(w().step).toBe("options");
     expect(w().dryRun).toBeNull();
+  });
+
+  it("ticks the stick's profile and takes its target", async () => {
+    const w = useExportWizard.getState;
+    profileSelection.mockResolvedValue({ playlists: [2, 5] });
+    w().open({ mountPoint: "/Volumes/REKS", playlists: [4] });
+    await w().takeProfile({ ...DEVICE, target: "Cdj3000" });
+    expect(profileSelection).toHaveBeenCalledWith(1);
+    expect([...w().checked]).toEqual([2, 5]);
+    expect(w().options.target).toBe("Cdj3000");
+    // A new stick keeps the sidebar's selection.
+    profileSelection.mockResolvedValue({ playlists: [] });
+    w().open({ mountPoint: "/Volumes/REKS", playlists: [4] });
+    await w().takeProfile(DEVICE);
+    expect([...w().checked]).toEqual([4]);
+  });
+
+  it("saves the ticks and the target as the stick's profile", async () => {
+    const w = useExportWizard.getState;
+    exportPlan.mockResolvedValue(plan("ready"));
+    await openOnStick([1, 2, 5]);
+    await w().next(NODES);
+    expect(profileSetSelection).not.toHaveBeenCalled();
+    await w().next(NODES);
+    // The folder covers its children: saved as folder + the other playlist.
+    expect(profileSetSelection).toHaveBeenCalledWith(1, [1, 5]);
+    expect(profileSetTarget).not.toHaveBeenCalled();
+    w().setOptions({ target: "Cdj2000Nxs2" });
+    await w().next(NODES);
+    expect(profileSetTarget).toHaveBeenCalledWith(1, "Cdj2000Nxs2");
+    expect(w().device?.target).toBe("Cdj2000Nxs2");
+    expect(exportPlan).toHaveBeenCalledWith(
+      "/Volumes/REKS",
+      { playlists: [1, 5] },
+      expect.objectContaining({ target: "Cdj2000Nxs2" }),
+      1,
+    );
+  });
+
+  it("stays on the step when saving the profile fails", async () => {
+    const w = useExportWizard.getState;
+    profileSetSelection.mockRejectedValue("database is locked");
+    await openOnStick([5]);
+    await w().next(NODES);
+    await w().next(NODES);
+    expect(w().step).toBe("playlists");
+    expect(w().error).toBe("Could not save the stick's profile: database is locked");
+  });
+
+  it("picking another stick forgets the profile", async () => {
+    const w = useExportWizard.getState;
+    await openOnStick([5]);
+    w().setDevice("/Volumes/REKS");
+    expect(w().device?.id).toBe(1);
+    w().setDevice("/Volumes/GIGS");
+    expect(w().device).toBeNull();
   });
 
   it("leaving discard withdraws the confirmation", () => {
@@ -198,7 +286,7 @@ describe("useExportWizard", () => {
   it("only exports a ready plan", async () => {
     const w = useExportWizard.getState;
     exportPlan.mockResolvedValue({ planId: 3, ready: false } as DryRun);
-    w().open({ mountPoint: "/Volumes/REKS", playlists: [5] });
+    await openOnStick([5]);
     await w().next(NODES);
     await w().next(NODES);
     await w().next(NODES);

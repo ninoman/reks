@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  Device,
   DeviceInfo,
   DryRun,
   ExportProgress,
@@ -17,6 +18,11 @@ vi.mock("../lib/ipc", async (original) => ({
   exportPlan: vi.fn(),
   exportApply: vi.fn(),
   exportCancel: vi.fn(),
+  profilesList: vi.fn(),
+  profileIdentify: vi.fn(),
+  profileSelection: vi.fn(),
+  profileSetSelection: vi.fn(),
+  profileSetTarget: vi.fn(),
 }));
 
 const ipc = await import("../lib/ipc");
@@ -25,8 +31,12 @@ const deviceEject = vi.mocked(ipc.deviceEject);
 const exportPlan = vi.mocked(ipc.exportPlan);
 const exportApply = vi.mocked(ipc.exportApply);
 const exportCancel = vi.mocked(ipc.exportCancel);
+const profileIdentify = vi.mocked(ipc.profileIdentify);
+const profileSelection = vi.mocked(ipc.profileSelection);
+const profileSetSelection = vi.mocked(ipc.profileSetSelection);
 const { useExportWizard } = await import("../store/exportWizard");
 const { usePlaylists } = await import("../store/playlists");
+const { useProfiles } = await import("../store/profiles");
 const { ExportWizard } = await import("./ExportWizard");
 
 const stick: DeviceInfo = {
@@ -38,6 +48,17 @@ const stick: DeviceInfo = {
   freeBytes: 18_400_000_000,
   label: "REKS",
   osName: "disk4s1",
+};
+
+const DEVICE: Device = {
+  id: 1,
+  volumeSerial: "4993-1CFB",
+  label: "REKS",
+  sizeBytes: 32_000_000_000,
+  name: "Main",
+  target: "Generic",
+  createdAt: "2026-10-19T12:00:00.000Z",
+  lastSyncedAt: null,
 };
 
 const node = (
@@ -168,6 +189,12 @@ beforeEach(() => {
   exportPlan.mockReset();
   exportApply.mockReset();
   exportCancel.mockReset().mockResolvedValue();
+  vi.mocked(ipc.profilesList).mockReset().mockResolvedValue([DEVICE]);
+  profileIdentify.mockReset().mockResolvedValue({ type: "known", device: DEVICE });
+  profileSelection.mockReset().mockResolvedValue({ playlists: [] });
+  profileSetSelection.mockReset().mockResolvedValue();
+  vi.mocked(ipc.profileSetTarget).mockReset();
+  useProfiles.setState({ known: [], mounted: {}, selectedId: null, status: null, error: null });
   usePlaylists.setState({ nodes: NODES });
   useExportWizard.getState().close();
 });
@@ -175,28 +202,65 @@ afterEach(cleanup);
 
 const button = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
 
+/** Picks the REKS stick and waits until it is identified (Next enabled). */
+async function pickStick() {
+  fireEvent.click(await screen.findByRole("radio", { name: "REKS" }));
+  await waitFor(() => expect(button("Next").disabled).toBe(false));
+}
+
 /** Opens the wizard and walks to the options step. */
 async function toOptions() {
   useExportWizard.getState().open();
   render(<ExportWizard />);
-  fireEvent.click(await screen.findByRole("radio", { name: "REKS" }));
+  await pickStick();
   fireEvent.click(button("Next"));
+  await screen.findByText("Step 2 of 6: Playlists");
   fireEvent.click(screen.getByRole("checkbox", { name: /Other/ }));
   fireEvent.click(button("Next"));
   await screen.findByText("Step 3 of 6: Options");
+  expect(profileSetSelection).toHaveBeenCalledWith(1, [3]);
 }
 
 describe("ExportWizard", () => {
+  it("ticks the stick's saved playlists", async () => {
+    profileSelection.mockResolvedValue({ playlists: [1] });
+    useExportWizard.getState().open();
+    render(<ExportWizard />);
+    await pickStick();
+    fireEvent.click(button("Next"));
+    await screen.findByText("Step 2 of 6: Playlists");
+    expect(screen.getByText(/Pick playlists and folders for Main/)).toBeTruthy();
+    expect((screen.getByRole("checkbox", { name: /Gigs/ }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole("checkbox", { name: /Other/ }) as HTMLInputElement).checked).toBe(
+      false,
+    );
+  });
+
+  it("asks to name a stick it does not know before going on", async () => {
+    profileIdentify.mockResolvedValue({
+      type: "new",
+      volumeSerial: "AAAA-0001",
+      suggestedName: "REKS",
+      prompt: "This stick is new to reks.",
+      note: "Name it and tick the playlists it should carry.",
+    });
+    useExportWizard.getState().open();
+    render(<ExportWizard />);
+    fireEvent.click(await screen.findByRole("radio", { name: "REKS" }));
+    expect(await screen.findByText("This stick is new to reks.")).toBeTruthy();
+    expect(button("Next").disabled).toBe(true);
+  });
+
   it("needs a stick and a playlist before going on", async () => {
     useExportWizard.getState().open();
     render(<ExportWizard />);
     expect(screen.getByText("Step 1 of 6: Stick")).toBeTruthy();
     expect(button("Next").disabled).toBe(true);
-    fireEvent.click(await screen.findByRole("radio", { name: "REKS" }));
-    expect(button("Next").disabled).toBe(false);
+    await pickStick();
+    expect(screen.getByText("Stick: Main")).toBeTruthy();
     fireEvent.click(button("Next"));
 
-    expect(screen.getByText("Step 2 of 6: Playlists")).toBeTruthy();
+    expect(await screen.findByText("Step 2 of 6: Playlists")).toBeTruthy();
     expect(button("Next").disabled).toBe(true);
     // Ticking a folder ticks (and locks) what is under it.
     fireEvent.click(screen.getByRole("checkbox", { name: /Gigs/ }));
@@ -225,6 +289,7 @@ describe("ExportWizard", () => {
       "/Volumes/REKS",
       { playlists: [3] },
       expect.objectContaining({ history: "discard", discardHistoryConfirmed: true }),
+      1,
     );
   });
 

@@ -31,6 +31,16 @@ fn run(
     plan: &ExportPlan,
     cancel_after: Option<usize>,
 ) -> (ReportView, Vec<ProgressView>) {
+    run_for(w, plan, cancel_after, None)
+}
+
+/// [`run`] for the stick profile `profile`.
+fn run_for(
+    w: &World,
+    plan: &ExportPlan,
+    cancel_after: Option<usize>,
+    profile: Option<DeviceId>,
+) -> (ReportView, Vec<ProgressView>) {
     let cancel = CancelToken::new();
     let views = Mutex::new(Vec::new());
     let progress = |v: ProgressView| {
@@ -40,7 +50,15 @@ fn run(
         views.lock().unwrap().push(v);
     };
     let labels = plan_track_labels(&w.lib, plan);
-    let report = export(&w.env(), plan, &w.sel(), labels, &progress, &cancel);
+    let report = export(
+        &w.env(),
+        plan,
+        &w.sel(),
+        labels,
+        &progress,
+        &cancel,
+        profile,
+    );
     (report, views.into_inner().unwrap())
 }
 
@@ -192,6 +210,80 @@ fn cancelled_export_keeps_the_history_on_the_stick() {
     assert!(r.history.folder.is_some());
     assert_eq!(w.pdb(), old_pdb);
     assert!(views.iter().all(|v| v.cancellable));
+}
+
+/// A stick profile for `w`'s stick with volume ID `serial`, holding `w.sel()`.
+fn profile(w: &World, serial: &str) -> DeviceId {
+    let dev = devices::create(
+        &w.lib,
+        &w.dev(),
+        Some(serial),
+        "Main",
+        crate::TargetProfile::Generic,
+    )
+    .unwrap();
+    devices::set_selection(&w.lib, dev.id, &w.sel().playlists).unwrap();
+    dev.id
+}
+
+/// Warnings about the profile record (the machine may add others, such as
+/// rekordbox running).
+fn profile_warnings(r: &ReportView) -> Vec<&NoticeGroup> {
+    r.warnings
+        .iter()
+        .filter(|g| g.kind == "profileNotRecorded")
+        .collect()
+}
+
+#[test]
+fn export_records_the_sync_in_the_stick_profile() {
+    let w = World::new();
+    let dev = profile(&w, crate::apply::tests::SERIAL);
+    let plan = w.plan();
+    let (r, _) = run_for(&w, &plan, None, Some(dev));
+
+    assert_eq!(r.outcome, Outcome::Success, "{r:#?}");
+    assert_eq!(
+        fact(&r.facts, "Stick profile"),
+        "2 playlists recorded for the Devices panel"
+    );
+    assert!(profile_warnings(&r).is_empty(), "{:?}", r.warnings);
+    let synced = w.lib.device_synced(dev).unwrap();
+    let paths: Vec<_> = synced.iter().map(|s| s.playlist.path.join("/")).collect();
+    assert_eq!(paths, ["Set/Peak", "Set/Chill"]);
+    assert!(synced.iter().all(|s| s.playlist.playlist_id.is_some()));
+    assert!(w.lib.device(dev).unwrap().last_synced_at.is_some());
+}
+
+#[test]
+fn profile_of_another_stick_is_a_warning_not_a_failure() {
+    let w = World::new();
+    let dev = profile(&w, "0000-0000");
+    let plan = w.plan();
+    let (r, _) = run_for(&w, &plan, None, Some(dev));
+
+    assert_eq!(r.outcome, Outcome::Success, "{r:#?}");
+    assert_eq!(
+        fact(&r.facts, "Stick profile"),
+        "Not recorded (see the warnings)"
+    );
+    let warned = profile_warnings(&r);
+    assert_eq!(warned.len(), 1);
+    assert!(warned[0].title.contains("went to another stick"));
+    assert!(w.lib.device_synced(dev).unwrap().is_empty());
+}
+
+#[test]
+fn cancelled_export_records_nothing_in_the_profile() {
+    let w = World::new();
+    let dev = profile(&w, crate::apply::tests::SERIAL);
+    let plan = w.plan();
+    let (r, _) = run_for(&w, &plan, Some(1), Some(dev));
+
+    assert_eq!(r.outcome, Outcome::Cancelled, "{r:#?}");
+    assert!(r.facts.is_empty());
+    assert!(profile_warnings(&r).is_empty());
+    assert!(w.lib.device_synced(dev).unwrap().is_empty());
 }
 
 #[test]
@@ -412,6 +504,7 @@ fn live_export_to_a_mounted_stick() {
         labels,
         &|v| views.lock().unwrap().push(v),
         &CancelToken::new(),
+        None,
     );
     assert_eq!(r.outcome, Outcome::Success, "{r:#?}");
     assert_eq!(r.mount_point, stick);

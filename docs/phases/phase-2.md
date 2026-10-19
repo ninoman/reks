@@ -474,10 +474,22 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
       export manifest. Tests: status and "frees" property tests, identity
       cases, profile → `Selection` → plan, a real baken sync recorded and
       compared mounted and unmounted across library edits.
-    - [ ] Devices panel UI (status list, "frees X MB", capacity bar, the
-      identify prompts).
-    - [ ] Export wizard takes its selection from the stick's profile.
-    - [ ] Sync calls `devices::record_sync` after `apply`.
+    - [x] Devices panel UI
+      ([DevicesDialog.tsx](../../src/components/DevicesDialog.tsx), store
+      [profiles.ts](../../src/store/profiles.ts)): each plugged-in volume shows
+      its stick name or the identify prompt ("Is this '<name>'?", "New stick",
+      the foreign-library note); "Your sticks" lists known sticks (plugged-in
+      first) with the selected one's status list, "frees X MB" per ticked
+      entry, capacity bar and "Edit and sync…". Tauri commands `profile_*`.
+    - [x] Export wizard takes its selection from the stick's profile: the
+      device step needs a known stick, its profile ticks the playlists (an
+      empty profile keeps the sidebar's selection), Next on the playlists step
+      saves the ticks (`set_selection`) and on the options step the target.
+    - [x] Sync calls `devices::record_sync` after `apply`:
+      `report::export(.., profile)` records any export that replaced the
+      database (not cancelled or refused); the report shows a "Stick profile"
+      fact, and a failed record is a warning, not a failed export. Tests:
+      recorded, wrong stick, cancelled.
 
 ## Acceptance criteria
 

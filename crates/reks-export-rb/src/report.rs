@@ -6,7 +6,8 @@
 //! (`reks rb export`).
 //!
 //! [`export`] is the UI's entry point: it runs the plan the dry run showed
-//! through [`apply`] with a fresh [`BakenWriter`] and returns the report.
+//! through [`apply`] with a fresh [`BakenWriter`], records the sync in the
+//! stick's profile ([`devices::record_sync`], D27) and returns the report.
 
 use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
@@ -17,6 +18,7 @@ use serde::Serialize;
 use crate::apply::{
     apply, ApplyEnv, ApplyError, ApplyEvent, ApplyStage, ExportReport, ExportStatus, ManifestStatus,
 };
+use crate::devices::{self, DeviceId, DevicesError};
 use crate::dryrun::{
     capitalise, count, device_name, track_label, Fact, Groups, NoticeGroup, TrackLabels,
 };
@@ -28,8 +30,11 @@ use crate::writer::{BakenWriter, ExportEvent, WriterError, WriterReport};
 /// Runs `plan` (made from `sel`, as the dry run showed it) on its stick:
 /// prepares a [`BakenWriter`] in a temp folder, then [`apply`] with `env`.
 /// `progress` gets a [`ProgressView`] per event; `labels` names the plan's
-/// tracks ([`crate::dryrun::plan_track_labels`]). Never fails: a refused
-/// export is a [`ReportView`] with [`Outcome::Failed`].
+/// tracks ([`crate::dryrun::plan_track_labels`]). `profile`: the stick's
+/// [`devices`] row; when the stick got a new database (not cancelled, not
+/// refused), [`devices::record_sync`] records it and the report says so.
+/// Never fails: a refused export is a [`ReportView`] with
+/// [`Outcome::Failed`].
 pub fn export(
     env: &ApplyEnv<'_>,
     plan: &ExportPlan,
@@ -37,6 +42,7 @@ pub fn export(
     labels: TrackLabels,
     progress: &(dyn Fn(ProgressView) + Sync),
     cancel: &CancelToken,
+    profile: Option<DeviceId>,
 ) -> ReportView {
     let tracker = ProgressTracker::new(labels);
     let result = writer_for(env.library, sel).and_then(|(writer, _work)| {
@@ -51,7 +57,17 @@ pub fn export(
     if let Err(e) = &result {
         tracing::warn!(error = %e, "export refused");
     }
-    ReportView::new(plan, &result, &tracker.labels)
+    let mut view = ReportView::new(plan, &result, &tracker.labels);
+    if let (Some(dev), Ok(report)) = (profile, &result) {
+        if report.status != ExportStatus::Cancelled {
+            let recorded = devices::record_sync(env.library, dev, plan, report);
+            if let Err(e) = &recorded {
+                tracing::warn!(error = %e, device = dev, "stick profile not recorded");
+            }
+            view.add_profile_record(&recorded);
+        }
+    }
+    view
 }
 
 /// A writer for `sel` and the temp folder it works in (removed on drop).
@@ -287,6 +303,32 @@ impl ReportView {
         }
         view.warnings = warnings.finish(|_, _| None);
         view
+    }
+
+    /// Adds what [`devices::record_sync`] did: a fact, and a warning when it
+    /// failed (the export itself is unaffected).
+    pub fn add_profile_record(&mut self, recorded: &Result<usize, DevicesError>) {
+        let value = match recorded {
+            Ok(n) => format!(
+                "{} recorded for the Devices panel",
+                count(*n, "playlist", "playlists")
+            ),
+            Err(e) => {
+                self.warnings.push(NoticeGroup {
+                    kind: "profileNotRecorded".to_owned(),
+                    title: format!(
+                        "The stick's playlists were not recorded in its profile: {e}. The \
+                         Devices panel reads the stick while it is plugged in."
+                    ),
+                    items: Vec::new(),
+                });
+                "Not recorded (see the warnings)".to_owned()
+            }
+        };
+        self.facts.push(Fact {
+            label: "Stick profile".to_owned(),
+            value,
+        });
     }
 }
 
