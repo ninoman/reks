@@ -42,6 +42,13 @@
   "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "overrides": [
     {
+      // Base components export their cva variants next to the component so they
+      // compose (docs/ui.md). Cost: editing one of these files reloads the page
+      // instead of hot-swapping it.
+      "includes": ["src/components/ui/**"],
+      "linter": { "rules": { "style": { "useComponentExportOnlyModules": "off" } } }
+    },
+    {
       // The track table is a virtualised ARIA grid built from divs: the container
       // holds focus and moves it between rows with the keyboard (WAI-ARIA grid
       // pattern), and <table> can't be absolutely positioned per row.

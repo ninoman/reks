@@ -2,8 +2,8 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SLIDE_IN_DEFAULT as SLIDE_IN, SLIDE_OUT_DEFAULT as SLIDE_OUT } from "../lib/motion";
-import { SlideOver } from "./SlideOver";
+import { SLIDE_IN_DEFAULT as SLIDE_IN, SLIDE_OUT_DEFAULT as SLIDE_OUT } from "../../lib/motion";
+import { Sheet } from "./Sheet";
 
 /** jsdom has no Web Animations; record calls and finish by hand. */
 interface FakeAnimation {
@@ -43,23 +43,23 @@ function nth(list: FakeAnimation[], i: number): FakeAnimation {
   if (a === undefined) throw new Error(`no animation ${i}`);
   return a;
 }
-const panel = () => document.querySelector(".slide-over");
+const panel = () => document.querySelector('[data-slot="sheet"]');
 const transforms = (a: FakeAnimation) => a.keyframes.map((k) => k.transform);
 
-describe("SlideOver", () => {
+describe("Sheet", () => {
   it("slides in from off-screen as soon as it opens", () => {
-    const { rerender } = render(<SlideOver open={false}>info</SlideOver>);
+    const { rerender } = render(<Sheet open={false}>info</Sheet>);
     expect(panel()).toBeNull();
-    rerender(<SlideOver open>info</SlideOver>);
+    rerender(<Sheet open>info</Sheet>);
     expect(screen.getByText("info")).toBeTruthy();
     expect(transforms(nth(started, 0))).toEqual(["translateX(100%)", "none"]);
     expect(nth(started, 0).options.easing).toBe(SLIDE_IN.easing);
   });
 
   it("slides out faster, then unmounts its children", () => {
-    const { rerender } = render(<SlideOver open>info</SlideOver>);
+    const { rerender } = render(<Sheet open>info</Sheet>);
     running = [];
-    rerender(<SlideOver open={false}>info</SlideOver>);
+    rerender(<Sheet open={false}>info</Sheet>);
     const out = nth(started, 1);
     expect(transforms(out)).toEqual(["none", "translateX(100%)"]);
     expect(out.options.duration).toBe(SLIDE_OUT.duration);
@@ -70,10 +70,10 @@ describe("SlideOver", () => {
   });
 
   it("reopening mid-slide cancels the slide-out and stays mounted", () => {
-    const { rerender } = render(<SlideOver open>info</SlideOver>);
+    const { rerender } = render(<Sheet open>info</Sheet>);
     running = [];
-    rerender(<SlideOver open={false}>info</SlideOver>);
-    rerender(<SlideOver open>info</SlideOver>);
+    rerender(<Sheet open={false}>info</Sheet>);
+    rerender(<Sheet open>info</Sheet>);
     expect(running).toHaveLength(1);
     expect(transforms(nth(running, 0)).at(-1)).toBe("none");
     expect(panel()).toBeTruthy();

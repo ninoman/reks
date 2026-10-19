@@ -15,11 +15,11 @@ import { LibraryToolbar } from "./components/LibraryToolbar";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
 import { SettingsDialog } from "./components/SettingsDialog";
-import { SlideOver } from "./components/SlideOver";
 import { TrackInfoPanel } from "./components/TrackDetailPanel";
 import { TrackTable } from "./components/TrackTable";
 import { TransportBar } from "./components/TransportBar";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
+import { Sheet } from "./components/ui/Sheet";
 import { useLibrary } from "./store/library";
 import { usePanels } from "./store/panels";
 import { usePlayer } from "./store/player";
@@ -87,9 +87,9 @@ export default function App() {
           )}
           <div className="table-area">
             <TrackTable columns={visibleColumns(table)} />
-            <SlideOver open={infoOpen}>
+            <Sheet open={infoOpen}>
               <TrackInfoPanel />
-            </SlideOver>
+            </Sheet>
           </div>
         </main>
       </div>

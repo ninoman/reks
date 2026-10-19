@@ -1,4 +1,4 @@
-/** Small line icons (16 px unless sized, `currentColor`) for toolbar buttons. */
+/** Small line icons (16 px unless sized by a control, `currentColor`). */
 
 export function InfoIcon() {
   return (
@@ -35,6 +35,81 @@ export function GearIcon({ size = 18 }: { size?: number }) {
       </g>
       <circle cx="8" cy="8" r="4.3" fill="none" stroke="currentColor" strokeWidth="1.4" />
       <circle cx="8" cy="8" r="1.7" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+
+export function SearchIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M10.4 10.4 14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function ChevronDownIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="m4 6 4 4 4-4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function CheckIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="m3.5 8.5 3 3 6-7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function CloseIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PlusIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PlayIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="M5 3.2v9.6a.5.5 0 0 0 .76.43l7.7-4.8a.5.5 0 0 0 0-.86l-7.7-4.8A.5.5 0 0 0 5 3.2z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export function PauseIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <rect x="4" y="3" width="2.8" height="10" rx="0.8" fill="currentColor" />
+      <rect x="9.2" y="3" width="2.8" height="10" rx="0.8" fill="currentColor" />
     </svg>
   );
 }

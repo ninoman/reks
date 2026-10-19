@@ -1,0 +1,76 @@
+/**
+ * Modal dialog (Radix): backdrop, focus trap, Escape and outside clicks go
+ * to `onOpenChange(false)`. Compose Header / Title / Body / Footer inside
+ * `DialogContent`.
+ */
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { cva, type VariantProps } from "class-variance-authority";
+import type { ComponentProps } from "react";
+
+import { cn } from "../../lib/cn";
+
+export const dialogContentVariants = cva(
+  [
+    "fixed top-1/2 left-1/2 z-(--z-dialog) flex max-h-[calc(100vh-64px)] w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col",
+    "rounded-lg border border-border bg-surface text-fg shadow-overlay outline-none",
+  ],
+  {
+    variants: { size: { sm: "max-w-[360px]", md: "max-w-[560px]", lg: "max-w-[640px]" } },
+    defaultVariants: { size: "sm" },
+  },
+);
+
+export const Dialog = DialogPrimitive.Root;
+
+export function DialogContent({
+  size,
+  className,
+  children,
+  ...props
+}: ComponentProps<typeof DialogPrimitive.Content> & VariantProps<typeof dialogContentVariants>) {
+  return (
+    <DialogPrimitive.Portal>
+      <DialogPrimitive.Overlay className="fixed inset-0 z-(--z-dialog) bg-overlay" />
+      <DialogPrimitive.Content
+        aria-describedby={undefined}
+        className={cn(dialogContentVariants({ size }), className)}
+        {...props}
+      >
+        {children}
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Portal>
+  );
+}
+
+export function DialogHeader({ className, ...props }: ComponentProps<"div">) {
+  return <div className={cn("flex flex-col gap-1 px-5 pt-4 pb-2", className)} {...props} />;
+}
+
+export function DialogTitle({ className, ...props }: ComponentProps<typeof DialogPrimitive.Title>) {
+  return (
+    <DialogPrimitive.Title
+      className={cn("m-0 text-md font-semibold text-fg", className)}
+      {...props}
+    />
+  );
+}
+
+export function DialogDescription({
+  className,
+  ...props
+}: ComponentProps<typeof DialogPrimitive.Description>) {
+  return (
+    <DialogPrimitive.Description
+      className={cn("m-0 text-xs text-fg-muted", className)}
+      {...props}
+    />
+  );
+}
+
+export function DialogBody({ className, ...props }: ComponentProps<"div">) {
+  return <div className={cn("min-h-0 overflow-auto px-5 py-2", className)} {...props} />;
+}
+
+export function DialogFooter({ className, ...props }: ComponentProps<"div">) {
+  return <div className={cn("flex justify-end gap-2 px-5 pt-3 pb-4", className)} {...props} />;
+}

@@ -10,7 +10,10 @@ export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],
 
   // Agent worktrees under .claude/ hold other checkouts of this repo.
-  test: { exclude: [...configDefaults.exclude, "**/.claude/**"] },
+  test: {
+    exclude: [...configDefaults.exclude, "**/.claude/**"],
+    setupFiles: ["src/test/setup.ts"],
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

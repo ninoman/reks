@@ -71,6 +71,7 @@
   --color-hover: rgb(38 37 30 / 6%);
   --color-selected: var(--warm-200);
   --color-selected-fg: var(--warm-850);
+  --color-knob: var(--warm-0);
 
   --color-fg: var(--warm-850);
   --color-fg-muted: var(--warm-500);
@@ -146,6 +147,7 @@
     --color-hover: rgb(237 236 230 / 6%);
     --color-selected: var(--warm-750);
     --color-selected-fg: var(--warm-75);
+    --color-knob: var(--warm-75);
     --color-fg: var(--warm-75);
     --color-fg-muted: var(--warm-400);
     --color-fg-subtle: var(--warm-600);
@@ -217,5 +219,4 @@
   --duration-fast: 100ms;
   --duration-slide-in: 240ms;
   --duration-slide-out: 160ms;
-  --tooltip-delay: 500ms;
 }
