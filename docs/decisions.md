@@ -299,6 +299,59 @@ Date of decisions: 2026-10-18.
   Windows ASIO needs Steinberg's SDK, so WASAPI only. "Xone" and "Allen &
   Heath" are trademarks: docs name them as the reference, UI strings do not.
 
+## D22. Playlist dividers: playlist entries in the library, silent WAV tracks on the stick
+
+- Date: 2026-10-19 (maintainer's call). Plan: [`phases/phase-2.5.md`](phases/phase-2.5.md),
+  a new phase after Phase 2 and before Phase 3 (a half step, so later phases keep
+  their numbers).
+- Decision: a divider is a `playlist_track` entry with `item_kind = 'divider'` and
+  a label, never a `track` row, so search, counts, filters and XML export stay
+  clean. On export it becomes a real track: a silent PCM WAV we generate (no
+  copied audio) with the label as title, analysed by baken's `generate_analysis`,
+  which only touches tracks rekordbox never analysed (R§10). One file per divider
+  until hardware shows rows can share one. Behind `export.dividers` until the
+  Phase 2.5 hardware checklist passes on CDJ-2000NXS2 and CDJ-3000.
+- Rationale: DJs already do this by hand with silent files in rekordbox. A PDB
+  playlist entry must point at a track row, and a row whose file is missing or
+  invalid is the kind of thing that breaks a stick; a loadable silent file is
+  the safe form.
+- Rejected: PDB rows without a file (unsafe, untested); dividers as library
+  tracks (pollute search, counts and XML); a reks-owned folder on the stick
+  (baken lays out `/Contents/<Artist>/<Album>/` itself, R§10).
+- Risks: dividers show in All Tracks, search and player history; label length
+  and glyphs per player; baken's analysis of a silent file with no TEMPO.
+
+## D23. Play history: imported sessions, derived play counts, and no export ever loses player history
+
+- Date: 2026-10-19 (maintainer's call). Safeguard: Phase 2 tasks 12–13. Import
+  from legacy sticks (H1): Phase 2.5. OneLibrary (H2): Phase 4 task 11. Engine
+  (H3): Phase 5 task 11.
+- Decision:
+  - Play count and last played are derived: a frozen baseline copied from
+    rekordbox's `collection.xml` values, plus the entries of included sessions.
+    Sessions are imported read-only from sticks or from Phase 2 backups. A
+    session can be marked practice (excluded) and back. Sessions dated on or
+    before the baseline date import excluded. reks preview and mixer playback
+    never count.
+  - Every writer checks what history the stick holds before writing. Phase 2
+    backs up `PIONEER/rekordbox/*.pdb` and `exportLibrary.db` to
+    `app_data_dir/stick-backups/` by default (data dir, not cache dir: it can
+    be the only copy) and discards only on explicit confirm. From Phase 2.5 an
+    export stops on sessions not yet imported.
+  - Entries match library tracks through `export_manifest`, keyed by (volume
+    serial, stick path) and filled from the validator's read-back, so PDB
+    track IDs need not stay stable; baken doesn't promise that.
+- Rationale: baken rebuilds `export.pdb` on every run and removes
+  `exportLibrary.db` unless OneLibrary is on (R§10), so without this every
+  re-export erases the history the players wrote. Derived counts (as in Mixxx)
+  are explainable and recomputable; a stored counter can't undo a practice
+  session.
+- Rejected: an incremented stored counter; importing rekordbox's own histories
+  (not in XML; `master.db` is out of scope); writing history back to sticks
+  (player-owned data); backups in `app_cache_dir` (D19; the OS may clear it).
+- Risks: history format unknowns (date table, appends across mounts, what a
+  player logs as a play) and volume serial access per OS; see R§8 item 14.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

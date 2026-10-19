@@ -60,8 +60,9 @@ shared: Engine paths point at the same `/Contents/...` files written in Phase 2.
 ## Non-goals
 
 - Importing Engine libraries into reks (maybe later).
-- History (`hm.db`), streaming DBs, Smartlists, crates (gone in 2.x+; folders
-  become playlist hierarchy).
+- Writing history (`hm.db`). We read it (task 11) and never delete it.
+- Streaming DBs, Smartlists, crates (gone in 2.x+; folders become playlist
+  hierarchy).
 - Album art hashing exactly like Engine (`AlbumArt.hash` algorithm unknown);
   we write art with our own hash and accept that Engine may re-hash.
 - Engine OS 1.x schemas (`m.db` + `p.db`).
@@ -133,9 +134,16 @@ Mapping from the export plan
 8. **Reader/validator**: open our DB, decode all blobs, cross-check track count
    and file existence; CLI `reks-cli engine verify <stick>`.
 9. **Planner + UI**: Engine target with schema picker and "also write Pioneer"
-   combined mode; dry-run lists the DB and any stale `Engine Library` files.
+   combined mode; dry-run lists the DB and any stale `Engine Library` files
+   (never `hm.db` or other DBs we don't write, task 11).
 10. **Hardware test**: checklist below on an Engine OS player (borrow a PRIME
     GO or SC LIVE; also test Engine DJ Desktop reading the stick).
+11. **History (H3, D23)**: read `Engine Library/Database2/hm.db` into Phase 2.5
+    sessions with `source = 'engine'`; the writer and stale cleanup never
+    delete or overwrite `hm.db`; the Phase 2.5 export guard covers it.
+    Location, schema and whether players write it on the stick come from a
+    reference stick played on an Engine player (UNVERIFIED, R§5). Test: the
+    reference `hm.db` imports; an export leaves its hash unchanged.
 
 ## Acceptance criteria
 
@@ -168,7 +176,10 @@ Mapping from the export plan
    hot cues 1–8 with colours, loops, overview waveform present.
 5. Insert into Engine DJ Desktop: library reads, no repair prompt.
 6. Insert into a CDJ: legacy library still works (shared audio files).
-7. Record Engine OS version, player, and results in `docs/hw-test-log.md`.
+7. Play 2 tracks on the Engine player; on the computer note whether `hm.db`
+   exists on the stick and what `reks-cli history scan` reads; re-export and
+   confirm `hm.db` is unchanged.
+8. Record Engine OS version, player, and results in `docs/hw-test-log.md`.
 
 ## Risks
 

@@ -50,7 +50,8 @@ files, mirroring what rekordbox 7.2.11+ does on every export.
 
 - Replacing the legacy export: never. Both are always written when enabled.
 - `history`, `hotCueBankList*`, `recommendedLike`, `myTag*` content: written
-  as empty tables with seed rows only.
+  as empty tables with seed rows only. Player history already on the stick is
+  imported or backed up first (task 11, D23).
 - Conversion of an existing rekordbox-written stick: we rewrite from our plan.
 - Reading `master.db`.
 
@@ -142,6 +143,14 @@ Mapping from the export plan (same source as Phase 2's PDB):
    rent an OPUS-QUAD/XDJ-AZ/CDJ-3000X). Log results in `docs/hw-test-log.md`.
 10. **Diff tool**: `reks-cli onelibrary diff <ref.db> <ours.db>` to speed up
     iteration after hardware failures.
+11. **History (H2, D23)**: read `history` / `history_content` from an existing
+    `exportLibrary.db` (key supplied at runtime, as above) into Phase 2.5
+    sessions with `source = 'onelibrary'`, from a stick or a Phase 2 backup.
+    A stick can hold different histories in each library, so both are
+    imported. The Phase 2.5 export guard covers `exportLibrary.db` before
+    task 6 replaces it. Columns from the task 2 reference (UNVERIFIED until
+    then). Test: a reference DB with history imports with entries in order;
+    re-import adds nothing.
 
 ## Acceptance criteria
 
@@ -179,7 +188,10 @@ Mapping from the export plan (same source as Phase 2's PDB):
    wrote its own files and did not corrupt ours (rekordbox then shows both
    libraries without the "out of matching" caution).
 6. Repeat on a legacy player with the same stick (regression).
-7. Record firmware versions and results.
+7. Play 2 tracks on the OneLibrary player; on the computer
+   `reks-cli history scan` lists them from `exportLibrary.db`; a re-export
+   asks to import first.
+8. Record firmware versions and results.
 
 ## Risks
 
@@ -195,5 +207,6 @@ Mapping from the export plan (same source as Phase 2's PDB):
   policy above; no key in repo; experimental flag; be ready to remove.
 - **Two libraries drifting**: a user edits the stick on a legacy player
   (history/hot cues written by the player) and the two libraries diverge.
-  Mitigation: reks always regenerates both from the plan; document that
-  on-player edits are not merged back.
+  Mitigation: reks always regenerates both from the plan; history is
+  imported first (task 11); document that other on-player edits are not
+  merged back.

@@ -1,8 +1,8 @@
 # Phase 2 — Legacy USB export (`export.pdb` + ANLZ)
 
 Status: not started. Depends on: Phase 1 (library, XML writer, playlists,
-`rb_track_id`/`rb_location`). Read `docs/decisions.md` D7, D8, D16 and
-`docs/research.md` §1, §4 first.
+`rb_track_id`/`rb_location`). Read `docs/decisions.md` D7, D8, D16, D23 and
+`docs/research.md` §1, §4, §10 first.
 
 ## Goal
 
@@ -20,6 +20,9 @@ validated by reading the stick back with an independent parser.
   `baken-export` implementation, stale-file reconciliation, read-back
   validator (rekordcrate), reports.
 - Locating rekordbox's local ANLZ cache for imported tracks.
+- History safeguard (D23): before writing, find the play history players left
+  on the stick, back it up and warn; after writing, record an export manifest
+  that Phase 2.5 uses to import that history.
 - Export UI: pick device, pick playlists, options, dry-run view, progress,
   result report, eject.
 - Hardware test campaign on the maintainer's players and `docs/hw-test-log.md`.
@@ -31,6 +34,8 @@ validated by reading the stick back with an independent parser.
   approximate) until Phase 3 lands.
 - OneLibrary (Phase 4), Engine DJ (Phase 5).
 - Writing `exportExt.pdb` My Tags, history, hot-cue banks, phrase (PSSI).
+- Importing play history and playlist dividers (Phase 2.5). This phase only
+  makes sure no history is lost.
 - Formatting sticks; transcoding audio (we refuse unsupported files and
   explain; "CDJ-safe transcode" is a later feature).
 - Settings files (`MYSETTING*.DAT`, `DEVSETTING.DAT`): copy if present on the
@@ -48,6 +53,8 @@ pub struct ExportPlan {
     pub copies: Vec<FileOp>,                 // audio to copy (src, dst, bytes, reason)
     pub anlz: Vec<AnlzOp>,                   // per track: CopyFromCache{src}, Generate, Missing
     pub deletes: Vec<FileOp>,                // stale audio/ANLZ/artwork to remove (prune)
+    pub history: StickHistory,               // what players left on the stick (D23)
+    pub backups: Vec<FileOp>,                // stick DB files copied to app_data_dir before any write
     pub warnings: Vec<Warning>,              // e.g. FLAC on NXS target, path > 255, exFAT
     pub errors: Vec<Problem>,                // blockers: missing file, > 4 GiB on FAT32, WAV_EXTENSIBLE
     pub bytes_to_write: u64, pub bytes_free_after: i64,
@@ -57,6 +64,11 @@ pub struct PlannedTrack { pub track_id: TrackId, pub src: PathBuf, pub dst_rel: 
                           pub anlz_source: AnlzSource }
 pub enum TargetProfile { Cdj2000Nxs, Cdj2000Nxs2, Cdj3000, XdjXz, Generic }   // affects fs + codec warnings
 pub enum AnlzSource { RekordboxCache(PathBuf), Generated, None }
+pub struct StickHistory { pub volume_serial: Option<String>,             // FAT/exFAT serial via the OS (R§8 item 14)
+                          pub pdb_sessions: u32, pub pdb_entries: u32,  // export.pdb history rows (rekordcrate)
+                          pub pdb_unreadable: bool,                     // treated as "has history"
+                          pub onelibrary_db: bool }                     // exportLibrary.db present (baken removes it)
+pub enum HistoryPolicy { BackUp /* default */, Discard /* only after an explicit confirm */ }   // Phase 2.5 adds Import
 
 pub fn plan(lib: &Library, sel: &Selection, dev: &DeviceInfo, opts: &ExportOptions) -> Result<ExportPlan>;
 pub fn apply(plan: &ExportPlan, writer: &dyn RekordboxWriter, progress: impl Fn(ExportEvent), cancel: &CancelToken)
@@ -104,6 +116,34 @@ Stale-file policy
   "out of matching" caution afterwards and that reks rewrites the Device
   Library completely.
 
+History safeguard (D23)
+- baken rebuilds `export.pdb` on every run and removes an existing
+  `exportLibrary.db` unless OneLibrary is on (R§10). Players write their
+  history into both, so a plain re-export erases it.
+- The planner reads the stick's history rows (rekordcrate `HistoryPlaylist` /
+  `HistoryEntry`, PDB tables 11/12) and notes `exportLibrary.db`. If either
+  holds or may hold history, the dry run says so and plans `backups`.
+- `apply` copies `PIONEER/rekordbox/*.pdb` and `exportLibrary.db` to
+  `app_data_dir/stick-backups/<volume serial>/<UTC timestamp>/`, checks the
+  copies by hash, and only then writes. Backups go in the data dir, not the
+  cache dir (D19): they can be the only copy. A failed backup aborts before
+  any stick write. `Discard` skips the backup only after an explicit confirm.
+- After a successful validation, `export_manifest` gets one row per file on
+  the stick, built from the read-back, replacing that serial's previous rows.
+  Phase 2.5 matches history entries through it, so PDB track IDs don't need to
+  stay stable across exports.
+
+```sql
+CREATE TABLE export_manifest (              -- latest export to each stick
+  volume_serial TEXT NOT NULL,
+  stick_path    TEXT NOT NULL,              -- '/Contents/...' as in the PDB track row
+  item_kind     TEXT NOT NULL DEFAULT 'track',   -- 'track' | 'divider' (Phase 2.5)
+  track_id      INTEGER REFERENCES track(id) ON DELETE SET NULL,
+  exported_at   TEXT NOT NULL,
+  PRIMARY KEY (volume_serial, stick_path)
+);
+```
+
 ## Tasks
 
 1. **Device discovery**: `sysinfo::Disks` wrapper → `DeviceInfo` (mount point,
@@ -141,15 +181,28 @@ Stale-file policy
    produce `ValidationReport` with per-track findings. Optional byte-diff
    tool against a rekordbox reference export (`reks-cli rb diff`).
 9. **Export orchestration**: `apply` = pre-flight (free space, device still
-   mounted, no rekordbox running? warn), writer, fsync, validate, report;
+   mounted, no rekordbox running? warn), history backup (task 12), writer,
+   fsync, validate, export manifest (task 13), report;
    cancellation leaves the stick in its previous DB state (baken keeps the
    old `export.pdb` on failure; verify).
 10. **Export UI**: wizard (device → playlists → options → dry-run table with
     warnings/errors/deletes → progress → report with "Eject"). Persist last
     selection per device label.
-11. **`reks-cli rb export/validate/diff`** for headless iteration.
-12. **Hardware campaign**: run the checklist on CDJ-2000NXS2 and CDJ-3000
+11. **`reks-cli rb export/validate/diff/history`** for headless iteration
+    (`history` lists the stick's history playlists and entry counts).
+12. **History safeguard**: `StickHistory` in the planner; volume serial from
+    the OS (`diskutil` on macOS, `GetVolumeInformationW` on Windows, `blkid`
+    UUID on Linux; UNVERIFIED, R§8 item 14); `backups` with hash check at the
+    start of `apply`; `HistoryPolicy`; dry-run and UI wording. Tests: fixture
+    `export.pdb` with history → counts and planned backups; a failing backup
+    leaves the stick untouched; `Discard` needs the explicit flag.
+13. **Export manifest**: migration adding `export_manifest`; rows from the
+    validator's read-back after each successful export. Tests: re-export
+    replaces the serial's rows; deleting a library track keeps its row with
+    `track_id` NULL; no serial → no rows, export still succeeds.
+14. **Hardware campaign**: run the checklist on CDJ-2000NXS2 and CDJ-3000
     (and any other player available); fix; log in `docs/hw-test-log.md`.
+    Tasks 12–13 come first: the checklist re-exports a played stick.
 
 ## Acceptance criteria
 
@@ -168,6 +221,8 @@ Stale-file policy
   clear message, never half-exported.
 - Writing never happens outside `apply`; a dry run leaves the stick's
   modification times unchanged (test).
+- A stick holding player history is never written without a backup whose
+  hashes match the stick's files, unless the user confirmed `Discard`.
 
 ## Tests to write
 
@@ -182,6 +237,9 @@ Stale-file policy
   and assert each is reported.
 - Golden: compare our stick's `export.pdb` row contents (not bytes) with a
   rekordbox export of the same 5 tracks in `fixtures/rekordbox/ref-<ver>/`.
+- History safeguard: an `export.pdb` from a stick played on a CDJ (sanitised,
+  metadata only) in `fixtures/rekordbox/played-<ver>/`; backup, abort and
+  manifest cases from tasks 12–13.
 
 ## Manual CDJ test checklist
 
@@ -205,9 +263,15 @@ dynamic grid, a track with 8 hot cues + 3 memory cues + 1 loop).
 6. Set a hot cue on the player; eject; re-insert in the computer; run
    `reks-cli rb validate`: still valid; rekordbox 7 opens the stick (expect
    the OneLibrary mismatch caution; record wording).
-7. Re-export with 20 tracks removed/added; re-insert; removed tracks gone,
-   new ones present, previously set player hot cue state noted.
-8. Log everything in `docs/hw-test-log.md` with photos of any error screens.
+7. Play 3 tracks for over a minute each; eject; on the computer run
+   `reks-cli rb validate` (still valid: the player wrote into our PDB without
+   breaking it) and `reks-cli rb history` (the session is listed). Keep a copy
+   of this `export.pdb` as the played-stick fixture.
+8. Re-export with 20 tracks removed/added: the dry run reports the history and
+   plans a backup; the backup folder then holds the old PDB with matching
+   hashes. Re-insert; removed tracks gone, new ones present, previously set
+   player hot cue state noted.
+9. Log everything in `docs/hw-test-log.md` with photos of any error screens.
 
 ## Risks
 
@@ -227,3 +291,6 @@ dynamic grid, a track with 8 hot cues + 3 memory cues + 1 loop).
   Cyrillic/Japanese/emoji; hardware checklist step 2.
 - **rekordbox mismatch caution** confuses users. Mitigation: explain in the
   report and docs; Phase 4 resolves it.
+- **Player history lost on re-export** (baken rebuilds `export.pdb`, removes
+  `exportLibrary.db`). Mitigation: history safeguard (task 12) before the
+  hardware campaign; Phase 2.5 imports the backups.

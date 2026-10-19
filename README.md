@@ -13,6 +13,9 @@ Engine DJ players.
 - Exports a USB stick in the legacy rekordbox format (`export.pdb` + ANLZ
   analysis files), targeting CDJ-2000 / NXS / NXS2 / CDJ-3000 / XDJ players
   (not yet hardware-tested; see `docs/hw-test-log.md`).
+- Then: playlist dividers that show on the player, and play history imported
+  from played sticks, with practice sessions left out of play counts
+  ([`docs/phases/phase-2.5.md`](docs/phases/phase-2.5.md)).
 - Analyses tracks itself (BPM, beatgrid, key, waveforms) in Pioneer formats.
 - Later: the newer rekordbox "Device Library Plus" (`exportLibrary.db`) format
   and Denon Engine DJ libraries.
@@ -34,7 +37,7 @@ Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
 | --- | --- |
 | [`CLAUDE.md`](CLAUDE.md) | Brief for contributors and coding agents: stack, rules, conventions |
 | [`docs/decisions.md`](docs/decisions.md) | Architecture and product decisions, with status |
-| [`docs/phases/`](docs/phases/) | Phase 1–6 plans with task checklists |
+| [`docs/phases/`](docs/phases/) | Phase 1–6 plans (plus 2.5) with task checklists |
 | [`docs/research.md`](docs/research.md) | Evidence and sources behind the decisions |
 | [`docs/research/`](docs/research/) | Raw research notes per topic |
 | [`docs/hw-test-log.md`](docs/hw-test-log.md) | Real-player test results |

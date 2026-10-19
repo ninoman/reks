@@ -16,6 +16,7 @@ Contents
 7. rekordbox XML (`collection.xml`)
 8. Consolidated list of unverified items
 9. DJ mixer reference and real-time audio crates (Phase 6)
+10. Play history and playlist dividers (Phases 2 and 2.5)
 
 ---
 
@@ -495,6 +496,12 @@ hardware run, and the result recorded in `docs/decisions.md` or
 13. Mixer (§9): Xone:92 Mk2 differences from the original; its filter slope
     and LFO waveform; how the `rubberband` crate builds (bundled or system
     library); `rubato` 5.x API for a smoothly changing ratio.
+14. History and dividers (§10): PDB table 19 date layout; whether players
+    append to a history across mounts and what they log as a play; volume
+    serial access per OS (`diskutil`, `GetVolumeInformationW`, `blkid`) and
+    whether reformatting changes it; Engine players writing `hm.db` on the
+    stick; minimum divider length, visible title length, shared divider
+    files and baken's handling of a silent file with empty artist/album.
 
 ---
 
@@ -555,3 +562,61 @@ Mk2 listing: https://avlgear.com/collections/allen-heath-dj-equipment/products/a
 crates.io API `https://crates.io/api/v1/crates/<name>` for every crate above ·
 https://docs.rs/timestretch · https://docs.rs/signalsmith-stretch ·
 https://docs.rs/ssstretch · https://github.com/jefflongo/rubberband-rs
+
+---
+
+## 10. Play history and playlist dividers (Phases 2 and 2.5)
+
+Research date: 2026-10-19. Supports D22 and D23. §10.2 summarises the
+maintainer's play-history PRD of the same date; we did not re-check its sources.
+
+### 10.1 What a stick holds, and what our writer does to it
+
+- Legacy players write history into `export.pdb`: tables 11
+  (`history_playlists`) and 12 (`history_entries`), plus table 19 (`history`,
+  dates; layout undecoded) (§4, raw-4 §3.1). History pages need a valid empty
+  structure (`u7 = 1`) (raw-4 §3.5). The prolink project reports table 19 rows
+  with ascending ids and ASCII `YYYY-MM-DD`; its licence is unchecked, so it is
+  a reference only.
+- rekordcrate 0.3.0 has `HistoryPlaylist`, `HistoryPlaylistId` and
+  `HistoryEntry` row types; nothing for table 19.
+- baken-export 4.6.1 rebuilds `export.pdb` on every run (raw-1). Without its
+  `onelibrary` option, "an existing OneLibrary on the stick is removed".
+  `generate_analysis` covers only tracks "rekordbox never analysed, instead of
+  leaving them out". Audio goes to `/Contents/<Artist>/<Album>/<file>`, names
+  cut at 48 characters, collisions suffixed `-1`, `-2`; empty artist/album
+  handling is not documented (**UNVERIFIED**).
+- OneLibrary keeps history in `history` / `history_content` (§2); Engine in
+  `hm.db` (§5; whether players write it on the stick is **UNVERIFIED**).
+
+### 10.2 Play history in other apps (from the PRD)
+
+| App | Sessions | What counts as a play | Counts | Reset / exclude |
+|---|---|---|---|---|
+| rekordbox | History per stick mount; desktop groups by year/month | Performance mode: 60 s default, configurable | Imported from stick histories (export mode only) | Dedupes by name + contents; deletes from the stick by default (keep option since 7.0.6) |
+| Serato | Explicit sessions with start/end; shows auditioned tracks | Deck playing with channel fader and crossfader open | Own count, no backfill from older versions | Mark played/unplayed; counting can be disabled |
+| Traktor | One history per app run, archived on close | Minimum play time; on air in internal mixing | Separate Play Count, Last Played, Played-State | Reset touches only the played checkmark |
+| Mixxx | Set-log playlists | Player logic | Derived from set-log rows; deleting a session updates counts | Remove from or delete a session |
+| Lexicon | Imported sessions with location and rating | From the source app | From the source app | — |
+
+Adopted: derived counts (Mixxx); sessions with metadata (Serato, Lexicon);
+name + contents dedupe and keep-on-stick (rekordbox); a separate baseline
+without backfill (Serato). Divider tracks: DJs make them by hand in rekordbox
+with silent files renamed to a label (playlist-dividers PRD, 2026-10-19).
+
+Sources: https://docs.rs/rekordcrate/0.3.0/rekordcrate/pdb/index.html ·
+https://docs.rs/baken-export/latest/baken_export/struct.Options.html ·
+https://docs.rs/baken-export/latest/baken_export/layout/index.html ·
+https://github.com/usr-ein/prolink/releases/tag/v0.3.0 ·
+https://pyrekordbox.readthedocs.io/en/latest/formats/devicelib_plus.html ·
+PRD sources: https://rekordbox.com/en/support/faq/operation-hints-7/ ·
+https://cdn.rekordbox.com/files/20251021171528/USB_export_guide_en_251007.pdf ·
+https://cdm.link/rekordbox-7-0-6/ · https://preview.nowplayingapp.com/tutorials/rekordbox ·
+https://support.serato.com/hc/en-us/articles/223455687 ·
+https://support.serato.com/hc/en-us/articles/360001031675-How-to-use-the-Plays-column-in-Serato-DJ-Pro-2-2-0-and-above ·
+https://support.native-instruments.com/support/solutions/articles/69000879487-my-history-playlist-is-empty-after-restarting-traktor ·
+https://community.native-instruments.com/discussion/comment/54748/ ·
+https://github.com/mixxxdj/mixxx/pull/3140 ·
+https://community.enginedj.com/t/multi-source-sets-and-shared-merged-history-no-start-time-on-history-exports/58299 ·
+https://www.digitaldjtips.com/lexicon-1-10-brings-serato-4-0-support-track-timeline-play-history/ ·
+https://community.algoriddim.com/t/edit-play-count-on-macos-windows/23018
