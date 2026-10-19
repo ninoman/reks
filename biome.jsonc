@@ -28,6 +28,13 @@
     "domains": { "react": "recommended" },
     "rules": {
       "preset": "recommended",
+      "a11y": {
+        // `ui/Checkbox` renders a native checkbox, so a <label> around it names it.
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": { "inputComponents": ["Checkbox"] }
+        }
+      },
       "style": {
         // Was react-refresh/only-export-components: keeps Vite fast refresh working.
         "useComponentExportOnlyModules": {

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Button } from "./Button";
+import { Checkbox } from "./Checkbox";
 import type { ControlSize } from "./control";
 import { Dialog, DialogContent, DialogTitle } from "./Dialog";
 import { IconButton } from "./IconButton";
@@ -73,6 +74,19 @@ describe("Switch", () => {
     const sw = screen.getByRole("switch", { name: "Apply" });
     expect(sw.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(sw);
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("Checkbox", () => {
+  it("is a native checkbox named by its label", () => {
+    const onChange = vi.fn();
+    render(
+      <label>
+        <Checkbox checked={false} onChange={(e) => onChange(e.target.checked)} />I understand
+      </label>,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "I understand" }));
     expect(onChange).toHaveBeenCalledWith(true);
   });
 });

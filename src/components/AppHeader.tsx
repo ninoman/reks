@@ -1,14 +1,17 @@
 /**
  * App header: the top bar across the whole window for library-wide actions
- * (scan, import, USB devices, settings), with the scan status line under it.
+ * (scan, import, export to USB, USB devices, settings), with the scan status
+ * line under it.
  * "Scan folder…" adds the folder to the library folders (Settings) and scans
  * it. "Import rekordbox XML…" picks the file and opens the import wizard
- * (`ImportWizard`).
+ * (`ImportWizard`). "Export to USB…" opens the export wizard (`ExportWizard`)
+ * with the playlist selected in the sidebar ticked.
  */
 
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { useDevices } from "../store/devices";
+import { openExportWizard } from "../store/exportWizard";
 import { useImportWizard } from "../store/importWizard";
 import { useScan } from "../store/scan";
 import { useSettings } from "../store/settings";
@@ -52,6 +55,9 @@ export function AppHeader() {
         )}
         <Button size="sm" disabled={scanning || importing} onClick={() => void chooseXml()}>
           Import rekordbox XML…
+        </Button>
+        <Button size="sm" disabled={importing} onClick={() => openExportWizard()}>
+          Export to USB…
         </Button>
         <Tooltip content="USB devices">
           <IconButton

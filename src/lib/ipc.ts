@@ -521,3 +521,102 @@ export function devicesList(): Promise<DeviceInfo[]> {
 export function deviceEject(mountPoint: string): Promise<void> {
   return invoke("device_eject", { mountPoint });
 }
+
+/** Player family the export is checked against (`TargetProfile`). */
+export type TargetProfile = "Cdj2000Nxs" | "Cdj2000Nxs2" | "Cdj3000" | "XdjXz" | "Generic";
+
+/** Tracks without rekordbox analysis (`MissingAnalysis`). The writer refuses `exportWithout`. */
+export type MissingAnalysis = "skip" | "generate" | "exportWithout";
+
+/** What an export does with the stick's play history (`HistoryPolicy`, D23). */
+export type HistoryPolicy = "backUp" | "discard";
+
+/** `plan::ExportOptions`. */
+export interface ExportOptions {
+  target: TargetProfile;
+  keepStale: boolean;
+  missingAnalysis: MissingAnalysis;
+  artwork: boolean;
+  skipUnsupported: boolean;
+  history: HistoryPolicy;
+  /** Required for `discard` on a stick that holds history. */
+  discardHistoryConfirmed: boolean;
+}
+
+/** Playlists and folders (= everything under them) to export (`plan::Selection`). */
+export interface ExportSelection {
+  playlists: number[];
+}
+
+/** `dryrun::Fact`: a label and its value, worded in Rust. */
+export interface Fact {
+  label: string;
+  value: string;
+}
+
+export interface DryRunFileRow {
+  path: string;
+  from: string | null;
+  sizeText: string;
+}
+
+export interface DryRunFileGroup {
+  count: number;
+  bytes: number;
+  totalText: string;
+  files: DryRunFileRow[];
+}
+
+/** Notices of one kind (`dryrun::NoticeGroup`); `items` is empty for one-sentence kinds. */
+export interface NoticeGroup {
+  kind: string;
+  title: string;
+  items: string[];
+}
+
+/** The dry-run view of an export plan (`dryrun::DryRun`); every string is final. */
+export interface DryRun {
+  ready: boolean;
+  status: string;
+  device: {
+    mountPoint: string;
+    name: string;
+    fsText: string;
+    spaceText: string;
+    volumeSerial: string | null;
+  };
+  target: string;
+  summary: Fact[];
+  playlists: { id: number; name: string; depth: number; isFolder: boolean; detail: string }[];
+  copies: DryRunFileGroup;
+  deletes: DryRunFileGroup;
+  space: {
+    fits: boolean;
+    totalBytes: number;
+    freeBytes: number;
+    writeBytes: number;
+    deleteBytes: number;
+    freeAfterBytes: number;
+    usedAfterBytes: number;
+    facts: Fact[];
+  };
+  history: {
+    atRisk: boolean;
+    policy: HistoryPolicy;
+    title: string;
+    text: string;
+    actionText: string | null;
+    backups: DryRunFileGroup;
+  };
+  problems: NoticeGroup[];
+  warnings: NoticeGroup[];
+}
+
+/** Plans an export to the stick at `mountPoint` without writing anything (slow: reads the stick and the files). */
+export function exportPlan(
+  mountPoint: string,
+  selection: ExportSelection,
+  options: ExportOptions,
+): Promise<DryRun> {
+  return invoke("export_plan", { mountPoint, selection, options });
+}

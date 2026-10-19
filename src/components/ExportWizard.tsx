@@ -1,0 +1,480 @@
+/**
+ * USB export wizard (phase 2 task 10): pick a stick, pick playlists, set the
+ * options, then read the dry run. Planning, wording and totals all come from
+ * Rust (`export_plan` → `DryRun`); this lays them out. The Export button
+ * stays disabled until the writer (`apply`, task 9) is wired in.
+ */
+import type { ReactNode } from "react";
+
+import { cn } from "../lib/cn";
+import type {
+  DryRun,
+  DryRunFileGroup,
+  ExportOptions,
+  Fact,
+  MissingAnalysis,
+  NoticeGroup,
+  PlaylistNode,
+  TargetProfile,
+} from "../lib/ipc";
+import { canContinue, coveredIds, EXPORT_STEPS, useExportWizard } from "../store/exportWizard";
+import { usePlaylists } from "../store/playlists";
+import { DeviceList } from "./DevicesDialog";
+import { Button } from "./ui/Button";
+import { Card } from "./ui/Card";
+import { Checkbox } from "./ui/Checkbox";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/Dialog";
+import { Field } from "./ui/Field";
+import { Progress } from "./ui/Progress";
+import { Segment, SegmentedControl } from "./ui/SegmentedControl";
+import { Select } from "./ui/Select";
+import { Switch } from "./ui/Switch";
+
+const STEP_TITLES = {
+  device: "Stick",
+  playlists: "Playlists",
+  options: "Options",
+  dryRun: "Dry run",
+} as const;
+
+const TARGETS: { value: TargetProfile; label: string }[] = [
+  { value: "Generic", label: "Any player (safest)" },
+  { value: "Cdj2000Nxs", label: "CDJ-2000NXS" },
+  { value: "Cdj2000Nxs2", label: "CDJ-2000NXS2" },
+  { value: "Cdj3000", label: "CDJ-3000" },
+  { value: "XdjXz", label: "XDJ-XZ" },
+];
+
+/** `exportWithout` is left out: the writer refuses it (baken writes ANLZ for every track). */
+const MISSING: { value: MissingAnalysis; label: string }[] = [
+  { value: "skip", label: "Leave them out" },
+  { value: "generate", label: "Generate approximate analysis" },
+];
+
+/** Indent per tree level, as in the sidebar tree. */
+const INDENT = 18;
+
+const facts =
+  "m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 [&_dt]:text-fg-muted [&_dd]:m-0 [&_dd]:tabular-nums";
+const list = "m-0 mt-1 list-disc pl-4.5 text-xs [overflow-wrap:anywhere]";
+
+export function ExportWizard() {
+  const step = useExportWizard((s) => s.step);
+  const mountPoint = useExportWizard((s) => s.mountPoint);
+  const checked = useExportWizard((s) => s.checked);
+  const options = useExportWizard((s) => s.options);
+  const nodes = usePlaylists((s) => s.nodes);
+  if (step === "closed") return null;
+  const w = useExportWizard.getState();
+  const index = EXPORT_STEPS.indexOf(step);
+  const ready = canContinue({ step, mountPoint, checked, options }, nodes);
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) w.close();
+      }}
+    >
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>Export to USB</DialogTitle>
+          <DialogDescription>
+            Step {index + 1} of {EXPORT_STEPS.length}: {STEP_TITLES[step]}
+          </DialogDescription>
+          <ol className="m-0 flex list-none gap-1 p-0" aria-label="Steps">
+            {EXPORT_STEPS.map((s, i) => (
+              <li
+                key={s}
+                aria-current={s === step ? "step" : undefined}
+                data-done={i < index || undefined}
+                className="flex-1 border-t-2 border-border pt-1 text-xs text-fg-subtle aria-[current=step]:border-accent aria-[current=step]:text-fg data-[done]:border-fg-subtle"
+              >
+                {STEP_TITLES[s]}
+              </li>
+            ))}
+          </ol>
+        </DialogHeader>
+        <DialogBody className="min-h-60">
+          {step === "device" && <DeviceStep />}
+          {step === "playlists" && <PlaylistsStep nodes={nodes} />}
+          {step === "options" && <OptionsStep />}
+          {step === "dryRun" && <DryRunStep nodes={nodes} />}
+        </DialogBody>
+        <DialogFooter className="items-center">
+          {step === "dryRun" && (
+            <p className="m-0 mr-auto text-xs text-fg-muted">
+              Writing to the stick isn't available in this build yet.
+            </p>
+          )}
+          <Button onClick={() => w.close()}>Cancel</Button>
+          {index > 0 && <Button onClick={() => w.back()}>Back</Button>}
+          {step === "dryRun" ? (
+            <Button variant="primary" disabled>
+              Export
+            </Button>
+          ) : (
+            <Button variant="primary" disabled={!ready} onClick={() => void w.next(nodes)}>
+              {step === "options" ? "Dry run" : "Next"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeviceStep() {
+  const mountPoint = useExportWizard((s) => s.mountPoint);
+  return (
+    <>
+      <p className="m-0 text-fg-muted">Which stick? Nothing is written until the last step.</p>
+      <DeviceList
+        selected={mountPoint}
+        onSelect={(d) => useExportWizard.getState().setDevice(d.mountPoint)}
+      />
+    </>
+  );
+}
+
+function PlaylistsStep({ nodes }: { nodes: PlaylistNode[] }) {
+  const checked = useExportWizard((s) => s.checked);
+  const covered = coveredIds(nodes, checked);
+  if (nodes.length === 0) {
+    return <p className="m-0 text-fg-muted">The library has no playlists yet.</p>;
+  }
+  return (
+    <>
+      <p className="m-0 text-fg-muted">
+        Pick playlists and folders. A folder exports every playlist under it.
+      </p>
+      <Card role="group" aria-label="Playlists" divided={false} className="py-1">
+        {nodes.map((n) => {
+          const implied = covered.has(n.id);
+          return (
+            <label
+              key={n.id}
+              className="flex h-(--row-h) items-center gap-2 pr-2 text-md"
+              style={{ paddingLeft: 8 + n.depth * INDENT }}
+            >
+              <Checkbox
+                checked={implied || checked.has(n.id)}
+                disabled={implied}
+                onChange={() => useExportWizard.getState().toggle(n.id)}
+              />
+              <span className="flex-1 truncate">{n.name}</span>
+              <span className="text-xs text-fg-subtle tabular-nums">
+                {n.isFolder ? "folder" : n.entries}
+              </span>
+            </label>
+          );
+        })}
+      </Card>
+    </>
+  );
+}
+
+function OptionRow({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-3">
+      <div className="min-w-0">
+        <p className="m-0 text-sm font-semibold">{title}</p>
+        <p className="m-0 text-xs text-fg-muted">{hint}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function OptionsStep() {
+  const o = useExportWizard((s) => s.options);
+  const set = (patch: Partial<ExportOptions>) => useExportWizard.getState().setOptions(patch);
+  return (
+    <Card>
+      <div className="px-4 py-3">
+        <Field label="Oldest player the stick must work on">
+          <Select
+            value={o.target}
+            onChange={(e) => set({ target: e.target.value as TargetProfile })}
+          >
+            {TARGETS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+      <div className="px-4 py-3">
+        <Field
+          label="Tracks without rekordbox analysis"
+          hint="Generated analysis is approximate until reks analyses audio itself."
+        >
+          <Select
+            value={o.missingAnalysis}
+            onChange={(e) => set({ missingAnalysis: e.target.value as MissingAnalysis })}
+          >
+            {MISSING.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+      <OptionRow
+        title="Leave out unsupported files"
+        hint="Missing or unplayable files are left out instead of blocking the export."
+      >
+        <Switch
+          aria-label="Leave out unsupported files"
+          checked={o.skipUnsupported}
+          onCheckedChange={(v) => set({ skipUnsupported: v })}
+        />
+      </OptionRow>
+      <OptionRow
+        title="Keep stale files"
+        hint="Leave music and analysis the export no longer uses on the stick."
+      >
+        <Switch
+          aria-label="Keep stale files"
+          checked={o.keepStale}
+          onCheckedChange={(v) => set({ keepStale: v })}
+        />
+      </OptionRow>
+      <OptionRow title="Artwork" hint="Write cover art for the players to show.">
+        <Switch
+          aria-label="Artwork"
+          checked={o.artwork}
+          onCheckedChange={(v) => set({ artwork: v })}
+        />
+      </OptionRow>
+      <div className="flex flex-col gap-2 px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="m-0 text-sm font-semibold">Play history on the stick</p>
+            <p className="m-0 text-xs text-fg-muted">
+              Players log what you played on the stick; exporting erases it.
+            </p>
+          </div>
+          <SegmentedControl
+            aria-label="Play history on the stick"
+            value={o.history}
+            onValueChange={(v) => set({ history: v as ExportOptions["history"] })}
+          >
+            <Segment value="backUp">Back up first</Segment>
+            <Segment value="discard">Discard</Segment>
+          </SegmentedControl>
+        </div>
+        {o.history === "discard" && (
+          <label className="flex items-start gap-2 text-sm text-warning">
+            <Checkbox
+              className="mt-0.5"
+              checked={o.discardHistoryConfirmed}
+              onChange={(e) => set({ discardHistoryConfirmed: e.target.checked })}
+            />
+            <span>
+              I understand the stick's play history is erased without a backup and can't be
+              recovered.
+            </span>
+          </label>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function DryRunStep({ nodes }: { nodes: PlaylistNode[] }) {
+  const dryRun = useExportWizard((s) => s.dryRun);
+  const planning = useExportWizard((s) => s.planning);
+  const error = useExportWizard((s) => s.error);
+  if (planning) {
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="m-0">Planning: reading the stick and checking your files…</p>
+        <Progress aria-label="Planning" />
+      </div>
+    );
+  }
+  if (error !== null) {
+    return (
+      <div className="flex flex-col items-start gap-2">
+        <p className="m-0 text-danger select-text" role="alert">
+          {error}
+        </p>
+        <Button onClick={() => void useExportWizard.getState().replan(nodes)}>Try again</Button>
+      </div>
+    );
+  }
+  if (dryRun === null) return null;
+  return <DryRunView dryRun={dryRun} nodes={nodes} />;
+}
+
+function DryRunView({ dryRun: d, nodes }: { dryRun: DryRun; nodes: PlaylistNode[] }) {
+  return (
+    <div className="flex flex-col gap-3 select-text">
+      <div className="flex items-start justify-between gap-4">
+        <p
+          className={d.ready ? "m-0 font-semibold text-success" : "m-0 font-semibold text-danger"}
+          role={d.ready ? "status" : "alert"}
+        >
+          {d.status}
+        </p>
+        <Button
+          size="sm"
+          className="shrink-0"
+          onClick={() => void useExportWizard.getState().replan(nodes)}
+        >
+          Plan again
+        </Button>
+      </div>
+      <p className="m-0 text-xs text-fg-muted">
+        {d.device.name} · {d.device.fsText} · {d.device.spaceText} · target {d.target}
+      </p>
+
+      {d.problems.length > 0 && (
+        <Section title="Must be fixed first" tone="danger">
+          <Notices groups={d.problems} />
+        </Section>
+      )}
+
+      <Section title="Space">
+        <Progress
+          max={Math.max(d.space.totalBytes, 1)}
+          value={d.space.usedAfterBytes}
+          aria-label="Stick space used after the export"
+        />
+        <Facts facts={d.space.facts} />
+        {!d.space.fits && (
+          <p className="m-0 text-xs text-danger">The new files don't fit in today's free space.</p>
+        )}
+      </Section>
+
+      <Section title="Export">
+        <Facts facts={d.summary} />
+      </Section>
+
+      <Section title={d.history.title} tone={d.history.atRisk ? "warning" : undefined}>
+        <p className="m-0 text-sm">{d.history.text}</p>
+        {d.history.actionText !== null && <p className="m-0 text-sm">{d.history.actionText}</p>}
+        <Files label="Backed up" group={d.history.backups} />
+      </Section>
+
+      {d.warnings.length > 0 && (
+        <Section title="Warnings" tone="warning">
+          <Notices groups={d.warnings} />
+        </Section>
+      )}
+
+      <Section title="Files">
+        <Files label="Copy" group={d.copies} />
+        <Files label="Delete" group={d.deletes} />
+        <details>
+          <summary className="text-sm">Playlists on the stick</summary>
+          <ul className="m-0 mt-1 list-none p-0 text-xs">
+            {d.playlists.map((p) => (
+              <li key={p.id} style={{ paddingLeft: p.depth * INDENT }}>
+                {p.name}
+                {p.isFolder ? "/" : ""}
+                {p.detail !== "" && <span className="text-fg-muted"> · {p.detail}</span>}
+              </li>
+            ))}
+          </ul>
+        </details>
+      </Section>
+    </div>
+  );
+}
+
+function Section({
+  title,
+  tone,
+  children,
+}: {
+  title: string;
+  tone?: "danger" | "warning" | undefined;
+  children: ReactNode;
+}) {
+  const titleClass =
+    tone === "danger" ? "text-danger" : tone === "warning" ? "text-warning" : "text-fg";
+  return (
+    <section aria-label={title}>
+      <Card className="flex flex-col gap-2 px-4 py-3" divided={false}>
+        <h3 className={cn("m-0 text-sm font-semibold", titleClass)}>{title}</h3>
+        {children}
+      </Card>
+    </section>
+  );
+}
+
+function Facts({ facts: rows }: { facts: Fact[] }) {
+  return (
+    <dl className={facts}>
+      {rows.map((f) => (
+        <div key={f.label} className="contents">
+          <dt>{f.label}</dt>
+          <dd>{f.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function Notices({ groups }: { groups: NoticeGroup[] }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {groups.map((g) =>
+        g.items.length === 0 ? (
+          <p key={g.kind} className="m-0 text-sm">
+            {g.title}
+          </p>
+        ) : (
+          <details key={g.kind} open={g.items.length <= 3}>
+            <summary className="text-sm">{g.title}</summary>
+            <ul className={list}>
+              {g.items.map((item, i) => (
+                // Items of one group can repeat (same message); order is stable.
+                // biome-ignore lint/suspicious/noArrayIndexKey: see above
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          </details>
+        ),
+      )}
+    </div>
+  );
+}
+
+function Files({ label, group }: { label: string; group: DryRunFileGroup }) {
+  if (group.count === 0) return null;
+  return (
+    <details>
+      <summary className="text-sm">
+        {label}: {group.totalText}
+      </summary>
+      <ul className={cn(list, "font-mono")}>
+        {group.files.map((f) => (
+          <li key={f.path} title={f.from ?? undefined}>
+            {f.path} <span className="text-fg-muted">({f.sizeText})</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
