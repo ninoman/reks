@@ -6,11 +6,14 @@ pub mod artwork;
 pub mod db;
 pub mod error;
 pub mod keys;
+pub mod scan;
+pub mod timefmt;
 
 pub use artwork::ArtworkId;
 pub use db::Library;
 pub use error::{Error, Result};
 pub use keys::{Key, Mode};
+pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
 
 /// Crate version, from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

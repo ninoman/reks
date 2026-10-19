@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (tasks 1–4 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–5 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -183,8 +183,10 @@ pub enum Filter { Genre(String), KeyIn(Vec<Key>), BpmRange(u32,u32), Color(Strin
                   RatingMin(u8), Playlist(PlaylistId), Missing(bool), NeedsAnalysis(bool) }
 
 pub mod scan {   // folder import
-    pub fn scan(roots: &[PathBuf], lib: &Library, progress: impl Fn(ScanEvent)) -> Result<ScanReport>;
-    // ScanEvent::{Found(path), Added(id), Updated(id), Moved{from,to}, Missing(id), Error{path,msg}}
+    pub fn scan(roots: &[PathBuf], lib: &Library, cancel: &CancelToken,
+                progress: impl Fn(&ScanEvent)) -> Result<ScanReport>;
+    // ScanEvent::{Found, Progress{done,total}, Added, Updated, Moved{id,from,to}, Missing, Error{path,message}}
+    // (struct variants, serialised with a "type" tag for the Tauri channel)
 }
 
 pub mod rbxml {  // rekordbox XML
@@ -239,6 +241,19 @@ Notes (task 4, [`reks-audio`](../../crates/reks-audio/src/))
   SHA-256 into `<cache_dir>/artwork/<sha256>.<ext>`, and stores `blob_path`
   relative to the cache dir. A deleted cache file is rewritten on the next store.
 
+Scan rules (task 5, [`scan.rs`](../../crates/reks-core/src/scan.rs))
+- Picks up `mp3 m4a aac flac wav wave aif aiff`; skips dot-files and
+  dot-folders (AppleDouble `._*`, `.Trashes`). Symlinks are not followed.
+- Paths are stored NFC when the NFC spelling opens the same file (macOS);
+  otherwise as on disk.
+- Same path, same size + mtime → unchanged. Changed file → technical fields
+  refreshed; tag fields only filled where the DB value is empty (the DB is the
+  source of truth). New path with the `content_hash` + size of a row whose file
+  is gone → move (row, cues and playlists kept). Otherwise insert.
+- Missing: set only after a complete walk. Never on cancel, for an absent root
+  (unplugged drive), or under a folder that could not be read. Rows are never
+  deleted by a scan.
+
 ### Tauri commands (`src-tauri`)
 
 `library_query`, `library_track`, `library_update_track`, `playlists_get`,
@@ -266,7 +281,7 @@ Response(bytes)`.
    `keys.rs` with parsing/normalisation and tests for every notation.
 4. [x] **Audio probe + tags + artwork**: `probe`, `tags` (`lofty`), artwork
    extraction and de-dup into cache, unit tests on the fixtures.
-5. [ ] **Folder scan**: walk roots (`walkdir`), extension filter, NFC normalise
+5. [x] **Folder scan**: walk roots (`walkdir`), extension filter, NFC normalise
    paths, insert/update by path, detect moves by `content_hash`, mark missing,
    progress events, cancellation token. Tests on a temp dir.
 6. [ ] **rekordbox XML parser/writer**: streaming parse with `quick-xml` into
