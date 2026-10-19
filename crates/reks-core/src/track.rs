@@ -347,7 +347,7 @@ fn invalid(field: &'static str, reason: impl Into<String>) -> Error {
 
 /// Trimmed text, `NULL` when empty. Control characters are refused (they
 /// can't round-trip through rekordbox XML); `multiline` allows LF and tab.
-fn text(field: &'static str, v: Option<&str>, multiline: bool) -> Result<Value> {
+pub(crate) fn text(field: &'static str, v: Option<&str>, multiline: bool) -> Result<Value> {
     let s = v.map(str::trim).unwrap_or_default();
     if s.is_empty() {
         return Ok(Value::Null);

@@ -2,12 +2,28 @@
  * The virtualised track table. Only the visible rows (plus overscan) are in
  * the DOM; rows come from the store's page cache, which fetches pages from
  * `library_query` as they scroll into view.
+ *
+ * Rows drag (the whole selection) onto playlists in the tree. In a playlist
+ * view sorted by position (ascending) they also drag to reorder, and Delete or
+ * the context menu removes the selected entries.
  */
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type KeyboardEvent, type MouseEvent, useEffect, useMemo, useRef } from "react";
+import {
+  type DragEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
+import { hasType, readTracks, TRACKS_MIME, type TrackDrag, zoneAt } from "../lib/dnd";
 import { rowAt, useLibrary } from "../store/library";
+import { shownPlaylist, usePlaylists } from "../store/playlists";
+import { ContextMenu, type MenuState } from "./ContextMenu";
 import type { ColumnSpec } from "./columns";
 import { ROW_HEIGHT } from "./trackTableModel";
 
@@ -20,6 +36,15 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const toggleSort = useLibrary((s) => s.toggleSort);
   const ensureRange = useLibrary((s) => s.ensureRange);
   const select = useLibrary((s) => s.select);
+  const playlistId = useLibrary((s) => s.filters.playlistId);
+  const nodes = usePlaylists((s) => s.nodes);
+  const view = shownPlaylist(nodes, playlistId);
+  const canReorder = view !== null && sort.column === "playlistPosition" && !sort.descending;
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const [dropAt, setDropAt] = useState<{ index: number; after: boolean } | null>(null);
+  // A plain press on a selected row selects only it on release, unless it starts a drag.
+  const pendingClick = useRef<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   // Plain React (no compiler), so the virtualizer's unmemoisable API is fine here.
@@ -77,13 +102,86 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
       select({ type: "selectAll", count: total });
     } else if (e.key === "Escape") {
       select({ type: "clear" });
+    } else if ((e.key === "Delete" || e.key === "Backspace") && view !== null) {
+      e.preventDefault();
+      removeSelected();
     }
   }
 
-  function onRowClick(e: MouseEvent, index: number) {
+  function onRowMouseDown(e: MouseEvent, index: number) {
+    pendingClick.current = null;
+    // Right-click selection is the context menu's job.
+    if (e.button !== 0) return;
+    const plain = !e.shiftKey && !e.metaKey && !e.ctrlKey;
+    if (plain && selection.selected.has(index)) {
+      pendingClick.current = index;
+      return;
+    }
     if (e.shiftKey) select({ type: "range", index });
     else if (e.metaKey || e.ctrlKey) select({ type: "toggle", index });
     else select({ type: "click", index });
+  }
+
+  /** The selected rows that are loaded, in table order. */
+  function selectedRows() {
+    const current = useLibrary.getState();
+    return [...current.selection.selected]
+      .sort((a, b) => a - b)
+      .map((i) => rowAt(current.pages, i))
+      .filter((r) => r !== undefined);
+  }
+
+  function removeSelected() {
+    if (view === null) return;
+    const positions = selectedRows()
+      .map((r) => r.entryPosition)
+      .filter((p) => p !== null);
+    void usePlaylists.getState().removeEntries(view.id, positions);
+  }
+
+  function onRowDragStart(e: DragEvent<HTMLElement>, index: number) {
+    pendingClick.current = null;
+    if (!useLibrary.getState().selection.selected.has(index)) select({ type: "click", index });
+    const rows = selectedRows();
+    const payload: TrackDrag = {
+      trackIds: rows.map((r) => r.id),
+      playlistId: view?.id ?? null,
+      entryPositions: rows.map((r) => r.entryPosition).filter((p) => p !== null),
+    };
+    e.dataTransfer.setData(TRACKS_MIME, JSON.stringify(payload));
+    e.dataTransfer.effectAllowed = "copyMove";
+  }
+
+  function onRowDragOver(e: DragEvent<HTMLElement>, index: number) {
+    if (!canReorder || !hasType(e.dataTransfer, TRACKS_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDropAt({ index, after: zoneAt(e.clientY - rect.top, rect.height, false) === "after" });
+  }
+
+  function onRowDrop(e: DragEvent<HTMLElement>, index: number) {
+    e.preventDefault();
+    const after = dropAt?.index === index && dropAt.after;
+    setDropAt(null);
+    const drag = readTracks(e.dataTransfer);
+    const row = rowAt(pages, index);
+    if (!canReorder || drag === null || drag.playlistId !== view?.id || row?.entryPosition == null)
+      return;
+    void usePlaylists
+      .getState()
+      .reorderEntries(view.id, drag.entryPositions, row.entryPosition + (after ? 1 : 0));
+  }
+
+  function onRowContextMenu(e: MouseEvent, index: number) {
+    e.preventDefault();
+    if (view === null) return;
+    if (!selection.selected.has(index)) select({ type: "click", index });
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [{ label: `Remove from ${view.name}`, onSelect: removeSelected }],
+    });
   }
 
   return (
@@ -134,9 +232,23 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
               aria-selected={selected}
               className={`tt-row${item.index % 2 === 1 ? " odd" : ""}${selected ? " selected" : ""}${focused ? " focused" : ""}${
                 row === undefined ? " loading" : ""
-              }${row?.missing ? " missing" : ""}`}
+              }${row?.missing ? " missing" : ""}${
+                dropAt?.index === item.index ? (dropAt.after ? " drop-after" : " drop-before") : ""
+              }`}
               style={{ transform: `translateY(${item.start}px)`, height: ROW_HEIGHT }}
-              onMouseDown={(e) => onRowClick(e, item.index)}
+              draggable={row !== undefined}
+              onMouseDown={(e) => onRowMouseDown(e, item.index)}
+              onClick={() => {
+                if (pendingClick.current === item.index)
+                  select({ type: "click", index: item.index });
+                pendingClick.current = null;
+              }}
+              onContextMenu={(e) => onRowContextMenu(e, item.index)}
+              onDragStart={(e) => onRowDragStart(e, item.index)}
+              onDragOver={(e) => onRowDragOver(e, item.index)}
+              onDragLeave={() => setDropAt((d) => (d?.index === item.index ? null : d))}
+              onDrop={(e) => onRowDrop(e, item.index)}
+              onDragEnd={() => setDropAt(null)}
             >
               {columns.map((c) => (
                 <div
@@ -152,6 +264,7 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
           );
         })}
       </div>
+      {menu !== null && <ContextMenu menu={menu} onClose={closeMenu} />}
     </div>
   );
 }

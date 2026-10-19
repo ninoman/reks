@@ -62,6 +62,8 @@ const BPM_X100_MAX = 1_000_00;
 export interface QueryInputs {
   text: string;
   filters: FilterState;
+  /** Off: the sidebar filters are kept but not applied (the playlist still is). */
+  filtersEnabled: boolean;
   sort: Sort;
 }
 
@@ -90,7 +92,11 @@ export function buildQuery(inputs: QueryInputs, page: number): TrackQuery {
   const text = inputs.text.trim();
   return {
     text: text === "" ? null : text,
-    filters: buildFilters(inputs.filters),
+    filters: buildFilters(
+      inputs.filtersEnabled
+        ? inputs.filters
+        : { ...noFilters, playlistId: inputs.filters.playlistId },
+    ),
     sort: { ...inputs.sort },
     offset: page * PAGE_SIZE,
     limit: PAGE_SIZE,
@@ -114,7 +120,15 @@ export interface LibraryState extends QueryInputs {
 
   setText(text: string): void;
   setFilters(patch: Partial<FilterState>): void;
+  /** Applies the filters or sets them aside without losing their values. */
+  setFiltersEnabled(enabled: boolean): void;
+  /** Clears the sidebar filters; the shown playlist (the tree's selection) stays. */
   clearFilters(): void;
+  /**
+   * Shows a playlist (sorted by position), a folder (everything below it) or,
+   * with `null`, the whole collection.
+   */
+  showPlaylist(id: number | null, isFolder: boolean): void;
   /** Header click: same column flips direction, another column sorts ascending. */
   toggleSort(column: Sort["column"]): void;
   setColumnVisibility(v: Record<string, boolean>): void;
@@ -160,6 +174,7 @@ export const useLibrary = create<LibraryState>()((set, get) => {
   return {
     text: "",
     filters: noFilters,
+    filtersEnabled: true,
     sort: defaultSort,
     columnVisibility: {},
     total: 0,
@@ -179,8 +194,22 @@ export const useLibrary = create<LibraryState>()((set, get) => {
       set((s) => ({ filters: { ...s.filters, ...patch } }));
       get().refresh();
     },
+    setFiltersEnabled(filtersEnabled) {
+      if (get().filtersEnabled === filtersEnabled) return;
+      set({ filtersEnabled });
+      get().refresh();
+    },
     clearFilters() {
-      set({ filters: noFilters });
+      set((s) => ({ filters: { ...noFilters, playlistId: s.filters.playlistId } }));
+      get().refresh();
+    },
+    showPlaylist(id, isFolder) {
+      set((s) => {
+        let sort = s.sort;
+        if (id !== null && !isFolder) sort = { column: "playlistPosition", descending: false };
+        else if (sort.column === "playlistPosition") sort = defaultSort;
+        return { filters: { ...s.filters, playlistId: id }, sort };
+      });
       get().refresh();
     },
     toggleSort(column) {
@@ -216,11 +245,12 @@ export const useLibrary = create<LibraryState>()((set, get) => {
         let changed = false;
         const pages = new Map(s.pages);
         for (const [p, rows] of pages) {
-          const i = rows.findIndex((r) => r.id === row.id);
-          if (i === -1) continue;
-          const copy = [...rows];
-          copy[i] = row;
-          pages.set(p, copy);
+          if (!rows.some((r) => r.id === row.id)) continue;
+          // A playlist view can hold the track more than once; each row keeps its entry.
+          pages.set(
+            p,
+            rows.map((r) => (r.id === row.id ? { ...row, entryPosition: r.entryPosition } : r)),
+          );
           changed = true;
         }
         return changed ? { pages } : {};

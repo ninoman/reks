@@ -40,6 +40,8 @@ pub fn run() {
             commands::library_facets,
             commands::library_track,
             commands::library_update_track,
+            commands::playlists_get,
+            commands::playlists_mutate,
             commands::artwork_get,
             commands::scan_start,
             commands::scan_cancel,

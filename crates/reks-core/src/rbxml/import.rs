@@ -13,7 +13,7 @@
 //! - Files are read before the database is locked; every track, grid, cue
 //!   and playlist write happens in one transaction.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -894,10 +894,19 @@ impl Import<'_> {
             )?
             .query_map([playlist], |r| r.get(0))?
             .collect::<rusqlite::Result<_>>()?;
-        // XML entries first, then tracks added in reks that the XML lacks.
-        let from_xml: HashSet<TrackId> = tracks.iter().copied().collect();
+        // XML entries first, then entries added in reks that the XML lacks.
+        // Counted per track, so a second copy added in reks is kept.
+        let mut from_xml: HashMap<TrackId, usize> = HashMap::new();
+        for id in &tracks {
+            *from_xml.entry(*id).or_default() += 1;
+        }
         let mut wanted = tracks;
-        wanted.extend(current.iter().filter(|id| !from_xml.contains(id)));
+        for id in &current {
+            match from_xml.get_mut(id) {
+                Some(n) if *n > 0 => *n -= 1,
+                _ => wanted.push(*id),
+            }
+        }
         if wanted == current {
             return Ok(());
         }

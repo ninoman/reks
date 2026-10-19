@@ -17,6 +17,7 @@ import {
   scanStart,
 } from "../lib/ipc";
 import { useLibrary } from "../store/library";
+import { usePlaylists } from "../store/playlists";
 import { ColumnChooser } from "./ColumnChooser";
 import { SearchBox } from "./SearchBox";
 import type { TrackTableModel } from "./trackTableModel";
@@ -52,7 +53,7 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
   async function afterChange() {
     const { refresh, loadFacets } = useLibrary.getState();
     refresh();
-    await loadFacets();
+    await Promise.all([loadFacets(), usePlaylists.getState().load()]);
   }
 
   async function scanFolder() {

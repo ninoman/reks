@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 use std::sync::OnceLock;
 
 use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection, Row};
+use rusqlite::{params_from_iter, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 use crate::db::Library;
@@ -130,6 +130,9 @@ pub struct TrackRow {
     pub play_count: i64,
     pub missing: bool,
     pub needs_analysis: bool,
+    /// The entry's position in a playlist view (one row per entry, so a
+    /// track in the playlist twice is two rows); `None` elsewhere.
+    pub entry_position: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -170,6 +173,10 @@ pub struct PlaylistNode {
     pub is_folder: bool,
     /// 0 for top-level nodes.
     pub depth: u32,
+    /// Index among its siblings (`sort_order`, kept dense by `playlist_mutate`).
+    pub position: u32,
+    /// Number of entries (0 for folders).
+    pub entries: u32,
 }
 
 pub(crate) const ROW_COLUMNS: &str =
@@ -181,27 +188,41 @@ pub(crate) const ROW_COLUMNS: &str =
 impl Library {
     /// One page of tracks matching `q`, and the total match count.
     pub fn tracks(&self, q: &TrackQuery) -> Result<TrackPage> {
-        let w = where_clause(q);
-        let (order, order_params) = order_by(q);
         let conn = self.conn()?;
+        let view = entry_view(&conn, q)?;
+        let w = where_clause(q, view);
+        let (order, order_params) = order_by(q, view);
+        // In a playlist view every entry is a row; `pe.position` is its place.
+        let (from, entry_col) = match view {
+            Some(_) => (
+                "track t JOIN playlist_track pe ON pe.track_id = t.id AND pe.playlist_id = ?",
+                "pe.position",
+            ),
+            None => ("track t", "NULL"),
+        };
+        let mut params: Vec<Value> = view.map(Value::Integer).into_iter().collect();
+        params.extend(w.params);
 
         let total: i64 = conn.query_row(
-            &format!("SELECT count(*) FROM track t{}", w.sql),
-            params_from_iter(&w.params),
+            &format!("SELECT count(*) FROM {from}{}", w.sql),
+            params_from_iter(&params),
             |r| r.get(0),
         )?;
 
         let sql = format!(
-            "SELECT {ROW_COLUMNS} FROM track t{} ORDER BY {order} LIMIT ? OFFSET ?",
+            "SELECT {ROW_COLUMNS}, {entry_col} FROM {from}{} ORDER BY {order} LIMIT ? OFFSET ?",
             w.sql
         );
-        let mut params = w.params;
         params.extend(order_params);
         params.push(Value::Integer(i64::from(q.limit.clamp(1, MAX_PAGE))));
         params.push(Value::Integer(i64::from(q.offset)));
         let mut stmt = conn.prepare_cached(&sql)?;
         let rows = stmt
-            .query_map(params_from_iter(&params), track_row)?
+            .query_map(params_from_iter(&params), |r| {
+                let mut row = track_row(r)?;
+                row.entry_position = r.get(20)?;
+                Ok(row)
+            })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
         Ok(TrackPage {
@@ -259,6 +280,27 @@ pub(crate) fn track_row(r: &Row<'_>) -> rusqlite::Result<TrackRow> {
         play_count: r.get(17)?,
         missing: r.get(18)?,
         needs_analysis: r.get(19)?,
+        entry_position: None,
+    })
+}
+
+/// The playlist whose entries are the rows: the first `Filter::Playlist`,
+/// when it names a playlist rather than a folder.
+fn entry_view(conn: &Connection, q: &TrackQuery) -> Result<Option<PlaylistId>> {
+    let Some(id) = first_playlist(q) else {
+        return Ok(None);
+    };
+    let is_folder: Option<bool> = conn
+        .prepare_cached("SELECT is_folder FROM playlist WHERE id = ?1")?
+        .query_row([id], |r| r.get(0))
+        .optional()?;
+    Ok((is_folder == Some(false)).then_some(id))
+}
+
+fn first_playlist(q: &TrackQuery) -> Option<PlaylistId> {
+    q.filters.iter().find_map(|f| match f {
+        Filter::Playlist { id } => Some(*id),
+        _ => None,
     })
 }
 
@@ -268,9 +310,11 @@ struct Where {
     params: Vec<Value>,
 }
 
-fn where_clause(q: &TrackQuery) -> Where {
+/// `view`: the entry-view playlist, whose filter the join already applies.
+fn where_clause(q: &TrackQuery, view: Option<PlaylistId>) -> Where {
     let mut conds: Vec<String> = Vec::new();
     let mut params: Vec<Value> = Vec::new();
+    let mut view_filter = view;
 
     if let Some(m) = q.text.as_deref().and_then(fts_query) {
         conds.push("t.id IN (SELECT rowid FROM track_fts WHERE track_fts MATCH ?)".into());
@@ -304,6 +348,10 @@ fn where_clause(q: &TrackQuery) -> Where {
                 params.push(Value::Integer(i64::from(*rating)));
             }
             Filter::Playlist { id } => {
+                if view_filter == Some(*id) {
+                    view_filter = None;
+                    continue;
+                }
                 conds.push(
                     "EXISTS (SELECT 1 FROM playlist_track pt WHERE pt.track_id = t.id
                        AND pt.playlist_id IN (
@@ -337,7 +385,7 @@ fn where_clause(q: &TrackQuery) -> Where {
 
 /// `ORDER BY` terms and their parameters. Empty values sort last in both
 /// directions; ties break on id so pages are stable.
-fn order_by(q: &TrackQuery) -> (String, Vec<Value>) {
+fn order_by(q: &TrackQuery, view: Option<PlaylistId>) -> (String, Vec<Value>) {
     let dir = if q.sort.descending { "DESC" } else { "ASC" };
     let text = |col: &str| format!("({col} IS NULL OR {col} = ''), {col} COLLATE NOCASE {dir}");
     let num = |expr: &str| format!("({expr}) IS NULL, ({expr}) {dir}");
@@ -358,12 +406,9 @@ fn order_by(q: &TrackQuery) -> (String, Vec<Value>) {
         SortColumn::DateAdded => text("t.date_added"),
         SortColumn::PlayCount => num("t.play_count"),
         SortColumn::BitRate => num("t.bit_rate_kbps"),
+        SortColumn::PlaylistPosition if view.is_some() => num("pe.position"),
         SortColumn::PlaylistPosition => {
-            let playlist = q.filters.iter().find_map(|f| match f {
-                Filter::Playlist { id } => Some(*id),
-                _ => None,
-            });
-            match playlist {
+            match first_playlist(q) {
                 Some(id) => {
                     // The expression appears twice in `num`.
                     params.extend([Value::Integer(id), Value::Integer(id)]);
@@ -374,7 +419,13 @@ fn order_by(q: &TrackQuery) -> (String, Vec<Value>) {
             }
         }
     };
-    (format!("{order}, t.id ASC"), params)
+    // Copies of one track in a playlist view tie on id; position breaks it.
+    let tie = if view.is_some() {
+        "t.id ASC, pe.position ASC"
+    } else {
+        "t.id ASC"
+    };
+    (format!("{order}, {tie}"), params)
 }
 
 /// Turns user text into an FTS5 query: each whitespace-separated word with
@@ -426,10 +477,15 @@ fn color_rank_sql() -> &'static str {
     })
 }
 
-fn playlist_nodes(conn: &Connection) -> Result<Vec<PlaylistNode>> {
-    let mut stmt = conn
-        .prepare("SELECT id, parent_id, name, is_folder FROM playlist ORDER BY sort_order, id")?;
-    let all = stmt
+/// Every playlist and folder, depth first, siblings in `sort_order`.
+pub(crate) fn playlist_nodes(conn: &Connection) -> Result<Vec<PlaylistNode>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT p.id, p.parent_id, p.name, p.is_folder, coalesce(e.n, 0) FROM playlist p
+         LEFT JOIN (SELECT playlist_id, count(*) AS n FROM playlist_track GROUP BY playlist_id) e
+           ON e.playlist_id = p.id
+         ORDER BY p.sort_order, p.id",
+    )?;
+    let mut all = stmt
         .query_map([], |r| {
             Ok(PlaylistNode {
                 id: r.get(0)?,
@@ -437,13 +493,17 @@ fn playlist_nodes(conn: &Connection) -> Result<Vec<PlaylistNode>> {
                 name: r.get(2)?,
                 is_folder: r.get(3)?,
                 depth: 0,
+                position: 0,
+                entries: r.get(4)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
 
     let mut children: HashMap<Option<PlaylistId>, Vec<usize>> = HashMap::new();
-    for (i, n) in all.iter().enumerate() {
-        children.entry(n.parent_id).or_default().push(i);
+    for (i, n) in all.iter_mut().enumerate() {
+        let siblings = children.entry(n.parent_id).or_default();
+        n.position = u32::try_from(siblings.len()).unwrap_or(u32::MAX);
+        siblings.push(i);
     }
     let mut out = Vec::with_capacity(all.len());
     // Depth-first; the stack holds (index, depth) in reverse order.

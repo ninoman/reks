@@ -33,6 +33,14 @@ export const COLUMNS: ColumnSpec[] = [
         </span>
       ) : null,
   },
+  {
+    id: "position",
+    header: "#",
+    width: 44,
+    sort: "playlistPosition",
+    align: "right",
+    cell: (r) => (r.entryPosition === null ? "" : r.entryPosition + 1),
+  },
   { id: "title", header: "Title", width: 280, sort: "title", cell: (r) => text(r.title) },
   { id: "artist", header: "Artist", width: 200, sort: "artist", cell: (r) => text(r.artist) },
   { id: "album", header: "Album", width: 180, sort: "album", cell: (r) => text(r.album) },

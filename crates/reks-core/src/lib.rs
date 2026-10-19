@@ -7,6 +7,7 @@ pub mod db;
 pub mod error;
 mod fileinfo;
 pub mod keys;
+pub mod playlist;
 pub mod query;
 pub mod rbxml;
 pub mod scan;
@@ -17,6 +18,7 @@ pub use artwork::ArtworkId;
 pub use db::Library;
 pub use error::{Error, Result};
 pub use keys::{Key, Mode};
+pub use playlist::{DuplicateMode, PlaylistOp, PlaylistOutcome, PlaylistTree};
 pub use query::{
     Facets, Filter, KeyInfo, PlaylistId, PlaylistNode, Sort, SortColumn, TrackPage, TrackQuery,
     TrackRow,
