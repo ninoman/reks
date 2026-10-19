@@ -16,8 +16,13 @@
 //!                               read the stick back against a fresh plan
 //! reks rb history <stick> [--json]
 //!                               list the play history players left on the stick
+//! reks convert plan --library <library.sqlite> (--track <id> | --playlist <id|path>)... [...]
+//!                               dry run of converting tracks (flags: see `convert.rs`)
+//! reks convert apply <plan flags> [--yes]
+//!                               dry run, then with --yes convert and update the library
 //! ```
 
+mod convert;
 mod rb;
 
 use std::io::BufWriter;
@@ -58,10 +63,12 @@ fn main() -> anyhow::Result<()> {
             import_xml(Path::new(db), Path::new(xml), rest)
         }
         [cmd, rest @ ..] if cmd == "rb" => rb::run(rest),
+        [cmd, rest @ ..] if cmd == "convert" => convert::run(rest),
         _ => bail!(
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
              | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run] \
-             | rb plan|export|validate <stick> ... | rb history <stick> [--json]]"
+             | rb plan|export|validate <stick> ... | rb history <stick> [--json] \
+             | convert plan|apply --library <library.sqlite> ...]"
         ),
     }
 }

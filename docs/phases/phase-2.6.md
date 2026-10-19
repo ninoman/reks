@@ -1,6 +1,6 @@
 # Phase 2.6 — File converter (WAV, AIFF, FLAC)
 
-Status: tasks 1–6 done (2026-10-19/20, started ahead of the Phase 2 hardware
+Status: tasks 1–7 done (2026-10-19/20, started ahead of the Phase 2 hardware
 campaign with the maintainer's approval: pure `reks-audio` code). Depends on:
 Phase 1 (decode, tags, library) and Phase 2 (`audiocheck`, export, hardware
 campaign). Independent of Phase 2.5; either can
@@ -193,7 +193,15 @@ and grid copied.
    `ExportPlan::convertible`; the dry run shows a "Convert for older players"
    section that opens the dialog on those tracks with Older players. Plan the
    export again after converting.
-7. **`reks-cli convert`** with the same plan/dry-run/apply flags.
+7. [x] **`reks-cli convert`** with the same plan/dry-run/apply flags.
+   Done in [reks-cli/src/convert.rs](../../crates/reks-cli/src/convert.rs):
+   `reks convert plan --library <db> (--track <id> | --playlist <id|Folder/Name>)...`
+   prints the dry run (`--json` for `PlanView`); `reks convert apply <same flags>`
+   prints it and converts only with `--yes`, as `reks rb export`. Settings:
+   `--preset older-players|save-space` (default Older players), overridden by
+   `--format`, `--depth keep|16|24`, `--rate keep|max48|44100|48000`, plus
+   `--dest <dir>`, `--add-as-new`, `--trash`. A playlist folder converts every
+   track under it. Exits non-zero when nothing would convert or a file failed.
 8. **Hardware session**: checklist below; log in `docs/hw-test-log.md`.
 
 ## Acceptance criteria
