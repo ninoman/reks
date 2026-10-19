@@ -32,14 +32,9 @@ export type SwatchProps = ComponentProps<"span"> &
 
 export function Swatch({ color, size, asChild = false, className, ...props }: SwatchProps) {
   const Comp = asChild ? Slot : "span";
-  return (
-    <Comp
-      className={cn(
-        swatchVariants({ size }),
-        color !== undefined && (TRACK_COLOURS[color] ?? "bg-fg-subtle"),
-        className,
-      )}
-      {...props}
-    />
-  );
+  const base = swatchVariants({ size });
+  const fill = color === undefined ? "" : (TRACK_COLOURS[color] ?? "bg-fg-subtle");
+  // Table cells pass no className: skip tailwind-merge on that hot path.
+  const classes = className === undefined ? `${base} ${fill}` : cn(base, fill, className);
+  return <Comp className={classes} {...props} />;
 }

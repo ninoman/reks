@@ -1,4 +1,7 @@
-/* Entry stylesheet: Tailwind (preflight, utilities), the tokens, element defaults. */
-@import "tailwindcss";
+/* Entry stylesheet. Tailwind's theme and utilities, but our own reset in
+   base.css instead of its preflight (see docs/ui.md, "Reset"). */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
 @import "./tokens.css";
 @import "./base.css" layer(base);

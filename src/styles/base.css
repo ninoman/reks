@@ -1,9 +1,26 @@
-/* Element defaults on top of Tailwind's preflight. Everything else is a
-   utility or a component in src/components/ui. */
+/*
+ * Reset and element defaults. Replaces Tailwind's preflight: same intent,
+ * but no `::before` / `::after` / `::backdrop` in the universal rule, which
+ * made every row of the track table pay for pseudo-element styles while
+ * scrolling (docs/ui.md, "Reset"). Everything else is a utility or a
+ * component in src/components/ui.
+ */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0 solid;
+}
+
 html,
 body,
 #root {
   height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  tab-size: 4;
 }
 
 body {
@@ -17,6 +34,67 @@ body {
   /* App chrome is not text; fields and paths opt back in with `select-text`. */
   user-select: none;
   -webkit-user-select: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+ol,
+ul {
+  list-style: none;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+  vertical-align: middle;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  background-color: transparent;
+  border-radius: 0;
+}
+
+textarea {
+  resize: vertical;
+}
+
+::placeholder {
+  opacity: 1;
+}
+
+table {
+  border-collapse: collapse;
+  border-color: inherit;
+  text-indent: 0;
+}
+
+summary {
+  display: list-item;
+}
+
+[hidden]:where(:not([hidden="until-found"])) {
+  /* biome-ignore lint/complexity/noImportantStyles: `hidden` must beat display utilities. */
+  display: none !important;
 }
 
 :focus-visible {
