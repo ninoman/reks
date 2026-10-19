@@ -42,7 +42,8 @@ Three layers in `tokens.css`:
 Semantic colours: `bg`, `bg-subtle` (chrome), `row-alt`, `surface`,
 `surface-strong`, `hover`, `selected`/`selected-fg`, `knob`, `fg`,
 `fg-muted`, `fg-subtle`, `border`, `border-subtle`, `border-strong`,
-`accent` (+ `-hover`, `-active`, `-fg`), `danger` (+ `-fg`), `success`,
+`accent` (text, lines, focus ring), `accent-solid` (+ `-hover`, `-active`;
+filled controls) with `accent-fg` on it, `danger` (+ `-fg`), `success`,
 `warning`, `rating`, `focus-ring`, `overlay`, `waveform-*`, `track-*`
 (rekordbox colours: data, the same in both themes).
 
@@ -52,8 +53,11 @@ use the neutral `selected` tint.
 
 ### Common edits (one line each in `tokens.css`)
 
-- Accent colour: `--color-accent: var(--violet-600);` (and its dark-block twin
-  for the dark theme; `-hover` / `-active` follow the same ramp).
+- Accent colour: `--color-accent` and `--color-accent-solid` (+ `-hover`,
+  `-active`), in the light block and again in the dark block. They are the
+  same in light. In dark, `accent` is a light violet (readable as text on the
+  dark background) and `accent-solid` a deeper one, so white `accent-fg`
+  passes AA on primary buttons (5.3:1).
 - Control radius: `--radius-md: 8px;` (sizes `md`/`lg` read it via `--ctl-r-*`).
 - Height of `md` controls: `--ctl-h-md: 28px;`.
 - Row height: `--row-h: 26px;` and `ROW_HEIGHT` in `trackTableModel.ts`

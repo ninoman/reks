@@ -9,7 +9,7 @@ import { disabledState, focusRing } from "./control";
 export const switchVariants = cva(
   [
     "inline-flex shrink-0 cursor-default items-center rounded-full bg-border-strong p-0.5",
-    "transition-colors duration-(--duration-fast) data-[state=checked]:bg-accent",
+    "transition-colors duration-(--duration-fast) data-[state=checked]:bg-accent-solid",
     focusRing,
     disabledState,
   ],
