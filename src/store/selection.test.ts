@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   emptySelection,
+  primaryIndex,
   selectionReducer,
   type Selection,
   type SelectionAction,
@@ -102,5 +103,26 @@ describe("selectionReducer", () => {
     expect(sel(all)).toEqual([0, 1, 2, 3]);
     expect(all.focus).toBe(1);
     expect(selectionReducer(all, { type: "clear" })).toBe(emptySelection);
+  });
+});
+
+describe("primaryIndex", () => {
+  it("is null with nothing selected", () => {
+    expect(primaryIndex(emptySelection)).toBeNull();
+  });
+
+  it("is the focused row when it is selected", () => {
+    expect(primaryIndex(run({ type: "click", index: 2 }, { type: "toggle", index: 7 }))).toBe(7);
+  });
+
+  it("falls back to the lowest selected row", () => {
+    // Toggling the focused row off leaves focus on an unselected row.
+    const s = run(
+      { type: "click", index: 5 },
+      { type: "toggle", index: 3 },
+      { type: "toggle", index: 9 },
+      { type: "toggle", index: 9 },
+    );
+    expect(primaryIndex(s)).toBe(3);
   });
 });

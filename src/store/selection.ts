@@ -69,3 +69,14 @@ export function selectionReducer(state: Selection, action: SelectionAction): Sel
       return emptySelection;
   }
 }
+
+/**
+ * The row the detail panel shows: the focused row if it is selected,
+ * otherwise the lowest selected row; `null` when nothing is selected.
+ */
+export function primaryIndex(state: Selection): number | null {
+  if (state.focus !== null && state.selected.has(state.focus)) return state.focus;
+  let lowest: number | null = null;
+  for (const i of state.selected) if (lowest === null || i < lowest) lowest = i;
+  return lowest;
+}

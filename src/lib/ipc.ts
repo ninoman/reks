@@ -191,3 +191,98 @@ export function rbxmlImportStart(
   channel.onmessage = onEvent;
   return invoke("rbxml_import_start", { path, remap, onEvent: channel });
 }
+
+export interface ArtworkInfo {
+  id: number;
+  mime: string;
+  width: number | null;
+  height: number | null;
+}
+
+/** Every track column the detail panel shows; a superset of `TrackRow`. */
+export interface Track extends TrackRow {
+  path: string;
+  fileSize: number;
+  fileMtime: string;
+  albumArtist: string | null;
+  composer: string | null;
+  mix: string | null;
+  grouping: string | null;
+  trackNo: number | null;
+  discNo: number | null;
+  sampleRate: number | null;
+  bitDepth: number | null;
+  channels: number | null;
+  keySource: string | null;
+  bpmSource: string | null;
+  lastPlayed: string | null;
+  rbTrackId: number | null;
+  createdAt: string;
+  updatedAt: string;
+  artwork: ArtworkInfo | null;
+}
+
+/** Hot cue (`slot` 0..7 = A..H), memory cue (`slot` null) or loop (`endMs` set). */
+export interface Cue {
+  id: number;
+  slot: number | null;
+  /** rekordbox Type: 0 cue, 1 fade-in, 2 fade-out, 3 load, 4 loop. */
+  kind: number;
+  startMs: number;
+  endMs: number | null;
+  name: string | null;
+  /** 0xRRGGBB. */
+  colorRgb: number | null;
+}
+
+export interface BeatgridSummary {
+  markers: number;
+  firstBeatMs: number;
+  bpmMinX100: number;
+  bpmMaxX100: number;
+}
+
+export interface TrackDetail {
+  track: Track;
+  cues: Cue[];
+  /** null = no grid (needs analysis). */
+  beatgrid: BeatgridSummary | null;
+}
+
+/**
+ * A metadata edit: an absent field is unchanged, `null` (or empty text)
+ * clears it. Validated in `reks-core` (`track.rs`).
+ */
+export interface TrackPatch {
+  title?: string | null;
+  artist?: string | null;
+  album?: string | null;
+  albumArtist?: string | null;
+  genre?: string | null;
+  composer?: string | null;
+  remixer?: string | null;
+  label?: string | null;
+  mix?: string | null;
+  grouping?: string | null;
+  comment?: string | null;
+  trackNo?: number | null;
+  discNo?: number | null;
+  year?: number | null;
+  rating?: number;
+  color?: string | null;
+  /** Any notation; stored canonical. */
+  key?: string | null;
+}
+
+export function libraryTrack(id: number): Promise<TrackDetail> {
+  return invoke("library_track", { id });
+}
+
+export function libraryUpdateTrack(id: number, patch: TrackPatch): Promise<TrackDetail> {
+  return invoke("library_update_track", { id, patch });
+}
+
+/** Artwork image bytes (raw `ipc::Response`, not JSON). */
+export function artworkGet(id: number): Promise<ArrayBuffer> {
+  return invoke("artwork_get", { id });
+}
