@@ -214,7 +214,7 @@ const ROOT = -1;
 function Disclosure({ open }: { open: boolean }) {
   return (
     <span className="tree-disclosure" aria-hidden="true">
-      <svg viewBox="0 0 10 10" width="9" height="9">
+      <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true">
         <path d={open ? "M1 2.5h8L5 8z" : "M2.5 1v8L8 5z"} fill="currentColor" />
       </svg>
     </span>

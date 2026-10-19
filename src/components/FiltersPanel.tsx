@@ -1,6 +1,8 @@
 /**
- * Filter panel on the right of the table; it collapses to a narrow strip that
- * still shows how many filters are on. Options (genres, keys, colours) come
+ * Filter panel on the right of the table. Two independent controls: the
+ * switch applies the filters or sets them aside (values kept), and the
+ * chevron collapses the panel to a narrow strip, which keeps the switch and
+ * shows how many filters are set. Options (genres, keys, colours) come
  * from `library_facets`. The playlist tree chooses the playlist; Clear leaves
  * that alone.
  */
@@ -26,6 +28,27 @@ export function FiltersPanel() {
   const facets = useLibrary((s) => s.facets);
   const f = useLibrary((s) => s.filters);
   const active = buildFilters({ ...f, playlistId: null }).length;
+  const enabled = useLibrary((s) => s.filtersEnabled);
+  const setEnabled = useLibrary((s) => s.setFiltersEnabled);
+  const badge = active > 0 && (
+    <span
+      className={`filters-badge${enabled ? "" : " off"}`}
+      title={enabled ? `${active} filters applied` : `${active} filters set, not applied`}
+    >
+      {active}
+    </span>
+  );
+  const toggle = (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label="Apply filters"
+      title={enabled ? "Filters on: click to set them aside" : "Filters off: click to apply"}
+      className={`filters-switch${enabled ? " on" : ""}`}
+      onClick={() => setEnabled(!enabled)}
+    />
+  );
   const setFilters = useLibrary((s) => s.setFilters);
   const clearFilters = useLibrary((s) => s.clearFilters);
   const set = (patch: Partial<FilterState>) => setFilters(patch);
@@ -36,6 +59,7 @@ export function FiltersPanel() {
   if (!open) {
     return (
       <aside className="filters-panel collapsed" aria-label="Filters">
+        {toggle}
         <button
           type="button"
           className="filters-rail"
@@ -44,14 +68,14 @@ export function FiltersPanel() {
           onClick={() => setOpen(true)}
         >
           <span className="filters-rail-label">Filters</span>
-          {active > 0 && <span className="filters-badge">{active}</span>}
+          {badge}
         </button>
       </aside>
     );
   }
 
   return (
-    <aside className="filters-panel" aria-label="Filters">
+    <aside className={`filters-panel${enabled ? "" : " off"}`} aria-label="Filters">
       <div className="panel-head">
         <button
           type="button"
@@ -63,8 +87,9 @@ export function FiltersPanel() {
           ▸
         </button>
         <h2>Filters</h2>
-        {active > 0 && <span className="filters-badge">{active}</span>}
+        {badge}
         <span className="spacer" />
+        {toggle}
         <button type="button" onClick={clearFilters} disabled={active === 0}>
           Clear
         </button>

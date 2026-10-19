@@ -13,6 +13,7 @@ import {
 const inputs = (patch: Partial<QueryInputs> = {}): QueryInputs => ({
   text: "",
   filters: noFilters,
+  filtersEnabled: true,
   sort: defaultSort,
   ...patch,
 });
@@ -37,6 +38,14 @@ describe("buildQuery", () => {
     const q = buildQuery(inputs(), 3);
     expect(q.offset).toBe(3 * PAGE_SIZE);
     expect(q.limit).toBe(PAGE_SIZE);
+  });
+
+  it("filters switched off are kept but not sent, except the playlist", () => {
+    const filters = { ...noFilters, genre: "House", ratingMin: 4, playlistId: 7 };
+    expect(buildQuery(inputs({ filters }), 0).filters).toHaveLength(3);
+    expect(buildQuery(inputs({ filters, filtersEnabled: false }), 0).filters).toEqual([
+      { type: "playlist", id: 7 },
+    ]);
   });
 
   it("passes the sort through", () => {

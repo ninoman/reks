@@ -386,8 +386,10 @@ Notes (task 10, [`playlist.rs`](../../crates/reks-core/src/playlist.rs), [`Playl
   re-import creates that one anew.
 - UI layout follows rekordbox: the left sidebar holds only the tree (Collection, then a
   collapsible Playlists root with a `+` button; disclosure triangles, folder and playlist icons).
-  Filters moved to a panel on the right that collapses to a strip showing how many filters are
-  on (open by default; the state isn't saved yet, see task 13).
+  Filters moved to a panel on the right with two independent controls: a switch that applies
+  the filters or sets them aside (values kept, the playlist still applies), and a chevron that
+  collapses the panel to a strip, which keeps the switch and shows how many filters are set
+  (muted when off). Both start on/open; saving them is task 13.
 - UI: the tree is a Zustand store over a pure reducer (Playlists root open, expanded folders,
   selection, rename). Selecting a playlist sets the `playlist` filter and sorts by
   `playlistPosition`; a folder shows everything below it; Collection clears it. Clear (filters)
