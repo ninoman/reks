@@ -5,9 +5,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use reks_core::rbxml::{self, ImportEvent, ImportOptions, ImportReport, PrefixRemap};
-use reks_core::{CancelToken, Facets, Library, ScanEvent, ScanReport, TrackPage, TrackQuery};
+use reks_core::{
+    ArtworkId, CancelToken, Facets, Library, ScanEvent, ScanReport, TrackDetail, TrackId,
+    TrackPage, TrackPatch, TrackQuery,
+};
 use serde::Serialize;
-use tauri::ipc::Channel;
+use tauri::ipc::{Channel, Response};
 use tauri::State;
 
 use crate::state::AppState;
@@ -45,6 +48,30 @@ pub async fn library_query(state: State<'_, AppState>, query: TrackQuery) -> Cmd
 #[tauri::command]
 pub async fn library_facets(state: State<'_, AppState>) -> CmdResult<Facets> {
     blocking(&state, |lib| lib.facets()).await
+}
+
+/// One track in full, with its cues and beatgrid summary.
+#[tauri::command]
+pub async fn library_track(state: State<'_, AppState>, id: TrackId) -> CmdResult<TrackDetail> {
+    blocking(&state, move |lib| lib.track(id)).await
+}
+
+/// Applies a metadata edit and returns the updated track.
+#[tauri::command]
+pub async fn library_update_track(
+    state: State<'_, AppState>,
+    id: TrackId,
+    patch: TrackPatch,
+) -> CmdResult<TrackDetail> {
+    blocking(&state, move |lib| lib.update_track(id, &patch)).await
+}
+
+/// Artwork image bytes, sent raw (an `ArrayBuffer` in the UI).
+#[tauri::command]
+pub async fn artwork_get(state: State<'_, AppState>, id: ArtworkId) -> CmdResult<Response> {
+    blocking(&state, move |lib| lib.artwork(id))
+        .await
+        .map(Response::new)
 }
 
 /// Scans `roots` into the library, streaming progress to `on_event`.

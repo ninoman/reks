@@ -11,6 +11,7 @@ pub mod query;
 pub mod rbxml;
 pub mod scan;
 pub mod timefmt;
+pub mod track;
 
 pub use artwork::ArtworkId;
 pub use db::Library;
@@ -21,6 +22,7 @@ pub use query::{
     TrackRow,
 };
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
+pub use track::{ArtworkInfo, BeatgridSummary, Cue, Track, TrackDetail, TrackPatch};
 
 /// Crate version, from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

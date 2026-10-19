@@ -25,6 +25,18 @@ pub enum Error {
     #[error("could not enable WAL journal mode (got {0:?})")]
     JournalMode(String),
 
+    /// No track with this id.
+    #[error("track {0} not found")]
+    TrackNotFound(crate::scan::TrackId),
+
+    /// No artwork with this id.
+    #[error("artwork {0} not found")]
+    ArtworkNotFound(crate::artwork::ArtworkId),
+
+    /// A track edit was rejected; nothing was written.
+    #[error("invalid {field}: {reason}")]
+    InvalidField { field: &'static str, reason: String },
+
     /// A thread panicked while holding the connection lock.
     #[error("library connection lock poisoned")]
     LockPoisoned,

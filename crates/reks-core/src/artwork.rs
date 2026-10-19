@@ -72,6 +72,13 @@ impl Library {
             .optional()?;
         Ok(rel.map(|r| self.cache_dir().join(r)))
     }
+
+    /// The stored picture's bytes. `ArtworkNotFound` for an unknown id; an
+    /// I/O error if the cache file is gone (the cache is disposable).
+    pub fn artwork(&self, id: ArtworkId) -> Result<Vec<u8>> {
+        let path = self.artwork_path(id)?.ok_or(Error::ArtworkNotFound(id))?;
+        std::fs::read(&path).map_err(|source| Error::Io { path, source })
+    }
 }
 
 /// MIME type and file extension, sniffed from the bytes (tag MIME fields
@@ -165,6 +172,19 @@ mod tests {
         let path = lib.artwork_path(id).unwrap().unwrap();
         assert_eq!(path, lib.cache_dir().join(&rel));
         assert_eq!(std::fs::read(path).unwrap(), PNG_1X1);
+    }
+
+    #[test]
+    fn artwork_bytes_round_trip() {
+        let (_dir, lib) = lib();
+        let id = lib.store_artwork(JPEG_3X2).unwrap().unwrap();
+        assert_eq!(lib.artwork(id).unwrap(), JPEG_3X2);
+        assert!(matches!(
+            lib.artwork(id + 1),
+            Err(Error::ArtworkNotFound(_))
+        ));
+        std::fs::remove_file(lib.artwork_path(id).unwrap().unwrap()).unwrap();
+        assert!(matches!(lib.artwork(id), Err(Error::Io { .. })));
     }
 
     #[test]
