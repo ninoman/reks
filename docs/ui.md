@@ -110,6 +110,7 @@ menu items `--menu-item-h`.
 | `Textarea` | `size`: sm, md | native |
 | `Select` | `size`; native `<select>` with our chevron | native |
 | `Switch` | `size`: sm, md | Radix Switch |
+| `Checkbox` | `size`: sm, md; native, wrap in a `<label>` (Biome knows it as an input) | native |
 | `Slider` | `size`: sm, md; one value | Radix Slider |
 | `SegmentedControl` + `Segment` | `size`; one choice, can't be cleared (radiogroup) | Radix ToggleGroup |
 | `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |

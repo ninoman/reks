@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { formatBytes } from "../lib/format";
 import type { DeviceInfo, FsKind } from "../lib/ipc";
 import { deviceName, useDevices } from "../store/devices";
+import { openExportWizard } from "../store/exportWizard";
 import { EjectIcon } from "./icons";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
@@ -72,6 +73,14 @@ export function DevicesDialog() {
           <DeviceList />
         </DialogBody>
         <DialogFooter>
+          <Button
+            onClick={() => {
+              useDevices.getState().setDialogOpen(false);
+              openExportWizard();
+            }}
+          >
+            Export to USB…
+          </Button>
           <Button variant="primary" onClick={() => useDevices.getState().setDialogOpen(false)}>
             Close
           </Button>
@@ -138,7 +147,7 @@ function DeviceRow({
 }: {
   device: DeviceInfo;
   selected: boolean;
-  onSelect?: (device: DeviceInfo) => void;
+  onSelect?: ((device: DeviceInfo) => void) | undefined;
 }) {
   const ejecting = useDevices((s) => s.ejecting);
   const name = deviceName(device);

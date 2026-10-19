@@ -335,6 +335,28 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
 10. **Export UI**: wizard (device → playlists → options → dry-run table with
     warnings/errors/deletes → progress → report with "Eject"). The device's
     selection is its stick profile (task 15).
+    - [x] Wizard through the dry run:
+      [ExportWizard.tsx](../../src/components/ExportWizard.tsx), opened from
+      the header and the USB devices dialog. Steps: stick (`DeviceList`),
+      playlists and folders (a ticked folder covers everything under it; the
+      sidebar's selection is pre-ticked), options (all `ExportOptions`
+      fields; `ExportWithout` is not offered because the writer refuses it;
+      `Discard` needs a confirmation checkbox), dry run. Tauri command
+      `export_plan(mount_point, selection, options)` runs
+      `dryrun::plan_at` (the volume mounted exactly there, rekordbox's default
+      analysis folders) on a blocking worker and returns `dryrun::DryRun`
+      ([dryrun.rs](../../crates/reks-export-rb/src/dryrun.rs)): notices
+      grouped by kind with track names, byte totals against free space,
+      history and backup text, all worded in Rust. Blocked plans list their
+      problems; Export stays disabled. Checked in the browser with the mock
+      backend and `plan_at` against a mounted FAT32 image
+      (`live_plan_at_a_mounted_stick`, ignored).
+    - [ ] Wire Export to `apply` (task 9); re-plan or keep the shown plan so
+      what is written is what the user saw.
+    - [ ] Progress (writer events, cancel).
+    - [ ] Report (validator findings, backup folder) with Eject.
+    - [ ] UI wording for history (task 12): review the dry-run text with the
+      report step.
 11. **`reks-cli rb export/validate/diff/history`** for headless iteration
     (`history` lists the stick's history playlists and entry counts).
     The binary is `reks`; commands live in [rb.rs](../../crates/reks-cli/src/rb.rs).

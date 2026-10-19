@@ -13,6 +13,8 @@ use reks_core::{
     TrackPatch, TrackQuery,
 };
 use reks_export_rb::device::{self, DeviceInfo};
+use reks_export_rb::dryrun::{self, DryRun};
+use reks_export_rb::plan::{ExportOptions, Selection};
 use reks_mix::{PlayerState, Reopened};
 use serde::Serialize;
 use tauri::ipc::{Channel, Response};
@@ -414,4 +416,24 @@ pub async fn devices_list() -> CmdResult<Vec<DeviceInfo>> {
 #[tauri::command]
 pub async fn device_eject(mount_point: PathBuf) -> CmdResult<()> {
     Ok(tauri::async_runtime::spawn_blocking(move || device::eject_at(&mount_point)).await??)
+}
+
+/// Dry run of exporting `selection` to the stick mounted at `mount_point`
+/// (phase 2 task 10): plans, writes nothing, returns the plan as the UI shows
+/// it. Scans rekordbox's analysis folders and samples file bytes, so it runs
+/// on a blocking worker.
+#[tauri::command]
+pub async fn export_plan(
+    state: State<'_, AppState>,
+    mount_point: PathBuf,
+    selection: Selection,
+    options: ExportOptions,
+) -> CmdResult<DryRun> {
+    let lib = Arc::clone(&state.library);
+    let dry_run = tauri::async_runtime::spawn_blocking(move || {
+        dryrun::plan_at(&lib, &selection, &mount_point, &options)
+            .map(|plan| DryRun::build(&lib, &plan))
+    })
+    .await??;
+    Ok(dry_run)
 }

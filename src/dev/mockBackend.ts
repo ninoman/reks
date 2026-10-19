@@ -8,6 +8,9 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 
 import type {
   DeviceInfo,
+  DryRun,
+  ExportOptions,
+  ExportSelection,
   Facets,
   ImportPreview,
   ImportReport,
@@ -335,6 +338,134 @@ let devices: DeviceInfo[] = [
   },
 ];
 
+/** A dry run in the shape `dryrun::DryRun` gives: GIGS holds play history, Backup is blocked. */
+function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): DryRun {
+  const dev = devices.find((d) => d.mountPoint === mountPoint) ?? (devices[0] as DeviceInfo);
+  const lists = NODES.filter((n) => sel.playlists.includes(n.id));
+  const copies = lists.slice(0, 1).flatMap(() =>
+    TRACKS.slice(0, 12).map((t) => ({
+      path: `/Contents/${t.artist ?? "Unknown Artist"}/${t.album ?? "Unknown Album"}/${t.title}.mp3`,
+      from: `/Users/dj/Music/${t.title}.mp3`,
+      sizeText: "9.4 MB",
+    })),
+  );
+  const played = dev.label === "GIGS";
+  const problems: DryRun["problems"] = [];
+  if (dev.fs.kind === "other") {
+    problems.push({
+      kind: "unsupportedFilesystem",
+      title: `Players cannot read the ${dev.fsName} file system; format the stick as FAT32.`,
+      items: [],
+    });
+  }
+  if (played && opts.history === "discard" && !opts.discardHistoryConfirmed) {
+    problems.push({
+      kind: "discardNotConfirmed",
+      title: "Discarding the stick's play history needs your confirmation.",
+      items: [],
+    });
+  }
+  const none = { count: 0, bytes: 0, totalText: "None", files: [] };
+  const write = copies.length * 9_400_000;
+  return {
+    ready: problems.length === 0,
+    status:
+      problems.length === 0
+        ? "Ready to export. Nothing has been written to the stick yet."
+        : `Blocked by ${problems.length} problem${problems.length === 1 ? "" : "s"}. Fix ${problems.length === 1 ? "it" : "them"} or change the options; nothing has been written.`,
+    device: {
+      mountPoint: dev.mountPoint,
+      name: dev.label,
+      fsText: `${dev.fs.kind === "fat32" ? "FAT32" : dev.fsName} (${dev.fsName})`,
+      spaceText: `${(dev.freeBytes / 1e9).toFixed(1)} GB free of ${(dev.totalBytes / 1e9).toFixed(1)} GB`,
+      volumeSerial: "4993-1CFB",
+    },
+    target: opts.target === "Generic" ? "Any player" : opts.target,
+    summary: [
+      {
+        label: "Tracks",
+        value: `${copies.length}: ${copies.length} to copy, 0 already on the stick`,
+      },
+      { label: "Playlists", value: String(lists.length) },
+      { label: "Analysis", value: `${copies.length - 1} from rekordbox (1.2 MB)` },
+      { label: "Copy", value: `${copies.length} files, ${(write / 1e6).toFixed(1)} MB` },
+      { label: "Delete", value: "None" },
+    ],
+    playlists: lists.map((p) => ({
+      id: p.id,
+      name: p.name,
+      depth: 0,
+      isFolder: p.isFolder,
+      detail: p.isFolder ? "" : `${p.entries} tracks`,
+    })),
+    copies: {
+      count: copies.length,
+      bytes: write,
+      totalText: `${copies.length} files, ${(write / 1e6).toFixed(1)} MB`,
+      files: copies,
+    },
+    deletes: none,
+    space: {
+      fits: true,
+      totalBytes: dev.totalBytes,
+      freeBytes: dev.freeBytes,
+      writeBytes: write,
+      deleteBytes: 0,
+      freeAfterBytes: dev.freeBytes - write,
+      usedAfterBytes: dev.totalBytes - dev.freeBytes + write,
+      facts: [
+        { label: "Free now", value: `${(dev.freeBytes / 1e9).toFixed(1)} GB` },
+        { label: "Writes", value: `${(write / 1e6).toFixed(1)} MB` },
+        { label: "Deletes free", value: "0 B" },
+        { label: "Free after", value: `${((dev.freeBytes - write) / 1e9).toFixed(1)} GB` },
+      ],
+    },
+    history: played
+      ? {
+          atRisk: true,
+          policy: opts.history,
+          title: "This stick holds play history",
+          text: "The stick's export.pdb holds 2 history sessions with 31 played tracks. Exporting rebuilds the stick's database, which erases it.",
+          actionText:
+            opts.history === "backUp"
+              ? "Before writing anything, reks copies 1 database file (412.0 KB) to its data folder and checks the copies; if the backup fails, nothing is written."
+              : opts.discardHistoryConfirmed
+                ? "You chose to discard it: no backup is made."
+                : "Discarding it needs your confirmation in the options.",
+          backups:
+            opts.history === "backUp"
+              ? {
+                  count: 1,
+                  bytes: 412_000,
+                  totalText: "1 file, 412.0 KB",
+                  files: [
+                    { path: "/PIONEER/rekordbox/export.pdb", from: null, sizeText: "412.0 KB" },
+                  ],
+                }
+              : none,
+        }
+      : {
+          atRisk: false,
+          policy: opts.history,
+          title: "No play history on this stick",
+          text: "Players have not logged any sessions here, so the export loses nothing.",
+          actionText: null,
+          backups: none,
+        },
+    problems,
+    warnings:
+      copies.length > 0
+        ? [
+            {
+              kind: "skipped",
+              title: "1 track left out",
+              items: [`${copies[0]?.path ?? ""}: never analysed by rekordbox`],
+            },
+          ]
+        : [],
+  };
+}
+
 mockIPC((cmd, payload) => {
   const args = (payload ?? {}) as Record<string, unknown>;
   switch (cmd) {
@@ -400,6 +531,20 @@ mockIPC((cmd, payload) => {
     case "device_eject":
       devices = devices.filter((d) => d.mountPoint !== args.mountPoint);
       return null;
+    case "export_plan":
+      return new Promise((resolve) =>
+        setTimeout(
+          () =>
+            resolve(
+              dryRun(
+                args.mountPoint as string,
+                args.selection as ExportSelection,
+                args.options as ExportOptions,
+              ),
+            ),
+          600,
+        ),
+      );
     case "plugin:dialog|open":
       return "/Users/dj/Music/rekordbox/collection.xml";
     default:
