@@ -18,11 +18,19 @@
 //!   `/PIONEER/USBANLZ` and `/PIONEER/Artwork` are deleted unless
 //!   [`ExportOptions::keep_stale`]. Nothing else on the stick is touched.
 //! - [`ExportPlan::errors`] block the export; [`ExportPlan::warnings`] don't.
+//! - History safeguard (D23, task 12): the plan carries what players left on
+//!   the stick ([`ExportPlan::history`]) and the database files `apply` backs
+//!   up before its first write ([`ExportPlan::backups`], see
+//!   [`ExportPlan::backup_plan`]), with a warning whenever the stick holds or
+//!   may hold history.
 //!
-//! Not here yet: the history safeguard (`history`, `backups`; task 12).
+//! ANLZ comes from an [`AnlzLocator`]: [`CacheLocator`] for rekordbox's local
+//! cache, [`NoAnlz`] in tests.
 
+mod locate;
 mod source;
 mod stick;
+mod text;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -34,10 +42,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::audiocheck::{self, Severity};
 use crate::device::{DeviceInfo, FsKind};
+use crate::history::{self, BackupFile, BackupPlan, HistoryError, HistoryPolicy, StickHistory};
 use crate::TargetProfile;
 
+pub use locate::CacheLocator;
 pub use source::{load, SourceTrack, Sources};
 pub use stick::anlz_dir;
+pub use text::human_bytes;
 
 /// Playlists (and folders, meaning everything below them) to export.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,6 +85,11 @@ pub struct ExportOptions {
     /// Leave out tracks with blocking problems (unsupported audio, missing
     /// source) instead of blocking the whole export.
     pub skip_unsupported: bool,
+    /// What to do with the play history on the stick (D23).
+    pub history: HistoryPolicy,
+    /// The user explicitly confirmed [`HistoryPolicy::Discard`]; without it a
+    /// stick that may hold history blocks the plan.
+    pub discard_history_confirmed: bool,
 }
 
 impl Default for ExportOptions {
@@ -84,6 +100,8 @@ impl Default for ExportOptions {
             missing_analysis: MissingAnalysis::Skip,
             artwork: false,
             skip_unsupported: false,
+            history: HistoryPolicy::BackUp,
+            discard_history_confirmed: false,
         }
     }
 }
@@ -105,10 +123,16 @@ pub enum AnlzSource {
     None,
 }
 
-/// Finds existing analysis for a track. rbcache (task 5) implements this for
-/// rekordbox's local cache; [`NoAnlz`] finds nothing.
+/// Finds existing analysis for a track: [`CacheLocator`] for rekordbox's
+/// local cache; [`NoAnlz`] finds nothing.
 pub trait AnlzLocator {
+    /// The track's `.DAT`, if there is analysis to copy.
     fn locate(&self, track: &SourceTrack) -> Option<PathBuf>;
+
+    /// Why [`Self::locate`] found nothing, for the dry run.
+    fn why_missing(&self, _track: &SourceTrack) -> String {
+        "no rekordbox analysis found".to_owned()
+    }
 }
 
 /// Locator that never finds anything.
@@ -144,6 +168,12 @@ pub struct ExportPlan {
     pub anlz: Vec<AnlzOp>,
     /// Stale files to remove (empty with `keep_stale`).
     pub deletes: Vec<FileOp>,
+    /// What players left on the stick (D23).
+    pub history: StickHistory,
+    /// Stick database files `apply` copies to the app data dir before any
+    /// write (`dst_rel` is the stick file, `reason` [`OpReason::HistoryBackup`]).
+    /// Empty when the stick holds no history or with a confirmed `Discard`.
+    pub backups: Vec<FileOp>,
     pub warnings: Vec<Warning>,
     /// Blockers: `apply` refuses a plan with errors.
     pub errors: Vec<Problem>,
@@ -158,6 +188,22 @@ impl ExportPlan {
     /// True when [`Self::errors`] holds anything.
     pub fn is_blocked(&self) -> bool {
         !self.errors.is_empty()
+    }
+
+    /// [`Self::backups`] as the input for [`history::run_backups`].
+    pub fn backup_plan(&self) -> BackupPlan {
+        BackupPlan {
+            device_root: self.device.mount_point.clone(),
+            volume_serial: self.history.volume_serial.clone(),
+            files: self
+                .backups
+                .iter()
+                .map(|f| BackupFile {
+                    rel_path: f.dst_rel.trim_start_matches('/').to_owned(),
+                    bytes: f.bytes,
+                })
+                .collect(),
+        }
     }
 }
 
@@ -209,6 +255,8 @@ pub enum OpReason {
     NotOnStick,
     /// Not referenced by the new export.
     Stale,
+    /// A stick database file copied off before writing (history safeguard).
+    HistoryBackup,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -259,6 +307,21 @@ pub enum Warning {
     StaleKept { files: usize, bytes: u64 },
     /// A playlist ended up empty after tracks were left out.
     EmptyPlaylist { id: PlaylistId },
+    /// The stick holds, or may hold, play history that the export erases
+    /// (baken rebuilds `export.pdb` and removes `exportLibrary.db`). With
+    /// `BackUp` the files in [`ExportPlan::backups`] are copied first.
+    StickHistory {
+        sessions: u32,
+        entries: u32,
+        /// `export.pdb` could not be read: it may hold history.
+        unreadable: bool,
+        /// `exportLibrary.db` is present: players may have logged there.
+        onelibrary_db: bool,
+        policy: HistoryPolicy,
+    },
+    /// The OS gave no volume serial: backups go under `unknown-serial` and
+    /// later history import cannot tell this stick from others.
+    NoVolumeSerial,
 }
 
 /// A blocker.
@@ -302,6 +365,9 @@ pub enum Problem {
         needed: u64,
         free: u64,
     },
+    /// [`HistoryPolicy::Discard`] on a stick that may hold history, without
+    /// [`ExportOptions::discard_history_confirmed`].
+    DiscardNotConfirmed,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -314,10 +380,17 @@ pub enum PlanError {
         #[source]
         source: std::io::Error,
     },
+    /// Listing the stick's database files for the backup failed.
+    #[error(transparent)]
+    History(#[from] HistoryError),
+    /// baken could not parse the XML we would hand it.
+    #[error("baken cannot parse the exported XML: {0}")]
+    Xml(String),
 }
 
 /// Plans exporting `sel` from `lib` to `dev`. ANLZ lookup goes through
-/// `anlz` ([`NoAnlz`] until rbcache lands).
+/// `anlz` (usually a [`CacheLocator`] for the same selection). Asks the OS for
+/// the volume serial ([`crate::device::volume_serial`]).
 pub fn plan(
     lib: &Library,
     sel: &Selection,
@@ -326,13 +399,16 @@ pub fn plan(
     anlz: &dyn AnlzLocator,
 ) -> Result<ExportPlan, PlanError> {
     let sources = load(lib, sel)?;
-    plan_sources(sources, dev, opts, anlz)
+    let serial = crate::device::volume_serial(dev);
+    plan_sources(sources, dev, serial, opts, anlz)
 }
 
-/// [`plan`] on already loaded sources (also the entry point for tests).
+/// [`plan`] on already loaded sources and a known volume serial (also the
+/// entry point for tests).
 pub fn plan_sources(
     sources: Sources,
     dev: &DeviceInfo,
+    volume_serial: Option<String>,
     opts: &ExportOptions,
     anlz: &dyn AnlzLocator,
 ) -> Result<ExportPlan, PlanError> {
@@ -358,6 +434,7 @@ pub fn plan_sources(
     if !found.is_empty() {
         warnings.push(Warning::RekordboxStick { found });
     }
+    let (history, backups) = plan_history(root, volume_serial, opts, &mut warnings, &mut errors)?;
 
     // Per-track checks; tracks that fail are left out (with a warning) or block.
     let mut ok: Vec<(SourceTrack, Probe, u64, std::time::SystemTime, AnlzSource)> = Vec::new();
@@ -506,11 +583,59 @@ pub fn plan_sources(
         copies,
         anlz: anlz_ops,
         deletes,
+        history,
+        backups,
         warnings,
         errors,
         bytes_to_write,
         bytes_free_after,
     })
+}
+
+/// Reads the stick's history and plans its backups under `opts.history`.
+fn plan_history(
+    root: &Path,
+    volume_serial: Option<String>,
+    opts: &ExportOptions,
+    warnings: &mut Vec<Warning>,
+    errors: &mut Vec<Problem>,
+) -> Result<(StickHistory, Vec<FileOp>), PlanError> {
+    let history = history::read_history(root, volume_serial);
+    let at_risk = history.may_hold_history();
+    let files =
+        match history::plan_backups(root, &history, opts.history, opts.discard_history_confirmed) {
+            Ok(plan) => plan.files,
+            // Nothing to lose: no confirmation needed.
+            Err(HistoryError::DiscardNotConfirmed) if !at_risk => Vec::new(),
+            Err(HistoryError::DiscardNotConfirmed) => {
+                errors.push(Problem::DiscardNotConfirmed);
+                Vec::new()
+            }
+            Err(e) => return Err(e.into()),
+        };
+    if at_risk {
+        warnings.push(Warning::StickHistory {
+            sessions: history.pdb_sessions,
+            entries: history.pdb_entries,
+            unreadable: history.pdb_unreadable,
+            onelibrary_db: history.onelibrary_db,
+            policy: opts.history,
+        });
+    }
+    if history.volume_serial.is_none() {
+        warnings.push(Warning::NoVolumeSerial);
+    }
+    let backups = files
+        .into_iter()
+        .map(|f| FileOp {
+            src: None,
+            dst_rel: format!("/{}", f.rel_path),
+            bytes: f.bytes,
+            track_id: None,
+            reason: OpReason::HistoryBackup,
+        })
+        .collect();
+    Ok((history, backups))
 }
 
 /// Probes and checks one track. `Ok(None)`: left out with a warning already
@@ -565,7 +690,7 @@ fn check_track(
             MissingAnalysis::Skip => {
                 warnings.push(Warning::Skipped {
                     track_id: t.track_id,
-                    reason: "no rekordbox analysis found".to_owned(),
+                    reason: anlz.why_missing(t),
                 });
                 return Ok(None);
             }
@@ -596,7 +721,7 @@ fn problem_text(p: &Problem) -> String {
         Problem::SourceUnreadable { message, .. } | Problem::Unsupported { message, .. } => {
             message.clone()
         }
-        other => format!("{other:?}"),
+        other => other.to_string(),
     }
 }
 

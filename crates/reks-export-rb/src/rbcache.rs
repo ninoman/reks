@@ -206,32 +206,7 @@ fn anlz_set(e: &Entry) -> AnlzSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use baken_export::anlz::section::{section, AnlzFile};
-
-    /// A minimal `.DAT`: `PPTH` = `ppth`, plus a constant `PQTZ` grid of
-    /// `beats` beats at `bpm_x100` from `first_ms` (none if `beats == 0`).
-    fn dat(ppth: &str, beats: u32, bpm_x100: u16, first_ms: u32) -> Vec<u8> {
-        let mut file = AnlzFile {
-            header_tail: [0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-            sections: Vec::new(),
-        };
-        if beats > 0 {
-            let mut payload = Vec::new();
-            payload.extend_from_slice(&0u32.to_be_bytes());
-            payload.extend_from_slice(&0x0008_0000u32.to_be_bytes());
-            payload.extend_from_slice(&beats.to_be_bytes());
-            let step = 60_000.0 / (f64::from(bpm_x100) / 100.0);
-            for i in 0..beats {
-                payload.extend_from_slice(&((i % 4 + 1) as u16).to_be_bytes());
-                payload.extend_from_slice(&bpm_x100.to_be_bytes());
-                let t = f64::from(first_ms) + f64::from(i) * step;
-                payload.extend_from_slice(&(t.round() as u32).to_be_bytes());
-            }
-            file.sections.push(section(b"PQTZ", 0x18, &payload));
-        }
-        file.set_path(ppth);
-        file.to_bytes()
-    }
+    use crate::testutil::anlz_dat as dat;
 
     /// Writes `USBANLZ/<a>/<b>/ANLZ0000.DAT` (+ `.EXT` / `.2EX`).
     fn put(root: &Path, a: &str, b: &str, bytes: &[u8], ext: bool, two_ex: bool) -> PathBuf {

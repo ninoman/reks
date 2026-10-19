@@ -8,6 +8,8 @@ pub mod history;
 pub mod plan;
 pub mod rbcache;
 pub mod target;
+#[cfg(any(test, feature = "test-util"))]
+pub mod testutil;
 
 pub use target::TargetProfile;
 

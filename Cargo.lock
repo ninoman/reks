@@ -3513,7 +3513,11 @@ dependencies = [
  "anyhow",
  "reks-audio",
  "reks-core",
+ "reks-export-rb",
  "reks-mix",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

@@ -14,4 +14,11 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 reks-audio = { workspace = true }
 reks-core = { workspace = true }
+reks-export-rb = { workspace = true }
 reks-mix = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+reks-export-rb = { workspace = true, features = ["test-util"] }
+tempfile = { workspace = true }

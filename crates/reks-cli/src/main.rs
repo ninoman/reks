@@ -8,7 +8,13 @@
 //! reks play <file> [seconds]    play a file on the default output (engine smoke test)
 //! reks import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run]
 //!                               import a rekordbox XML (or, with --dry-run, preview it)
+//! reks rb plan <stick> --library <library.sqlite> --playlist <id|Folder/Name>... [...]
+//!                               dry run of a rekordbox USB export (flags: see `rb.rs`)
+//! reks rb history <stick> [--json]
+//!                               list the play history players left on the stick
 //! ```
+
+mod rb;
 
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
@@ -47,9 +53,11 @@ fn main() -> anyhow::Result<()> {
         [cmd, db, xml, rest @ ..] if cmd == "import-xml" => {
             import_xml(Path::new(db), Path::new(xml), rest)
         }
+        [cmd, rest @ ..] if cmd == "rb" => rb::run(rest),
         _ => bail!(
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
-             | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run]]"
+             | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run] \
+             | rb plan <stick> ... | rb history <stick> [--json]]"
         ),
     }
 }
