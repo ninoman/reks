@@ -531,7 +531,8 @@ Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5)
 - Overview: min/max per 1,000 source frames over both channels, computed on
   every decode and cached in `<cache_dir>/waveform/overview/<key>.f32` (key:
   hash of path, size and mtime).
-- UI: double-click or Enter plays a row; Space plays and pauses (except in
+- UI: double-click or Enter plays a row; the loaded track's row gets an accent
+  bar and accent text (distinct from the selection background); Space plays and pauses (except in
   text fields); the overview is the position slider (seeks on pointer-down and
   on every move while dragging, arrow keys ±5 s; the store sends only the
   newest target while a seek call is in flight). `reks-cli devices` and `reks-cli play <file>` drive it headless.
