@@ -365,6 +365,28 @@ Date of decisions: 2026-10-18.
 - Risks: history format unknowns (date table, appends across mounts, what a
   player logs as a play) and volume serial access per OS; see R§8 item 14.
 
+## D24. Stick paths: ASCII transliteration, metadata stays Unicode
+
+- Date: 2026-10-19 (Phase 2 task 2). Code: `reks-core::fsname`.
+- Decision: every path reks writes under `/Contents` is ASCII. Names are NFC
+  normalised, then transliterated with `deunicode` (BSD-3-Clause): `Кино` →
+  `Kino`, `Sigur Rós` → `Sigur Ros`, kana → romaji, Han → Mandarin readings
+  (`坂本龍一` → `Ban Ben Long Yi`), emoji → words (`🔥` → `fire`). Titles,
+  artists and albums in `export.pdb`/OneLibrary/Engine keep their Unicode, so
+  browse and search are unaffected; only the file name is folded. Collisions
+  that folding creates are resolved by `fsname::dedupe` (`-1`, `-2`).
+- Rationale: CLAUDE.md requires ASCII-safe paths; NFC/NFD and case handling
+  on players have no Pioneer source (R§4, R§8 item 4) and a non-ASCII artist
+  froze an NXS2 in baken before #168 (R§1). ASCII makes the PPTH/`file_path`
+  string identical however the OS or player normalises, and makes character
+  and byte limits the same.
+- Rejected: writing NFC Unicode paths (what rekordbox does; unverified on
+  older players); `_` for every non-ASCII character (unreadable folders,
+  more collisions); hashing names.
+- Risks: Han readings are Mandarin, odd for Japanese users browsing by
+  folder (players browse by metadata, so rarely seen). Revisit if a hardware
+  test shows Unicode paths are safe on all target players.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

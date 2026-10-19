@@ -35,9 +35,11 @@ reks-export-engine = { version = "0.1.0", path = "crates/reks-export-engine" }
 anyhow = "1"
 blake3 = "1.8"
 cpal = "0.18"
+deunicode = "1.6"
 hound = "3"
 imagesize = { version = "0.15", default-features = false, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
 lofty = "0.25"
+proptest = "1"
 percent-encoding = "2.3"
 quick-xml = "0.42"
 rusqlite = { version = "0.40", features = ["bundled"] }

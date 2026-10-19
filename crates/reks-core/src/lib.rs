@@ -6,6 +6,7 @@ pub mod artwork;
 pub mod db;
 pub mod error;
 mod fileinfo;
+pub mod fsname;
 pub mod keys;
 pub mod playlist;
 pub mod preview;
