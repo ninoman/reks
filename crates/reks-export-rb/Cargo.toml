@@ -10,3 +10,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+reks-audio = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

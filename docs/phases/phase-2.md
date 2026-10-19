@@ -88,9 +88,11 @@ pub mod fsname {   // FAT32-safe naming, shared with Phase 4/5
     pub fn contents_path(artist: &str, album: &str, file: &str) -> String; // /Contents/<Artist>/<Album>/<file>, depth ≤ 3
     pub fn dedupe(existing: &mut HashSet<String>, path: String) -> String; // case-insensitive, -1/-2 suffixes
 }
-pub mod audiocheck {
-    pub enum Issue { WavExtensible, FloatWav, SampleRateUnsupported(u32), Channels(u8), AiffC, VbrNoXing, Over4GiB, Codec(Kind) }
-    pub fn check(path: &Path, probe: &Probe, target: TargetProfile) -> Vec<Issue>;
+pub mod audiocheck {   // done: crates/reks-export-rb/src/audiocheck.rs
+    pub enum Issue { WavExtensible, FloatWav, WavFormat(u16), BitDepth(u8), SampleRateUnsupported(u32),
+                     Channels(u8), AiffC, VbrNoXing, Over4GiB, Codec(Kind) }
+    pub enum Severity { Warning, Error }                       // Issue::severity(target)
+    pub fn check(path: &Path, probe: &Probe, target: TargetProfile) -> Result<Vec<Issue>, Error>;  // Err = unreadable/malformed header
 }
 pub mod rbcache {   // rekordbox's local analysis files for imported tracks
     pub fn default_roots() -> Vec<PathBuf>;                      // macOS: ~/Library/Pioneer/rekordbox/share/PIONEER/USBANLZ, Windows: %APPDATA%\Pioneer\rekordbox\share\PIONEER\USBANLZ (verify)
@@ -155,10 +157,12 @@ CREATE TABLE export_manifest (              -- latest export to each stick
 2. **fsname + path planning**: implement `fsname`, `/Contents` layout, depth
    and length limits (255 full path, 8 levels), case-insensitive dedupe,
    NFC; property tests.
-3. **audiocheck**: parse WAV/AIFF headers (format tag, bit depth, float),
-   MP3 Xing/Info presence, sample rate/channels from probe; map to `Issue`
-   with target-dependent severity (FLAC/ALAC warn on NXS, error on NXS1);
-   tests on crafted headers in fixtures.
+3. [x] **audiocheck**: parse WAV/AIFF headers (format tag, bit depth, float),
+   MP3 Xing/Info/VBRI presence, sample rate/channels from probe; map to `Issue`
+   with target-dependent severity (FLAC/ALAC warn on NXS2/XDJ-XZ/Generic,
+   error on NXS1; VBR without seek header warns; 88.2/96 kHz on CDJ-3000
+   warns, UNVERIFIED; the rest are errors); tests on headers crafted in code
+   plus the generated fixtures.
 4. **Planner**: selection → `ExportPlan` with copies, anlz ops, deletes,
    warnings, errors, byte totals; stable `/Contents` paths across re-exports
    (reuse existing path if the same source file is already on the stick:
