@@ -43,7 +43,7 @@ jobs:
       - name: npm ci
         run: npm ci
 
-      - name: Lint (ESLint + Prettier)
+      - name: Lint + format check (Biome)
         run: npm run lint
 
       - name: Frontend tests

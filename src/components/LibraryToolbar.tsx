@@ -5,15 +5,16 @@
  * they are in now (re-importing with a prefix remap). The full import wizard
  * is phase 1 task 12.
  */
-import { useState } from "react";
+
 import { open } from "@tauri-apps/plugin-dialog";
+import { useState } from "react";
 
 import {
+  type ImportReport,
+  type PrefixRemap,
   rbxmlImportStart,
   scanCancel,
   scanStart,
-  type ImportReport,
-  type PrefixRemap,
 } from "../lib/ipc";
 import { useLibrary } from "../store/library";
 import { ColumnChooser } from "./ColumnChooser";

@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   emptySelection,
   primaryIndex,
-  selectionReducer,
   type Selection,
   type SelectionAction,
+  selectionReducer,
 } from "./selection";
 
 function run(...actions: SelectionAction[]): Selection {

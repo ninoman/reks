@@ -3,7 +3,7 @@
  * and read-only cue and beatgrid listings. Mount it with `key={trackId}` so
  * switching tracks starts from a fresh form (unsaved edits are dropped).
  */
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
+import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useState } from "react";
 
 import {
   formatBpm,
@@ -15,19 +15,19 @@ import {
 } from "../lib/format";
 import {
   artworkGet,
+  type Cue,
   libraryTrack,
   libraryUpdateTrack,
-  type Cue,
   type TrackDetail,
 } from "../lib/ipc";
 import { useLibrary } from "../store/library";
 import {
   buildPatch,
+  type EditField,
+  type EditForm,
   NUMBER_FIELDS,
   TEXT_FIELDS,
   toForm,
-  type EditField,
-  type EditForm,
 } from "./trackDetailForm";
 
 const NO_COLOURS: string[] = [];
@@ -44,13 +44,13 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  function load(d: TrackDetail) {
+  const load = useCallback((d: TrackDetail) => {
     const f = toForm(d.track);
     setDetail(d);
     setInitial(f);
     setForm(f);
     setBadInput(new Set());
-  }
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -61,7 +61,7 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
     return () => {
       live = false;
     };
-  }, [trackId]);
+  }, [trackId, load]);
 
   if (detail === null || initial === null || form === null) {
     return (
@@ -139,16 +139,19 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
       </div>
 
       <form className="detail-form" onSubmit={(e) => void save(e)} onKeyDown={onKeyDown}>
-        {TEXT_FIELDS.map(({ id, label, multiline }) => (
-          <label key={id}>
-            {label}
-            {multiline ? (
+        {TEXT_FIELDS.map(({ id, label, multiline }) =>
+          multiline ? (
+            <label key={id}>
+              {label}
               <textarea rows={3} value={form[id]} onChange={(e) => set(id, e.target.value)} />
-            ) : (
+            </label>
+          ) : (
+            <label key={id}>
+              {label}
               <input type="text" value={form[id]} onChange={(e) => set(id, e.target.value)} />
-            )}
-          </label>
-        ))}
+            </label>
+          ),
+        )}
         <div className="detail-row">
           {NUMBER_FIELDS.map(({ id, label }) => (
             <label key={id}>
@@ -295,7 +298,7 @@ function ArtworkView({ id, mime }: { id: number | null; mime: string }) {
   // A stale picture from the previous id is not shown while the new one loads.
   const url = loaded !== null && loaded.id === id ? loaded.url : null;
   return url === null ? (
-    <div className="artwork placeholder" aria-label="No artwork">
+    <div className="artwork placeholder" role="img" aria-label="No artwork">
       ♪
     </div>
   ) : (

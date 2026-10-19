@@ -1,15 +1,15 @@
 /** Column model for the track table (react-table): visibility and header order. */
 import {
+  type ColumnVisibilityState,
   columnVisibilityFeature,
   createColumnHelper,
   tableFeatures,
-  useTable,
-  type ColumnVisibilityState,
   type Updater,
+  useTable,
 } from "@tanstack/react-table";
 
 import { useLibrary } from "../store/library";
-import { COLUMNS, COLUMN_BY_ID, type ColumnSpec } from "./columns";
+import { COLUMN_BY_ID, COLUMNS, type ColumnSpec } from "./columns";
 
 export const ROW_HEIGHT = 26;
 

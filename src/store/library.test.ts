@@ -6,8 +6,8 @@ import {
   defaultSort,
   noFilters,
   PAGE_SIZE,
-  rowAt,
   type QueryInputs,
+  rowAt,
 } from "./library";
 
 const inputs = (patch: Partial<QueryInputs> = {}): QueryInputs => ({

@@ -7,20 +7,20 @@
 import { create } from "zustand";
 
 import {
-  libraryFacets,
-  libraryQuery,
   type Facets,
   type Filter,
   type Key,
+  libraryFacets,
+  libraryQuery,
   type Sort,
   type TrackQuery,
   type TrackRow,
 } from "../lib/ipc";
 import {
   emptySelection,
-  selectionReducer,
   type Selection,
   type SelectionAction,
+  selectionReducer,
 } from "./selection";
 
 /** Rows per `library_query` call. */

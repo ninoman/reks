@@ -62,7 +62,12 @@ export const COLUMNS: ColumnSpec[] = [
     sort: "color",
     cell: (r) =>
       r.color === null ? null : (
-        <span className={`swatch swatch-${r.color}`} title={r.color} aria-label={r.color} />
+        <span
+          className={`swatch swatch-${r.color}`}
+          role="img"
+          title={r.color}
+          aria-label={r.color}
+        />
       ),
   },
   {

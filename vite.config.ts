@@ -1,5 +1,5 @@
-import react from "@vitejs/plugin-react";
 import process from "node:process";
+import react from "@vitejs/plugin-react";
 import { configDefaults, defineConfig } from "vitest/config";
 
 const host = process.env.TAURI_DEV_HOST;
