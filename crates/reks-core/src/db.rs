@@ -18,6 +18,7 @@ const MIGRATION_LIST: &[M<'static>] = &[
     M::up(include_str!("../migrations/0001_init.sql")),
     M::up(include_str!("../migrations/0002_export_manifest.sql")),
     M::up(include_str!("../migrations/0003_device_profiles.sql")),
+    M::up(include_str!("../migrations/0004_superseded_file.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 
@@ -194,6 +195,7 @@ mod tests {
             ("table", "setting"),
             ("table", "track_fts"),
             ("table", "export_manifest"),
+            ("table", "superseded_file"),
             ("index", "track_artist_idx"),
             ("index", "track_bpm_idx"),
             ("index", "track_key_idx"),
@@ -201,6 +203,7 @@ mod tests {
             ("index", "cue_track_idx"),
             ("index", "playlist_track_track_idx"),
             ("index", "export_manifest_track_idx"),
+            ("index", "superseded_file_track_idx"),
             ("trigger", "track_fts_ai"),
             ("trigger", "track_fts_ad"),
             ("trigger", "track_fts_au"),

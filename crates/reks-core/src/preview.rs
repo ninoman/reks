@@ -68,6 +68,19 @@ impl Library {
         Ok(bytes)
     }
 
+    /// Deletes the cached overview of track `id`'s current file (the
+    /// converter's Replace points the track at a new file). No entry is fine;
+    /// a failed delete is logged: a stale entry is never read again.
+    pub(crate) fn drop_overview(&self, id: TrackId) -> Result<()> {
+        let cache = self.overview_path(&self.track_file(id)?);
+        match std::fs::remove_file(&cache) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => tracing::warn!(error = %e, "overview cache not removed"),
+        }
+        Ok(())
+    }
+
     fn track_file(&self, id: TrackId) -> Result<TrackFile> {
         let conn = self.conn()?;
         conn.query_row(

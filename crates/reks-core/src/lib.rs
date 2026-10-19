@@ -3,6 +3,7 @@
 //! See `docs/phases/` for what lands here and when.
 
 pub mod artwork;
+pub mod convert;
 pub mod db;
 pub mod device;
 pub mod error;

@@ -23,11 +23,14 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+trash = { workspace = true }
 unicode-normalization = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
 baken-export = { workspace = true }
+hound = { workspace = true }
 lofty = { workspace = true }
 proptest = { workspace = true }
+reks-fixtures-gen = { workspace = true }
 tempfile = { workspace = true }

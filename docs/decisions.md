@@ -459,6 +459,10 @@ Date of decisions: 2026-10-18.
   Verification is a full read-back with a hash compare on every conversion,
   not only on the sample-exact ones: the writers are lossless, so what was
   written must decode to the same samples even after resampling or dither.
+- 2026-10-20 (task 5): Trash moves use `trash` 5.2 (MIT); its only crate new to
+  the tree is `urlencoding` (MIT), the rest (`chrono`, `objc2`, `windows`, …)
+  was already there. `cargo deny check licenses` passes with the allowlist
+  unchanged. Trash is only offered with Replace.
 
 ## D26. UI styling: Tailwind v4 + cva + Radix
 
