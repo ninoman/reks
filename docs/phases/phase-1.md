@@ -386,10 +386,18 @@ Notes (task 10, [`playlist.rs`](../../crates/reks-core/src/playlist.rs), [`Playl
   re-import creates that one anew.
 - UI layout follows rekordbox: the left sidebar holds only the tree (Collection, then a
   collapsible Playlists root with a `+` button; disclosure triangles, folder and playlist icons).
-  Filters moved to a panel on the right with two independent controls: a switch that applies
-  the filters or sets them aside (values kept, the playlist still applies), and a chevron that
-  collapses the panel to a strip, which keeps the switch and shows how many filters are set
-  (muted when off). Both start on/open; saving them is task 13.
+  Filters sit in a bar between the toolbar and the table (they narrow the whole list); the
+  toolbar's Filters button shows or hides it and badges how many filters are set (muted when
+  off). A control that filters is outlined; keys are picked from a Camelot popover; the bar
+  wraps on narrow windows. The on/off switch next to that button applies the filters or sets
+  them aside (values kept, the playlist still applies) and works with the bar hidden. Track
+  info is shown only by the toolbar's info button (selecting a row never opens it): it slides
+  over the table's right edge (Web Animations: 240 ms ease-out in, 160 ms fast-start out,
+  reversing mid-slide from where it is; none under reduced motion), so the table and toolbars
+  keep their width, and shows the primary selected track. Scan and import
+  live in an app header across the whole window (the home for future library-wide actions),
+  with their status line under it; the list toolbar holds only list controls. Both start as bar shown, filters on, info
+  hidden; saving that is task 13.
 - UI: the tree is a Zustand store over a pure reducer (Playlists root open, expanded folders,
   selection, rename). Selecting a playlist sets the `playlist` filter and sorts by
   `playlistPosition`; a folder shows everything below it; Collection clears it. Clear (filters)

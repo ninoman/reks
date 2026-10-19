@@ -1,29 +1,29 @@
 /**
- * Library window: playlist tree on the left, toolbar and track table in the
- * middle, then the detail panel for the primary selected track and the
- * collapsible filter panel on the right. The player lands
- * in a later task (docs/phases/phase-1.md).
+ * Library window: the app header (library-wide actions) across the top; below
+ * it the playlist tree on the left; toolbar, filter bar and track
+ * table in the middle; the track info panel slides over the table's right
+ * edge when its toolbar button is on. The player lands in a later task (docs/phases/phase-1.md).
  */
 import { useEffect } from "react";
+import { AppHeader } from "./components/AppHeader";
 import { DEFAULT_HIDDEN } from "./components/columns";
-import { FiltersPanel } from "./components/FiltersPanel";
+import { FilterBar } from "./components/FilterBar";
 import { LibraryToolbar } from "./components/LibraryToolbar";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
-import { TrackDetailPanel } from "./components/TrackDetailPanel";
+import { SlideOver } from "./components/SlideOver";
+import { TrackInfoPanel } from "./components/TrackDetailPanel";
 import { TrackTable } from "./components/TrackTable";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
-import { rowAt, useLibrary } from "./store/library";
+import { useLibrary } from "./store/library";
+import { usePanels } from "./store/panels";
 import { usePlaylists } from "./store/playlists";
-import { primaryIndex } from "./store/selection";
 
 export default function App() {
   const table = useTrackTable();
   const error = useLibrary((s) => s.error);
-  const primaryId = useLibrary((s) => {
-    const i = primaryIndex(s.selection);
-    return i === null ? null : (rowAt(s.pages, i)?.id ?? null);
-  });
+  const filterBarOpen = usePanels((s) => s.filterBarOpen);
+  const infoOpen = usePanels((s) => s.infoOpen);
 
   useEffect(() => {
     const s = useLibrary.getState();
@@ -35,20 +35,27 @@ export default function App() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
-        <PlaylistTree />
-      </aside>
-      <main className="main">
-        <LibraryToolbar table={table} />
-        {error !== null && (
-          <div className="error" role="alert">
-            {error}
+      <AppHeader />
+      <div className="app-body">
+        <aside className="sidebar">
+          <PlaylistTree />
+        </aside>
+        <main className="main">
+          <LibraryToolbar table={table} />
+          {filterBarOpen && <FilterBar />}
+          {error !== null && (
+            <div className="error" role="alert">
+              {error}
+            </div>
+          )}
+          <div className="table-area">
+            <TrackTable columns={visibleColumns(table)} />
+            <SlideOver open={infoOpen}>
+              <TrackInfoPanel />
+            </SlideOver>
           </div>
-        )}
-        <TrackTable columns={visibleColumns(table)} />
-      </main>
-      {primaryId !== null && <TrackDetailPanel key={primaryId} trackId={primaryId} />}
-      <FiltersPanel />
+        </main>
+      </div>
       <DuplicateDialog />
       <DeleteDialog />
     </div>

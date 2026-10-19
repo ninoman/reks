@@ -55,6 +55,29 @@ select {
 
 .app {
   display: flex;
+  flex-direction: column;
+}
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* App header: library-wide actions across the whole window */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+.app-header .app-name {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.app-header .spacer {
+  flex: 1;
 }
 
 /* Left sidebar: the playlist tree */
@@ -66,10 +89,29 @@ select {
   background: var(--bg-alt);
 }
 
-/* Right panel: filters, collapsible to a strip */
-.filters-panel {
-  width: 220px;
+/* Track info: slides over the table's right edge; the table keeps its width */
+.table-area {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Slides in and out via the Web Animations API (SlideOver.tsx). */
+.slide-over {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  box-shadow: -8px 0 24px rgb(0 0 0 / 22%);
+}
+.side-panel {
+  width: 300px;
   flex: none;
+  box-sizing: border-box;
   overflow-y: auto;
   padding: 8px 12px 12px;
   border-left: 1px solid var(--border);
@@ -78,34 +120,52 @@ select {
   flex-direction: column;
   gap: 10px;
 }
-.filters-panel.collapsed {
-  width: 30px;
-  padding: 0;
-  gap: 0;
-  overflow: hidden;
-}
-.filters-rail {
-  flex: 1;
-  width: 100%;
-  border: none;
-  border-radius: 0;
-  background: none;
+.panel-head {
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 10px 0;
+}
+.panel-head h2 {
+  font-size: 13px;
+  margin: 0;
+}
+.panel-head .spacer {
+  flex: 1;
+}
+.panel-close {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
   color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
 }
-.filters-rail:hover {
+.panel-close:hover {
   color: var(--fg);
+  background: var(--border);
 }
-.filters-rail-label {
-  writing-mode: vertical-rl;
+
+/* Toolbar toggles (Filters, Track info): pressed = accent tint */
+.toolbar .toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
 }
-.filters-badge {
+.toolbar .toggle.icon {
+  padding: 2px 5px;
+}
+.toolbar .toggle.on {
+  background: var(--selected);
+  border-color: var(--accent);
+}
+.toolbar .badge {
   min-width: 16px;
   padding: 0 4px;
+  box-sizing: border-box;
   border-radius: 8px;
   background: var(--accent);
   color: white;
@@ -113,6 +173,16 @@ select {
   line-height: 16px;
   text-align: center;
 }
+.toolbar .badge.off {
+  background: var(--muted);
+}
+.toolbar-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 2px;
+  background: var(--border);
+}
+
 /* On/off switch (filters applied or set aside) */
 .filters-switch {
   position: relative;
@@ -141,56 +211,67 @@ select {
 .filters-switch.on::after {
   left: 14px;
 }
-.filters-panel.collapsed .filters-switch {
-  margin: 8px auto 0;
+
+/* Filter bar: between the toolbar and the table, one row that wraps */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
 }
-.filters-panel.off > :not(.panel-head) {
-  opacity: 0.45;
+.filter-bar .clear-all {
+  margin-left: auto;
 }
-.filters-badge.off {
-  background: var(--muted);
-}
-.panel-head {
+.filter-field {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
 }
-.panel-head h2 {
-  font-size: 13px;
-  margin: 0;
+.filter-field.set {
+  border-color: var(--accent);
 }
-.panel-head .spacer {
-  flex: 1;
+.filter-bar.off .filter-field {
+  opacity: 0.45;
 }
-.panel-collapse {
-  border: none;
-  background: none;
-  padding: 0 2px;
+.filter-label {
   color: var(--muted);
 }
-.filters-panel label {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  color: var(--muted);
-}
-.filters-panel select,
-.filters-panel input {
+.filter-bar select,
+.filter-bar input {
   color: var(--fg);
 }
-.filters-panel fieldset {
-  border: none;
-  margin: 0;
-  padding: 0;
+.filter-bar input.bpm {
+  width: 46px;
 }
-.filters-panel legend {
-  color: var(--muted);
-  padding: 0;
-  margin-bottom: 3px;
+.key-picker {
+  position: relative;
+}
+.key-picker .filter-select {
+  min-width: 56px;
+  text-align: left;
+  white-space: nowrap;
+}
+.key-picker .popover {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+  margin: 0;
+  padding: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 20%);
 }
 .key-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(6, 36px);
   gap: 2px;
 }
 .key-grid button {
@@ -201,23 +282,15 @@ select {
   background: var(--accent);
   color: white;
 }
-.bpm-range {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.bpm-range input {
-  width: 70px;
-}
 .colour-row {
   display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  gap: 3px;
 }
 .colour-row .swatch {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   border: 2px solid transparent;
+  border-radius: 3px;
   padding: 0;
   cursor: pointer;
 }
@@ -392,6 +465,7 @@ select {
 }
 .toolbar .count {
   color: var(--muted);
+  white-space: nowrap;
 }
 .toolbar .spacer {
   flex: 1;
@@ -532,18 +606,7 @@ select {
   background: #660099;
 }
 
-/* Detail panel */
-.detail-panel {
-  width: 300px;
-  flex: none;
-  overflow-y: auto;
-  padding: 10px 12px;
-  border-left: 1px solid var(--border);
-  background: var(--bg-alt);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+/* Track info panel */
 .detail-panel .muted,
 .detail-facts {
   color: var(--muted);
