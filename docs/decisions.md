@@ -444,6 +444,15 @@ Date of decisions: 2026-10-18.
   during export (a transcoder in the export path; needs its own decision).
 - Risks: rekordbox ANLZ reuse after Replace (CONV1), ID3 chunks in WAV (CONV2),
   mono on players (CONV3), all **UNVERIFIED** until the Phase 2.6 hardware session.
+- 2026-10-19 (tasks 1–3): `flacenc` 0.5.1 with default features off (no worker
+  threads, no serde). Its new crates (`crc`, `crc-catalog`, `heapless`,
+  `hash32`, `md-5`, `seq-macro`, build-time `built`) are MIT or Apache-2.0, so
+  the `cargo deny` allowlist is unchanged. The writer streams frame by frame
+  with `encode_fixed_size_frame`, because flacenc's one-call API keeps the whole
+  encoded stream in memory. Dither: TPDF only when going to 16 bits. Going to
+  24 bits (32-bit and float sources, resampled audio) rounds, since that error
+  is about 144 dB below full scale. The dither generator is seeded, so the same
+  input always gives the same bytes.
 
 ## D26. UI styling: Tailwind v4 + cva + Radix
 

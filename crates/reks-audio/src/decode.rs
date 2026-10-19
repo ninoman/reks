@@ -7,24 +7,20 @@
 use std::fs::File;
 use std::path::Path;
 
-use rubato::audioadapter_buffers::direct::InterleavedSlice;
-use rubato::{Fft, FixedSync, Indexing, Resampler};
-use symphonia::core::codecs::audio::AudioDecoderOptions;
+use symphonia::core::codecs::audio::{AudioCodecParameters, AudioDecoderOptions};
 use symphonia::core::errors::Error as SymErr;
 use symphonia::core::formats::probe::Hint;
-use symphonia::core::formats::{FormatOptions, TrackType};
+use symphonia::core::formats::{FormatOptions, FormatReader, TrackType};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 
 use crate::error::{Error, Result};
 use crate::overview::Overview;
 use crate::probe::decode_err;
+use crate::resample::{StreamResampler, CHUNK};
 
 /// Longest track [`decode_stereo`] accepts: about 690 MB of PCM at 48 kHz.
 pub const MAX_DECODE_MS: u64 = 60 * 60 * 1000;
-
-/// Frames per resampler chunk.
-const CHUNK: usize = 1024;
 
 /// Interleaved stereo PCM.
 #[derive(Clone, PartialEq, Eq)]
@@ -66,10 +62,19 @@ pub struct Decoded {
     pub overview: Vec<f32>,
 }
 
-/// Decodes all of `path`. With `target_rate`, the PCM is resampled to it;
-/// the overview is always computed at the file's rate, so it does not depend
-/// on the device.
-pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded> {
+/// The opened container and its default audio track.
+pub(crate) struct OpenTrack {
+    pub format: Box<dyn FormatReader>,
+    pub track_id: u32,
+    pub params: AudioCodecParameters,
+    /// Positive.
+    pub sample_rate: u32,
+    /// Frame count from the header, when known.
+    pub num_frames: Option<u64>,
+}
+
+/// Opens `path` and finds its default audio track.
+pub(crate) fn open_track(path: &Path) -> Result<OpenTrack> {
     let file = File::open(path).map_err(|source| Error::Io {
         path: path.to_path_buf(),
         source,
@@ -79,7 +84,7 @@ pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded> {
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         hint.with_extension(ext);
     }
-    let mut format = symphonia::default::get_probe()
+    let format = symphonia::default::get_probe()
         .probe(
             &hint,
             mss,
@@ -96,18 +101,39 @@ pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded> {
         .default_track(TrackType::Audio)
         .ok_or_else(|| unsupported("no audio track"))?;
     let track_id = track.id;
+    let num_frames = track.num_frames;
     let params = track
         .codec_params
         .as_ref()
         .and_then(|p| p.audio())
         .ok_or_else(|| unsupported("no audio codec parameters"))?
         .clone();
-    let source_rate = params
+    let sample_rate = params
         .sample_rate
         .filter(|&sr| sr > 0)
         .ok_or_else(|| unsupported("unknown sample rate"))?;
+    Ok(OpenTrack {
+        format,
+        track_id,
+        params,
+        sample_rate,
+        num_frames,
+    })
+}
+
+/// Decodes all of `path`. With `target_rate`, the PCM is resampled to it;
+/// the overview is always computed at the file's rate, so it does not depend
+/// on the device.
+pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded> {
+    let OpenTrack {
+        mut format,
+        track_id,
+        params,
+        sample_rate: source_rate,
+        num_frames,
+    } = open_track(path)?;
     let max_frames = MAX_DECODE_MS * u64::from(source_rate) / 1000;
-    if let Some(frames) = track.num_frames.filter(|&f| f > max_frames) {
+    if let Some(frames) = num_frames.filter(|&f| f > max_frames) {
         return Err(too_long(path, frames, source_rate));
     }
 
@@ -116,7 +142,7 @@ pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded> {
         .map_err(|source| decode_err(path, source))?;
 
     let target = target_rate.unwrap_or(source_rate);
-    let mut sink = Sink::new(path, source_rate, target, track.num_frames)?;
+    let mut sink = Sink::new(path, source_rate, target, num_frames)?;
     let mut overview = Overview::new();
     let mut frame_count: u64 = 0;
     let mut scratch: Vec<f32> = Vec::new();
@@ -150,8 +176,9 @@ pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded> {
             let l = frame[0];
             let r = if channels > 1 { frame[1] } else { l };
             overview.push(l, r);
-            sink.push(l, r)?;
+            sink.push(l, r);
         }
+        sink.flush()?;
         frame_count += (scratch.len() / channels) as u64;
         if frame_count > max_frames {
             return Err(too_long(path, frame_count, source_rate));
@@ -159,28 +186,19 @@ pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded> {
     }
 
     Ok(Decoded {
-        pcm: sink.finish(frame_count)?,
+        pcm: sink.finish()?,
         source_rate,
         overview: overview.finish(),
     })
 }
 
-/// Collects stereo frames, resampling in chunks when the rates differ.
+/// Collects stereo frames, resampling per packet when the rates differ.
 struct Sink<'p> {
     path: &'p Path,
     out: Vec<i16>,
     target_rate: u32,
-    resampler: Option<Chunked>,
-}
-
-struct Chunked {
-    fft: Fft<f32>,
-    input: Vec<f32>,
-    output: Vec<f32>,
-    /// Output frames still to drop for the resampler's delay.
-    skip: usize,
-    from: u64,
-    to: u64,
+    /// Stereo `f32` input waiting for the resampler, and its output.
+    resampler: Option<(StreamResampler<f32>, Vec<f32>, Vec<f32>)>,
 }
 
 impl<'p> Sink<'p> {
@@ -192,18 +210,8 @@ impl<'p> Sink<'p> {
         let resampler = if from == to {
             None
         } else {
-            let fft = Fft::<f32>::new(from as usize, to as usize, CHUNK, 2, FixedSync::Input)
-                .map_err(|e| resample_err(path, e))?;
-            let output = vec![0.0; fft.output_frames_max() * 2];
-            let skip = fft.output_delay();
-            Some(Chunked {
-                fft,
-                input: Vec::with_capacity(CHUNK * 2),
-                output,
-                skip,
-                from: u64::from(from),
-                to: u64::from(to),
-            })
+            let rs = StreamResampler::new(from, to, 2).map_err(|e| resample_err(path, e))?;
+            Some((rs, Vec::new(), Vec::new()))
         };
         Ok(Self {
             path,
@@ -213,62 +221,37 @@ impl<'p> Sink<'p> {
         })
     }
 
-    fn push(&mut self, l: f32, r: f32) -> Result<()> {
-        let Some(rs) = self.resampler.as_mut() else {
-            self.out.push(to_i16(l));
-            self.out.push(to_i16(r));
-            return Ok(());
-        };
-        rs.input.push(l);
-        rs.input.push(r);
-        if rs.input.len() == CHUNK * 2 {
-            run_chunk(self.path, rs, &mut self.out, None)?;
+    fn push(&mut self, l: f32, r: f32) {
+        match self.resampler.as_mut() {
+            Some((_, input, _)) => input.extend([l, r]),
+            None => self.out.extend([to_i16(l), to_i16(r)]),
+        }
+    }
+
+    /// Resamples what [`Sink::push`] collected.
+    fn flush(&mut self) -> Result<()> {
+        if let Some((rs, input, output)) = self.resampler.as_mut() {
+            output.clear();
+            rs.push(input, output)
+                .map_err(|e| resample_err(self.path, e))?;
+            input.clear();
+            self.out.extend(output.iter().map(|&s| to_i16(s)));
         }
         Ok(())
     }
 
-    fn finish(mut self, input_frames: u64) -> Result<StereoPcm> {
-        if let Some(rs) = self.resampler.as_mut() {
-            let expected =
-                usize::try_from((input_frames * rs.to).div_ceil(rs.from)).unwrap_or(usize::MAX);
-            // The last partial chunk, then silence until the delay is flushed.
-            let partial = rs.input.len() / 2;
-            rs.input.resize(CHUNK * 2, 0.0);
-            run_chunk(self.path, rs, &mut self.out, Some(partial))?;
-            while self.out.len() / 2 < expected {
-                rs.input.resize(CHUNK * 2, 0.0);
-                run_chunk(self.path, rs, &mut self.out, Some(0))?;
-            }
-            self.out.truncate(expected * 2);
+    fn finish(mut self) -> Result<StereoPcm> {
+        self.flush()?;
+        if let Some((rs, _, output)) = self.resampler.as_mut() {
+            output.clear();
+            rs.finish(output).map_err(|e| resample_err(self.path, e))?;
+            self.out.extend(output.iter().map(|&s| to_i16(s)));
         }
         Ok(StereoPcm {
             samples: self.out,
             sample_rate: self.target_rate,
         })
     }
-}
-
-fn run_chunk(
-    path: &Path,
-    rs: &mut Chunked,
-    out: &mut Vec<i16>,
-    partial: Option<usize>,
-) -> Result<()> {
-    let input =
-        InterleavedSlice::new(&rs.input[..], 2, CHUNK).map_err(|e| resample_err(path, e))?;
-    let frames_out = rs.output.len() / 2;
-    let mut output = InterleavedSlice::new_mut(&mut rs.output[..], 2, frames_out)
-        .map_err(|e| resample_err(path, e))?;
-    let indexing = partial.map(|n| Indexing::new().partial_len(n));
-    let (_, written) = rs
-        .fft
-        .process_into_buffer(&input, &mut output, indexing.as_ref())
-        .map_err(|e| resample_err(path, e))?;
-    let drop = rs.skip.min(written);
-    rs.skip -= drop;
-    out.extend(rs.output[drop * 2..written * 2].iter().map(|&s| to_i16(s)));
-    rs.input.clear();
-    Ok(())
 }
 
 fn to_i16(s: f32) -> i16 {

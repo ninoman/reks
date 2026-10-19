@@ -1,7 +1,9 @@
 # Phase 2.6 — File converter (WAV, AIFF, FLAC)
 
-Status: not started. Depends on: Phase 1 (decode, tags, library) and Phase 2
-(`audiocheck`, export, hardware campaign). Independent of Phase 2.5; either can
+Status: tasks 1–3 done (2026-10-19, started ahead of the Phase 2 hardware
+campaign with the maintainer's approval: pure `reks-audio` code). Depends on:
+Phase 1 (decode, tags, library) and Phase 2 (`audiocheck`, export, hardware
+campaign). Independent of Phase 2.5; either can
 go first. Read `docs/decisions.md` D4, D6, D25 and `docs/research.md` §4, §11 first.
 
 ## Goal
@@ -95,19 +97,41 @@ and grid copied.
 
 ## Tasks
 
-1. **PCM writers**: own WAV (`fmt` tag 1, 16-byte `fmt` for ≤ 2 ch, 16/24-bit)
+1. [x] **PCM writers**: own WAV (`fmt` tag 1, 16-byte `fmt` for ≤ 2 ch, 16/24-bit)
    and AIFF (`COMM` + `SSND`, 80-bit rate) little/big-endian writers with
    explicit offsets; round-trip through Symphonia; header byte tests (24-bit
    WAV is tag 1, not 0xFFFE). `hound` stays a dev-dependency (D25).
-2. **FLAC encoder**: `flacenc` behind a small `FlacWriter`; licence check of
+   Done in [`reks-audio::write`](../../crates/reks-audio/src/write/mod.rs):
+   `WavWriter`, `AiffWriter` behind a `PcmWriter` trait; they stream and
+   patch sizes in `finish()`, add the RIFF/IFF pad byte, range-check samples
+   and refuse over 4 GiB of data (`WriteError::TooLarge`). Exact-byte tests
+   per writer; [convert_blocks.rs](../../crates/reks-audio/tests/convert_blocks.rs)
+   turns hound's EXTENSIBLE 24/96 WAV into a tag-1 one with the same samples.
+2. [x] **FLAC encoder**: `flacenc` behind a small `FlacWriter`; licence check of
    its transitive deps in `cargo deny`; round-trip through Symphonia,
-   sample-exact on the fixtures.
-3. **Native decode stream** in `reks-audio`: source-depth integer samples in
+   sample-exact on the fixtures. Done in
+   [write/flac.rs](../../crates/reks-audio/src/write/flac.rs): one
+   `encode_fixed_size_frame` per 4,096-frame block, written as it comes, then
+   the final STREAMINFO (min = max block size, sample count, MD5); flacenc's
+   whole-stream API would hold the encoded file in memory. Default features
+   off (no threads, no serde). New crates are all MIT or Apache-2.0 (D25).
+   Symphonia checks our MD5 on read-back; a flipped MD5 byte fails the read.
+3. [x] **Native decode stream** in `reks-audio`: source-depth integer samples in
    chunks (the preview path is stereo `i16`, D5); streaming `rubato` resample;
    TPDF dither to 16-bit; tests: sample-exact passthrough, dither bounded to ±1 LSB.
+   Done: [`NativeStream`](../../crates/reks-audio/src/native.rs) yields one
+   packet at a time, right-aligned at the source depth (float sources as
+   32-bit, clipped at full scale), fails on an undecodable packet instead of
+   skipping it (a skip would shift cues) and checks the FLAC MD5;
+   [`StreamResampler`](../../crates/reks-audio/src/resample.rs) (rubato FFT,
+   delay removed, output trimmed to `ceil(frames·to/from)`; the preview
+   decoder now uses it too, at `f32`); [`Requantiser`](../../crates/reks-audio/src/dither.rs)
+   widens exactly, rounds to 24 bits and applies seeded TPDF dither at 16 bits
+   (deterministic output). Fixtures: `reks-fixtures-gen` renders the 24/96 and
+   float WAVs on the fly (fixtures/README.md).
 4. **`convert()`**: pipeline, progress, cancel, verify; tags and artwork copy
-   with `lofty`; tests per source × target on fixtures (generate 24/96 and
-   float WAV fixtures in `fixtures/gen`).
+   with `lofty`; tests per source × target on fixtures (the 24/96 and float
+   WAV generators are in `fixtures/gen`, task 3).
 5. **Library plan/apply**: migration for the superseded-file table, scan skips
    those paths, Replace / Add as new, Trash option (`trash` crate, licence
    check), collision naming, report. Tests on a temp library: cues, grid,
