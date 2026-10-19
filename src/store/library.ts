@@ -114,7 +114,13 @@ export interface LibraryState extends QueryInputs {
 
   setText(text: string): void;
   setFilters(patch: Partial<FilterState>): void;
+  /** Clears the sidebar filters; the shown playlist (the tree's selection) stays. */
   clearFilters(): void;
+  /**
+   * Shows a playlist (sorted by position), a folder (everything below it) or,
+   * with `null`, the whole collection.
+   */
+  showPlaylist(id: number | null, isFolder: boolean): void;
   /** Header click: same column flips direction, another column sorts ascending. */
   toggleSort(column: Sort["column"]): void;
   setColumnVisibility(v: Record<string, boolean>): void;
@@ -180,7 +186,16 @@ export const useLibrary = create<LibraryState>()((set, get) => {
       get().refresh();
     },
     clearFilters() {
-      set({ filters: noFilters });
+      set((s) => ({ filters: { ...noFilters, playlistId: s.filters.playlistId } }));
+      get().refresh();
+    },
+    showPlaylist(id, isFolder) {
+      set((s) => {
+        let sort = s.sort;
+        if (id !== null && !isFolder) sort = { column: "playlistPosition", descending: false };
+        else if (sort.column === "playlistPosition") sort = defaultSort;
+        return { filters: { ...s.filters, playlistId: id }, sort };
+      });
       get().refresh();
     },
     toggleSort(column) {
@@ -216,11 +231,12 @@ export const useLibrary = create<LibraryState>()((set, get) => {
         let changed = false;
         const pages = new Map(s.pages);
         for (const [p, rows] of pages) {
-          const i = rows.findIndex((r) => r.id === row.id);
-          if (i === -1) continue;
-          const copy = [...rows];
-          copy[i] = row;
-          pages.set(p, copy);
+          if (!rows.some((r) => r.id === row.id)) continue;
+          // A playlist view can hold the track more than once; each row keeps its entry.
+          pages.set(
+            p,
+            rows.map((r) => (r.id === row.id ? { ...row, entryPosition: r.entryPosition } : r)),
+          );
           changed = true;
         }
         return changed ? { pages } : {};

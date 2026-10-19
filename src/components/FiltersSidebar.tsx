@@ -1,4 +1,7 @@
-/** Filter sidebar. Options (genres, keys, colours, playlists) come from `library_facets`. */
+/**
+ * Filter sidebar. Options (genres, keys, colours) come from `library_facets`.
+ * The playlist tree above it chooses the playlist; Clear leaves that alone.
+ */
 import { type FilterState, useLibrary } from "../store/library";
 
 function triState(v: boolean | null): string {
@@ -25,32 +28,13 @@ export function FiltersSidebar() {
     set({ keys: f.keys.includes(key) ? f.keys.filter((k) => k !== key) : [...f.keys, key] });
 
   return (
-    <aside className="sidebar" aria-label="Filters">
+    <section className="filters" aria-label="Filters">
       <div className="sidebar-head">
         <h2>Filters</h2>
         <button type="button" onClick={clearFilters}>
           Clear
         </button>
       </div>
-
-      <label>
-        Playlist
-        <select
-          value={f.playlistId ?? ""}
-          onChange={(e) =>
-            set({ playlistId: e.target.value === "" ? null : Number(e.target.value) })
-          }
-        >
-          <option value="">All tracks</option>
-          {facets?.playlists.map((p) => (
-            <option key={p.id} value={p.id}>
-              {"  ".repeat(p.depth)}
-              {p.isFolder ? "▸ " : ""}
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </label>
 
       <label>
         Genre
@@ -160,6 +144,6 @@ export function FiltersSidebar() {
           <option value="false">Analysed</option>
         </select>
       </label>
-    </aside>
+    </section>
   );
 }

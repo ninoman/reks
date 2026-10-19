@@ -135,6 +135,139 @@ select {
   border-color: var(--fg);
 }
 
+/* Playlist tree */
+.playlists,
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.filters {
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.sidebar-head button {
+  padding: 0 6px;
+}
+.tree {
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  margin: 0 -6px;
+}
+.tree:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 22px;
+  padding: 0 6px 0 4px;
+  border-radius: 4px;
+  cursor: default;
+  white-space: nowrap;
+}
+.tree-row.selected {
+  background: var(--selected);
+}
+.tree-row.drop-into {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.tree-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.tree-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.tree-chevron {
+  width: 12px;
+  flex: none;
+  text-align: center;
+  color: var(--muted);
+}
+.tree-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-count {
+  color: var(--muted);
+  font-size: 11px;
+}
+.tree-rename {
+  flex: 1;
+  min-width: 0;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.tt-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.tt-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* Context menu and dialogs */
+.context-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 20%);
+}
+.context-menu button {
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.context-menu button:hover:not(:disabled),
+.context-menu button:focus-visible {
+  background: var(--accent);
+  color: white;
+  outline: none;
+}
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 30%);
+}
+.dialog {
+  width: 360px;
+  padding: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgb(0 0 0 / 30%);
+}
+.dialog h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.dialog-buttons .primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
 /* Main column */
 .main {
   flex: 1;

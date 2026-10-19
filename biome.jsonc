@@ -53,6 +53,20 @@
           }
         }
       }
+    },
+    {
+      // The playlist tree follows the WAI-ARIA tree pattern the same way: the
+      // role="tree" container holds focus and handles the keys for its rows.
+      "includes": ["src/components/PlaylistTree.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useFocusableInteractive": "off",
+            "useKeyWithClickEvents": "off",
+            "noStaticElementInteractions": "off"
+          }
+        }
+      }
     }
   ]
 }

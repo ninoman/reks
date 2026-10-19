@@ -71,6 +71,8 @@ export interface TrackRow {
   playCount: number;
   missing: boolean;
   needsAnalysis: boolean;
+  /** Position of this entry in a playlist view (one row per entry); null elsewhere. */
+  entryPosition: number | null;
 }
 
 export interface TrackPage {
@@ -89,7 +91,51 @@ export interface PlaylistNode {
   name: string;
   isFolder: boolean;
   depth: number;
+  /** Index among its siblings. */
+  position: number;
+  /** Number of entries (0 for folders). */
+  entries: number;
 }
+
+/** Depth first, siblings in order. */
+export interface PlaylistTree {
+  nodes: PlaylistNode[];
+}
+
+/** What "add tracks" does with tracks already in the playlist. */
+export type DuplicateMode = "ask" | "allow" | "skip";
+
+/**
+ * A playlist edit (`playlist.rs`). `position` / `before` are indices in the
+ * list as it is now (its length = the end); reks-core does the rest.
+ */
+export type PlaylistOp =
+  | { type: "createPlaylist"; parentId: number | null; name: string; position?: number | null }
+  | { type: "createFolder"; parentId: number | null; name: string; position?: number | null }
+  | { type: "rename"; id: number; name: string }
+  | { type: "delete"; id: number }
+  | { type: "move"; id: number; parentId: number | null; position: number }
+  | {
+      type: "addTracks";
+      playlistId: number;
+      trackIds: number[];
+      before?: number | null;
+      duplicates: DuplicateMode;
+    }
+  | { type: "removeEntries"; playlistId: number; positions: number[] }
+  | { type: "reorderEntries"; playlistId: number; positions: number[]; before: number };
+
+export type PlaylistOutcome =
+  | { type: "done"; createdId: number | null; added: number; skipped: number }
+  /** "Add tracks" with `ask` found duplicates; nothing was written. */
+  | {
+      type: "duplicates";
+      playlistId: number;
+      /** The duplicated tracks, each once. */
+      trackIds: number[];
+      duplicateCount: number;
+      requested: number;
+    };
 
 export interface Facets {
   genres: string[];
@@ -285,4 +331,12 @@ export function libraryUpdateTrack(id: number, patch: TrackPatch): Promise<Track
 /** Artwork image bytes (raw `ipc::Response`, not JSON). */
 export function artworkGet(id: number): Promise<ArrayBuffer> {
   return invoke("artwork_get", { id });
+}
+
+export function playlistsGet(): Promise<PlaylistTree> {
+  return invoke("playlists_get");
+}
+
+export function playlistsMutate(op: PlaylistOp): Promise<PlaylistOutcome> {
+  return invoke("playlists_mutate", { op });
 }
