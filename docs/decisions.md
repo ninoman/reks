@@ -463,11 +463,16 @@ Date of decisions: 2026-10-18.
 ## D26. UI styling: Tailwind v4 + cva + Radix
 
 - Date: 2026-10-19 (maintainer's call). Design reference: an analysis of Cursor's
-  marketing site (DESIGN.md, not in the repo), adapted to desktop density: warm
-  cream canvas, warm ink, hairline depth, one scarce accent, 8px control
-  radius, system fonts. Accent: violet (maintainer's call, 2026-10-19), not the
-  reference's orange, which fails AA for small text on cream (3.4:1). How it is
-  set up: [`ui.md`](ui.md).
+  marketing site (DESIGN.md, not in the repo), adapted to desktop density:
+  pale canvas, dark ink, hairline depth, one scarce accent, 8px control
+  radius, system fonts. How it is set up: [`ui.md`](ui.md).
+- Palette history: the reference's orange fails AA for small text on its warm
+  cream canvas (3.4:1). The next accent, violet (2026-10-19), passed AA but
+  looked muddy on cream, because the hues are nearly opposite. Since
+  2026-10-20 (maintainer's call): an indigo accent (`--indigo-*`, OKLCH hue
+  272) on neutrals tinted towards it (`--mist-*`, hue 285). Every text and
+  button pair passes AA in both themes, including `fg-muted` on the light
+  canvas (4.6:1; the warm one was 3.9:1).
 - Decision: tokens CSS-first in `src/styles/tokens.css` (`@theme`, light and dark
   via `prefers-color-scheme`); Tailwind CSS v4 (`@tailwindcss/vite`) utilities;
   `class-variance-authority` for variants and `clsx` + `tailwind-merge` as `cn()`;
