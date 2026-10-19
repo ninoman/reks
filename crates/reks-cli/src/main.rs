@@ -6,14 +6,18 @@
 //! reks synth-xml <N> <out.xml>  write a synthetic rekordbox XML with N tracks
 //! reks devices                  list audio output devices
 //! reks play <file> [seconds]    play a file on the default output (engine smoke test)
+//! reks import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run]
+//!                               import a rekordbox XML (or, with --dry-run, preview it)
 //! ```
 
 use std::io::BufWriter;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
-use reks_core::rbxml::{self, Collection, Extra, Tempo, XmlNode, XmlTrack, TRACK_COLOURS};
-use reks_core::Key;
+use reks_core::rbxml::{
+    self, Collection, Extra, ImportOptions, PrefixRemap, Tempo, XmlNode, XmlTrack, TRACK_COLOURS,
+};
+use reks_core::{Key, Library};
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -40,8 +44,69 @@ fn main() -> anyhow::Result<()> {
         [cmd, file, secs] if cmd == "play" => {
             play(Path::new(file), secs.parse().context("seconds")?)
         }
-        _ => bail!("usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds]]"),
+        [cmd, db, xml, rest @ ..] if cmd == "import-xml" => {
+            import_xml(Path::new(db), Path::new(xml), rest)
+        }
+        _ => bail!(
+            "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
+             | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run]]"
+        ),
     }
+}
+
+/// Imports (or previews, with `--dry-run`) `xml` into the library at `db`,
+/// creating it if needed; derived files go to `cache/` next to it.
+fn import_xml(db: &Path, xml: &Path, flags: &[String]) -> anyhow::Result<()> {
+    let mut opts = ImportOptions::default();
+    let mut dry_run = false;
+    let mut flags = flags.iter();
+    while let Some(flag) = flags.next() {
+        match flag.as_str() {
+            "--dry-run" => dry_run = true,
+            "--remap" => {
+                let arg = flags.next().context("--remap needs FROM=TO")?;
+                let (from, to) = arg.split_once('=').context("--remap needs FROM=TO")?;
+                opts.remap.push(PrefixRemap {
+                    from: PathBuf::from(from),
+                    to: PathBuf::from(to),
+                });
+            }
+            other => bail!("unknown flag {other}"),
+        }
+    }
+    let cache = db.parent().unwrap_or(Path::new(".")).join("cache");
+    let lib = Library::open(db, &cache)?;
+    let started = std::time::Instant::now();
+    let collection = rbxml::parse_file(xml)?;
+    println!("parsed in {} ms", started.elapsed().as_millis());
+    if dry_run {
+        let started = std::time::Instant::now();
+        let p = rbxml::preview(&collection, &lib, &opts)?;
+        println!("{p:#?}");
+        println!("previewed in {} ms", started.elapsed().as_millis());
+        return Ok(());
+    }
+    let report = rbxml::import(&collection, &lib, opts, |_| {})?;
+    for u in &report.unmatched {
+        println!("unmatched {}: {:?}", u.track_id, u.reason);
+    }
+    println!(
+        "{} tracks: {} added, {} matched by path, {} by location, {} by fallback, {} missing, \
+         {} unmatched, {} warnings, {} ms",
+        report.total,
+        report.added,
+        report.matched_by_path,
+        report.matched_by_location,
+        report.matched_by_fallback,
+        report.missing,
+        report.unmatched.len(),
+        report.warnings.len(),
+        report.elapsed_ms
+    );
+    if let Some(root) = &report.missing_root {
+        println!("missing files are under {root}");
+    }
+    Ok(())
 }
 
 /// Plays `file` for `secs` seconds through the preview player, printing the

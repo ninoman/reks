@@ -1,5 +1,5 @@
 //! rekordbox XML import into a library: the small fixture, idempotency,
-//! unmatched tracks, prefix remap and a 3,000-track run.
+//! unmatched tracks, prefix remap, preview, cancel and a 3,000-track run.
 
 // Test helpers outside `#[test]` fns are not covered by clippy's allow-unwrap-in-tests.
 #![allow(clippy::unwrap_used)]
@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use reks_core::rbxml::{
-    self, import, path_to_location, Collection, Extra, ImportEvent, ImportOptions, ImportReport,
-    PositionMark, PrefixRemap, Tempo, UnmatchedReason, XmlNode, XmlTrack,
+    self, import, path_to_location, preview, Collection, Extra, ImportEvent, ImportOptions,
+    ImportReport, PositionMark, PrefixRemap, Tempo, UnmatchedReason, XmlNode, XmlTrack,
 };
 use reks_core::{scan, CancelToken, DuplicateMode, Library, PlaylistOp, PlaylistOutcome};
 use rusqlite::types::Value;
@@ -36,6 +36,7 @@ fn fixture_remap() -> ImportOptions {
             from: XML_PREFIX.into(),
             to: audio_dir(),
         }],
+        ..ImportOptions::default()
     }
 }
 
@@ -628,6 +629,94 @@ fn prefix_remap_relinks_tracks_stored_as_missing() {
 
 /// 3,000 tracks over hard links to the fixture files, 1 in 20 missing.
 /// Logs the time; the acceptance target is 60 s for a real collection.
+#[test]
+fn preview_counts_without_writing() {
+    let env = Env::new();
+    let c = small_collection();
+    let before = env.snapshot();
+
+    let p = preview(&c, &env.lib, &ImportOptions::default()).unwrap();
+    assert_eq!(p.total, 3);
+    assert_eq!((p.folders, p.playlists, p.playlist_entries), (1, 2, 4));
+    assert_eq!((p.with_grid, p.with_cues), (3, 3));
+    assert_eq!((p.files_found, p.files_not_found, p.in_library), (0, 3, 0));
+    assert_eq!(
+        p.missing_root.as_deref().map(Path::new),
+        Some(Path::new(XML_PREFIX))
+    );
+    assert_eq!(p.not_found_sample.len(), 3);
+    assert_eq!(env.snapshot(), before);
+    assert_eq!(env.count("track"), 0);
+
+    // The remap finds the files; nothing is missing, so no root to suggest.
+    let p = preview(&c, &env.lib, &fixture_remap()).unwrap();
+    assert_eq!((p.files_found, p.files_not_found), (3, 0));
+    assert_eq!(p.missing_root, None);
+    assert!(p.not_found_sample.is_empty());
+
+    // After an import the same tracks are in the library.
+    let report = env.import(&c, fixture_remap());
+    let p = preview(&c, &env.lib, &fixture_remap()).unwrap();
+    let again = env.import(&c, fixture_remap());
+    assert_eq!(report.added, 3);
+    assert_eq!(
+        p.in_library,
+        again.matched_by_path + again.matched_by_location + again.matched_by_fallback
+    );
+    assert_eq!(p.in_library, 3);
+}
+
+#[test]
+fn preview_counts_entries_that_are_not_stored() {
+    let env = Env::new();
+    let mut c = small_collection();
+    let mut stream = c.tracks[0].clone();
+    stream.location = Some("file://localhostsoundcloud:tracks:123".into());
+    let mut no_loc = c.tracks[0].clone();
+    no_loc.location = None;
+    let mut bad = c.tracks[0].clone();
+    bad.location = Some("file://localhost/bad%FF.mp3".into());
+    c.tracks.extend([stream, no_loc, bad]);
+
+    let p = preview(&c, &env.lib, &fixture_remap()).unwrap();
+    assert_eq!(p.total, 6);
+    assert_eq!((p.not_a_file, p.no_location, p.invalid_location), (1, 1, 1));
+    assert_eq!((p.files_found, p.files_not_found), (3, 0));
+}
+
+#[test]
+fn cancelled_import_writes_nothing() {
+    let env = Env::new();
+    let cancel = CancelToken::new();
+    cancel.cancel();
+    let report = env.import(
+        &small_collection(),
+        ImportOptions {
+            cancel: Some(cancel),
+            ..fixture_remap()
+        },
+    );
+    assert!(report.cancelled);
+    assert_eq!(report.added, 0);
+    assert_eq!(env.count("track"), 0);
+    assert_eq!(env.count("playlist"), 0);
+
+    // Cancelling while files are read stops before the database stage.
+    let cancel = CancelToken::new();
+    let opts = ImportOptions {
+        cancel: Some(cancel.clone()),
+        ..fixture_remap()
+    };
+    let report = import(&small_collection(), &env.lib, opts, |e| {
+        if matches!(e, ImportEvent::Progress { .. }) {
+            cancel.cancel();
+        }
+    })
+    .unwrap();
+    assert!(report.cancelled);
+    assert_eq!(env.count("track"), 0);
+}
+
 #[test]
 fn imports_3000_tracks() {
     let env = Env::new();

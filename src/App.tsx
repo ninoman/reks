@@ -7,6 +7,7 @@
 import { useEffect } from "react";
 import { DEFAULT_HIDDEN } from "./components/columns";
 import { FiltersPanel } from "./components/FiltersPanel";
+import { ImportWizard } from "./components/ImportWizard";
 import { LibraryToolbar } from "./components/LibraryToolbar";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
@@ -64,6 +65,7 @@ export default function App() {
         <FiltersPanel />
         <DuplicateDialog />
         <DeleteDialog />
+        <ImportWizard />
       </div>
       <TransportBar />
     </div>

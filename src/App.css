@@ -373,6 +373,72 @@ select {
   border-color: var(--accent);
 }
 
+.dialog.wizard {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.wizard .dialog-body {
+  overflow: auto;
+  min-height: 0;
+}
+.wizard-file {
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.wizard .muted {
+  color: var(--muted);
+}
+.wizard .warn {
+  color: #c77700;
+}
+.wizard-error {
+  color: #d0342c;
+}
+.wizard-counts {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 16px;
+  margin: 0 0 12px;
+}
+.wizard-counts dt {
+  color: var(--muted);
+}
+.wizard-counts dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.wizard-paths,
+.wizard-remaps ul {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.wizard progress {
+  width: 100%;
+}
+.wizard-group {
+  margin-top: 8px;
+}
+.wizard-group table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.wizard-group td {
+  padding: 2px 6px 2px 0;
+  vertical-align: top;
+}
+.wizard-group td.path {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
 /* Main column */
 .main {
   flex: 1;
@@ -406,12 +472,6 @@ select {
 }
 .error {
   color: #d0342c;
-}
-.status-line .warn {
-  color: #c77700;
-}
-.status-line .link {
-  margin-left: 6px;
 }
 .column-chooser {
   position: relative;

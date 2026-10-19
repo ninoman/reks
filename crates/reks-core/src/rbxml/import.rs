@@ -28,7 +28,7 @@ use crate::db::Library;
 use crate::error::Result;
 use crate::fileinfo::{self, kind_from_extension, library_path, probe_cols, FileInfo};
 use crate::keys::Key;
-use crate::scan::TrackId;
+use crate::scan::{CancelToken, TrackId};
 use crate::timefmt;
 
 /// Grid and cue rows written by this import carry this `source`.
@@ -43,10 +43,13 @@ pub struct PrefixRemap {
     pub to: PathBuf,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default)]
 pub struct ImportOptions {
     /// Tried in order; the first matching prefix wins.
     pub remap: Vec<PrefixRemap>,
+    /// Checked between tracks while files are read. Once the database
+    /// stage starts (one transaction) the import runs to the end.
+    pub cancel: Option<CancelToken>,
 }
 
 /// Which pass a [`ImportEvent::Progress`] belongs to.
@@ -143,6 +146,106 @@ pub struct ImportReport {
     /// music folder has moved.
     pub missing_root: Option<String>,
     pub elapsed_ms: u64,
+    /// Stopped before the database stage: nothing was written, and only the
+    /// counts up to that point are filled in.
+    pub cancelled: bool,
+}
+
+/// What an import of a collection would find, before anything is written.
+/// Computed from the XML, the library rows and one `stat` per track; no file
+/// is read.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportPreview {
+    /// Tracks in the XML.
+    pub total: usize,
+    /// Playlists and folders below `ROOT`.
+    pub playlists: usize,
+    pub folders: usize,
+    pub playlist_entries: usize,
+    /// Tracks with at least one `TEMPO` / `POSITION_MARK`.
+    pub with_grid: usize,
+    pub with_cues: usize,
+    /// Tracks whose file (after the remap) exists.
+    pub files_found: usize,
+    pub files_not_found: usize,
+    /// Tracks that won't be stored at all: no `Location`, not a local file,
+    /// or a `Location` that can't be decoded.
+    pub no_location: usize,
+    pub not_a_file: usize,
+    pub invalid_location: usize,
+    /// Tracks that resolve to a library row by path or by the `Location` of an
+    /// earlier import. An estimate: the import also matches by (artist, title,
+    /// size) and reports a second XML track on one row as a duplicate.
+    pub in_library: usize,
+    /// As [`ImportReport::missing_root`], over the files not found.
+    pub missing_root: Option<String>,
+    /// Up to [`PREVIEW_SAMPLE`] paths of files not found, in XML order.
+    pub not_found_sample: Vec<String>,
+}
+
+/// How many not-found paths [`preview`] lists.
+pub const PREVIEW_SAMPLE: usize = 20;
+
+/// Counts what [`import`] would do with `c`, without writing anything.
+pub fn preview(c: &Collection, lib: &Library, opts: &ImportOptions) -> Result<ImportPreview> {
+    let remap = prepare_remap(&opts.remap);
+    let ex = existing_rows(lib)?;
+    let mut p = ImportPreview {
+        total: c.tracks.len(),
+        ..ImportPreview::default()
+    };
+    count_nodes(&c.playlists, &mut p, true);
+    let mut not_found: Vec<String> = Vec::new();
+    for t in &c.tracks {
+        p.with_grid += usize::from(!t.tempos.is_empty());
+        p.with_cues += usize::from(!t.position_marks.is_empty());
+        let path = match resolve(&remap, t) {
+            Ok(path) => path,
+            Err(UnmatchedReason::NoLocation) => {
+                p.no_location += 1;
+                continue;
+            }
+            Err(UnmatchedReason::NotAFile) => {
+                p.not_a_file += 1;
+                continue;
+            }
+            Err(_) => {
+                p.invalid_location += 1;
+                continue;
+            }
+        };
+        let known = ex.by_path.contains_key(&path)
+            || t.location
+                .as_ref()
+                .is_some_and(|l| ex.by_location.contains_key(l));
+        p.in_library += usize::from(known);
+        if Path::new(&path).exists() {
+            p.files_found += 1;
+        } else {
+            p.files_not_found += 1;
+            not_found.push(path);
+        }
+    }
+    p.missing_root = missing_root(not_found.iter().map(String::as_str));
+    not_found.truncate(PREVIEW_SAMPLE);
+    p.not_found_sample = not_found;
+    Ok(p)
+}
+
+fn count_nodes(node: &XmlNode, p: &mut ImportPreview, root: bool) {
+    match &node.kind {
+        NodeKind::Folder(children) => {
+            p.folders += usize::from(!root);
+            for child in children {
+                count_nodes(child, p, false);
+            }
+        }
+        NodeKind::Playlist { keys, .. } => {
+            p.playlists += 1;
+            p.playlist_entries += keys.len();
+        }
+    }
 }
 
 /// Imports `c` into `lib`. Safe to repeat: a second import of the same XML
@@ -157,14 +260,21 @@ pub fn import(
     let mut imp = Import {
         lib,
         remap: prepare_remap(&opts.remap),
+        cancel: opts.cancel,
         progress: &progress,
         report: ImportReport {
             total: c.tracks.len(),
             ..ImportReport::default()
         },
     };
-    let existing = imp.existing_rows()?;
+    let existing = existing_rows(lib)?;
     let plans = imp.plan_tracks(&c.tracks, &existing);
+    if imp.cancelled() {
+        imp.report.cancelled = true;
+        imp.report.elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        tracing::info!(read = plans.len(), "rekordbox XML import cancelled");
+        return Ok(imp.report);
+    }
 
     let mut conn = lib.conn()?;
     let tx = conn.transaction()?;
@@ -194,7 +304,11 @@ pub fn import(
     tx.commit()?;
     drop(conn);
 
-    imp.report.missing_root = missing_root(&imp.report.unmatched);
+    imp.report.missing_root =
+        missing_root(imp.report.unmatched.iter().filter_map(|u| match &u.reason {
+            UnmatchedReason::FileNotFound { path } => Some(path.as_str()),
+            _ => None,
+        }));
     imp.report.elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     tracing::info!(
         total = imp.report.total,
@@ -209,13 +323,10 @@ pub fn import(
     Ok(imp.report)
 }
 
-/// Deepest common folder of the `FileNotFound` paths; `None` if there are
-/// none or they only share a root (`/`, `C:\\`), which is too broad to remap.
-fn missing_root(unmatched: &[Unmatched]) -> Option<String> {
-    let mut paths = unmatched.iter().filter_map(|u| match &u.reason {
-        UnmatchedReason::FileNotFound { path } => Some(Path::new(path)),
-        _ => None,
-    });
+/// Deepest common folder of the paths of files not found; `None` if there
+/// are none or they only share a root (`/`, `C:\\`), which is too broad to remap.
+fn missing_root<'a>(paths: impl IntoIterator<Item = &'a str>) -> Option<String> {
+    let mut paths = paths.into_iter().map(Path::new);
     let mut common: PathBuf = paths.next()?.parent()?.to_path_buf();
     for p in paths {
         while !p.starts_with(&common) {
@@ -232,6 +343,7 @@ fn missing_root(unmatched: &[Unmatched]) -> Option<String> {
 struct Import<'a> {
     lib: &'a Library,
     remap: Vec<(String, PathBuf)>,
+    cancel: Option<CancelToken>,
     progress: &'a dyn Fn(&ImportEvent),
     report: ImportReport,
 }
@@ -288,6 +400,10 @@ struct TrackRows<'a> {
 }
 
 impl Import<'_> {
+    fn cancelled(&self) -> bool {
+        self.cancel.as_ref().is_some_and(CancelToken::is_cancelled)
+    }
+
     fn emit(&self, event: &ImportEvent) {
         (self.progress)(event);
     }
@@ -311,37 +427,6 @@ impl Import<'_> {
         self.report.unmatched.push(u);
     }
 
-    fn existing_rows(&self) -> Result<Existing> {
-        let conn = self.lib.conn()?;
-        let mut stmt = conn.prepare(
-            "SELECT id, path, file_size, file_mtime, rb_location, artist, title
-             FROM track ORDER BY id",
-        )?;
-        let mut rows = stmt.query([])?;
-        let mut ex = Existing::default();
-        while let Some(r) = rows.next()? {
-            let i = ex.rows.len();
-            let row = Row {
-                id: r.get(0)?,
-                path: r.get(1)?,
-                file_size: r.get(2)?,
-                file_mtime: r.get(3)?,
-            };
-            let location: Option<String> = r.get(4)?;
-            let artist: Option<String> = r.get(5)?;
-            let title: Option<String> = r.get(6)?;
-            ex.by_path.insert(row.path.clone(), i);
-            if let Some(loc) = location {
-                ex.by_location.entry(loc).or_default().push(i);
-            }
-            if let Some(key) = fallback_key(artist.as_deref(), title.as_deref(), row.file_size) {
-                ex.by_fallback.entry(key).or_default().push(i);
-            }
-            ex.rows.push(row);
-        }
-        Ok(ex)
-    }
-
     /// Resolves, matches and reads the file of every XML track. No DB lock
     /// is held (artwork storage takes it briefly).
     fn plan_tracks(&mut self, tracks: &[XmlTrack], ex: &Existing) -> Vec<Plan> {
@@ -351,6 +436,9 @@ impl Import<'_> {
         let total = tracks.len();
         let mut plans = Vec::with_capacity(total);
         for (i, t) in tracks.iter().enumerate() {
+            if self.cancelled() {
+                break;
+            }
             let plan = self.plan_track(t, ex, &mut claimed_rows, &mut claimed_paths);
             plans.push(plan);
             if (i + 1) % 50 == 0 || i + 1 == total {
@@ -371,7 +459,7 @@ impl Import<'_> {
         claimed_rows: &mut HashMap<usize, u32>,
         claimed_paths: &mut HashMap<String, u32>,
     ) -> Plan {
-        let xml_path = match self.resolve(t) {
+        let xml_path = match resolve(&self.remap, t) {
             Ok(p) => p,
             Err(reason) => {
                 self.unmatched(t, reason);
@@ -496,37 +584,6 @@ impl Import<'_> {
             }
         };
         Plan::Write { target, path, file }
-    }
-
-    /// The library path an XML `Location` points at, after the remap.
-    fn resolve(&self, t: &XmlTrack) -> std::result::Result<String, UnmatchedReason> {
-        let url = match t.location.as_deref() {
-            Some(u) if !u.trim().is_empty() => u,
-            _ => return Err(UnmatchedReason::NoLocation),
-        };
-        if !is_file_url(url) {
-            return Err(UnmatchedReason::NotAFile);
-        }
-        let path = location_to_path(url).map_err(|e| UnmatchedReason::InvalidLocation {
-            message: e.to_string(),
-        })?;
-        // Re-collecting the components gives native separators, so a
-        // Windows Location (`C:/Music/x.mp3`) matches the scan's `C:\Music\x.mp3`.
-        let path: PathBuf = apply_remap(&self.remap, &path).components().collect();
-        let Some(nfc) = path.to_str() else {
-            return Err(UnmatchedReason::InvalidLocation {
-                message: "remapped path is not valid UTF-8".into(),
-            });
-        };
-        // location_to_path gives NFC; a file stored NFD on a filesystem that
-        // doesn't normalise (Linux) is only found under its NFD name.
-        if !Path::new(nfc).exists() {
-            let nfd: String = nfc.nfd().collect();
-            if nfd != nfc && Path::new(&nfd).exists() {
-                return Ok(nfd);
-            }
-        }
-        Ok(library_path(Path::new(nfc)).unwrap_or_else(|| nfc.to_owned()))
     }
 
     /// Writes one track with its grid and cues; returns its row id.
@@ -1004,6 +1061,72 @@ fn fallback_key(
     Some((norm(artist)?, norm(title)?, size))
 }
 
+/// Library rows before the import, with the matcher's lookups.
+fn existing_rows(lib: &Library) -> Result<Existing> {
+    let conn = lib.conn()?;
+    let mut stmt = conn.prepare(
+        "SELECT id, path, file_size, file_mtime, rb_location, artist, title
+         FROM track ORDER BY id",
+    )?;
+    let mut rows = stmt.query([])?;
+    let mut ex = Existing::default();
+    while let Some(r) = rows.next()? {
+        let i = ex.rows.len();
+        let row = Row {
+            id: r.get(0)?,
+            path: r.get(1)?,
+            file_size: r.get(2)?,
+            file_mtime: r.get(3)?,
+        };
+        let location: Option<String> = r.get(4)?;
+        let artist: Option<String> = r.get(5)?;
+        let title: Option<String> = r.get(6)?;
+        ex.by_path.insert(row.path.clone(), i);
+        if let Some(loc) = location {
+            ex.by_location.entry(loc).or_default().push(i);
+        }
+        if let Some(key) = fallback_key(artist.as_deref(), title.as_deref(), row.file_size) {
+            ex.by_fallback.entry(key).or_default().push(i);
+        }
+        ex.rows.push(row);
+    }
+    Ok(ex)
+}
+
+/// The library path an XML `Location` points at, after the remap.
+fn resolve(
+    remap: &[(String, PathBuf)],
+    t: &XmlTrack,
+) -> std::result::Result<String, UnmatchedReason> {
+    let url = match t.location.as_deref() {
+        Some(u) if !u.trim().is_empty() => u,
+        _ => return Err(UnmatchedReason::NoLocation),
+    };
+    if !is_file_url(url) {
+        return Err(UnmatchedReason::NotAFile);
+    }
+    let path = location_to_path(url).map_err(|e| UnmatchedReason::InvalidLocation {
+        message: e.to_string(),
+    })?;
+    // Re-collecting the components gives native separators, so a
+    // Windows Location (`C:/Music/x.mp3`) matches the scan's `C:\Music\x.mp3`.
+    let path: PathBuf = apply_remap(remap, &path).components().collect();
+    let Some(nfc) = path.to_str() else {
+        return Err(UnmatchedReason::InvalidLocation {
+            message: "remapped path is not valid UTF-8".into(),
+        });
+    };
+    // location_to_path gives NFC; a file stored NFD on a filesystem that
+    // doesn't normalise (Linux) is only found under its NFD name.
+    if !Path::new(nfc).exists() {
+        let nfd: String = nfc.nfd().collect();
+        if nfd != nfc && Path::new(&nfd).exists() {
+            return Ok(nfd);
+        }
+    }
+    Ok(library_path(Path::new(nfc)).unwrap_or_else(|| nfc.to_owned()))
+}
+
 /// Remaps with `from` normalised to NFC (like decoded Locations) and `to`
 /// made absolute.
 fn prepare_remap(remap: &[PrefixRemap]) -> Vec<(String, PathBuf)> {
@@ -1130,25 +1253,9 @@ fn is_date(s: &str) -> bool {
 mod tests {
     use super::*;
 
-    fn not_found(paths: &[&str]) -> Vec<Unmatched> {
-        paths
-            .iter()
-            .enumerate()
-            .map(|(i, p)| Unmatched {
-                track_id: i as u32,
-                name: None,
-                artist: None,
-                location: None,
-                reason: UnmatchedReason::FileNotFound {
-                    path: Path::new(p).to_string_lossy().into_owned(),
-                },
-            })
-            .collect()
-    }
-
     #[test]
     fn missing_root_is_the_deepest_common_folder() {
-        let root = |paths: &[&str]| missing_root(&not_found(paths)).map(PathBuf::from);
+        let root = |paths: &[&str]| missing_root(paths.iter().copied()).map(PathBuf::from);
         assert_eq!(root(&[]), None);
         assert_eq!(root(&["/m/a/x.mp3"]), Some(PathBuf::from("/m/a")));
         assert_eq!(
@@ -1162,19 +1269,6 @@ mod tests {
         );
         // Only the filesystem root in common: too broad to suggest.
         assert_eq!(root(&["/a/x.mp3", "/b/y.mp3"]), None);
-        // Other reasons don't count.
-        let mut u = not_found(&["/m/a/x.mp3"]);
-        u.push(Unmatched {
-            track_id: 9,
-            name: None,
-            artist: None,
-            location: None,
-            reason: UnmatchedReason::NotAFile,
-        });
-        assert_eq!(
-            missing_root(&u).map(PathBuf::from),
-            Some(PathBuf::from("/m/a"))
-        );
     }
 
     #[test]

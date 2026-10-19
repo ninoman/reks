@@ -4,7 +4,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use reks_core::rbxml::{self, ImportEvent, ImportOptions, ImportReport, PrefixRemap};
+use reks_core::rbxml::{
+    self, ImportEvent, ImportOptions, ImportPreview, ImportReport, PrefixRemap,
+};
 use reks_core::{
     ArtworkId, CancelToken, Facets, Library, PlaylistOp, PlaylistOutcome, PlaylistTree, ScanEvent,
     ScanReport, TrackDetail, TrackId, TrackPage, TrackPatch, TrackQuery,
@@ -133,6 +135,24 @@ pub fn scan_cancel(state: State<'_, AppState>) {
     }
 }
 
+/// What importing `path` with `remap` would find; writes nothing.
+#[tauri::command]
+pub async fn rbxml_preview(
+    state: State<'_, AppState>,
+    path: PathBuf,
+    remap: Vec<PrefixRemap>,
+) -> CmdResult<ImportPreview> {
+    blocking(&state, move |lib| {
+        let collection = rbxml::parse_file(&path)?;
+        let opts = ImportOptions {
+            remap,
+            ..ImportOptions::default()
+        };
+        rbxml::preview(&collection, lib, &opts)
+    })
+    .await
+}
+
 /// Imports a rekordbox `collection.xml`, streaming progress to `on_event`.
 #[tauri::command]
 pub async fn rbxml_import_start(
@@ -141,15 +161,45 @@ pub async fn rbxml_import_start(
     remap: Vec<PrefixRemap>,
     on_event: Channel<ImportEvent>,
 ) -> CmdResult<ImportReport> {
-    blocking(&state, move |lib| {
+    let cancel = CancelToken::new();
+    {
+        let mut running = state
+            .import_cancel
+            .lock()
+            .map_err(|_| "import state poisoned")?;
+        if running.is_some() {
+            return Err(CmdError("an import is already running".into()));
+        }
+        *running = Some(cancel.clone());
+    }
+    let result = blocking(&state, move |lib| {
         let collection = rbxml::parse_file(&path)?;
-        rbxml::import(&collection, lib, ImportOptions { remap }, |e| {
+        let opts = ImportOptions {
+            remap,
+            cancel: Some(cancel),
+        };
+        rbxml::import(&collection, lib, opts, |e| {
             if let Err(err) = on_event.send(e.clone()) {
                 tracing::warn!(%err, "import progress channel closed");
             }
         })
     })
-    .await
+    .await;
+    if let Ok(mut running) = state.import_cancel.lock() {
+        *running = None;
+    }
+    result
+}
+
+/// Asks the running import, if any, to stop. Only takes effect while files
+/// are read; the database stage always runs to the end.
+#[tauri::command]
+pub fn rbxml_import_cancel(state: State<'_, AppState>) {
+    if let Ok(running) = state.import_cancel.lock() {
+        if let Some(c) = running.as_ref() {
+            c.cancel();
+        }
+    }
 }
 
 /// The player state plus the track on it.

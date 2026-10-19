@@ -14,6 +14,8 @@ pub struct AppState {
     pub library: Arc<Library>,
     /// Cancels the running scan, if any.
     pub scan_cancel: Mutex<Option<CancelToken>>,
+    /// Cancels the running rekordbox XML import, if any.
+    pub import_cancel: Mutex<Option<CancelToken>>,
     pub player: Mutex<PlayerSlot>,
 }
 
@@ -36,6 +38,7 @@ impl AppState {
         Ok(Self {
             library: Arc::new(library),
             scan_cancel: Mutex::new(None),
+            import_cancel: Mutex::new(None),
             // Output device setting: Phase 1 task 13. The system default until then.
             player: Mutex::new(PlayerSlot {
                 player: Player::new(None),

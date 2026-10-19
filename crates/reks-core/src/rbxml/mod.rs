@@ -18,8 +18,8 @@ use std::collections::BTreeMap;
 
 pub use colour::{colour_name, colour_rgb, TRACK_COLOURS};
 pub use import::{
-    import, ImportEvent, ImportOptions, ImportReport, ImportStage, ImportWarning, PrefixRemap,
-    Unmatched, UnmatchedReason,
+    import, preview, ImportEvent, ImportOptions, ImportPreview, ImportReport, ImportStage,
+    ImportWarning, PrefixRemap, Unmatched, UnmatchedReason, PREVIEW_SAMPLE,
 };
 pub use location::{location_to_path, path_to_location};
 pub use parse::{parse, parse_file};

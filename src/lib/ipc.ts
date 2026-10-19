@@ -202,6 +202,28 @@ export interface ImportReport {
   /** Deepest folder holding every file not found; the remap `from` to suggest. */
   missingRoot: string | null;
   elapsedMs: number;
+  /** Stopped while files were read: nothing was written. */
+  cancelled: boolean;
+}
+
+/** What an import would find, before anything is written (`rbxml::preview`). */
+export interface ImportPreview {
+  total: number;
+  playlists: number;
+  folders: number;
+  playlistEntries: number;
+  withGrid: number;
+  withCues: number;
+  filesFound: number;
+  filesNotFound: number;
+  noLocation: number;
+  notAFile: number;
+  invalidLocation: number;
+  /** Already in the library by path or earlier Location (an estimate). */
+  inLibrary: number;
+  missingRoot: string | null;
+  /** The first few paths not found. */
+  notFoundSample: string[];
 }
 
 /** Replace a path prefix in every XML `Location` (music folder moved). */
@@ -226,6 +248,14 @@ export function scanStart(roots: string[], onEvent: (e: ScanEvent) => void): Pro
 
 export function scanCancel(): Promise<void> {
   return invoke("scan_cancel");
+}
+
+export function rbxmlPreview(path: string, remap: PrefixRemap[]): Promise<ImportPreview> {
+  return invoke("rbxml_preview", { path, remap });
+}
+
+export function rbxmlImportCancel(): Promise<void> {
+  return invoke("rbxml_import_cancel");
 }
 
 export function rbxmlImportStart(

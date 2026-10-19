@@ -200,6 +200,7 @@ pub mod rbxml {  // rekordbox XML
     pub fn write(c: &Collection, w: impl Write) -> Result<()>;
     pub fn import(c: &Collection, lib: &Library, opts: ImportOptions, progress: impl Fn(ImportEvent))
         -> Result<ImportReport>;
+    pub fn preview(c: &Collection, lib: &Library, opts: &ImportOptions) -> Result<ImportPreview>;  // writes nothing
     pub fn export(lib: &Library, selection: Selection) -> Result<Collection>;
     pub fn location_to_path(url: &str) -> Result<PathBuf>;              // file://localhost/... → path, percent-decoded, NFC
     pub fn path_to_location(path: &Path) -> Result<String>;             // inverse, for export
@@ -310,11 +311,7 @@ Notes (task 8, [`query.rs`](../../crates/reks-core/src/query.rs), [`src/`](../..
   playlist tree, so key and colour knowledge stays in Rust.
 - App: `AppState` opens `reks.sqlite` in `app_data_dir` (`app_local_data_dir` on
   Windows, D19); commands run on `spawn_blocking`. `scan_start` / `rbxml_import_start`
-  stream progress over a `Channel`; the toolbar uses them until the wizard (task 12).
-  "Import rekordbox XML…" is one step (pick the file, it imports). If files are not
-  found, it names the folder they were expected in (`ImportReport.missing_root`: the
-  deepest common folder of the not-found paths, `None` when only a filesystem root is
-  shared) and offers "Locate folder…", which re-imports with that prefix remapped.
+  stream progress over a `Channel`. The XML import runs through the wizard (task 12).
 - UI: Zustand store (`src/store/library.ts`) builds the `TrackQuery`; a generation
   counter drops stale pages. Selection is a pure reducer over row indices of the current
   result (click, cmd/ctrl toggle, shift range, arrows/Page/Home/End with shift-extend,
@@ -323,7 +320,7 @@ Notes (task 8, [`query.rs`](../../crates/reks-core/src/query.rs), [`src/`](../..
   search debounce; a `tauri-driver` smoke test is skipped (optional).
 - 10k manual check: `reks synth-xml 10000 synth.xml` writes a synthetic collection (files
   missing) to import in the app. The fixture XML imports with its files missing until
-  "Locate folder…" points it at `fixtures/audio`.
+  "Map folder…" points it at `fixtures/audio`.
 
 Notes (task 9, [`track.rs`](../../crates/reks-core/src/track.rs), [`TrackDetailPanel`](../../src/components/TrackDetailPanel.tsx))
 - `Library::track(id) -> TrackDetail { track, cues, beatgrid }`. `Track` serialises as the
@@ -402,6 +399,35 @@ Notes (task 10, [`playlist.rs`](../../crates/reks-core/src/playlist.rs), [`Playl
 - HTML5 drag and drop needs `dragDropEnabled: false` on the window (`tauri.conf.json`); file drops
   from the OS are not accepted until something needs them.
 - Not checked yet in the running app (`cargo tauri dev`); covered by reks-core and Vitest tests.
+
+Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs), [`ImportWizard`](../../src/components/ImportWizard.tsx))
+- "Import rekordbox XML…" picks the file and opens the wizard. Its steps are
+  review → importing → report (`src/store/importWizard.ts`).
+- Review shows `rbxml::preview`. The preview writes nothing and reads no files beyond
+  one `stat` per track (after the remap). It counts:
+  - tracks, files found / not found, and entries that won't be stored (no
+    Location, not a local file, undecodable)
+  - tracks with a grid / cues, playlists and folders below `ROOT`
+  - tracks already in the library. This is an estimate: it matches by path or earlier
+    Location only, without the (artist, title, size) fallback or duplicate detection.
+- When files are not found, review shows `missingRoot` (as in `ImportReport`) and the
+  first 20 paths. "Map folder…" adds `{from: missingRoot, to}` in front of the remap
+  list, so the newest mapping wins, and runs the preview again. Mappings can be removed.
+- Importing shows progress per stage and a count of tracks without a file.
+  Stop (`rbxml_import_cancel`, a `CancelToken` in `ImportOptions`) only takes effect
+  while files are read. The import then returns `cancelled: true` before the
+  transaction opens, so nothing is written. Saving is one transaction and can't be
+  stopped. The library, facets and tree reload after every import that isn't cancelled.
+- The report shows every `ImportReport` count, with unmatched tracks grouped by reason
+  (collapsible, with artist, title and path or message) and the warnings. "Map folder and
+  re-import…" goes back to review with the new mapping in front, so the counts are
+  confirmed before the re-import (which is idempotent, task 7).
+- `reks import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]… [--dry-run]` runs
+  the same import or preview headless.
+- Timings (release, maintainer's Mac): the preview of 3,000 generated tracks takes 17 ms
+  (8 ms parse, 9 ms preview), so the file is parsed again on every preview with no cache.
+  The import of the real collection was 8.1 s (task 7). The wizard run on it is still to
+  be checked by hand (manual checklist).
 
 ### Audio (`reks-audio`)
 
@@ -489,7 +515,7 @@ Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5)
 
 `library_query`, `library_facets`, `library_track`, `library_update_track`, `playlists_get`,
 `playlists_mutate`, `scan_start` (progress via `Channel<ScanEvent>`), `scan_cancel`,
-`rbxml_import_start` (progress via Channel), `rbxml_export`,
+`rbxml_preview(path, remap)`, `rbxml_import_start` (progress via Channel), `rbxml_import_cancel`, `rbxml_export`,
 `player_load(id, play)`, `player_play/pause/seek/volume/devices/set_device`,
 `player_state` (polled every 100 ms while playing), `artwork_get(artwork_id) -> Response(bytes)`, `overview_waveform(id) ->
 Response(bytes)`.
@@ -532,11 +558,11 @@ Response(bytes)`.
    grid listing (read-only), artwork display via `artwork_get`.
 10. [x] **Playlists UI**: tree, create/rename/delete folder/playlist, drag tracks,
     reorder, context menu; backed by `playlists_mutate` ops.
-11. [ ] **Player**: one-deck slice of the Phase 6 engine (`reks-mix`, D5) with
+11. [x] **Player**: one-deck slice of the Phase 6 engine (`reks-mix`, D5) with
     Symphonia decoding in `reks-audio`, output device list, seek; Tauri commands; transport bar with position slider and
     a simple overview waveform (min/max per 1,000 samples, computed on first
     load, cached as `.f32` in cache dir, sent as bytes).
-12. [ ] **Import wizard**: choose `collection.xml`, show counts, run import with
+12. [x] **Import wizard**: choose `collection.xml`, show counts, run import with
     progress, show report (matched, unmatched, missing files) and a "map
     folder" option when the XML paths point at a moved music folder (prefix
     replacement).
@@ -582,7 +608,8 @@ Response(bytes)`.
 
 ## Manual checklist
 
-- Import real collection; spot-check 20 tracks against rekordbox side by side.
+- Import real collection through the wizard (time it; check every unmatched track is listed
+  with a reason); spot-check 20 tracks against rekordbox side by side.
 - Export XML, import into rekordbox 7 as a test playlist; confirm cues/grids.
 - Play a track on each OS; switch output device while playing.
 
