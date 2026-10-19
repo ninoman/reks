@@ -381,7 +381,8 @@ fn played_stick_shows_history_and_backups() {
         Some(
             format!(
                 "Before writing anything, reks copies 2 database files ({}) to its data \
-                 folder and checks the copies; if the backup fails, nothing is written.",
+                 folder and checks the copies; if the backup fails, nothing is written. The \
+                 report after the export shows where the copies are.",
                 human_bytes(pdb + 6)
             )
             .as_str()
@@ -442,7 +443,7 @@ fn discard_needs_confirmation_before_the_plan_is_ready() {
     assert!(dry.ready);
     assert_eq!(
         dry.history.action_text.as_deref(),
-        Some("You chose to discard it: no backup is made.")
+        Some("You chose to discard it: it is erased without a backup.")
     );
     assert_eq!(dry.history.backups.count, 0);
 }

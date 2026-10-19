@@ -576,6 +576,8 @@ export interface NoticeGroup {
 
 /** The dry-run view of an export plan (`dryrun::DryRun`); every string is final. */
 export interface DryRun {
+  /** The kept plan this shows; `exportApply` writes exactly it. */
+  planId: number;
   ready: boolean;
   status: string;
   device: {
@@ -619,4 +621,61 @@ export function exportPlan(
   options: ExportOptions,
 ): Promise<DryRun> {
   return invoke("export_plan", { mountPoint, selection, options });
+}
+
+/** Steps of an export (`apply::ApplyStage`), in order. */
+export type ApplyStage = "preflight" | "backup" | "write" | "sync" | "validate" | "manifest";
+
+/** Where a running export is (`report::ProgressView`); every string is final. */
+export interface ExportProgress {
+  stage: ApplyStage;
+  title: string;
+  /** `Track 3 of 40: Alpha – One`. */
+  detail: string | null;
+  /** Tracks written of `total`; `total` 0 = no count. */
+  done: number;
+  total: number;
+  /** False once the new database is being written: cancelling no longer keeps the old one. */
+  cancellable: boolean;
+  warnings: string[];
+}
+
+export type ExportOutcome = "success" | "problems" | "cancelled" | "failed";
+
+/** The export's report (`report::ReportView`); every string is final. */
+export interface ExportReportView {
+  outcome: ExportOutcome;
+  title: string;
+  status: string;
+  mountPoint: string;
+  deviceName: string;
+  facts: Fact[];
+  history: {
+    title: string;
+    text: string;
+    /** The backup folder in the app data dir. */
+    folder: string | null;
+    files: string[];
+  };
+  problems: NoticeGroup[];
+  warnings: NoticeGroup[];
+}
+
+/**
+ * Writes the plan dry run `planId` showed to its stick, streaming progress.
+ * Rejects only when that plan is gone (replanned or already exported); a
+ * refused or failed export resolves with outcome `failed`.
+ */
+export function exportApply(
+  planId: number,
+  onEvent: (p: ExportProgress) => void,
+): Promise<ExportReportView> {
+  const channel = new Channel<ExportProgress>();
+  channel.onmessage = onEvent;
+  return invoke("export_apply", { planId, onEvent: channel });
+}
+
+/** Asks the running export to stop (it keeps the old database while `cancellable`). */
+export function exportCancel(): Promise<void> {
+  return invoke("export_cancel");
 }

@@ -501,4 +501,4 @@ fn sync_written(plan: &ExportPlan) -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

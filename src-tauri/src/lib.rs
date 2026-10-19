@@ -69,6 +69,8 @@ pub fn run() {
             commands::devices_list,
             commands::device_eject,
             commands::export_plan,
+            commands::export_apply,
+            commands::export_cancel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

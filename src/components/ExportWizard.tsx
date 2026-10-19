@@ -1,8 +1,9 @@
 /**
  * USB export wizard (phase 2 task 10): pick a stick, pick playlists, set the
- * options, then read the dry run. Planning, wording and totals all come from
- * Rust (`export_plan` → `DryRun`); this lays them out. The Export button
- * stays disabled until the writer (`apply`, task 9) is wired in.
+ * options, read the dry run, export, read the report. Planning, progress,
+ * wording and totals all come from Rust (`export_plan` → `DryRun`,
+ * `export_apply` → `ExportProgress` / `ExportReportView`); this lays them
+ * out.
  */
 import type { ReactNode } from "react";
 
@@ -11,6 +12,8 @@ import type {
   DryRun,
   DryRunFileGroup,
   ExportOptions,
+  ExportOutcome,
+  ExportReportView,
   Fact,
   MissingAnalysis,
   NoticeGroup,
@@ -43,6 +46,8 @@ const STEP_TITLES = {
   playlists: "Playlists",
   options: "Options",
   dryRun: "Dry run",
+  writing: "Writing",
+  report: "Report",
 } as const;
 
 const TARGETS: { value: TargetProfile; label: string }[] = [
@@ -71,6 +76,8 @@ export function ExportWizard() {
   const mountPoint = useExportWizard((s) => s.mountPoint);
   const checked = useExportWizard((s) => s.checked);
   const options = useExportWizard((s) => s.options);
+  const dryRun = useExportWizard((s) => s.dryRun);
+  const planning = useExportWizard((s) => s.planning);
   const nodes = usePlaylists((s) => s.nodes);
   if (step === "closed") return null;
   const w = useExportWizard.getState();
@@ -108,27 +115,183 @@ export function ExportWizard() {
           {step === "playlists" && <PlaylistsStep nodes={nodes} />}
           {step === "options" && <OptionsStep />}
           {step === "dryRun" && <DryRunStep nodes={nodes} />}
+          {step === "writing" && <WritingStep />}
+          {step === "report" && <ReportStep />}
         </DialogBody>
         <DialogFooter className="items-center">
-          {step === "dryRun" && (
-            <p className="m-0 mr-auto text-xs text-fg-muted">
-              Writing to the stick isn't available in this build yet.
-            </p>
-          )}
-          <Button onClick={() => w.close()}>Cancel</Button>
-          {index > 0 && <Button onClick={() => w.back()}>Back</Button>}
-          {step === "dryRun" ? (
-            <Button variant="primary" disabled>
-              Export
-            </Button>
+          {step === "writing" ? (
+            <WritingFooter />
+          ) : step === "report" ? (
+            <ReportFooter nodes={nodes} />
           ) : (
-            <Button variant="primary" disabled={!ready} onClick={() => void w.next(nodes)}>
-              {step === "options" ? "Dry run" : "Next"}
-            </Button>
+            <>
+              <Button onClick={() => w.close()}>Cancel</Button>
+              {index > 0 && <Button onClick={() => w.back()}>Back</Button>}
+              {step === "dryRun" ? (
+                <Button
+                  variant="primary"
+                  disabled={planning || dryRun === null || !dryRun.ready}
+                  onClick={() => void w.startExport()}
+                >
+                  Export
+                </Button>
+              ) : (
+                <Button variant="primary" disabled={!ready} onClick={() => void w.next(nodes)}>
+                  {step === "options" ? "Dry run" : "Next"}
+                </Button>
+              )}
+            </>
           )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function WritingStep() {
+  const progress = useExportWizard((s) => s.progress);
+  const cancelling = useExportWizard((s) => s.cancelling);
+  const counted = progress !== null && progress.total > 0;
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="m-0 font-semibold" role="status">
+        {progress?.title ?? "Starting the export…"}
+      </p>
+      <Progress
+        aria-label="Export progress"
+        {...(counted ? { max: progress.total, value: progress.done } : {})}
+      />
+      {progress?.detail != null && (
+        <p className="m-0 truncate text-xs text-fg-muted tabular-nums">{progress.detail}</p>
+      )}
+      {cancelling && progress?.cancellable !== false && (
+        <p className="m-0 text-sm text-fg-muted">Cancelling…</p>
+      )}
+      {progress !== null && progress.warnings.length > 0 && (
+        <ul className={cn(list, "text-warning")} aria-label="Warnings">
+          {progress.warnings.map((w) => (
+            <li key={w}>{w}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function WritingFooter() {
+  const progress = useExportWizard((s) => s.progress);
+  const cancelling = useExportWizard((s) => s.cancelling);
+  return (
+    <Button
+      disabled={cancelling || progress?.cancellable === false}
+      onClick={() => void useExportWizard.getState().cancelExport()}
+    >
+      Cancel export
+    </Button>
+  );
+}
+
+const OUTCOME_TONE: Record<ExportOutcome, string> = {
+  success: "text-success",
+  problems: "text-warning",
+  cancelled: "text-fg",
+  failed: "text-danger",
+};
+
+function ReportStep() {
+  const report = useExportWizard((s) => s.report);
+  const error = useExportWizard((s) => s.error);
+  const eject = useExportWizard((s) => s.eject);
+  return (
+    <div className="flex flex-col gap-3 select-text">
+      {error !== null && (
+        <p className="m-0 text-danger" role="alert">
+          {error}
+        </p>
+      )}
+      {report !== null && <ReportView report={report} />}
+      {eject.message !== null && (
+        <p
+          className={cn("m-0 text-sm", eject.state === "failed" ? "text-danger" : "text-success")}
+          role={eject.state === "failed" ? "alert" : "status"}
+        >
+          {eject.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ReportView({ report: r }: { report: ExportReportView }) {
+  const bad = r.outcome === "failed" || r.outcome === "problems";
+  return (
+    <>
+      <div className="flex flex-col gap-1">
+        <p
+          className={cn("m-0 font-semibold", OUTCOME_TONE[r.outcome])}
+          role={bad ? "alert" : "status"}
+        >
+          {r.title}
+        </p>
+        <p className="m-0 text-sm">{r.status}</p>
+      </div>
+
+      {r.problems.length > 0 && (
+        <Section title="Problems" tone="danger">
+          <Notices groups={r.problems} />
+        </Section>
+      )}
+
+      {r.warnings.length > 0 && (
+        <Section title="Warnings" tone="warning">
+          <Notices groups={r.warnings} />
+        </Section>
+      )}
+
+      {r.facts.length > 0 && (
+        <Section title={r.deviceName}>
+          <Facts facts={r.facts} />
+        </Section>
+      )}
+
+      <Section title={r.history.title}>
+        <p className="m-0 text-sm">{r.history.text}</p>
+        {r.history.folder !== null && (
+          <p className="m-0 font-mono text-xs [overflow-wrap:anywhere]">{r.history.folder}</p>
+        )}
+        {r.history.files.length > 0 && (
+          <ul className={cn(list, "font-mono")} aria-label="Backed-up files">
+            {r.history.files.map((f) => (
+              <li key={f}>{f}</li>
+            ))}
+          </ul>
+        )}
+      </Section>
+    </>
+  );
+}
+
+function ReportFooter({ nodes }: { nodes: PlaylistNode[] }) {
+  const report = useExportWizard((s) => s.report);
+  const eject = useExportWizard((s) => s.eject);
+  const w = useExportWizard.getState();
+  return (
+    <>
+      {report?.outcome !== "success" && (
+        <Button className="mr-auto" onClick={() => void w.planAgain(nodes)}>
+          Plan again
+        </Button>
+      )}
+      <Button
+        disabled={eject.state === "ejecting" || eject.state === "done"}
+        onClick={() => void w.ejectStick()}
+      >
+        {eject.state === "ejecting" ? "Ejecting…" : "Eject"}
+      </Button>
+      <Button variant="primary" onClick={() => w.close()}>
+        Done
+      </Button>
+    </>
   );
 }
 

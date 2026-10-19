@@ -19,7 +19,7 @@ use crate::writer::BakenWriter;
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/audio");
 const XML_PREFIX: &str = "/Users/reks/Music/reks apply";
-const SERIAL: &str = "4993-1CFB";
+pub(crate) const SERIAL: &str = "4993-1CFB";
 
 /// (fixture, file name, title, artist)
 const TRACKS: [(&str, &str, &str, &str); 3] = [
@@ -28,16 +28,16 @@ const TRACKS: [(&str, &str, &str, &str); 3] = [
     ("sine-click-128.wav", "three.wav", "Three", "Gamma"),
 ];
 
-struct World {
-    tmp: tempfile::TempDir,
-    lib: Library,
-    stick: PathBuf,
-    data: PathBuf,
+pub(crate) struct World {
+    pub(crate) tmp: tempfile::TempDir,
+    pub(crate) lib: Library,
+    pub(crate) stick: PathBuf,
+    pub(crate) data: PathBuf,
 }
 
 impl World {
     /// [`TRACKS`] in `Set/Peak` (1, 2) and `Set/Chill` (3, 2); an empty stick.
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let tmp = tempfile::tempdir().unwrap();
         let music = tmp.path().join("music");
         let stick = tmp.path().join("stick");
@@ -68,7 +68,7 @@ impl World {
     }
 
     /// The `Set` folder: all three tracks.
-    fn sel(&self) -> Selection {
+    pub(crate) fn sel(&self) -> Selection {
         let tree = self.lib.playlists().unwrap();
         Selection {
             playlists: vec![tree.nodes.iter().find(|n| n.name == "Set").unwrap().id],
@@ -106,7 +106,7 @@ impl World {
         p
     }
 
-    fn plan(&self) -> ExportPlan {
+    pub(crate) fn plan(&self) -> ExportPlan {
         self.plan_with(Some(SERIAL))
     }
 
@@ -114,7 +114,7 @@ impl World {
         BakenWriter::prepare(&self.lib, &self.sel(), &self.tmp.path().join("work")).unwrap()
     }
 
-    fn env(&self) -> ApplyEnv<'_> {
+    pub(crate) fn env(&self) -> ApplyEnv<'_> {
         ApplyEnv {
             library: &self.lib,
             app_data_dir: &self.data,
@@ -143,19 +143,19 @@ impl World {
         self.apply_with(plan, &self.env(), |_, _| {})
     }
 
-    fn export(&self) -> ExportReport {
+    pub(crate) fn export(&self) -> ExportReport {
         let report = self.apply(&self.plan()).0.unwrap();
         assert_eq!(report.status, ExportStatus::Success, "{report:#?}");
         report
     }
 
-    fn put_played_pdb(&self) {
+    pub(crate) fn put_played_pdb(&self) {
         let rb = self.stick.join("PIONEER/rekordbox");
         fs::create_dir_all(&rb).unwrap();
         fs::write(rb.join("export.pdb"), testutil::played_pdb()).unwrap();
     }
 
-    fn pdb(&self) -> Vec<u8> {
+    pub(crate) fn pdb(&self) -> Vec<u8> {
         fs::read(self.stick.join("PIONEER/rekordbox/export.pdb")).unwrap()
     }
 }
