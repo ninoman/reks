@@ -16,6 +16,9 @@ Engine DJ players.
 - Analyses tracks itself (BPM, beatgrid, key, waveforms) in Pioneer formats.
 - Later: the newer rekordbox "Device Library Plus" (`exportLibrary.db`) format
   and Denon Engine DJ libraries.
+- Later still: a mix-prep tool, 2–4 beat-synced decks through a 4-channel mixer
+  with EQ kills and filters, to try transitions while building playlists
+  ([`docs/phases/phase-6.md`](docs/phases/phase-6.md)).
 
 ## Status
 
@@ -31,7 +34,7 @@ Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
 | --- | --- |
 | [`CLAUDE.md`](CLAUDE.md) | Brief for contributors and coding agents: stack, rules, conventions |
 | [`docs/decisions.md`](docs/decisions.md) | Architecture and product decisions, with status |
-| [`docs/phases/`](docs/phases/) | Phase 1–5 plans with task checklists |
+| [`docs/phases/`](docs/phases/) | Phase 1–6 plans with task checklists |
 | [`docs/research.md`](docs/research.md) | Evidence and sources behind the decisions |
 | [`docs/research/`](docs/research/) | Raw research notes per topic |
 | [`docs/hw-test-log.md`](docs/hw-test-log.md) | Real-player test results |

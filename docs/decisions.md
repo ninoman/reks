@@ -263,6 +263,42 @@ Date of decisions: 2026-10-18.
 - `TrackTable.tsx` turns off three a11y rules that don't fit its virtualised ARIA grid
   of divs; the reason is in `biome.jsonc`.
 
+## D21. Mix-prep mixer (Phase 6): 2–4 synced decks through a Xone:92-style mixer on our own cpal engine
+
+- Date: 2026-10-19 (maintainer's call). Plan: [`phases/phase-6.md`](phases/phase-6.md).
+- Decision: a preparation tool, not a performance app. While building a playlist,
+  load 2–4 tracks on decks, beat-sync them from their grids, and try a transition
+  or a techno layer through a model of the Allen & Heath Xone:92 music section:
+  4-band asymmetric EQ with HI/LO kill, two state-variable filters with LFOs,
+  X/Y crossfader with curve, headphone cue (R§9.1). New crate `reks-mix` owns a
+  raw `cpal` stream with `rtrb` queues for control and state. Tempo is varispeed
+  through `rubato` (already in the tree via `beat-this`, D10). When it lands it
+  replaces the rodio preview player (D5), so one engine owns the audio device.
+- Order: after Phase 5. It depends only on Phase 1 (imported grids, decode)
+  and Phase 3 (waveform columns, grid editor); moving it earlier needs a new
+  decision.
+- Licence: cpal Apache-2.0; rtrb MIT/Apache-2.0; rubato MIT/Apache-2.0 (R§9.2).
+  EQ, filter, LFO and fader laws are our own code from published designs;
+  Mixxx (GPL-2.0-or-later) may be ported with attribution, as in D10.
+- Rationale: auditioning a transition while preparing a set is library work
+  (rekordbox ships it in the same app), it runs on the grids we already import,
+  and it adds no file formats. Copying one well-documented mixer gives a fixed
+  spec to test against instead of a mixer designed by us.
+- Key lock: not in the first cut; pitch follows tempo. Candidates (R§9.2):
+  `timestretch` (pure Rust, MIT, real-time engine, young), `signalsmith-stretch`
+  (MIT, C++ built with `cc`), `rubberband` (GPL-2.0-or-later, crate weeks old),
+  `soundtouch` (SPDX `LGPL-2.1`, needs a `deny.toml` note). Choose by listening test.
+- Rejected: live-performance scope (MIDI mapping, recording, stage reliability;
+  a second product, needs its own decision); embedding Mixxx (C++/Qt
+  application, not a library); WebView audio (D4); rodio for the mixer (no
+  per-sample control or 4-channel cue routing).
+- Risks: real-time glitches (no allocation, locks or I/O in the callback;
+  offline render tests; soak test); sync is only as good as the grid; the model
+  follows the original user guide (AP5345 Issue 1), Mk2 differences
+  UNVERIFIED; headphone cue needs a 4-output interface, otherwise split cue;
+  Windows ASIO needs Steinberg's SDK, so WASAPI only. "Xone" and "Allen &
+  Heath" are trademarks: docs name them as the reference, UI strings do not.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

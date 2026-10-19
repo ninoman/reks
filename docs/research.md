@@ -15,6 +15,7 @@ Contents
 6. Tauri 2 specifics
 7. rekordbox XML (`collection.xml`)
 8. Consolidated list of unverified items
+9. DJ mixer reference and real-time audio crates (Phase 6)
 
 ---
 
@@ -491,3 +492,66 @@ hardware run, and the result recorded in `docs/decisions.md` or
     resolved against a real 6.8.6 export on 2026-10-19 (Phase 1 task 7). Still
     open: whether rekordbox imports `&#10;` and our stricter `Location`
     encoding, and the RGB of the pink/orange/yellow/purple track colours.
+13. Mixer (§9): Xone:92 Mk2 differences from the original; its filter slope
+    and LFO waveform; how the `rubberband` crate builds (bundled or system
+    library); `rubato` 5.x API for a smoothly changing ratio.
+
+---
+
+## 9. DJ mixer reference and real-time audio crates (Phase 6)
+
+Research date: 2026-10-19. Supports D21.
+
+### 9.1 Xone:92 music section
+
+From the XONE:92 User Guide, publication AP5345 Issue 1 (original model,
+2004), pages 20–25. Mk2 changes (refined filter tapers, a 3-way channel
+fader curve switch) come from a retailer listing only (**UNVERIFIED**).
+
+- Four stereo music channels (plus two mic/line channels we don't model). Per
+  channel: LEVEL trim (20 dB range), 4-band EQ, FILTER assign (X / off / Y),
+  XFADE assign (X / off = straight to mix / Y), CUE, 60 mm VCA fader.
+- EQ is "asymmetric": every band boosts at most +6 dB.
+  - HI: shelf above a 2.5 kHz turning point; fully anticlockwise it becomes a
+    12 dB/oct low-pass (total kill).
+  - MID 1: bell at 2 kHz, +6 / −30 dB. MID 2: bell at 350 Hz, same range.
+    Q is narrow on boost and wide on cut.
+  - LO: shelf below 250 Hz; fully anticlockwise it becomes a 12 dB/oct high-pass.
+  - Cue is pre-EQ by default; a master POST EQ switch changes that.
+- Filters: two stereo state-variable VCFs, X and Y. Cutoff (−3 dB point)
+  30 Hz–20 kHz. HPF, BPF and LPF can be combined (HP+LP gives a notch, all
+  three an "all-pass" effect), and switching is ramped to avoid clicks.
+  RESONANCE goes from MILD to WILD and is flattest at about two o'clock.
+  The slope is not stated (**UNVERIFIED**).
+- LFOs: one per filter with ON, DEPTH, TAP tempo (last two taps) and ×2.
+  The waveform is not stated (**UNVERIFIED**).
+- VCF TO XFADER lets the crossfader sweep a filter's cutoff. VCF LINK 2-1
+  makes filter 2 follow filter 1's FREQ, e.g. LP on one channel and HP on the
+  other for a moving crossover.
+- Crossfader curve: from progressive with a 4 dB dip at centre to almost
+  instant full level off the end stop.
+- Headphones: a new cue cancels the previous one (several by pressing
+  together), cue/mix balance, split cue.
+
+### 9.2 Rust crates for a real-time engine (crates.io, 2026-10-19)
+
+| Crate | Version | Licence | Last publish | Use |
+|---|---|---|---|---|
+| `cpal` | 0.18.2 | Apache-2.0 | 2026-08-16 | output stream, multichannel devices |
+| `rtrb` | 0.4.0 | MIT OR Apache-2.0 | 2026-08-18 | wait-free SPSC ring buffer for control/state |
+| `rubato` | 5.0.1 | MIT OR Apache-2.0 | 2026-10-01 | resampling for varispeed |
+| `midir` | 0.11.1 | MIT | 2026-10-10 | MIDI, if controller mapping is ever added |
+| `timestretch` | 0.15.0 | MIT | 2026-09-02 (first 2026-02-26) | pure Rust; real-time engine with varispeed + SOLA key lock, "optimised for EDM"; no published quality figures |
+| `signalsmith-stretch` | 0.1.3 | MIT | 2025-09-18 | binds the Signalsmith Stretch C++ library, built with `cc`/`bindgen` |
+| `ssstretch` | 0.1.0 | MIT | 2025-03-01 | second Signalsmith binding, via `cxx` |
+| `rubberband` | 0.1.5 | GPL-2.0-or-later | 2026-09-18 (first 2026-09-09) | Rubber Band bindings; build method **UNVERIFIED** |
+| `bungee-rs` | 0.1.1 | MPL-2.0 | 2026-02-21 | Bungee bindings, C++ as a git submodule |
+| `soundtouch` | 0.5.4 | `LGPL-2.1` (only/or-later not stated) | 2026-03-23 | SoundTouch bindings; `deny.toml` allows only LGPL-2.1-or-later |
+
+Sources: XONE:92 User Guide AP5345 (mirror):
+https://www.dittasistema.it/wp-content/uploads/2015/09/Manuale-Allen-Heath-XONE-92.pdf ·
+https://www.manualslib.com/products/Allen-And-Heath-Xone-92-3144081.html ·
+Mk2 listing: https://avlgear.com/collections/allen-heath-dj-equipment/products/allen-and-heath-xone-92-mk2-analog-4-channel-dj-mixer ·
+crates.io API `https://crates.io/api/v1/crates/<name>` for every crate above ·
+https://docs.rs/timestretch · https://docs.rs/signalsmith-stretch ·
+https://docs.rs/ssstretch · https://github.com/jefflongo/rubberband-rs
