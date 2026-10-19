@@ -3476,6 +3476,9 @@ version = "0.1.0"
 [[package]]
 name = "reks-anlz"
 version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "reks-app"
@@ -3553,10 +3556,12 @@ version = "0.1.0"
 name = "reks-export-rb"
 version = "0.1.0"
 dependencies = [
+ "baken-core",
  "baken-export",
  "binrw",
  "blake3",
  "rekordcrate",
+ "reks-anlz",
  "reks-audio",
  "reks-core",
  "serde",

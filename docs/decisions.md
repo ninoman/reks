@@ -130,6 +130,13 @@ Date of decisions: 2026-10-18.
   best-documented Rust parser and reads PDB, exportExt and ANLZ. Byte-level
   diffs against rekordbox reference exports in `fixtures/` complement it.
 - Rejected: pyrekordbox in CI (Python toolchain in a Rust CI; optional later).
+- Finding (2026-10-19, Phase 2 task 8): rekordcrate 0.3.0's ANLZ parser
+  models cue type only as 0 (point) and 2 (loop) and fails on type 1, the
+  point cue rekordbox and baken write (crate-digger: 1 = point), so it can't
+  read a real cue list. The validator reads ANLZ with our own section
+  reader (`reks-anlz::read`, crate-digger layout; PPTH, PQTZ, PCOB/PCO2
+  counts) and keeps rekordcrate for `export.pdb`. Row fields rekordcrate
+  keeps private are read from rows re-serialised by rekordcrate.
 
 ## D9. ANLZ serialisation (Phase 3): `rekordcrate::anlz` types (`BinWrite`) inside our `reks-anlz` crate
 
@@ -140,7 +147,9 @@ Date of decisions: 2026-10-18.
   (approximate waveforms, no API for our own analysis results).
 - Risks: PQT2 not modelled (write only what rekordbox-less players need;
   verify on hardware whether PQT2 is required for NXS2 features); any
-  rekordcrate API break (pin version).
+  rekordcrate API break (pin version); 0.3.0 can't represent cue type 1
+  (point cues, see D8), so cue lists need a newer rekordcrate or our own
+  encoding.
 
 ## D10. BPM/beatgrid analysis (Phase 3): Beat This! via the `beat-this` crate + a Rust port of Mixxx `BeatUtils` constant-grid logic
 

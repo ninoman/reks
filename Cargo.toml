@@ -35,6 +35,8 @@ reks-export-engine = { version = "0.1.0", path = "crates/reks-export-engine" }
 anyhow = "1"
 # Exact pin (D7): young single-maintainer crate; bump only with the writer integration test.
 baken-export = "=4.6.1"
+# baken-export's CancelToken/Progress live here; same pin as baken-export.
+baken-core = "=4.6.1"
 # Must match the binrw version rekordcrate uses (its row types implement binrw traits).
 binrw = "0.14"
 blake3 = "1.8"

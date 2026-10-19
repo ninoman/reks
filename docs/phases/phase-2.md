@@ -1,6 +1,6 @@
 # Phase 2 — Legacy USB export (`export.pdb` + ANLZ)
 
-Status: in progress (tasks 2–6 done, 1, 12, 13 backend done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
+Status: in progress (tasks 2–6 and 8 done, 1, 12, 13 backend done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
 `rb_track_id`/`rb_location`). Read `docs/decisions.md` D7, D8, D16, D23 and
 `docs/research.md` §1, §4, §10 first.
 
@@ -246,12 +246,32 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    `export`; translate its `Plan`/`Report`/`Skipped` into our events; handle
    `Error::DeviceWrite`; set `prune`, `no_settings` (unless settings sourced),
    `artwork`, `generate_analysis` (option). Integration test on a temp dir.
-8. **Read-back validator**: parse `export.pdb` with rekordcrate; check
+8. [x] **Read-back validator**: parse `export.pdb` with rekordcrate; check
    track count = plan, every `file_path` exists, every `analyze_path` exists
    with PPTH matching `file_path`, PQTZ non-empty where `has_grid`, cue
    counts match, playlists tree and order match, all 20 tables present;
    produce `ValidationReport` with per-track findings. Optional byte-diff
    tool against a rekordbox reference export (`reks-cli rb diff`).
+   Done in [validate.rs](../../crates/reks-export-rb/src/validate.rs):
+   `validate(root, plan) -> Result<ValidationReport, ValidateError>`; every
+   problem is a serialisable `Finding` (per-track ones carry `track_id`,
+   `track_findings(id)`), `Err` only for I/O that stops the run. Rows match
+   plan tracks on `file_path` = `dst_rel`. Beyond the list above it also
+   checks that `analyze_path` is in the folder players derive from
+   `file_path` (`anlz_dir`), the `.EXT`'s PPTH and `PCO2` count, extra and
+   duplicate rows, and sibling order (PDB `sort_order`). Grid and cue
+   checks skip tracks planned without analysis (`AnlzSource::None`).
+   `report.tracks` is the read-back (stick path → PDB row → planned track);
+   `manifest_rows()` feeds `Library::replace_manifest` (task 13). The PDB
+   pages are walked by us (bounded, cycle-checked); row fields rekordcrate
+   0.3.0 keeps private are read from the row re-serialised by rekordcrate.
+   ANLZ files go through our own section reader
+   ([reks-anlz `read`](../../crates/reks-anlz/src/read.rs)) because
+   rekordcrate 0.3.0 rejects point cues (D8). Tests write a real stick with
+   baken (fixture audio, generated analysis), validate it clean, then
+   delete an ANLZ or audio file, corrupt PPTH, empty PQTZ, clear a track
+   row's presence bit, and change plan order/tree/cues. Byte-diff
+   (`reks-cli rb diff`) left for task 11, with the rekordbox reference export.
 9. **Export orchestration**: `apply` = pre-flight (free space, device still
    mounted, no rekordbox running? warn), history backup (task 12), writer,
    fsync, validate, export manifest (task 13), report;
@@ -299,8 +319,8 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
       transaction; no serial → `Ok(0)`, nothing stored; bad rows keep the old
       ones), `manifest(serial)`, `manifest_entry(serial, stick_path)` in
       [manifest.rs](../../crates/reks-core/src/manifest.rs), with the three tests.
-    - [ ] Build the rows from the validator's read-back (task 8) and call
-      `replace_manifest` after a successful validation in `apply` (task 9).
+    - [x] Rows from the validator's read-back: `ValidationReport::manifest_rows()`.
+    - [ ] Call `replace_manifest` after a successful validation in `apply` (task 9).
 14. **Hardware campaign**: run the checklist on CDJ-2000NXS2 and CDJ-3000
     (and any other player available); fix; log in `docs/hw-test-log.md`.
     Tasks 12–13 come first: the checklist re-exports a played stick.

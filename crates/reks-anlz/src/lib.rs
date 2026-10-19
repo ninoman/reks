@@ -1,6 +1,9 @@
 //! reks ANLZ: Pioneer ANLZ model plus writer/reader helpers (Phase 2/3)
 //!
-//! Scaffold only (Phase 1 task 1). See `docs/phases/` for what lands here.
+//! So far: [`read`], the section reader export validation uses (Phase 2
+//! task 8). The writer lands in Phase 3 (D9).
+
+pub mod read;
 
 /// Crate version, from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
