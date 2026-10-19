@@ -28,6 +28,7 @@ use crate::db::Library;
 use crate::error::Result;
 use crate::fileinfo::{self, kind_from_extension, library_path, probe_cols, FileInfo};
 use crate::keys::Key;
+use crate::playlist::{self, Entry};
 use crate::scan::{CancelToken, TrackId};
 use crate::timefmt;
 
@@ -945,12 +946,7 @@ impl Import<'_> {
         }
         self.report.playlist_entries += tracks.len();
 
-        let current: Vec<TrackId> = tx
-            .prepare_cached(
-                "SELECT track_id FROM playlist_track WHERE playlist_id = ?1 ORDER BY position",
-            )?
-            .query_map([playlist], |r| r.get(0))?
-            .collect::<rusqlite::Result<_>>()?;
+        let current = playlist::entries(tx, playlist)?;
         // XML entries first, then entries added in reks that the XML lacks.
         // Counted per track, so a second copy added in reks is kept.
         let mut from_xml: HashMap<TrackId, usize> = HashMap::new();
@@ -958,30 +954,24 @@ impl Import<'_> {
             *from_xml.entry(*id).or_default() += 1;
         }
         let mut wanted = tracks;
-        for id in &current {
+        let current_tracks: Vec<TrackId> = current.iter().filter_map(Entry::track).collect();
+        for id in &current_tracks {
             match from_xml.get_mut(id) {
                 Some(n) if *n > 0 => *n -= 1,
                 _ => wanted.push(*id),
             }
         }
-        if wanted == current {
+        if wanted == current_tracks {
             return Ok(());
         }
-        tx.prepare_cached("DELETE FROM playlist_track WHERE playlist_id = ?1")?
-            .execute([playlist])?;
-        let mut insert = tx.prepare_cached(
-            "INSERT INTO playlist_track (playlist_id, track_id, position) VALUES (?1, ?2, ?3)",
-        )?;
-        for (pos, id) in wanted.iter().enumerate() {
-            insert.execute(params![
-                playlist,
-                id,
-                i64::try_from(pos).unwrap_or(i64::MAX)
-            ])?;
+        // Dividers (reks-only, D22) keep their positions, clamped to the end.
+        let mut new: Vec<Entry> = wanted.into_iter().map(Entry::Track).collect();
+        for (pos, e) in current.iter().enumerate() {
+            if let Entry::Divider(_) = e {
+                new.insert(pos.min(new.len()), e.clone());
+            }
         }
-        tx.prepare_cached("UPDATE playlist SET updated_at = ?2 WHERE id = ?1")?
-            .execute(params![playlist, now])?;
-        Ok(())
+        playlist::write_entries(tx, playlist, &current, &new, now)
     }
 
     /// A `yyyy-mm-dd` date attribute, or `None` (with a warning if present

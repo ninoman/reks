@@ -64,6 +64,13 @@ pub enum Error {
     #[error("index {index} out of range (length {len})")]
     IndexOutOfRange { index: u32, len: u32 },
 
+    /// The op needs a divider, and the entry at `position` is a track.
+    #[error("entry {position} of playlist {playlist} is not a divider")]
+    NotADivider {
+        playlist: crate::query::PlaylistId,
+        position: u32,
+    },
+
     /// The cache dir cannot move to `path`; nothing was changed.
     #[error("cannot move the cache to {path}: {reason}")]
     CacheDirRefused { path: PathBuf, reason: &'static str },

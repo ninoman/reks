@@ -1,6 +1,8 @@
 # Phase 2.5 — Stick round trip (playlist dividers, play history, adopt)
 
-Status: not started. Depends on: Phase 2 done, including its hardware campaign,
+Status: started 2026-10-20 ahead of the Phase 2 hardware campaign with the
+maintainer's approval (software only; anything that needs a player stays
+UNVERIFIED); tasks 1–2 done. Depends on: Phase 2 done, including its hardware campaign,
 history safeguard and `export_manifest` (tasks 12–14). Runs before Phase 3.
 Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
@@ -46,7 +48,7 @@ Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 - OneLibrary history (H2, Phase 4 task 11) and Engine history (H3, Phase 5
   task 11).
 
-## Data model (`reks-core`, one migration)
+## Data model (`reks-core`, migration [0004](../../crates/reks-core/migrations/0004_dividers_history.sql))
 
 ```sql
 -- Dividers (D22). Table rebuild: track_id becomes nullable.
@@ -116,7 +118,7 @@ session (UNVERIFIED whether players append across mounts, HIST3).
 
 ```rust
 // reks-core
-pub enum PlaylistOp { /* existing ops */ InsertDivider { playlist, position, label }, RenameDivider { playlist, position, label } }
+pub enum PlaylistOp { /* existing ops */ InsertDivider { playlist_id, position: Option<u32>, label }, RenameDivider { playlist_id, position, label } }
 // move/removeEntries/reorderEntries work on divider positions unchanged; dividers are never duplicates
 
 pub mod history {
@@ -141,10 +143,14 @@ Divider rules
   same text rules as playlist names. The UI suggests ASCII (`---- PEAK ----`);
   other characters are allowed but flagged until the hardware session shows
   how they render.
-- Playlist view: when the first `Playlist` filter names a playlist, the query
-  returns entries that are either a track row or a divider row. Dividers show
-  only in playlist order with no other filter; sorted or filtered views hide
-  them. Track counts (`entries`, `total`) exclude dividers.
+- Playlist view: when the first `Playlist` filter names a playlist, the rows
+  are its track entries and `TrackPage.dividers` lists every divider (entry
+  position, label) on every page, so the UI can place them between rows
+  without paging them. Dividers show only in ascending playlist order with no
+  other filter or search; sorted or filtered views get none. Track counts
+  (`entries`, `total`) exclude dividers.
+- rekordbox XML: export omits dividers; a re-import that reorders a
+  playlist's tracks keeps each divider at its entry position (clamped to the end).
 - Export: each divider becomes a `PlannedTrack` (`kind = Divider`) whose source
   is a generated WAV in `app_cache_dir/dividers/div-<playlist_id>-<n>.wav`:
   PCM 16-bit, 44.1 kHz, stereo, `DIVIDER_SECONDS` = 4, header written by hand
@@ -163,13 +169,19 @@ Divider rules
 
 ## Tasks
 
-1. **Migration**: `playlist_track` rebuild, `play_session`,
+1. [x] **Migration**: `playlist_track` rebuild, `play_session`,
    `play_session_entry`, baseline columns, data step, baseline date. Tests:
    existing entries preserved; CHECK rejects invalid rows; baseline copied;
-   re-run is a no-op.
-2. **Divider ops and query**: `InsertDivider`, `RenameDivider`, label rules,
+   re-run is a no-op. Done: migration 0004, tests in
+   [db.rs](../../crates/reks-core/src/db.rs). The baseline date is stored as
+   setting `history.baseline_date` (JSON string, `YYYY-MM-DD`).
+2. [x] **Divider ops and query**: `InsertDivider`, `RenameDivider`, label rules,
    entry rows in the playlist query, counts without dividers, XML writer omits
-   them. Tests per op; dividers absent from search and track counts.
+   them. Tests per op; dividers absent from search and track counts. Done in
+   [playlist.rs](../../crates/reks-core/src/playlist.rs) (`Entry`,
+   `MAX_DIVIDER_LABEL_CHARS`, `Error::NotADivider`) and
+   [query.rs](../../crates/reks-core/src/query.rs) (`DividerRow`); tests in
+   [tests/dividers.rs](../../crates/reks-core/tests/dividers.rs).
 3. **Divider UI**: "Insert divider" in the playlist context menu, inline
    rename, drag like an entry, full-width row; hidden when sorted or filtered.
 4. **Divider export**: WAV generator (round-trip through Symphonia probe and

@@ -139,8 +139,22 @@ pub struct TrackRow {
 #[serde(rename_all = "camelCase")]
 pub struct TrackPage {
     pub rows: Vec<TrackRow>,
-    /// Matching tracks over all pages.
+    /// Matching tracks over all pages. Dividers are not tracks.
     pub total: u64,
+    /// In a playlist view in playlist order with no other filter or search
+    /// (`TrackQuery::shows_dividers`): every divider of the playlist, on
+    /// every page, in order. Empty elsewhere. A divider at `position` sits
+    /// between the track rows whose `entry_position`s surround it.
+    pub dividers: Vec<DividerRow>,
+}
+
+/// A divider entry in a playlist (D22).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DividerRow {
+    /// Entry position, the same numbering as `TrackRow::entry_position`.
+    pub position: i64,
+    pub label: String,
 }
 
 /// Option lists for the filter sidebar.
@@ -176,7 +190,7 @@ pub struct PlaylistNode {
     pub depth: u32,
     /// Index among its siblings (`sort_order`, kept dense by `playlist_mutate`).
     pub position: u32,
-    /// Number of entries (0 for folders).
+    /// Number of track entries, dividers left out (0 for folders).
     pub entries: u32,
 }
 
@@ -226,9 +240,26 @@ impl Library {
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
+        let dividers = match view {
+            Some(id) if q.shows_dividers(id) => conn
+                .prepare_cached(
+                    "SELECT position, label FROM playlist_track
+                     WHERE playlist_id = ?1 AND item_kind = 'divider' ORDER BY position",
+                )?
+                .query_map([id], |r| {
+                    Ok(DividerRow {
+                        position: r.get(0)?,
+                        label: r.get(1)?,
+                    })
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?,
+            _ => Vec::new(),
+        };
+
         Ok(TrackPage {
             rows,
             total: u64::try_from(total).unwrap_or(0),
+            dividers,
         })
     }
 
@@ -284,6 +315,20 @@ pub(crate) fn track_row(r: &Row<'_>) -> rusqlite::Result<TrackRow> {
         needs_analysis: r.get(19)?,
         entry_position: None,
     })
+}
+
+impl TrackQuery {
+    /// Whether the entry view of `playlist` shows its dividers: playlist
+    /// order (ascending), no search text and no filter but the playlist.
+    fn shows_dividers(&self, playlist: PlaylistId) -> bool {
+        self.sort.column == SortColumn::PlaylistPosition
+            && !self.sort.descending
+            && self.text.as_deref().and_then(fts_query).is_none()
+            && self
+                .filters
+                .iter()
+                .all(|f| matches!(f, Filter::Playlist { id } if *id == playlist))
+    }
 }
 
 /// The playlist whose entries are the rows: the first `Filter::Playlist`,
@@ -483,7 +528,8 @@ fn color_rank_sql() -> &'static str {
 pub(crate) fn playlist_nodes(conn: &Connection) -> Result<Vec<PlaylistNode>> {
     let mut stmt = conn.prepare_cached(
         "SELECT p.id, p.parent_id, p.name, p.is_folder, coalesce(e.n, 0) FROM playlist p
-         LEFT JOIN (SELECT playlist_id, count(*) AS n FROM playlist_track GROUP BY playlist_id) e
+         LEFT JOIN (SELECT playlist_id, count(*) AS n FROM playlist_track
+                    WHERE item_kind = 'track' GROUP BY playlist_id) e
            ON e.playlist_id = p.id
          ORDER BY p.sort_order, p.id",
     )?;

@@ -25,11 +25,13 @@ pub use device::{Device, DeviceId, NewDevice, SyncedPlaylist, SyncedRecord};
 pub use error::{Error, Result};
 pub use keys::{Key, KeyNotation, Mode};
 pub use manifest::{ManifestEntry, ManifestItemKind, ManifestRow};
-pub use playlist::{DuplicateMode, PlaylistOp, PlaylistOutcome, PlaylistTree};
+pub use playlist::{
+    DuplicateMode, PlaylistOp, PlaylistOutcome, PlaylistTree, MAX_DIVIDER_LABEL_CHARS,
+};
 pub use preview::PreviewAudio;
 pub use query::{
-    Facets, Filter, KeyInfo, PlaylistId, PlaylistNode, Sort, SortColumn, TrackPage, TrackQuery,
-    TrackRow,
+    DividerRow, Facets, Filter, KeyInfo, PlaylistId, PlaylistNode, Sort, SortColumn, TrackPage,
+    TrackQuery, TrackRow,
 };
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
 pub use settings::{LibraryRoot, Settings, SettingsPatch, UiState};
