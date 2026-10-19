@@ -1,5 +1,5 @@
 # cargo-deny configuration (see docs/decisions.md D18 and CLAUDE.md "Licence rules").
-# Run: cargo deny check licenses
+# Run: cargo deny check
 # Adding a licence here requires a note in docs/decisions.md.
 
 [licenses]
@@ -37,3 +37,15 @@ wildcards = "deny"
 
 [advisories]
 yanked = "deny"
+# Each ignore needs a reason here and in docs/decisions.md D18. Drop it when the
+# upstream fix lands (cargo deny then reports the ignore as unused).
+ignore = [
+  # quick-xml 0.37.5 via rekordcrate 0.3.0: denial of service on crafted XML.
+  # Only rekordcrate's XML module uses it; reks reads PDB/ANLZ with rekordcrate
+  # and parses rekordbox XML with its own code. Fixed in quick-xml >= 0.41.
+  { id = "RUSTSEC-2026-0194", reason = "rekordcrate's XML module is unused; waits on rekordcrate bumping quick-xml" },
+  { id = "RUSTSEC-2026-0195", reason = "rekordcrate's XML module is unused; waits on rekordcrate bumping quick-xml" },
+  # Unmaintained, transitive, no maintained release to move to.
+  { id = "RUSTSEC-2024-0436", reason = "paste via lofty (macro-only, build time); waits on lofty" },
+  { id = "RUSTSEC-2024-0370", reason = "proc-macro-error via Tauri's Linux GTK stack (build time); waits on Tauri/gtk-rs" },
+]

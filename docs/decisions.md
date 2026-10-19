@@ -278,6 +278,15 @@ Date of decisions: 2026-10-18.
   distributions to say in their documentation that the software is based in
   part on the work of the Independent JPEG Group: release notices must carry
   that line.
+- 2026-10-19: `cargo deny check advisories` ignores four advisories, each with
+  a reason in `deny.toml`. RUSTSEC-2026-0194/0195 (`quick-xml` 0.37.5 denial of
+  service on crafted XML) come only through `rekordcrate` 0.3.0's XML module;
+  reks uses `rekordcrate` for PDB/ANLZ read-back and parses rekordbox XML with
+  its own code, so the vulnerable path never runs. RUSTSEC-2024-0436 (`paste`,
+  via `lofty`) and RUSTSEC-2024-0370 (`proc-macro-error`, via Tauri's Linux GTK
+  crates) are unmaintained build-time macro crates with no replacement release.
+  Remove each ignore when `rekordcrate`, `lofty` or Tauri moves off it; a new
+  advisory still fails the check.
 
 ## D19. Naming and identifiers
 
