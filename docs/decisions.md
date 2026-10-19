@@ -365,6 +365,33 @@ Date of decisions: 2026-10-18.
 - Risks: history format unknowns (date table, appends across mounts, what a
   player logs as a play) and volume serial access per OS; see R§8 item 14.
 
+## D24. UI styling: Tailwind v4 + cva + Radix
+
+- Date: 2026-10-19 (maintainer's call). Design reference: an analysis of Cursor's
+  marketing site (DESIGN.md, not in the repo), adapted to desktop density: warm
+  cream canvas, warm ink, hairline depth, one scarce orange accent, 8px control
+  radius, system fonts. How it is set up: [`ui.md`](ui.md).
+- Decision: tokens CSS-first in `src/styles/tokens.css` (`@theme`, light and dark
+  via `prefers-color-scheme`); Tailwind CSS v4 (`@tailwindcss/vite`) utilities;
+  `class-variance-authority` for variants and `clsx` + `tailwind-merge` as `cn()`;
+  Radix Primitives for behaviour (Dialog, DropdownMenu, ContextMenu, Popover,
+  Tooltip, Switch, Slider, ToggleGroup, ScrollArea, Slot) in `src/components/ui/`.
+  Selects stay native (styled), so keyboard and OS behaviour are unchanged.
+- Licences: tailwindcss, @tailwindcss/vite, cva (Apache-2.0), clsx, tailwind-merge,
+  all @radix-ui packages MIT. Build-only tree (dev deps, not in
+  `licenses:check --production`): checked once in full on 2026-10-19; adds only
+  MIT and lightningcss (MPL-2.0). No fonts bundled (Inter / JetBrains Mono are
+  OFL-1.1, not on the allowlist).
+- Rationale: one file changes the look; one control size scale keeps buttons,
+  inputs and selects the same height; Radix brings focus management, keyboard
+  handling and menus we would otherwise hand-roll per component.
+- Rejected: plain CSS (what we had: 1,000 lines, no shared sizes, ad-hoc colours);
+  CSS Modules (scoping, but no variant system or shared scale, so the same
+  drift); React Aria (stronger a11y and i18n, but larger, hooks-first API and more
+  code per component than this app needs).
+- Risks: Tailwind's native oxide/lightningcss binaries per platform (CI builds on
+  all three); Radix menus portal to `<body>`, so tests query `document`.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

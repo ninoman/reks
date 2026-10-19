@@ -1,4 +1,5 @@
 import process from "node:process";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { configDefaults, defineConfig } from "vitest/config";
 
@@ -6,7 +7,7 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
 
   // Agent worktrees under .claude/ hold other checkouts of this repo.
   test: { exclude: [...configDefaults.exclude, "**/.claude/**"] },

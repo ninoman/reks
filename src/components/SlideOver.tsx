@@ -10,7 +10,7 @@
  */
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
-import { SLIDE_IN, SLIDE_OUT } from "../lib/motion";
+import { slideIn, slideOut } from "../lib/motion";
 
 const OFF = "translateX(100%)";
 
@@ -34,9 +34,10 @@ export function SlideOver({ open, children }: { open: boolean; children: ReactNo
 
     if (open) {
       setMounted(true);
+      const timing = slideIn();
       el.animate?.([{ transform: from }, { transform: "none" }], {
-        ...SLIDE_IN,
-        duration: SLIDE_IN.duration * scale,
+        ...timing,
+        duration: timing.duration * scale,
       });
       return;
     }
@@ -44,9 +45,10 @@ export function SlideOver({ open, children }: { open: boolean; children: ReactNo
       setMounted(false);
       return;
     }
+    const timing = slideOut();
     const out = el.animate([{ transform: from }, { transform: OFF }], {
-      ...SLIDE_OUT,
-      duration: SLIDE_OUT.duration * scale,
+      ...timing,
+      duration: timing.duration * scale,
       fill: "forwards",
     });
     out.onfinish = () => setMounted(false);

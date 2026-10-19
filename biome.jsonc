@@ -37,6 +37,8 @@
       }
     }
   },
+  // Tailwind v4 at-rules (@theme, @custom-variant) in src/styles.
+  "css": { "parser": { "tailwindDirectives": true } },
   "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "overrides": [
     {

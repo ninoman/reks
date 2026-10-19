@@ -1,56 +1,16 @@
-:root {
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
-html,
-body,
-#root,
 .shell {
-  margin: 0;
   height: 100%;
 }
 
-body {
-  overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
 :root {
-  --bg: #ffffff;
-  --bg-alt: #f4f4f6;
-  --fg: #1d1d1f;
-  --muted: #6e6e73;
-  --border: #d9d9de;
-  --accent: #2f6fde;
-  --selected: #cfe0ff;
-  --font-size: 13px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1c1c1e;
-    --bg-alt: #232326;
-    --fg: #e8e8ea;
-    --muted: #98989d;
-    --border: #3a3a3e;
-    --accent: #5b8ff0;
-    --selected: #24406e;
-  }
-}
-
-body {
-  background: var(--bg);
-  color: var(--fg);
-  font-size: var(--font-size);
-}
-
-button,
-input,
-select {
-  font: inherit;
-  color: inherit;
+  /* Old names, aliased to the design tokens until the migration removes this file. */
+  --bg: var(--color-bg);
+  --bg-alt: var(--color-bg-subtle);
+  --fg: var(--color-fg);
+  --muted: var(--color-fg-muted);
+  --border: var(--color-border);
+  --accent: var(--color-accent);
+  --selected: var(--color-selected);
 }
 
 .app {

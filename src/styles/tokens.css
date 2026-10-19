@@ -1,0 +1,221 @@
+/*
+ * Design tokens: the one place that sets how reks looks. See docs/ui.md.
+ *
+ * 1. Primitive palette (plain :root): raw colours, no utilities generated.
+ *    The only hex values in src/ live here.
+ * 2. Semantic tokens (@theme): what components use (`bg-surface`, `text-fg-muted`,
+ *    `rounded-md`, `shadow-overlay`...). Tailwind's default palette is dropped.
+ * 3. Dark theme: the semantic colours again, under prefers-color-scheme.
+ * 4. Control sizes, rows, layers, motion (plain :root, read as `h-(--ctl-h-sm)`).
+ */
+
+/* 1. Primitive palette ------------------------------------------------------ */
+:root {
+  --warm-0: #ffffff;
+  --warm-25: #fafaf7;
+  --warm-50: #f7f7f4;
+  --warm-75: #edece6;
+  --warm-100: #efeee8;
+  --warm-200: #e6e5e0;
+  --warm-300: #cfcdc4;
+  --warm-400: #a09c92;
+  --warm-500: #807d72;
+  --warm-600: #5a5852;
+  --warm-700: #45433d;
+  --warm-750: #38362f;
+  --warm-775: #312f2a;
+  --warm-800: #2a2924;
+  --warm-850: #26251e;
+  --warm-900: #211f1c;
+  --warm-925: #1e1d1a;
+  --warm-950: #1a1916;
+
+  --orange-400: #ff8547;
+  --orange-500: #ff6a1f;
+  --orange-600: #f54e00;
+  --orange-650: #e24800;
+  --orange-700: #d04200;
+
+  --red-500: #e85a7c;
+  --red-600: #cf2d56;
+  --green-500: #3fb58a;
+  --green-600: #1f8a65;
+  --amber-500: #d49a45;
+  --amber-600: #c08532;
+  --amber-700: #9a6516;
+
+  /* rekordbox track colours (names from reks-core rbxml::TRACK_COLOURS); data, not theme. */
+  --rb-pink: #ff007f;
+  --rb-red: #ff0000;
+  --rb-orange: #ffa500;
+  --rb-yellow: #ffff00;
+  --rb-green: #00ff00;
+  --rb-aqua: #25fde9;
+  --rb-blue: #0000ff;
+  --rb-purple: #660099;
+}
+
+/* 2. Semantic tokens (light) ------------------------------------------------ */
+@theme static {
+  --color-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+
+  --color-bg: var(--warm-25);
+  --color-bg-subtle: var(--warm-100);
+  --color-row-alt: var(--warm-50);
+  --color-surface: var(--warm-0);
+  --color-surface-strong: var(--warm-200);
+  --color-hover: rgb(38 37 30 / 6%);
+  --color-selected: var(--warm-200);
+  --color-selected-fg: var(--warm-850);
+
+  --color-fg: var(--warm-850);
+  --color-fg-muted: var(--warm-500);
+  --color-fg-subtle: var(--warm-400);
+
+  --color-border: var(--warm-200);
+  --color-border-subtle: var(--warm-100);
+  --color-border-strong: var(--warm-300);
+
+  --color-accent: var(--orange-600);
+  --color-accent-hover: var(--orange-650);
+  --color-accent-active: var(--orange-700);
+  --color-accent-fg: var(--warm-0);
+
+  --color-danger: var(--red-600);
+  --color-danger-fg: var(--warm-0);
+  --color-success: var(--green-600);
+  --color-warning: var(--amber-700);
+  --color-rating: var(--amber-600);
+
+  --color-focus-ring: var(--color-accent);
+  --color-overlay: rgb(26 25 22 / 32%);
+
+  --color-waveform-played: var(--color-accent);
+  --color-waveform-rest: var(--warm-400);
+  --color-waveform-playhead: var(--color-fg);
+
+  --color-track-pink: var(--rb-pink);
+  --color-track-red: var(--rb-red);
+  --color-track-orange: var(--rb-orange);
+  --color-track-yellow: var(--rb-yellow);
+  --color-track-green: var(--rb-green);
+  --color-track-aqua: var(--rb-aqua);
+  --color-track-blue: var(--rb-blue);
+  --color-track-purple: var(--rb-purple);
+
+  /* Type: system faces (no bundled fonts); 13px body; nothing bolder than 600. */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-2xs: 11px;
+  --text-2xs--line-height: 1.4;
+  --text-xs: 12px;
+  --text-xs--line-height: 1.4;
+  --text-sm: 13px;
+  --text-sm--line-height: 1.4;
+  --text-md: 14px;
+  --text-md--line-height: 1.4;
+  --text-lg: 16px;
+  --text-lg--line-height: 1.4;
+  --tracking-caption: 0.08em;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* Hairline depth; only floating layers (menus, popovers, dialogs, sheet) cast a shadow. */
+  --shadow-overlay: 0 8px 24px rgb(38 37 30 / 12%), 0 1px 3px rgb(38 37 30 / 8%);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snap: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* 3. Dark theme ------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: var(--warm-950);
+    --color-bg-subtle: var(--warm-900);
+    --color-row-alt: var(--warm-925);
+    --color-surface: var(--warm-800);
+    --color-surface-strong: var(--warm-750);
+    --color-hover: rgb(237 236 230 / 6%);
+    --color-selected: var(--warm-750);
+    --color-selected-fg: var(--warm-75);
+    --color-fg: var(--warm-75);
+    --color-fg-muted: var(--warm-400);
+    --color-fg-subtle: var(--warm-600);
+    --color-border: var(--warm-775);
+    --color-border-subtle: var(--warm-800);
+    --color-border-strong: var(--warm-700);
+    --color-accent: var(--orange-500);
+    --color-accent-hover: var(--orange-400);
+    --color-accent-active: var(--orange-600);
+    --color-accent-fg: var(--warm-950);
+    --color-danger: var(--red-500);
+    --color-danger-fg: var(--warm-950);
+    --color-success: var(--green-500);
+    --color-warning: var(--amber-500);
+    --color-rating: var(--amber-500);
+    --color-overlay: rgb(0 0 0 / 50%);
+    --color-waveform-rest: var(--warm-600);
+    --shadow-overlay: 0 8px 24px rgb(0 0 0 / 45%), 0 1px 3px rgb(0 0 0 / 30%);
+    color-scheme: dark;
+  }
+}
+/* 4. Sizes, layers, motion -------------------------------------------------- */
+:root {
+  /* Control size scale: every button, input, select and segmented control reads these. */
+  --ctl-h-xs: 20px;
+  --ctl-h-sm: 24px;
+  --ctl-h-md: 28px;
+  --ctl-h-lg: 32px;
+  --ctl-px-xs: 6px;
+  --ctl-px-sm: 8px;
+  --ctl-px-md: 10px;
+  --ctl-px-lg: 12px;
+  --ctl-fs-xs: 11px;
+  --ctl-fs-sm: 12px;
+  --ctl-fs-md: 13px;
+  --ctl-fs-lg: 13px;
+  --ctl-icon-xs: 12px;
+  --ctl-icon-sm: 14px;
+  --ctl-icon-md: 16px;
+  --ctl-icon-lg: 16px;
+  --ctl-r-xs: var(--radius-xs);
+  --ctl-r-sm: var(--radius-sm);
+  --ctl-r-md: var(--radius-md);
+  --ctl-r-lg: var(--radius-md);
+  --ctl-gap-xs: 4px;
+  --ctl-gap-sm: 4px;
+  --ctl-gap-md: 6px;
+  --ctl-gap-lg: 8px;
+  --focus-ring-width: 2px;
+
+  /* Rows: track table and playlist tree (TS mirror: ROW_HEIGHT), menu items. */
+  --row-h: 26px;
+  --menu-item-h: 26px;
+
+  /* Layout. */
+  --sidebar-w: 240px;
+  --sheet-w: 300px;
+  --transport-h: 52px;
+
+  /* Layers. */
+  --z-sticky: 1;
+  --z-sheet: 10;
+  --z-popover: 20;
+  --z-menu: 30;
+  --z-dialog: 40;
+  --z-tooltip: 50;
+
+  /* Motion (TS mirror: src/lib/motion.ts). */
+  --duration-fast: 100ms;
+  --duration-slide-in: 240ms;
+  --duration-slide-out: 160ms;
+  --tooltip-delay: 500ms;
+}

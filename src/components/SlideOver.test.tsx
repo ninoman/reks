@@ -2,7 +2,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SLIDE_IN, SLIDE_OUT } from "../lib/motion";
+import { SLIDE_IN_DEFAULT as SLIDE_IN, SLIDE_OUT_DEFAULT as SLIDE_OUT } from "../lib/motion";
 import { SlideOver } from "./SlideOver";
 
 /** jsdom has no Web Animations; record calls and finish by hand. */
