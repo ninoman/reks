@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (tasks 1–9 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–10 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -176,7 +176,7 @@ impl Library {
     pub fn update_track(&self, id: TrackId, patch: &TrackPatch) -> Result<TrackDetail>;
     pub fn artwork(&self, id: ArtworkId) -> Result<Vec<u8>>;            // image bytes
     pub fn playlists(&self) -> Result<PlaylistTree>;
-    pub fn playlist_mutate(&self, op: PlaylistOp) -> Result<()>;
+    pub fn playlist_mutate(&self, op: PlaylistOp) -> Result<PlaylistOutcome>;
 }
 
 pub struct TrackQuery { pub text: Option<String>, pub filters: Vec<Filter>,
@@ -294,6 +294,9 @@ Notes (task 8, [`query.rs`](../../crates/reks-core/src/query.rs), [`src/`](../..
   text. Diacritics fold both ways via the 0001 `unicode61` tokenizer (`beyonce` ↔ `Beyoncé`).
 - Filters: genre and colour compare case-insensitively; `KeyIn` uses canonical keys;
   `BpmRange` is bpm×100, inclusive; `Playlist` on a folder means any playlist below it.
+  When the first `Playlist` filter names a playlist (not a folder), the result has one
+  row per entry, so a track in it twice is two rows (`TrackRow.entryPosition`, null
+  elsewhere) and `total` counts entries (task 10).
 - **Needs analysis** = the track has no `beatgrid` row (any source). Key and BPM alone
   don't count: a grid is what export needs, and what rekordbox XML carries for analysed
   tracks. `TrackRow.needsAnalysis` exposes it.
@@ -351,6 +354,48 @@ Notes (task 9, [`track.rs`](../../crates/reks-core/src/track.rs), [`TrackDetailP
   After a save, `replaceRow` swaps the row into the loaded pages without re-querying, so
   selection and scroll stay put. A row that no longer matches the filter or sort stays until
   the next refresh. Facets are reloaded so a new genre shows up in the filter.
+
+Notes (task 10, [`playlist.rs`](../../crates/reks-core/src/playlist.rs), [`PlaylistTree`](../../src/components/PlaylistTree.tsx))
+- `Library::playlists() -> PlaylistTree { nodes }`: the depth-first `PlaylistNode` list that
+  facets already use, now with `position` (index among siblings) and `entries`.
+- `Library::playlist_mutate(PlaylistOp) -> PlaylistOutcome` (serde tag `type`): `createPlaylist`,
+  `createFolder`, `rename`, `delete` (a folder takes its subtree and their entries), `move`,
+  `addTracks`, `removeEntries`, `reorderEntries`. `position` / `before` are indices in the list as
+  it is now (`0..=len`, `len` = end); reks-core adjusts for the moved items, which keep their
+  relative order. A reorder moves the given entries as one block.
+- Every op is validated before writing and runs in one transaction. Errors: `PlaylistNotFound`,
+  `TrackNotFound`, `NotAPlaylist` (entries of a folder), `NotAFolder` (a playlist as parent),
+  `MoveCycle` (into itself or a descendant), `IndexOutOfRange`, and `InvalidField { field: "name" }`
+  (trimmed; empty or control characters refused, the task 9 text rules).
+- Entry positions and sibling `sort_order`s stay dense (`0..n`). Entry edits delete and re-insert
+  from the first changed position, so the `(playlist_id, position)` key never collides.
+  Removing an entry removes that position only, not other copies of the track.
+- `updated_at` (UTC ISO-8601) is set on each node whose name, parent, `sort_order` or entries
+  change; a no-op writes nothing.
+- **Duplicates.** A playlist may hold a track more than once, but only when the user says so.
+  `addTracks.duplicates` is `ask` (default), `allow` or `skip`. A requested track is a duplicate
+  if the playlist has it or the same request named it earlier. `ask`: any duplicate → nothing
+  written, outcome `duplicates { trackIds, duplicateCount, requested }` (data, not an error);
+  none → added. `allow` adds all; `skip` adds only the rest. The UI always sends `ask` and on
+  `duplicates` shows "N of M tracks are already in <playlist>" with Add anyway (`allow`),
+  Skip duplicates (`skip`) and Cancel (nothing sent); Skip is left out when all M are
+  duplicates. A remembered choice is task 13.
+- XML re-import: matching (task 7) is unchanged and works on edited trees, since sort orders stay
+  dense. XML entry order wins; entries added in reks follow it, counted per track, so a second
+  copy added in reks survives. A renamed or moved playlist no longer matches its XML node, so a
+  re-import creates that one anew.
+- UI: the tree (Zustand store over a pure reducer: expanded folders, selection, rename) sits
+  above the filters. Selecting a playlist sets the `playlist` filter and sorts by
+  `playlistPosition`; a folder shows everything below it; Collection clears it. Clear (filters)
+  keeps the selected playlist. Context menu and keys: F2 / Enter rename in place (Enter commits,
+  Esc cancels, blur commits), Delete / Backspace asks, then deletes. The table drags its
+  selection onto a playlist; inside a playlist sorted by `playlistPosition` ascending it drags
+  to reorder (top / bottom half of the target row); Delete or the menu removes the selected
+  entries. Tree nodes drag before / after a node or into a folder (top / bottom quarter, middle).
+  A `#` column shows the entry position. After every edit the tree, facets and table reload.
+- HTML5 drag and drop needs `dragDropEnabled: false` on the window (`tauri.conf.json`); file drops
+  from the OS are not accepted until something needs them.
+- Not checked yet in the running app (`cargo tauri dev`); covered by reks-core and Vitest tests.
 
 ### Audio (`reks-audio`)
 
@@ -443,7 +488,7 @@ Response(bytes)`.
    calling `library_query`, filters sidebar, multi-select, keyboard navigation.
 9. [x] **Track detail + inline edit**: side panel with editable fields, cue and
    grid listing (read-only), artwork display via `artwork_get`.
-10. [ ] **Playlists UI**: tree, create/rename/delete folder/playlist, drag tracks,
+10. [x] **Playlists UI**: tree, create/rename/delete folder/playlist, drag tracks,
     reorder, context menu; backed by `playlists_mutate` ops.
 11. [ ] **Player**: `reks-audio::Player` on rodio (Symphonia decoders), output
     device list, seek; Tauri commands; transport bar with position slider and
