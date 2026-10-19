@@ -108,7 +108,15 @@ Date of decisions: 2026-10-18.
     documentation source (exportExt.pdb, `.sync`, DEVSETTING).
   - rekordcrate writer (MPL-2.0): still an open PR, no ANLZ generation.
   - rex, djbooth: no licence; never copy from them.
+- Paths (2026-10-19, task 7): baken lays out `/Contents` itself (Unicode,
+  48-character cut); our planner uses ASCII paths (D24). `BakenWriter`
+  rewrites baken's public `Plan` between `plan()` and `export()` (tracks,
+  `usb_path`, ANLZ slot and source), so the stick follows our plan; no fork.
+  `baken-core` (same pin) is a direct dependency for `CancelToken`/`Progress`.
 - Risks (open):
+  - The `Plan` rewrite relies on baken's public fields and on `export` using
+    `usb_path`/`anlz_dir`/`anlz` as it does in 4.6.1; the writer integration
+    test is the check on every bump.
   - Input is an XML **file path**; we round-trip through XML (lossless for
     everything rekordbox XML carries; waveforms come from `anlz_roots` or
     generation, not XML).

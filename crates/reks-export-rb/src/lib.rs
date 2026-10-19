@@ -8,6 +8,7 @@ pub mod history;
 pub mod plan;
 pub mod rbcache;
 pub mod target;
+pub mod writer;
 
 pub use target::TargetProfile;
 
