@@ -12,6 +12,9 @@ import { useImportWizard } from "../store/importWizard";
 import { useScan } from "../store/scan";
 import { useSettings } from "../store/settings";
 import { GearIcon } from "./icons";
+import { Button } from "./ui/Button";
+import { IconButton } from "./ui/IconButton";
+import { Tooltip } from "./ui/Tooltip";
 
 export function AppHeader() {
   const status = useScan((s) => s.status);
@@ -35,33 +38,35 @@ export function AppHeader() {
   }
 
   return (
-    <header className="app-header-wrap">
-      <div className="app-header">
-        <span className="app-name">reks</span>
-        <span className="spacer" />
-        <button type="button" disabled={scanning || importing} onClick={() => void scanFolder()}>
+    <header>
+      <div className="flex h-(--toolbar-h) items-center gap-2 border-b border-border bg-bg-subtle px-3">
+        <span className="flex-1 font-medium tracking-wide">reks</span>
+        <Button size="sm" disabled={scanning || importing} onClick={() => void scanFolder()}>
           Scan folder…
-        </button>
+        </Button>
         {scanning && (
-          <button type="button" onClick={() => useScan.getState().cancel()}>
+          <Button size="sm" onClick={() => useScan.getState().cancel()}>
             Stop
-          </button>
+          </Button>
         )}
-        <button type="button" disabled={scanning || importing} onClick={() => void chooseXml()}>
+        <Button size="sm" disabled={scanning || importing} onClick={() => void chooseXml()}>
           Import rekordbox XML…
-        </button>
-        <button
-          type="button"
-          className="header-icon"
-          aria-label="Settings"
-          title="Settings (⌘,)"
-          onClick={() => useSettings.getState().setDialogOpen(true)}
-        >
-          <GearIcon />
-        </button>
+        </Button>
+        <Tooltip content="Settings" shortcut="⌘ ,">
+          <IconButton
+            size="sm"
+            aria-label="Settings"
+            onClick={() => useSettings.getState().setDialogOpen(true)}
+          >
+            <GearIcon />
+          </IconButton>
+        </Tooltip>
       </div>
       {status !== "" && (
-        <div className="status-line" role="status">
+        <div
+          className="border-b border-border px-3 py-1 text-xs text-fg-muted select-text"
+          role="status"
+        >
           {status}
         </div>
       )}

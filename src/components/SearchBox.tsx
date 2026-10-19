@@ -1,6 +1,8 @@
 /** Search field; calls `onSearch` 50 ms after the last keystroke. */
 import { useEffect, useRef, useState } from "react";
 
+import { Input } from "./ui/Input";
+
 export const SEARCH_DEBOUNCE_MS = 50;
 
 export function SearchBox({ onSearch }: { onSearch: (text: string) => void }) {
@@ -15,9 +17,10 @@ export function SearchBox({ onSearch }: { onSearch: (text: string) => void }) {
     return () => clearTimeout(t);
   }, [value, onSearch]);
   return (
-    <input
-      type="search"
-      className="search"
+    <Input
+      variant="search"
+      size="sm"
+      className="w-65"
       placeholder="Search"
       aria-label="Search"
       value={value}

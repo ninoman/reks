@@ -1,4 +1,10 @@
 /* Element defaults. Everything else is a utility or a component in src/components/ui. */
+*,
+::before,
+::after {
+  box-sizing: border-box;
+}
+
 html,
 body,
 #root {

@@ -12,6 +12,11 @@ import { FiltersSwitch } from "./FilterBar";
 import { FilterIcon, InfoIcon } from "./icons";
 import { SearchBox } from "./SearchBox";
 import type { TrackTableModel } from "./trackTableModel";
+import { Badge } from "./ui/Badge";
+import { Button } from "./ui/Button";
+import { IconButton } from "./ui/IconButton";
+import { Separator } from "./ui/Separator";
+import { Tooltip } from "./ui/Tooltip";
 
 export function LibraryToolbar({ table }: { table: TrackTableModel }) {
   const total = useLibrary((s) => s.total);
@@ -22,39 +27,30 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
   const { filterBarOpen, infoOpen, toggleFilterBar, toggleInfo } = usePanels();
 
   return (
-    <div className="toolbar">
+    <div className="flex h-(--toolbar-h) shrink-0 items-center gap-2 border-b border-border px-2.5">
       <SearchBox onSearch={setText} />
-      <button
-        type="button"
-        className={`toggle${filterBarOpen ? " on" : ""}`}
-        aria-pressed={filterBarOpen}
-        title={filterBarOpen ? "Hide filters" : "Show filters"}
-        onClick={toggleFilterBar}
-      >
-        <FilterIcon />
-        Filters
-        {activeFilters > 0 && (
-          <span className={`badge${filtersEnabled ? "" : " off"}`}>{activeFilters}</span>
-        )}
-      </button>
+      <Tooltip content={filterBarOpen ? "Hide filters" : "Show filters"}>
+        <Button size="sm" variant="ghost" aria-pressed={filterBarOpen} onClick={toggleFilterBar}>
+          <FilterIcon />
+          Filters
+          {activeFilters > 0 && (
+            <Badge variant={filtersEnabled ? "accent" : "muted"}>{activeFilters}</Badge>
+          )}
+        </Button>
+      </Tooltip>
       {activeFilters > 0 && <FiltersSwitch />}
-      <span className="count">
+      <span className="whitespace-nowrap text-xs text-fg-muted tabular-nums">
         {total.toLocaleString()} tracks
         {selected > 0 ? ` · ${selected.toLocaleString()} selected` : ""}
       </span>
-      <span className="spacer" />
+      <span className="flex-1" />
       <ColumnChooser table={table} />
-      <span className="toolbar-divider" />
-      <button
-        type="button"
-        className={`toggle icon${infoOpen ? " on" : ""}`}
-        aria-pressed={infoOpen}
-        aria-label="Track info"
-        title={infoOpen ? "Hide track info" : "Show track info"}
-        onClick={toggleInfo}
-      >
-        <InfoIcon />
-      </button>
+      <Separator orientation="vertical" className="my-2.5" />
+      <Tooltip content={infoOpen ? "Hide track info" : "Show track info"}>
+        <IconButton size="sm" aria-pressed={infoOpen} aria-label="Track info" onClick={toggleInfo}>
+          <InfoIcon />
+        </IconButton>
+      </Tooltip>
     </div>
   );
 }

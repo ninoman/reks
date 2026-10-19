@@ -203,6 +203,7 @@
   --menu-item-h: 26px;
 
   /* Layout. */
+  --toolbar-h: 40px;
   --sidebar-w: 240px;
   --sheet-w: 300px;
   --transport-h: 52px;

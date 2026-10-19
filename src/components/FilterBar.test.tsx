@@ -47,9 +47,9 @@ afterEach(cleanup);
 describe("FilterBar", () => {
   it("outlines only the controls that filter", () => {
     render(<FilterBar />);
-    const outlined = [...document.querySelectorAll(".filter-field.set .filter-label")].map(
-      (e) => e.textContent,
-    );
+    const outlined = [
+      ...document.querySelectorAll('[data-slot="field"][data-active] [data-slot="field-label"]'),
+    ].map((e) => e.textContent);
     expect(outlined).toEqual(["Genre", "Rating"]);
   });
 
@@ -57,11 +57,11 @@ describe("FilterBar", () => {
     notation("camelot");
     render(<FilterBar />);
     const button = screen.getByRole("button", { name: "Key" });
-    expect(button.textContent).toBe("Any ▾");
+    expect(button.textContent).toBe("Any");
     fireEvent.click(button);
     fireEvent.click(screen.getByRole("button", { name: "8A" }));
     expect(useLibrary.getState().filters.keys).toEqual(["Am"]);
-    expect(button.textContent).toBe("8A ▾");
+    expect(button.textContent).toBe("8A");
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("group", { name: "Keys" })).toBeNull();
   });
@@ -71,13 +71,13 @@ describe("FilterBar", () => {
     notation("openKey");
     render(<FilterBar />);
     const button = screen.getByRole("button", { name: "Key" });
-    expect(button.textContent).toBe("1m ▾");
+    expect(button.textContent).toBe("1m");
     fireEvent.click(button);
     expect(screen.getByRole("button", { name: "1d" }).getAttribute("aria-pressed")).toBe("false");
     cleanup();
     notation("classical");
     render(<FilterBar />);
-    expect(screen.getByRole("button", { name: "Key" }).textContent).toBe("Am ▾");
+    expect(screen.getByRole("button", { name: "Key" }).textContent).toBe("Am");
   });
 
   it("the switch turns filters off and on, keeping their values", () => {

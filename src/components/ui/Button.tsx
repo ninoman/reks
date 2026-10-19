@@ -11,7 +11,7 @@ import { controlSizes, disabledState, focusRing } from "./control";
 
 export const buttonVariants = cva(
   [
-    "inline-flex shrink-0 cursor-default items-center justify-center whitespace-nowrap border border-transparent font-medium",
+    "inline-flex shrink-0 cursor-default items-center justify-center whitespace-nowrap border border-transparent bg-transparent font-medium",
     "transition-colors duration-(--duration-fast)",
     "aria-pressed:border-border-strong aria-pressed:bg-selected aria-pressed:text-selected-fg",
     focusRing,

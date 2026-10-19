@@ -1,30 +1,35 @@
-/** Popover with a checkbox per column. */
-import { useState } from "react";
-
+/** Menu with a check item per column. */
 import type { TrackTableModel } from "./trackTableModel";
+import { Button } from "./ui/Button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "./ui/DropdownMenu";
 
 export function ColumnChooser({ table }: { table: TrackTableModel }) {
-  const [open, setOpen] = useState(false);
   const columns = table.getAllLeafColumns().filter((c) => c.id !== "status");
   return (
-    <div className="column-chooser">
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
-        Columns
-      </button>
-      {open && (
-        <div className="popover" role="menu">
-          {columns.map((c) => (
-            <label key={c.id}>
-              <input
-                type="checkbox"
-                checked={c.getIsVisible()}
-                onChange={(e) => c.toggleVisibility(e.target.checked)}
-              />
-              {String(c.columnDef.header ?? c.id)}
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="ghost">
+          Columns
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        {columns.map((c) => (
+          <DropdownMenuCheckboxItem
+            key={c.id}
+            checked={c.getIsVisible()}
+            onCheckedChange={(checked) => c.toggleVisibility(checked)}
+            // Keep the menu open to switch several columns.
+            onSelect={(e) => e.preventDefault()}
+          >
+            {String(c.columnDef.header ?? c.id)}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

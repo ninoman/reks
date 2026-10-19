@@ -6,10 +6,20 @@
  * (genres, keys, colours) come from `library_facets`. The playlist tree
  * chooses the playlist; Clear leaves that alone.
  */
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 
+import { cn } from "../lib/cn";
 import { activeFilterCount, type FilterState, useLibrary } from "../store/library";
 import { useKeyLabel } from "../store/settings";
+import { ChevronDownIcon } from "./icons";
+import { Button } from "./ui/Button";
+import { Field as UiField } from "./ui/Field";
+import { Input } from "./ui/Input";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/Popover";
+import { Select } from "./ui/Select";
+import { Swatch } from "./ui/Swatch";
+import { Switch } from "./ui/Switch";
+import { Tooltip } from "./ui/Tooltip";
 
 function triState(v: boolean | null): string {
   return v === null ? "" : String(v);
@@ -29,25 +39,20 @@ export function FiltersSwitch() {
   const enabled = useLibrary((s) => s.filtersEnabled);
   const setEnabled = useLibrary((s) => s.setFiltersEnabled);
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={enabled}
-      aria-label="Apply filters"
-      title={enabled ? "Filters on: click to set them aside" : "Filters off: click to apply"}
-      className={`filters-switch${enabled ? " on" : ""}`}
-      onClick={() => setEnabled(!enabled)}
-    />
+    <Tooltip
+      content={enabled ? "Filters on: click to set them aside" : "Filters off: click to apply"}
+    >
+      <Switch aria-label="Apply filters" checked={enabled} onCheckedChange={setEnabled} />
+    </Tooltip>
   );
 }
 
 /** One labelled control in the bar; outlined while it filters. */
 function Field({ label, set, children }: { label: string; set: boolean; children: ReactNode }) {
   return (
-    <div className={`filter-field${set ? " set" : ""}`}>
-      <span className="filter-label">{label}</span>
+    <UiField label={label} orientation="inline" active={set}>
       {children}
-    </div>
+    </UiField>
   );
 }
 
@@ -60,23 +65,6 @@ function KeyPicker() {
   const chosen = useLibrary((s) => s.filters.keys);
   const setFilters = useLibrary((s) => s.setFilters);
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
 
   const label = useKeyLabel();
   const summary =
@@ -91,34 +79,34 @@ function KeyPicker() {
     });
 
   return (
-    <div className="key-picker" ref={ref}>
-      <button
-        type="button"
-        className="filter-select"
-        aria-label="Key"
-        aria-haspopup="true"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        {summary} ▾
-      </button>
-      {open && (
-        <fieldset className="popover key-grid" aria-label="Keys">
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button size="sm" className="min-w-16 justify-between font-normal" aria-label="Key">
+          {summary}
+          <ChevronDownIcon />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent>
+        <fieldset
+          className="m-0 grid grid-cols-[repeat(6,36px)] gap-0.5 border-0 p-0"
+          aria-label="Keys"
+        >
           {keys?.map((k) => (
-            <button
+            <Button
               key={k.key}
-              type="button"
-              className={chosen.includes(k.key) ? "on" : ""}
+              size="xs"
+              variant="ghost"
+              className="px-0 font-normal"
               aria-pressed={chosen.includes(k.key)}
               title={`${k.key} · ${k.camelot} · ${k.openKey}`}
               onClick={() => toggle(k.key)}
             >
               {label(k.key)}
-            </button>
+            </Button>
           ))}
         </fieldset>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -131,9 +119,16 @@ export function FilterBar() {
   const set = (patch: Partial<FilterState>) => setFilters(patch);
 
   return (
-    <section className={`filter-bar${enabled ? "" : " off"}`} aria-label="Filters">
+    <section
+      className={cn(
+        "flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 border-b border-border bg-bg-subtle px-2.5 py-1.5",
+        !enabled && "[&_[data-slot=field]]:opacity-45",
+      )}
+      aria-label="Filters"
+    >
       <Field label="Genre" set={f.genre !== null}>
-        <select
+        <Select
+          size="sm"
           aria-label="Genre"
           value={f.genre ?? ""}
           onChange={(e) => set({ genre: e.target.value === "" ? null : e.target.value })}
@@ -144,7 +139,7 @@ export function FilterBar() {
               {g}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
 
       <Field label="Key" set={f.keys.length > 0}>
@@ -152,9 +147,10 @@ export function FilterBar() {
       </Field>
 
       <Field label="BPM" set={f.bpmMin !== null || f.bpmMax !== null}>
-        <input
+        <Input
+          size="sm"
           type="number"
-          className="bpm"
+          className="w-14"
           aria-label="Minimum BPM"
           placeholder="min"
           min={0}
@@ -162,9 +158,10 @@ export function FilterBar() {
           onChange={(e) => set({ bpmMin: parseBpm(e.target.value) })}
         />
         –
-        <input
+        <Input
+          size="sm"
           type="number"
-          className="bpm"
+          className="w-14"
           aria-label="Maximum BPM"
           placeholder="max"
           min={0}
@@ -174,23 +171,25 @@ export function FilterBar() {
       </Field>
 
       <Field label="Colour" set={f.color !== null}>
-        <div className="colour-row">
+        <div className="flex gap-0.5">
           {facets?.colours.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className={`swatch swatch-${c}${f.color === c ? " on" : ""}`}
-              aria-pressed={f.color === c}
-              aria-label={c}
-              title={c}
-              onClick={() => set({ color: f.color === c ? null : c })}
-            />
+            <Swatch key={c} color={c} size="md" asChild>
+              <button
+                type="button"
+                className="cursor-pointer border-2 border-transparent p-0 aria-pressed:border-fg"
+                aria-pressed={f.color === c}
+                aria-label={c}
+                title={c}
+                onClick={() => set({ color: f.color === c ? null : c })}
+              />
+            </Swatch>
           ))}
         </div>
       </Field>
 
       <Field label="Rating" set={f.ratingMin > 0}>
-        <select
+        <Select
+          size="sm"
           aria-label="Rating at least"
           value={f.ratingMin}
           onChange={(e) => set({ ratingMin: Number(e.target.value) })}
@@ -201,11 +200,12 @@ export function FilterBar() {
               {"★".repeat(n)}+
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
 
       <Field label="File" set={f.missing !== null}>
-        <select
+        <Select
+          size="sm"
           aria-label="File missing"
           value={triState(f.missing)}
           onChange={(e) => set({ missing: parseTriState(e.target.value) })}
@@ -213,11 +213,12 @@ export function FilterBar() {
           <option value="">Any</option>
           <option value="true">Missing</option>
           <option value="false">Present</option>
-        </select>
+        </Select>
       </Field>
 
       <Field label="Analysis" set={f.needsAnalysis !== null}>
-        <select
+        <Select
+          size="sm"
           aria-label="Analysis"
           value={triState(f.needsAnalysis)}
           onChange={(e) => set({ needsAnalysis: parseTriState(e.target.value) })}
@@ -225,17 +226,18 @@ export function FilterBar() {
           <option value="">Any</option>
           <option value="true">Needs analysis</option>
           <option value="false">Analysed</option>
-        </select>
+        </Select>
       </Field>
 
-      <button
-        type="button"
-        className="link clear-all"
+      <Button
+        size="sm"
+        variant="link"
+        className="ml-auto"
         onClick={clearFilters}
         disabled={activeFilterCount(f) === 0}
       >
         Clear all
-      </button>
+      </Button>
     </section>
   );
 }
