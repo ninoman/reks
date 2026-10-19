@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use reks_core::rbxml::{self, ImportEvent, ImportOptions, ImportReport, PrefixRemap};
 use reks_core::{
-    ArtworkId, CancelToken, Facets, Library, ScanEvent, ScanReport, TrackDetail, TrackId,
-    TrackPage, TrackPatch, TrackQuery,
+    ArtworkId, CancelToken, Facets, Library, PlaylistOp, PlaylistOutcome, PlaylistTree, ScanEvent,
+    ScanReport, TrackDetail, TrackId, TrackPage, TrackPatch, TrackQuery,
 };
 use serde::Serialize;
 use tauri::ipc::{Channel, Response};
@@ -64,6 +64,22 @@ pub async fn library_update_track(
     patch: TrackPatch,
 ) -> CmdResult<TrackDetail> {
     blocking(&state, move |lib| lib.update_track(id, &patch)).await
+}
+
+/// The playlist tree.
+#[tauri::command]
+pub async fn playlists_get(state: State<'_, AppState>) -> CmdResult<PlaylistTree> {
+    blocking(&state, |lib| lib.playlists()).await
+}
+
+/// Applies one playlist edit. Duplicates found by "add tracks" come back as
+/// an outcome, not an error.
+#[tauri::command]
+pub async fn playlists_mutate(
+    state: State<'_, AppState>,
+    op: PlaylistOp,
+) -> CmdResult<PlaylistOutcome> {
+    blocking(&state, move |lib| lib.playlist_mutate(op)).await
 }
 
 /// Artwork image bytes, sent raw (an `ArrayBuffer` in the UI).
