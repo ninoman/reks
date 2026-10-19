@@ -1,6 +1,6 @@
 # Phase 2.6 — File converter (WAV, AIFF, FLAC)
 
-Status: tasks 1–4 done (2026-10-19, started ahead of the Phase 2 hardware
+Status: tasks 1–5 done (2026-10-19/20, started ahead of the Phase 2 hardware
 campaign with the maintainer's approval: pure `reks-audio` code). Depends on:
 Phase 1 (decode, tags, library) and Phase 2 (`audiocheck`, export, hardware
 campaign). Independent of Phase 2.5; either can
@@ -147,11 +147,33 @@ and grid copied.
    an even block. Tests: [convert.rs](../../crates/reks-audio/tests/convert.rs)
    over WAV, AIFF, FLAC, 24/96 ALAC (new fixture), 24/96 and float WAV × the
    three targets.
-5. **Library plan/apply**: migration for the superseded-file table, scan skips
+5. [x] **Library plan/apply**: migration for the superseded-file table, scan skips
    those paths, Replace / Add as new, Trash option (`trash` crate, licence
    check), collision naming, report. Tests on a temp library: cues, grid,
    playlists and play history survive Replace; a re-scan adds nothing;
    cancel leaves no temp files and no DB change.
+   Done in [`reks-core::convert`](../../crates/reks-core/src/convert.rs) and
+   migration [`0004_superseded_file.sql`](../../crates/reks-core/migrations/0004_superseded_file.sql).
+   `plan` probes headers only and skips lossy, > 2 channels, missing,
+   unreadable, duplicate ids and files already in target form (same kind,
+   rate and depth, and a plain header: an EXTENSIBLE or float WAV and AIFF-C
+   still convert). The Older players rate cap is `ConvertOptions::cap_rate_48k`
+   (`Preset::OlderPlayers.options()`); `Rate` has no "cap" value. Warnings:
+   renamed, 16-bit dither, and CONV1 for Replace on tracks imported from
+   rekordbox. `apply` re-checks that the track and file size are as planned,
+   takes the next free name at that moment (a name is taken by a file, its
+   `.reks-tmp`, a track row or another item), checks the frame count and, for
+   same rate/depth integer sources, the PCM hash against the source, then
+   renames without clobbering (hard link, or check + rename where the
+   filesystem has none) and fsyncs the folder. Replace keeps `duration_ms`,
+   `channels` and `rb_location`; Add as new copies metadata, rating, cues
+   and grid but not play history or the rekordbox ids. Trash needs Replace
+   (otherwise the kept track would point at a trashed file); on macOS it uses
+   NSFileManager (no Finder automation prompt), and a failed move is
+   reported, not fatal. Deleting the new track drops its `superseded_file`
+   row, so a re-scan adds the original back. `CancelToken` is now the
+   `reks_audio` one, re-exported. The Trash move itself has no automated
+   test (it would fill the tester's Trash).
 6. **UI**: "Convert…" in the track context menu; dialog with the preset and the
    table above; dry-run list; background progress with cancel; report.
    `audiocheck` warnings link to it (Phase 2 dry-run view).

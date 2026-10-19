@@ -9,11 +9,10 @@
 //! - Nothing is marked missing if the scan was cancelled, for roots that are
 //!   absent (e.g. an unplugged drive), or under folders that could not be read.
 //! - Rows are never deleted; missing files keep their cues, grids and playlists.
+//! - Originals the converter replaced (`superseded_file`) are not added back.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use rusqlite::named_params;
 use serde::Serialize;
@@ -33,23 +32,10 @@ pub type TrackId = i64;
 /// `reks-audio` can probe.
 const AUDIO_EXTENSIONS: &[&str] = &["mp3", "m4a", "aac", "flac", "wav", "wave", "aif", "aiff"];
 
-/// Cooperative cancellation for a running scan. Clones share one flag.
-#[derive(Debug, Clone, Default)]
-pub struct CancelToken(Arc<AtomicBool>);
-
-impl CancelToken {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn cancel(&self) {
-        self.0.store(true, Ordering::Relaxed);
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::Relaxed)
-    }
-}
+/// Cooperative cancellation (scan, import, export, convert). Clones share
+/// one flag. One type for the whole stack, so a token passes straight
+/// through to `reks_audio::convert`.
+pub use reks_audio::CancelToken;
 
 /// Progress reported while scanning (sent to the UI over a Tauri channel).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -125,6 +111,7 @@ pub fn scan(
     };
     let walk = s.walk(roots);
     let existing = s.existing_tracks()?;
+    let superseded = s.superseded_paths()?;
 
     // Rows whose file was not found: candidates for "moved" and "missing".
     let mut gone: HashMap<TrackId, &ExistingTrack> = existing
@@ -149,6 +136,9 @@ pub fn scan(
         }
         match existing.get(path) {
             Some(t) => s.rescan(t, path)?,
+            None if superseded.contains(path) => {
+                tracing::debug!(path, "skipping converted-away original");
+            }
             None => {
                 let moved_from = |hash: &str, size: i64| {
                     let ids = by_hash.get_mut(&(hash.to_owned(), size))?;
@@ -327,6 +317,16 @@ impl Scan<'_> {
             map.insert(t.path.clone(), t);
         }
         Ok(map)
+    }
+
+    /// Originals the converter replaced; the scan never adds them back.
+    fn superseded_paths(&self) -> Result<HashSet<String>> {
+        let conn = self.lib.conn()?;
+        let mut stmt = conn.prepare("SELECT old_path FROM superseded_file")?;
+        let paths = stmt
+            .query_map([], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(paths)
     }
 
     /// A known path: unchanged, changed on disk, or back after being missing.

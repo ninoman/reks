@@ -65,6 +65,8 @@ symphonia = { version = "0.6", default-features = false, features = ["mp3", "aac
 tempfile = "3"
 thiserror = "2"
 tracing = "0.1"
+# Moves converted-away originals to the OS Trash, only when asked (D25). MIT.
+trash = "5"
 unicode-normalization = "0.1"
 walkdir = "2.5"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Ioctl"] }

@@ -84,6 +84,10 @@ pub enum Error {
     #[error("this stick's volume ID already belongs to '{name}'")]
     DeviceSerialInUse { name: String },
 
+    /// One file of a conversion failed a check; its track is unchanged.
+    #[error("cannot convert {path}: {reason}")]
+    Convert { path: String, reason: String },
+
     /// A thread panicked while holding the connection lock.
     #[error("library connection lock poisoned")]
     LockPoisoned,
