@@ -37,6 +37,29 @@ pub enum Error {
     #[error("invalid {field}: {reason}")]
     InvalidField { field: &'static str, reason: String },
 
+    /// No playlist or folder with this id.
+    #[error("playlist {0} not found")]
+    PlaylistNotFound(crate::query::PlaylistId),
+
+    /// The op needs a playlist, and this id is a folder.
+    #[error("{0} is a folder, not a playlist")]
+    NotAPlaylist(crate::query::PlaylistId),
+
+    /// The op needs a folder (a parent), and this id is a playlist.
+    #[error("{0} is a playlist, not a folder")]
+    NotAFolder(crate::query::PlaylistId),
+
+    /// Moving `id` under `parent` would put it inside itself.
+    #[error("cannot move {id} into itself or one of its descendants ({parent})")]
+    MoveCycle {
+        id: crate::query::PlaylistId,
+        parent: crate::query::PlaylistId,
+    },
+
+    /// An entry position or sibling index outside the list.
+    #[error("index {index} out of range (length {len})")]
+    IndexOutOfRange { index: u32, len: u32 },
+
     /// A thread panicked while holding the connection lock.
     #[error("library connection lock poisoned")]
     LockPoisoned,

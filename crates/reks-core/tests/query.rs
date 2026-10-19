@@ -501,6 +501,7 @@ fn serde_shapes() {
             "comment",
             "dateAdded",
             "durationMs",
+            "entryPosition",
             "genre",
             "id",
             "key",

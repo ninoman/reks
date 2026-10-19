@@ -12,7 +12,7 @@ use reks_core::rbxml::{
     self, import, path_to_location, Collection, Extra, ImportEvent, ImportOptions, ImportReport,
     PositionMark, PrefixRemap, Tempo, UnmatchedReason, XmlNode, XmlTrack,
 };
-use reks_core::{scan, CancelToken, Library};
+use reks_core::{scan, CancelToken, DuplicateMode, Library, PlaylistOp, PlaylistOutcome};
 use rusqlite::types::Value;
 
 const XML_PREFIX: &str = "/Users/reks/Music/reks fixtures";
@@ -391,6 +391,77 @@ fn second_import_changes_nothing_and_keeps_user_data() {
     assert_eq!(env.snapshot(), with_user);
     assert_eq!(env.playlist_tracks("Lossless"), vec![2, 1]);
     assert_eq!(cues(&env, 2).len(), 3);
+}
+
+#[test]
+fn reimport_after_playlist_edits_still_matches() {
+    let env = Env::new();
+    let c = small_collection();
+    env.import(&c, fixture_remap());
+    let id = |name: &str| -> i64 {
+        env.db()
+            .query_row("SELECT id FROM playlist WHERE name = ?1", [name], |r| {
+                r.get(0)
+            })
+            .unwrap()
+    };
+    let (folder, all, lossless) = (id("reks fixtures"), id("All fixtures"), id("Lossless"));
+    let (t1, t2, t3) = (env.track_id(1), env.track_id(2), env.track_id(3));
+    let mutate = |op| env.lib.playlist_mutate(op).unwrap();
+
+    // Edits in reks: reorder, insert, a second copy, a sibling move, a new playlist.
+    mutate(PlaylistOp::ReorderEntries {
+        playlist_id: all,
+        positions: vec![2],
+        before: 0,
+    });
+    mutate(PlaylistOp::AddTracks {
+        playlist_id: lossless,
+        track_ids: vec![t1, t2],
+        before: Some(0),
+        duplicates: DuplicateMode::Allow,
+    });
+    mutate(PlaylistOp::Move {
+        id: lossless,
+        parent_id: Some(folder),
+        position: 0,
+    });
+    let PlaylistOutcome::Done {
+        created_id: Some(mine),
+        ..
+    } = mutate(PlaylistOp::CreatePlaylist {
+        parent_id: Some(folder),
+        name: "Mine".into(),
+        position: Some(1),
+    })
+    else {
+        panic!("no id");
+    };
+    mutate(PlaylistOp::AddTracks {
+        playlist_id: mine,
+        track_ids: vec![t3],
+        before: None,
+        duplicates: DuplicateMode::Ask,
+    });
+    assert_eq!(env.playlist_tracks("Lossless"), vec![1, 2, 2]);
+
+    let again = env.import(&c, fixture_remap());
+    assert_eq!(again.playlists_created, 0);
+    assert_eq!(again.playlists_matched, 3);
+    assert_eq!(id("Lossless"), lossless);
+    // XML order wins; what reks added (including the second copy) follows it.
+    assert_eq!(env.playlist_tracks("All fixtures"), vec![1, 2, 3]);
+    assert_eq!(env.playlist_tracks("Lossless"), vec![2, 1, 2]);
+    assert_eq!(env.playlist_tracks("Mine"), vec![3]);
+    let order: Vec<i64> = env
+        .lib
+        .playlists()
+        .unwrap()
+        .nodes
+        .iter()
+        .map(|n| n.id)
+        .collect();
+    assert_eq!(order, vec![folder, lossless, mine, all]);
 }
 
 #[test]
