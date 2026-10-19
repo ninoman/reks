@@ -19,6 +19,9 @@ Engine DJ players.
 - Converts lossless tracks to WAV, AIFF or FLAC, for older players or to save
   space, keeping cues and playlists
   ([`docs/phases/phase-2.6.md`](docs/phases/phase-2.6.md)).
+- Stick profiles: a saved, visible list of playlists per stick, synced with a
+  dry run; sticks written by rekordbox can be adopted
+  ([`docs/stick-profiles.md`](docs/stick-profiles.md)).
 - Analyses tracks itself (BPM, beatgrid, key, waveforms) in Pioneer formats.
 - Later: the newer rekordbox "Device Library Plus" (`exportLibrary.db`) format
   and Denon Engine DJ libraries.
@@ -42,6 +45,7 @@ Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
 | [`CLAUDE.md`](CLAUDE.md) | Brief for contributors and coding agents: stack, rules, conventions |
 | [`docs/decisions.md`](docs/decisions.md) | Architecture and product decisions, with status |
 | [`docs/phases/`](docs/phases/) | Phase 1–6 plans (plus 2.5 and 2.6) with task checklists |
+| [`docs/stick-profiles.md`](docs/stick-profiles.md) | Stick profiles and adopting foreign sticks (spec, D27) |
 | [`docs/research.md`](docs/research.md) | Evidence and sources behind the decisions |
 | [`docs/research/`](docs/research/) | Raw research notes per topic |
 | [`docs/hw-test-log.md`](docs/hw-test-log.md) | Real-player test results |

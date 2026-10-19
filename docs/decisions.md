@@ -470,6 +470,28 @@ Date of decisions: 2026-10-18.
   all three); Radix menus portal to `<body>`, so tests query `document`; the JS
   bundle grew from 353 kB to 506 kB (Radix), over Vite's 500 kB warning.
 
+## D27. Stick profiles and adopting foreign sticks
+
+- Date: 2026-10-19. Status: proposed. Spec: [`stick-profiles.md`](stick-profiles.md).
+  Profiles: Phase 2 task 15 (replaces task 10's "last selection per device
+  label"). Adopt: Phase 2.5 task 12.
+- Decision: each stick is a `device` keyed by FAT/exFAT volume serial (as D23),
+  with a saved, live selection of playlists/folders. Sync runs the unchanged
+  Phase 2 pipeline (plan → dry run → D23 backup → write → validate → manifest)
+  and records `device_synced_playlist`; per-playlist status
+  (`InSync | Changed | New | WillRemove`) and "frees X MB" are computed in Rust.
+  A stick reks did not write can be adopted: read-only scan with rekordcrate,
+  history import first, tracks matched with the D23 matcher, each stick playlist
+  linked, created under `From stick/<name>/`, or skipped.
+- Rationale: rekordbox makes it hard to see and prune what is on a stick. baken
+  rebuilds `export.pdb` every run (D7), so a saved selection plus a dry run is
+  the safe way to add and drop playlists.
+- Rejected: editing the stick DB in place; snapshot entries; rule-based or
+  auto-sync on mount (v1); writing any reks file to the stick.
+- Risks: volume serial per OS and after reformat (R§8 item 14); player limits
+  on playlist count/depth (UNVERIFIED); whether baken keeps `/Contents` paths
+  so unchanged tracks are not re-copied; rekordcrate reading a rekordbox 7 stick.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

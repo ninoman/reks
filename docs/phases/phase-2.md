@@ -313,8 +313,8 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    7 for cancel and stick-wide errors; a single failed track still gets a new
    PDB without it, see task 7).
 10. **Export UI**: wizard (device → playlists → options → dry-run table with
-    warnings/errors/deletes → progress → report with "Eject"). Persist last
-    selection per device label.
+    warnings/errors/deletes → progress → report with "Eject"). The device's
+    selection is its stick profile (task 15).
 11. **`reks-cli rb export/validate/diff/history`** for headless iteration
     (`history` lists the stick's history playlists and entry counts).
     The binary is `reks`; commands live in [rb.rs](../../crates/reks-cli/src/rb.rs).
@@ -380,6 +380,13 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
 14. **Hardware campaign**: run the checklist on CDJ-2000NXS2 and CDJ-3000
     (and any other player available); fix; log in `docs/hw-test-log.md`.
     Tasks 12–13 come first: the checklist re-exports a played stick.
+15. **Stick profiles** (D27, [`../stick-profiles.md`](../stick-profiles.md) §4.1–4.2,
+    §5): migration for `device`, `device_selection`, `device_synced_playlist`;
+    `devices::identify` (serial, label+size prompt, no-serial confirm),
+    `profile_status`, `set_selection`; Devices panel with status, "frees X MB"
+    and capacity bar; Sync records `device_synced_playlist`. Tests per
+    stick-profiles §8 (status property test, identity, profile → `Selection`
+    equals hand-built plan). Depends on tasks 9, 12, 13.
 
 ## Acceptance criteria
 

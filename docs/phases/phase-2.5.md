@@ -1,8 +1,8 @@
-# Phase 2.5 — Stick round trip (playlist dividers, play history)
+# Phase 2.5 — Stick round trip (playlist dividers, play history, adopt)
 
 Status: not started. Depends on: Phase 2 done, including its hardware campaign,
 history safeguard and `export_manifest` (tasks 12–14). Runs before Phase 3.
-Read `docs/decisions.md` D7, D22, D23 and `docs/research.md` §10 first.
+Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
 ## Goal
 
@@ -203,6 +203,12 @@ Divider rules
 10. **`reks-cli history scan/import`** for headless runs.
 11. **Hardware session**: checklist below on CDJ-2000NXS2 and CDJ-3000; log in
     `docs/hw-test-log.md`; turn `export.dividers` on by default only after both pass.
+12. **Adopt a foreign stick** (D27, [`../stick-profiles.md`](../stick-profiles.md) §4.3):
+    `adopt::scan` / `adopt::apply`, read-only on the stick; history import
+    (tasks 5–6) first; Link / Create under `From stick/<name>/` / Skip per
+    playlist; UI dialog. First check open item S4 (rekordcrate on a
+    rekordbox 7 fixture). Tests per stick-profiles §8 (golden `AdoptPlan`,
+    stick bytes unchanged, Link only on exact ordered match).
 
 ## Acceptance criteria
 
