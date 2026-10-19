@@ -22,6 +22,9 @@ fn core_version() -> &'static str {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Restores each window's size, position and maximised state on start and
+        // saves it on close, in `app_config_dir/.window-state.json`.
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
             let paths = app.path();
             // D19: app_data_dir, but app_local_data_dir on Windows (not roaming).

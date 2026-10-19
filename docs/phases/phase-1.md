@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (tasks 1–13 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–14 done 2026-10-19; acceptance criteria and manual checklist open). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -456,10 +456,29 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
   import runs. At start-up a stored cache dir that cannot be created falls back to the default
   (logged). Artwork paths are relative to the cache, so the database is untouched.
 - Window state is saved 300 ms after the last change (`startUiSync`) and restored before the
-  table shows; window size and position are task 14.
+  table shows; window size and position are task 14 (window-state plugin, below).
 - UI: Settings dialog (header gear button, Cmd/Ctrl+,), one view in titled groups: Folders
-  (library folders, cache folder), Playback (output device), Display (key notation). A stored device that is not connected stays listed as such.
-- Covered by reks-core and Vitest tests; not yet checked by hand in `cargo tauri dev`.
+  (library folders, cache folder), Playback (output device), Display (key notation). A
+  stored device that is not connected stays listed as such.
+- Covered by reks-core and Vitest tests; the dialog was reviewed in `cargo tauri dev`.
+  Not checked by hand yet: settings across a restart and a real cache move.
+
+Notes (task 14, [`release.yml`](../../.github/workflows/release.yml), [`icons/`](../../src-tauri/icons/))
+- App icon: a record with a blue label (the UI accent) and an amber cue dot, drawn in
+  `src-tauri/icons/app-icon.svg` (1024 canvas, 824 px body on the macOS grid). Every
+  bundled size comes from it: `cargo tauri icon src-tauri/icons/app-icon.svg`, then keep
+  only the files already in `icons/` (the Android and iOS sets are not used).
+- Window state: `tauri-plugin-window-state` restores size, position and maximised state
+  and saves them on close, in `app_config_dir/.window-state.json`. It is not in the
+  `setting` table, since it is per machine and is not a preference. A saved position
+  on no connected monitor is skipped, so the window opens at the default place.
+- Release: pushing a tag `vX.Y.Z` runs `release.yml`. It first checks that the tag
+  equals the version in `Cargo.toml`, `package.json` and `tauri.conf.json`, then builds
+  macOS arm64, macOS x86_64, Windows and Linux (Ubuntu 22.04) with `tauri-action@v1`
+  and uploads the bundles to a draft pre-release. Builds are unsigned (D17); signing,
+  notarisation and the updater come later.
+- Not checked yet: a tag run on GitHub, and window state across restarts in the
+  running app (manual checklist).
 
 ### Audio (`reks-audio`)
 
@@ -539,7 +558,8 @@ Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5)
 - Overview: min/max per 1,000 source frames over both channels, computed on
   every decode and cached in `<cache_dir>/waveform/overview/<key>.f32` (key:
   hash of path, size and mtime).
-- UI: double-click or Enter plays a row; Space plays and pauses (except in
+- UI: double-click or Enter plays a row; the loaded track's row gets an accent
+  bar and accent text (distinct from the selection background); Space plays and pauses (except in
   text fields); the overview is the position slider (seeks on pointer-down and
   on every move while dragging, arrow keys ±5 s; the store sends only the
   newest target while a seek call is in flight). `reks-cli devices` and `reks-cli play <file>` drive it headless.
@@ -602,7 +622,7 @@ Response(bytes)`, `settings_get`, `settings_set(patch)`, `library_roots`, `libra
     replacement).
 13. [x] **Settings**: library roots, cache dir, audio device, rekordbox key
     notation preference; stored in `setting`.
-14. [ ] **Polish + release pipeline**: app icon, window state persistence, unsigned
+14. [x] **Polish + release pipeline**: app icon, window state persistence, unsigned
     dev builds via `tauri-action` on tags (signing is Phase 2+ concern; see
     decisions.md).
 
@@ -646,6 +666,8 @@ Response(bytes)`, `settings_get`, `settings_set(patch)`, `library_roots`, `libra
   with a reason); spot-check 20 tracks against rekordbox side by side.
 - Export XML, import into rekordbox 7 as a test playlist; confirm cues/grids.
 - Play a track on each OS; switch output device while playing.
+- Resize and move the window, quit, reopen: same size and place. Push a test tag and
+  install the draft release's bundle on each OS.
 
 ## Risks
 

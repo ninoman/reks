@@ -6,7 +6,8 @@
  * Rows drag (the whole selection) onto playlists in the tree. In a playlist
  * view sorted by position (ascending) they also drag to reorder, and Delete or
  * the context menu removes the selected entries. Double-click or Enter loads
- * a row into the player and plays it.
+ * a row into the player and plays it; the loaded track's row is marked with
+ * an accent bar and accent text, separate from the selection background.
  */
 
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -39,6 +40,7 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const ensureRange = useLibrary((s) => s.ensureRange);
   const select = useLibrary((s) => s.select);
   const playlistId = useLibrary((s) => s.filters.playlistId);
+  const loadedId = usePlayer((s) => s.status.trackId);
   const nodes = usePlaylists((s) => s.nodes);
   const view = shownPlaylist(nodes, playlistId);
   const canReorder = view !== null && sort.column === "playlistPosition" && !sort.descending;
@@ -230,6 +232,7 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
           const row = rowAt(pages, item.index);
           const selected = selection.selected.has(item.index);
           const focused = selection.focus === item.index;
+          const loaded = row !== undefined && row.id === loadedId;
           return (
             <div
               key={item.index}
@@ -237,8 +240,8 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
               aria-rowindex={item.index + 1}
               aria-selected={selected}
               className={`tt-row${item.index % 2 === 1 ? " odd" : ""}${selected ? " selected" : ""}${focused ? " focused" : ""}${
-                row === undefined ? " loading" : ""
-              }${row?.missing ? " missing" : ""}${
+                loaded ? " loaded" : ""
+              }${row === undefined ? " loading" : ""}${row?.missing ? " missing" : ""}${
                 dropAt?.index === item.index ? (dropAt.after ? " drop-after" : " drop-before") : ""
               }`}
               style={{ transform: `translateY(${item.start}px)`, height: ROW_HEIGHT }}

@@ -758,6 +758,24 @@ select {
 .tt-row.missing {
   color: var(--muted);
 }
+/* The track in the player: accent bar and text, so it reads apart from the
+   selection background and still shows when both apply. */
+.tt-row.loaded {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tt-row.loaded::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
+.tt-row.loaded.selected {
+  color: var(--fg);
+}
 .tt-cell {
   flex: none;
   box-sizing: border-box;
