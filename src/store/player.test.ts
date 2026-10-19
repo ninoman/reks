@@ -102,6 +102,24 @@ describe("player store", () => {
     expect(usePlayer.getState().status.positionMs).toBe(30_000);
   });
 
+  it("toggle flips the button before Rust answers and ignores a stale poll", async () => {
+    usePlayer.setState({ status: paused });
+    let answerPoll: (s: PlayerStatus) => void = () => {};
+    vi.mocked(ipc.playerState).mockImplementationOnce(() => new Promise((r) => (answerPoll = r)));
+    const poll = usePlayer.getState().poll();
+    let answerPlay: (s: PlayerStatus) => void = () => {};
+    vi.mocked(ipc.playerPlay).mockImplementationOnce(() => new Promise((r) => (answerPlay = r)));
+    const toggled = usePlayer.getState().toggle();
+    expect(usePlayer.getState().status.playing).toBe(true);
+    // The poll was sent before Play; its "paused" is out of date.
+    answerPoll(paused);
+    await poll;
+    expect(usePlayer.getState().status.playing).toBe(true);
+    answerPlay(playing);
+    await toggled;
+    expect(usePlayer.getState().status.playing).toBe(true);
+  });
+
   it("toggle does nothing with no track", async () => {
     await usePlayer.getState().toggle();
     expect(ipc.playerPlay).not.toHaveBeenCalled();

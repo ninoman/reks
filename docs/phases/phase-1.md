@@ -559,8 +559,10 @@ Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5)
   every decode and cached in `<cache_dir>/waveform/overview/<key>.f32` (key:
   hash of path, size and mtime).
 - UI: double-click or Enter plays a row; the loaded track's row gets an accent
-  bar and accent text (distinct from the selection background); Space plays and pauses (except in
-  text fields); the overview is the position slider (seeks on pointer-down and
+  bar and accent text (distinct from the selection background); Space plays and pauses wherever focus
+  is (except in text fields, dialogs and menus), without ringing the control clicked last; the
+  button flips at once and the player reports a play/pause the audio thread has not taken yet
+  as requested, so the state never lags the sound; the overview is the position slider (seeks on pointer-down and
   on every move while dragging, arrow keys ±5 s; the store sends only the
   newest target while a seek call is in flight). `reks-cli devices` and `reks-cli play <file>` drive it headless.
 
