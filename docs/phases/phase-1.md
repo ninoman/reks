@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (tasks 1–3 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–4 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -226,6 +226,19 @@ impl Player {
 }
 ```
 
+Notes (task 4, [`reks-audio`](../../crates/reks-audio/src/))
+- `probe` takes kind, rate, channels, bit depth and duration from Symphonia.
+  Duration excludes encoder delay/padding when the file records it (MP3 LAME
+  header). AAC priming is not trimmed (no AAC gapless in Symphonia), so M4A
+  reads ~23 ms long. Bit rate: exact for WAV/AIFF, lofty's stream bit rate
+  otherwise (tags and artwork not counted).
+- `tags` merges the primary tag with the file's other tags; `key` is the raw
+  initial-key string for `keys.rs` to normalise. No `mix` field yet: which
+  tag frame rekordbox reads "Mix" from is UNVERIFIED.
+- Artwork: `Library::store_artwork` (`reks-core`) sniffs the bytes, de-dups by
+  SHA-256 into `<cache_dir>/artwork/<sha256>.<ext>`, and stores `blob_path`
+  relative to the cache dir. A deleted cache file is rewritten on the next store.
+
 ### Tauri commands (`src-tauri`)
 
 `library_query`, `library_track`, `library_update_track`, `playlists_get`,
@@ -251,7 +264,7 @@ Response(bytes)`.
    [`fixtures/README.md`](../../fixtures/README.md).
 3. [x] **Schema + migrations**: migration 0001 above, `Library::open`, FTS triggers,
    `keys.rs` with parsing/normalisation and tests for every notation.
-4. [ ] **Audio probe + tags + artwork**: `probe`, `tags` (`lofty`), artwork
+4. [x] **Audio probe + tags + artwork**: `probe`, `tags` (`lofty`), artwork
    extraction and de-dup into cache, unit tests on the fixtures.
 5. [ ] **Folder scan**: walk roots (`walkdir`), extension filter, NFC normalise
    paths, insert/update by path, detect moves by `content_hash`, mark missing,

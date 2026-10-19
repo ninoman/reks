@@ -80,7 +80,6 @@ impl Library {
     }
 
     /// Locks the connection. Crate-internal: service modules build on this.
-    #[allow(dead_code)] // first callers arrive with scan/import (tasks 5–7)
     pub(crate) fn conn(&self) -> Result<MutexGuard<'_, Connection>> {
         self.conn.lock().map_err(|_| Error::LockPoisoned)
     }
