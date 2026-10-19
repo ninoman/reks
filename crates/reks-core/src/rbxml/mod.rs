@@ -2,13 +2,15 @@
 //!
 //! Format reference: `docs/research.md` §7. Model and round-trip rules:
 //! `docs/phases/phase-1.md` (task 6 notes). Import into the library:
-//! [`import()`] (task 7 notes).
+//! [`import()`] (task 7 notes). Export of a playlist selection (the input
+//! for the USB writer): [`export()`] (`docs/phases/phase-2.md` task 6).
 //!
 //! Every attribute we don't model is kept in an `extra` map, and a known
 //! numeric attribute whose value doesn't parse is kept there too (raw), so
 //! `parse(write(c)) == c` holds for any parsed collection.
 
 mod colour;
+mod export;
 mod import;
 mod location;
 mod parse;
@@ -17,6 +19,7 @@ mod write;
 use std::collections::BTreeMap;
 
 pub use colour::{colour_name, colour_rgb, TRACK_COLOURS};
+pub use export::{export, export_file, Selection, XmlExport};
 pub use import::{
     import, preview, ImportEvent, ImportOptions, ImportPreview, ImportReport, ImportStage,
     ImportWarning, PrefixRemap, Unmatched, UnmatchedReason, PREVIEW_SAMPLE,

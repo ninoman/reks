@@ -27,6 +27,7 @@ unicode-normalization = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
+baken-export = { workspace = true }
 lofty = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }

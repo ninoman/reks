@@ -72,6 +72,10 @@ pub enum Error {
     #[error("library folder {0} not found")]
     LibraryRootNotFound(i64),
 
+    /// An export selection that holds no playlist (nothing, or only empty folders).
+    #[error("the selection contains no playlist")]
+    EmptySelection,
+
     /// A thread panicked while holding the connection lock.
     #[error("library connection lock poisoned")]
     LockPoisoned,

@@ -1,6 +1,6 @@
 # Phase 2 — Legacy USB export (`export.pdb` + ANLZ)
 
-Status: in progress (task 2 done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
+Status: in progress (tasks 2, 3, 5, 6 done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
 `rb_track_id`/`rb_location`). Read `docs/decisions.md` D7, D8, D16, D23 and
 `docs/research.md` §1, §4, §10 first.
 
@@ -94,9 +94,18 @@ pub mod audiocheck {   // done: crates/reks-export-rb/src/audiocheck.rs
     pub enum Severity { Warning, Error }                       // Issue::severity(target)
     pub fn check(path: &Path, probe: &Probe, target: TargetProfile) -> Result<Vec<Issue>, Error>;  // Err = unreadable/malformed header
 }
-pub mod rbcache {   // rekordbox's local analysis files for imported tracks
-    pub fn default_roots() -> Vec<PathBuf>;                      // macOS: ~/Library/Pioneer/rekordbox/share/PIONEER/USBANLZ, Windows: %APPDATA%\Pioneer\rekordbox\share\PIONEER\USBANLZ (verify)
-    pub fn locate(track: &TrackRow, roots: &[PathBuf]) -> Option<AnlzSet>; // delegate to baken's locate, or own index of PPTH → files
+pub mod rbcache {   // done: crates/reks-export-rb/src/rbcache.rs
+    pub fn default_roots() -> Vec<PathBuf>;                      // baken's: macOS ~/Library/Pioneer/rekordbox/share/PIONEER/USBANLZ (verified), Windows %APPDATA%\... (UNVERIFIED), library drives
+    pub struct AnlzQuery { pub path: String, pub total_time_s: u32, pub first_tempo: Option<(f64, f64)> } // From<&baken Track>
+    pub struct RbCache;                                          // RbCache::scan(roots) once, then .locate(&AnlzQuery) -> Lookup
+    pub enum Lookup { Found(AnlzSet), Missing(Missing) }         // Missing::{NoRoots, NotAnalysed, Mismatch}
+    pub struct AnlzSet { pub dat: PathBuf, pub ext: Option<PathBuf>, pub two_ex: Option<PathBuf>, pub beats: u32 }
+}
+pub mod rbxml {     // in reks-core; done: crates/reks-core/src/rbxml/export.rs
+    pub struct Selection { pub playlists: Vec<PlaylistId> }      // playlists or folders (= every playlist under it)
+    pub fn export(lib: &Library, sel: &Selection) -> Result<XmlExport>;          // { collection, playlists: Vec<(id, "Folder/Name")> }
+    pub fn export_file(lib: &Library, sel: &Selection, path: &Path) -> Result<XmlExport>;
+    impl XmlExport { pub fn baken_playlists(&self) -> Vec<String>; }            // Options.playlists
 }
 ```
 
@@ -187,13 +196,35 @@ CREATE TABLE export_manifest (              -- latest export to each stick
    warnings, errors, byte totals; stable `/Contents` paths across re-exports
    (reuse existing path if the same source file is already on the stick:
    compare size + mtime or hash); unit tests on fake device trees.
-5. **rbcache locate**: find rekordbox's local ANLZ for an imported track
+5. [x] **rbcache locate**: find rekordbox's local ANLZ for an imported track
    (use baken's `anlz_roots` default resolution; add an index that scans
    roots once and maps PPTH → files for our own needs); report `Missing`.
-6. **XML bridge for baken**: `rbxml::export(lib, selection)` to a temp file
+   Done in [rbcache.rs](../../crates/reks-export-rb/src/rbcache.rs): wraps
+   baken's `AnlzIndex` (one scan, PPTH file name → `.DAT`s), so the dry run
+   predicts exactly what baken copies. baken matches on the file name, then
+   requires the first beat (±2 ms) and BPM of the XML's first `TEMPO`, and
+   prefers a grid whose length agrees with `TotalTime` (±3 s); a track
+   without a grid only takes an analysis without one. `Missing` says why:
+   no root, never analysed, or a same-named file that doesn't match. Build
+   `AnlzQuery` from the temp XML parsed with `baken_export::collection`, so
+   both see the same values. macOS root checked on the maintainer's machine
+   (2026-10-19, `USBANLZ/<3 hex>/<id>/ANLZ0000.{DAT,EXT,2EX}`, PPTH
+   `?/<file name>`); Windows and library-drive roots UNVERIFIED.
+6. [x] **XML bridge for baken**: `rbxml::export(lib, selection)` to a temp file
    with only the planned playlists; map our `Selection` to baken
    `Options.playlists` (`Folder/Name` paths). Test that the temp XML parses
    with our parser and baken's `collection` module.
+   Done in [rbxml/export.rs](../../crates/reks-core/src/rbxml/export.rs),
+   tests in [rbxml_export.rs](../../crates/reks-core/tests/rbxml_export.rs).
+   The file holds the selected playlists (a folder = all playlists under
+   it), their ancestor folders in library order, and each referenced track
+   once; `TrackID` is our track id, `KeyType` 0. Fields are the inverse of
+   the import (stars × 51, colour name → RGB, `Kind` from `track.kind` with
+   ALAC as `ALAC File`, which baken reads to tell ALAC from AAC). baken picks
+   a playlist by its first exact path match, so when two exported playlists
+   share a path (same-named siblings, or a `/` in a name) `baken_playlists`
+   returns an empty list, which baken reads as every playlist in the file:
+   the same set.
 7. **BakenWriter**: implement `RekordboxWriter` with `baken_export::plan` +
    `export`; translate its `Plan`/`Report`/`Skipped` into our events; handle
    `Error::DeviceWrite`; set `prune`, `no_settings` (unless settings sourced),
