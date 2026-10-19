@@ -76,6 +76,14 @@ pub enum Error {
     #[error("the selection contains no playlist")]
     EmptySelection,
 
+    /// No stick with this id.
+    #[error("stick {0} not found")]
+    DeviceNotFound(crate::device::DeviceId),
+
+    /// The volume ID already belongs to another known stick.
+    #[error("this stick's volume ID already belongs to '{name}'")]
+    DeviceSerialInUse { name: String },
+
     /// A thread panicked while holding the connection lock.
     #[error("library connection lock poisoned")]
     LockPoisoned,

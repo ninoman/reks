@@ -17,6 +17,7 @@ use crate::error::{Error, Result};
 const MIGRATION_LIST: &[M<'static>] = &[
     M::up(include_str!("../migrations/0001_init.sql")),
     M::up(include_str!("../migrations/0002_export_manifest.sql")),
+    M::up(include_str!("../migrations/0003_device_profiles.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 

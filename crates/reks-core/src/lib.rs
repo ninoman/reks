@@ -4,6 +4,7 @@
 
 pub mod artwork;
 pub mod db;
+pub mod device;
 pub mod error;
 mod fileinfo;
 pub mod fsname;
@@ -20,6 +21,7 @@ pub mod track;
 
 pub use artwork::ArtworkId;
 pub use db::Library;
+pub use device::{Device, DeviceId, NewDevice, SyncedPlaylist, SyncedRecord};
 pub use error::{Error, Result};
 pub use keys::{Key, KeyNotation, Mode};
 pub use manifest::{ManifestEntry, ManifestItemKind, ManifestRow};

@@ -385,42 +385,79 @@ impl std::fmt::Display for Finding {
 
 /// Reads the stick at `device_root` back and checks it against `plan`.
 pub fn validate(device_root: &Path, plan: &ExportPlan) -> Result<ValidationReport, ValidateError> {
-    let mut report = ValidationReport::default();
-    let Some(pdb_path) = locate(device_root, PDB_PATH).map_err(io_err(device_root))? else {
-        report.findings.push(Finding::PdbMissing);
-        return Ok(report);
-    };
-    let bytes = fs::read(&pdb_path).map_err(io_err(&pdb_path))?;
-    let pdb = match read_pdb(&bytes) {
-        Ok(pdb) => pdb,
-        Err(message) => {
-            report.findings.push(Finding::PdbUnreadable { message });
-            return Ok(report);
+    let mut report = match read_back(device_root)? {
+        ReadBack::Read(report) => report,
+        ReadBack::Missing => return Ok(finding_only(Finding::PdbMissing)),
+        ReadBack::Unreadable(message) => {
+            return Ok(finding_only(Finding::PdbUnreadable { message }))
         }
     };
+    let planned: HashMap<&str, TrackId> = plan
+        .tracks
+        .iter()
+        .map(|t| (t.dst_rel.as_str(), t.track_id))
+        .collect();
+    for t in &mut report.tracks {
+        t.track_id = planned.get(t.file_path.as_str()).copied();
+    }
+    check_tracks(device_root, plan, &report.tracks, &mut report.findings)?;
+    check_playlists(
+        plan,
+        &report.tracks,
+        &report.playlists,
+        &mut report.findings,
+    );
+    Ok(report)
+}
+
+/// Reads the stick's `export.pdb` without a plan: its track rows (with no
+/// `track_id`), its playlist tree, and findings only for damage
+/// ([`Finding::PdbMissing`] when there is no database). Read-only; stick
+/// profiles use it to see what a mounted stick holds.
+pub fn read(device_root: &Path) -> Result<ValidationReport, ValidateError> {
+    Ok(match read_back(device_root)? {
+        ReadBack::Read(report) => report,
+        ReadBack::Missing => finding_only(Finding::PdbMissing),
+        ReadBack::Unreadable(message) => finding_only(Finding::PdbUnreadable { message }),
+    })
+}
+
+enum ReadBack {
+    Missing,
+    /// The header itself is unusable.
+    Unreadable(String),
+    /// Rows, tree and entries; damage to tables or rows in `findings`.
+    Read(ValidationReport),
+}
+
+fn finding_only(f: Finding) -> ValidationReport {
+    ValidationReport {
+        findings: vec![f],
+        ..ValidationReport::default()
+    }
+}
+
+fn read_back(device_root: &Path) -> Result<ReadBack, ValidateError> {
+    let Some(pdb_path) = locate(device_root, PDB_PATH).map_err(io_err(device_root))? else {
+        return Ok(ReadBack::Missing);
+    };
+    let bytes = fs::read(&pdb_path).map_err(io_err(&pdb_path))?;
     let PdbContents {
         table_types,
         tracks,
         playlists,
         entries,
         errors,
-    } = pdb;
-    report.findings.extend(errors);
+    } = match read_pdb(&bytes) {
+        Ok(pdb) => pdb,
+        Err(message) => return Ok(ReadBack::Unreadable(message)),
+    };
+    let mut report = ValidationReport {
+        tracks,
+        playlists,
+        findings: errors,
+    };
     check_tables(&table_types, &mut report.findings);
-
-    let planned: HashMap<&str, TrackId> = plan
-        .tracks
-        .iter()
-        .map(|t| (t.dst_rel.as_str(), t.track_id))
-        .collect();
-    report.tracks = tracks
-        .into_iter()
-        .map(|mut t| {
-            t.track_id = planned.get(t.file_path.as_str()).copied();
-            t
-        })
-        .collect();
-    report.playlists = playlists;
     for (playlist_id, list) in entries {
         if let Some(p) = report
             .playlists
@@ -430,15 +467,7 @@ pub fn validate(device_root: &Path, plan: &ExportPlan) -> Result<ValidationRepor
             p.entries = list;
         }
     }
-
-    check_tracks(device_root, plan, &report.tracks, &mut report.findings)?;
-    check_playlists(
-        plan,
-        &report.tracks,
-        &report.playlists,
-        &mut report.findings,
-    );
-    Ok(report)
+    Ok(ReadBack::Read(report))
 }
 
 fn check_tables(types: &[u32], findings: &mut Vec<Finding>) {
@@ -1022,7 +1051,7 @@ fn entry_row(row: &Row) -> Result<(u32, u32, u32), String> {
 /// The file at stick path `rel` (`/`-separated), each component matched
 /// ignoring ASCII case when the exact name is absent (FAT is
 /// case-insensitive, a temp dir on Linux is not).
-fn locate(root: &Path, rel: &str) -> io::Result<Option<PathBuf>> {
+pub(crate) fn locate(root: &Path, rel: &str) -> io::Result<Option<PathBuf>> {
     let mut path = root.to_path_buf();
     for part in rel.split('/').filter(|p| !p.is_empty()) {
         let exact = path.join(part);
