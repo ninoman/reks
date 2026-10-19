@@ -95,6 +95,24 @@ pub enum Error {
     #[error("cannot convert {path}: {reason}")]
     Convert { path: String, reason: String },
 
+    /// No play session entry at this position.
+    #[error("session {session} has no entry {position}")]
+    SessionEntryNotFound {
+        session: crate::history::SessionId,
+        position: u32,
+    },
+
+    /// The op needs a track entry, and this session entry is a divider.
+    #[error("entry {position} of session {session} is not a track entry")]
+    NotATrackEntry {
+        session: crate::history::SessionId,
+        position: u32,
+    },
+
+    /// A history import plan no longer fits the library; nothing was written.
+    #[error("the history import plan is out of date: {0}")]
+    StaleHistoryPlan(String),
+
     /// A thread panicked while holding the connection lock.
     #[error("library connection lock poisoned")]
     LockPoisoned,

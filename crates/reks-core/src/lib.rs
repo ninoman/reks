@@ -9,6 +9,7 @@ pub mod device;
 pub mod error;
 mod fileinfo;
 pub mod fsname;
+pub mod history;
 pub mod keys;
 pub mod manifest;
 pub mod playlist;
