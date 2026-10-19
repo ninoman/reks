@@ -190,6 +190,9 @@ select {
 .import-form input {
   width: 260px;
 }
+.import-form .hint {
+  color: #d0342c;
+}
 .column-chooser {
   position: relative;
 }

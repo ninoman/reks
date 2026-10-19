@@ -124,15 +124,18 @@ function ImportForm({
     const p = await open({ directory: true, title: "Folder the music is in now" });
     if (typeof p === "string") setTo(p);
   }
-  const remap =
-    from.trim() !== "" && to.trim() !== "" ? [{ from: from.trim(), to: to.trim() }] : [];
+  const hasFrom = from.trim() !== "";
+  const hasTo = to.trim() !== "";
+  // A half-filled remap would be silently dropped; make the user finish or clear it.
+  const remapIncomplete = hasFrom !== hasTo;
+  const remap = hasFrom && hasTo ? [{ from: from.trim(), to: to.trim() }] : [];
 
   return (
     <form
       className="import-form"
       onSubmit={(e) => {
         e.preventDefault();
-        if (path !== "") onImport(path, remap);
+        if (path !== "" && !remapIncomplete) onImport(path, remap);
       }}
     >
       <label>
@@ -165,9 +168,14 @@ function ImportForm({
           Choose…
         </button>
       </label>
-      <button type="submit" disabled={disabled || path === ""}>
+      <button type="submit" disabled={disabled || path === "" || remapIncomplete}>
         Import
       </button>
+      {remapIncomplete && (
+        <span className="hint" role="alert">
+          Fill in both folder fields, or clear them, to import.
+        </span>
+      )}
     </form>
   );
 }
