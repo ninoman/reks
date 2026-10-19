@@ -19,7 +19,7 @@ use std::time::Instant;
 
 use rusqlite::types::Value;
 use rusqlite::{named_params, params, Transaction};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 
 use super::colour::colour_name;
@@ -36,7 +36,7 @@ const SOURCE: &str = "rekordbox";
 
 /// Replace a path prefix in every `Location` (the music folder moved since
 /// rekordbox exported the XML). Compared component-wise.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct PrefixRemap {
     pub from: PathBuf,
     /// Made absolute against the current directory if relative.

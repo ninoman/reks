@@ -7,6 +7,7 @@ pub mod db;
 pub mod error;
 mod fileinfo;
 pub mod keys;
+pub mod query;
 pub mod rbxml;
 pub mod scan;
 pub mod timefmt;
@@ -15,6 +16,10 @@ pub use artwork::ArtworkId;
 pub use db::Library;
 pub use error::{Error, Result};
 pub use keys::{Key, Mode};
+pub use query::{
+    Facets, Filter, KeyInfo, PlaylistId, PlaylistNode, Sort, SortColumn, TrackPage, TrackQuery,
+    TrackRow,
+};
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
 
 /// Crate version, from Cargo metadata.

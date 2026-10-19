@@ -20,7 +20,9 @@ Engine DJ players.
 ## Status
 
 Pre-alpha. Phase 1 in progress: the library core (SQLite schema, folder scan,
-rekordbox XML parse/write/import) works headless and is tested; no UI yet.
+rekordbox XML parse/write/import, track queries) is tested, and the app shows the
+library in a searchable, filterable track table, filled by scanning a folder or
+importing a rekordbox XML.
 Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
 
 ## Documentation

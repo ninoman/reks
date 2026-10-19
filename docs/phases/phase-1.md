@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (tasks 1–7 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–8 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -170,7 +170,8 @@ pub struct Library { conn: Mutex<rusqlite::Connection>, cache_dir: PathBuf }
 
 impl Library {
     pub fn open(db_path: &Path, cache_dir: &Path) -> Result<Self>;      // runs migrations
-    pub fn tracks(&self, q: &TrackQuery) -> Result<Vec<TrackRow>>;      // paged, sorted, filtered
+    pub fn tracks(&self, q: &TrackQuery) -> Result<TrackPage>;          // { rows, total }; paged, sorted, filtered
+    pub fn facets(&self) -> Result<Facets>;                             // genres, keys, colours, playlists for filters
     pub fn track(&self, id: TrackId) -> Result<TrackDetail>;            // with grid, cues, artwork
     pub fn update_track(&self, id: TrackId, patch: TrackPatch) -> Result<()>;
     pub fn playlists(&self) -> Result<PlaylistTree>;
@@ -179,8 +180,10 @@ impl Library {
 
 pub struct TrackQuery { pub text: Option<String>, pub filters: Vec<Filter>,
                         pub sort: Sort, pub offset: u32, pub limit: u32 }
-pub enum Filter { Genre(String), KeyIn(Vec<Key>), BpmRange(u32,u32), Color(String),
-                  RatingMin(u8), Playlist(PlaylistId), Missing(bool), NeedsAnalysis(bool) }
+pub enum Filter { Genre { genre }, KeyIn { keys: Vec<Key> }, BpmRange { min, max } /* bpm×100 */,
+                  Color { color }, RatingMin { rating: u8 }, Playlist { id: PlaylistId },
+                  Missing { missing: bool }, NeedsAnalysis { needs: bool } }   // serde tag "type"
+pub struct Sort { pub column: SortColumn, pub descending: bool }
 
 pub mod scan {   // folder import
     pub fn scan(roots: &[PathBuf], lib: &Library, cancel: &CancelToken,
@@ -280,6 +283,40 @@ Notes (task 7, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs))
   tracks matched the XML exactly on key, rating, BPM, colour, cues and grid.
   Debug builds are ~15× slower (the 3,000-track test takes ~35 s there).
 
+Notes (task 8, [`query.rs`](../../crates/reks-core/src/query.rs), [`src/`](../../src/))
+- `Library::tracks(&TrackQuery) -> TrackPage { rows, total }`. `limit` is clamped to
+  1..=1,000 (`MAX_PAGE`); the UI fetches 200-row pages as they scroll into view.
+  All filters AND together; user values are always bound parameters.
+- Text: each whitespace-separated word with a letter or digit becomes a quoted FTS5
+  prefix term (`"deep"* "nig"*`), so every word must prefix-match a word of title,
+  artist, album, genre, comment, label or remixer, and FTS syntax in the input is plain
+  text. Diacritics fold both ways via the 0001 `unicode61` tokenizer (`beyonce` ↔ `Beyoncé`).
+- Filters: genre and colour compare case-insensitively; `KeyIn` uses canonical keys;
+  `BpmRange` is bpm×100, inclusive; `Playlist` on a folder means any playlist below it.
+- **Needs analysis** = the track has no `beatgrid` row (any source). Key and BPM alone
+  don't count: a grid is what export needs, and what rekordbox XML carries for analysed
+  tracks. `TrackRow.needsAnalysis` exposes it.
+- Sort: empty values (NULL, and `''` for text) last in both directions, text
+  case-insensitive, ties by id (stable paging). Key sorts in Camelot order (1A, 1B, 2A …),
+  colour in rekordbox order, `playlistPosition` by position in the filtered playlist.
+- No migration 0002: on 10,000 generated tracks every query in the test takes
+  0.5–8 ms in release (2–23 ms debug; slowest is the last page by title), well inside
+  the 100 ms budget, so no extra index paid for itself.
+- `library_facets` sends genres, the 24 keys with Camelot labels, the colour names and the
+  playlist tree, so key and colour knowledge stays in Rust.
+- App: `AppState` opens `reks.sqlite` in `app_data_dir` (`app_local_data_dir` on
+  Windows, D19); commands run on `spawn_blocking`. `scan_start` / `rbxml_import_start`
+  stream progress over a `Channel`; the toolbar uses them (folder/XML picked with
+  `tauri-plugin-dialog`, optional one-prefix remap) until the wizard (task 12).
+- UI: Zustand store (`src/store/library.ts`) builds the `TrackQuery`; a generation
+  counter drops stale pages. Selection is a pure reducer over row indices of the current
+  result (click, cmd/ctrl toggle, shift range, arrows/Page/Home/End with shift-extend,
+  cmd/ctrl+A, Esc) and is cleared when the query changes. Column visibility is not
+  persisted yet (task 13). Vitest covers query building, the selection reducer and the
+  search debounce; a `tauri-driver` smoke test is skipped (optional).
+- 10k manual check: `reks synth-xml 10000 synth.xml` writes a synthetic collection (files
+  missing) to import in the app.
+
 ### Audio (`reks-audio`)
 
 ```rust
@@ -328,8 +365,8 @@ Scan rules (task 5, [`scan.rs`](../../crates/reks-core/src/scan.rs))
 
 ### Tauri commands (`src-tauri`)
 
-`library_query`, `library_track`, `library_update_track`, `playlists_get`,
-`playlists_mutate`, `scan_start` (progress via `Channel<ScanEvent>`),
+`library_query`, `library_facets`, `library_track`, `library_update_track`, `playlists_get`,
+`playlists_mutate`, `scan_start` (progress via `Channel<ScanEvent>`), `scan_cancel`,
 `rbxml_import_start` (progress via Channel), `rbxml_export`,
 `player_load/play/pause/seek/volume/devices`, `player_state` (polled or event
 every 100 ms), `artwork_get(id) -> Response(bytes)`, `overview_waveform(id) ->
@@ -366,7 +403,7 @@ Response(bytes)`.
    playlists tree, options: match by Location path, fall back to
    (artist,title,size); report unmatched tracks; idempotent re-import updates
    rather than duplicates.
-8. [ ] **Track table UI**: virtualised table (`@tanstack/react-virtual` +
+8. [x] **Track table UI**: virtualised table (`@tanstack/react-virtual` +
    `@tanstack/react-table`), column chooser, sorting, 50 ms debounced search
    calling `library_query`, filters sidebar, multi-select, keyboard navigation.
 9. [ ] **Track detail + inline edit**: side panel with editable fields, cue and

@@ -22,7 +22,7 @@ pub use import::{
     Unmatched, UnmatchedReason,
 };
 pub use location::{location_to_path, path_to_location};
-pub use parse::parse;
+pub use parse::{parse, parse_file};
 pub use write::write;
 
 /// Attributes we don't model, by name, with their (unescaped) values.
