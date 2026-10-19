@@ -15,7 +15,6 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -26,9 +25,14 @@ import { hasType, readTracks, TRACKS_MIME, type TrackDrag, zoneAt } from "../lib
 import { rowAt, useLibrary } from "../store/library";
 import { usePlayer } from "../store/player";
 import { shownPlaylist, usePlaylists } from "../store/playlists";
-import { ContextMenu, type MenuState } from "./ContextMenu";
 import type { ColumnSpec } from "./columns";
 import { ROW_HEIGHT } from "./trackTableModel";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "./ui/ContextMenu";
 
 export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const total = useLibrary((s) => s.total);
@@ -44,8 +48,6 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const nodes = usePlaylists((s) => s.nodes);
   const view = shownPlaylist(nodes, playlistId);
   const canReorder = view !== null && sort.column === "playlistPosition" && !sort.descending;
-  const [menu, setMenu] = useState<MenuState | null>(null);
-  const closeMenu = useCallback(() => setMenu(null), []);
   const [dropAt, setDropAt] = useState<{ index: number; after: boolean } | null>(null);
   // A plain press on a selected row selects only it on release, unless it starts a drag.
   const pendingClick = useRef<number | null>(null);
@@ -181,102 +183,112 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
       .reorderEntries(view.id, drag.entryPositions, row.entryPosition + (after ? 1 : 0));
   }
 
-  function onRowContextMenu(e: MouseEvent, index: number) {
-    e.preventDefault();
-    if (view === null) return;
-    if (!selection.selected.has(index)) select({ type: "click", index });
-    setMenu({
-      x: e.clientX,
-      y: e.clientY,
-      items: [{ label: `Remove from ${view.name}`, onSelect: removeSelected }],
-    });
+  /** Right-click selects the row first; the menu (playlists only) opens on the table. */
+  function onRowContextMenu(index: number) {
+    if (view !== null && !selection.selected.has(index)) select({ type: "click", index });
   }
 
   return (
-    <div
-      ref={scrollRef}
-      className="track-table"
-      role="grid"
-      aria-rowcount={total}
-      aria-multiselectable
-      tabIndex={0}
-      onKeyDown={onKeyDown}
-    >
-      <div className="tt-header" role="row" style={{ width }}>
-        {columns.map((c) => (
-          <div
-            key={c.id}
-            role="columnheader"
-            className={`tt-cell${c.align === "right" ? " right" : ""}${c.sort ? " sortable" : ""}`}
-            style={{ width: c.width }}
-            aria-sort={
-              c.sort !== null && sort.column === c.sort
-                ? sort.descending
-                  ? "descending"
-                  : "ascending"
-                : undefined
-            }
-            onClick={
-              c.sort === null
-                ? undefined
-                : () => toggleSort(c.sort as NonNullable<ColumnSpec["sort"]>)
-            }
-          >
-            {c.header}
-            {c.sort !== null && sort.column === c.sort ? (sort.descending ? " ▼" : " ▲") : ""}
+    <ContextMenu modal={false}>
+      <ContextMenuTrigger asChild disabled={view === null}>
+        <div
+          ref={scrollRef}
+          className="track-table"
+          role="grid"
+          aria-rowcount={total}
+          aria-multiselectable
+          tabIndex={0}
+          onKeyDown={onKeyDown}
+          onContextMenu={(e) => {
+            // No menu in the collection, and no browser menu either.
+            if (view === null) e.preventDefault();
+          }}
+        >
+          <div className="tt-header" role="row" style={{ width }}>
+            {columns.map((c) => (
+              <div
+                key={c.id}
+                role="columnheader"
+                className={`tt-cell${c.align === "right" ? " right" : ""}${c.sort ? " sortable" : ""}`}
+                style={{ width: c.width }}
+                aria-sort={
+                  c.sort !== null && sort.column === c.sort
+                    ? sort.descending
+                      ? "descending"
+                      : "ascending"
+                    : undefined
+                }
+                onClick={
+                  c.sort === null
+                    ? undefined
+                    : () => toggleSort(c.sort as NonNullable<ColumnSpec["sort"]>)
+                }
+              >
+                {c.header}
+                {c.sort !== null && sort.column === c.sort ? (sort.descending ? " ▼" : " ▲") : ""}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="tt-body" style={{ height: virtualizer.getTotalSize(), width }}>
-        {items.map((item) => {
-          const row = rowAt(pages, item.index);
-          const selected = selection.selected.has(item.index);
-          const focused = selection.focus === item.index;
-          const loaded = row !== undefined && row.id === loadedId;
-          return (
-            <div
-              key={item.index}
-              role="row"
-              aria-rowindex={item.index + 1}
-              aria-selected={selected}
-              className={`tt-row${item.index % 2 === 1 ? " odd" : ""}${selected ? " selected" : ""}${focused ? " focused" : ""}${
-                loaded ? " loaded" : ""
-              }${row === undefined ? " loading" : ""}${row?.missing ? " missing" : ""}${
-                dropAt?.index === item.index ? (dropAt.after ? " drop-after" : " drop-before") : ""
-              }`}
-              style={{ transform: `translateY(${item.start}px)`, height: ROW_HEIGHT }}
-              draggable={row !== undefined}
-              onMouseDown={(e) => onRowMouseDown(e, item.index)}
-              onDoubleClick={() => {
-                if (row !== undefined) void usePlayer.getState().load(row);
-              }}
-              onClick={() => {
-                if (pendingClick.current === item.index)
-                  select({ type: "click", index: item.index });
-                pendingClick.current = null;
-              }}
-              onContextMenu={(e) => onRowContextMenu(e, item.index)}
-              onDragStart={(e) => onRowDragStart(e, item.index)}
-              onDragOver={(e) => onRowDragOver(e, item.index)}
-              onDragLeave={() => setDropAt((d) => (d?.index === item.index ? null : d))}
-              onDrop={(e) => onRowDrop(e, item.index)}
-              onDragEnd={() => setDropAt(null)}
-            >
-              {columns.map((c) => (
+          <div className="tt-body" style={{ height: virtualizer.getTotalSize(), width }}>
+            {items.map((item) => {
+              const row = rowAt(pages, item.index);
+              const selected = selection.selected.has(item.index);
+              const focused = selection.focus === item.index;
+              const loaded = row !== undefined && row.id === loadedId;
+              return (
                 <div
-                  key={c.id}
-                  role="gridcell"
-                  className={`tt-cell${c.align === "right" ? " right" : ""}`}
-                  style={{ width: c.width }}
+                  key={item.index}
+                  role="row"
+                  aria-rowindex={item.index + 1}
+                  aria-selected={selected}
+                  className={`tt-row${item.index % 2 === 1 ? " odd" : ""}${selected ? " selected" : ""}${focused ? " focused" : ""}${
+                    loaded ? " loaded" : ""
+                  }${row === undefined ? " loading" : ""}${row?.missing ? " missing" : ""}${
+                    dropAt?.index === item.index
+                      ? dropAt.after
+                        ? " drop-after"
+                        : " drop-before"
+                      : ""
+                  }`}
+                  style={{ transform: `translateY(${item.start}px)`, height: ROW_HEIGHT }}
+                  draggable={row !== undefined}
+                  onMouseDown={(e) => onRowMouseDown(e, item.index)}
+                  onDoubleClick={() => {
+                    if (row !== undefined) void usePlayer.getState().load(row);
+                  }}
+                  onClick={() => {
+                    if (pendingClick.current === item.index)
+                      select({ type: "click", index: item.index });
+                    pendingClick.current = null;
+                  }}
+                  onContextMenu={() => onRowContextMenu(item.index)}
+                  onDragStart={(e) => onRowDragStart(e, item.index)}
+                  onDragOver={(e) => onRowDragOver(e, item.index)}
+                  onDragLeave={() => setDropAt((d) => (d?.index === item.index ? null : d))}
+                  onDrop={(e) => onRowDrop(e, item.index)}
+                  onDragEnd={() => setDropAt(null)}
                 >
-                  {row === undefined ? null : c.cell(row)}
+                  {columns.map((c) => (
+                    <div
+                      key={c.id}
+                      role="gridcell"
+                      className={`tt-cell${c.align === "right" ? " right" : ""}`}
+                      style={{ width: c.width }}
+                    >
+                      {row === undefined ? null : c.cell(row)}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-      {menu !== null && <ContextMenu menu={menu} onClose={closeMenu} />}
-    </div>
+              );
+            })}
+          </div>
+        </div>
+      </ContextMenuTrigger>
+      {view !== null && (
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={removeSelected}>Remove from {view.name}</ContextMenuItem>
+        </ContextMenuContent>
+      )}
+    </ContextMenu>
   );
 }

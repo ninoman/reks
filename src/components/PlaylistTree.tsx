@@ -3,7 +3,7 @@
  * table), F2 / Enter renames in place, Delete asks first. Right-click for the
  * menu. Drop tracks on a playlist to add them; drag nodes to move them.
  */
-import { type DragEvent, type KeyboardEvent, type MouseEvent, useCallback, useState } from "react";
+import { type DragEvent, type KeyboardEvent, useRef, useState } from "react";
 
 import {
   type DropZone,
@@ -17,7 +17,12 @@ import {
 import type { PlaylistNode } from "../lib/ipc";
 import { usePlaylists } from "../store/playlists";
 import { visibleNodes } from "../store/playlistTree";
-import { ContextMenu, type MenuItem, type MenuState } from "./ContextMenu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "./ui/ContextMenu";
 
 /** Indent per level and the row's own left padding, in px (rekordbox-like spacing). */
 const INDENT = 18;
@@ -28,9 +33,11 @@ export function PlaylistTree() {
   const tree = usePlaylists((s) => s.tree);
   const error = usePlaylists((s) => s.error);
   const p = usePlaylists.getState;
-  const [menu, setMenu] = useState<MenuState | null>(null);
+  /** The node the context menu is for (`null`: the tree itself). */
+  const [menuNode, setMenuNode] = useState<PlaylistNode | null>(null);
+  /** Set by a row's right-click, read by the tree's (which opens the menu). */
+  const hit = useRef<PlaylistNode | null>(null);
   const [drop, setDrop] = useState<{ id: number; zone: DropZone } | null>(null);
-  const closeMenu = useCallback(() => setMenu(null), []);
 
   const visible = tree.playlistsOpen ? visibleNodes(nodes, tree.expanded) : [];
   const selected = nodes.find((n) => n.id === tree.selectedId) ?? null;
@@ -72,23 +79,11 @@ export function PlaylistTree() {
     }
   }
 
-  function openMenu(e: MouseEvent, node: PlaylistNode | null) {
-    e.preventDefault();
+  function onTreeContextMenu() {
+    const node = hit.current;
+    hit.current = null;
     if (node !== null) p().select(node.id);
-    const items: MenuItem[] = [
-      { label: "New playlist", onSelect: () => void p().create("playlist", node) },
-      { label: "New folder", onSelect: () => void p().create("folder", node) },
-    ];
-    if (node !== null) {
-      items.push(
-        {
-          label: "Rename",
-          onSelect: () => p().dispatch({ type: "startRename", id: node.id, name: node.name }),
-        },
-        { label: "Delete…", onSelect: () => p().requestDelete(node) },
-      );
-    }
-    setMenu({ x: e.clientX, y: e.clientY, items });
+    setMenuNode(node);
   }
 
   function onDragOver(e: DragEvent<HTMLElement>, node: PlaylistNode) {
@@ -128,82 +123,107 @@ export function PlaylistTree() {
           {error}
         </div>
       )}
-      <div
-        className="tree"
-        role="tree"
-        aria-label="Playlist tree"
-        tabIndex={0}
-        onKeyDown={onKeyDown}
-        onContextMenu={(e) => openMenu(e, null)}
-      >
-        <div
-          role="treeitem"
-          aria-level={1}
-          aria-selected={tree.selectedId === null}
-          className={`tree-row root${tree.selectedId === null ? " selected" : ""}`}
-          onClick={() => p().select(null)}
-        >
-          <span className="tree-disclosure" />
-          <CollectionIcon />
-          <span className="tree-name">Collection</span>
-        </div>
-        <div
-          role="treeitem"
-          aria-level={1}
-          aria-selected={false}
-          aria-expanded={tree.playlistsOpen}
-          className={`tree-row root${drop?.id === ROOT ? " drop-into" : ""}`}
-          onClick={() => p().dispatch({ type: "togglePlaylists" })}
-          onDragOver={(e) => {
-            if (!hasType(e.dataTransfer, NODE_MIME)) return;
-            e.preventDefault();
-            setDrop({ id: ROOT, zone: "into" });
-          }}
-          onDragLeave={() => setDrop((d) => (d?.id === ROOT ? null : d))}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDrop(null);
-            const moved = readNode(e.dataTransfer);
-            if (moved !== null) {
-              void p().mutate({ type: "move", id: moved, parentId: null, position: rootCount });
-            }
-          }}
-        >
-          <Disclosure open={tree.playlistsOpen} />
-          <span className="tree-name">Playlists</span>
-          <button
-            type="button"
-            className="tree-add"
-            title="New playlist"
-            aria-label="New playlist"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!tree.playlistsOpen) p().dispatch({ type: "togglePlaylists" });
-              void p().create("playlist", selected);
-            }}
+      <ContextMenu modal={false}>
+        <ContextMenuTrigger asChild>
+          <div
+            className="tree"
+            role="tree"
+            aria-label="Playlist tree"
+            tabIndex={0}
+            onKeyDown={onKeyDown}
+            onContextMenu={onTreeContextMenu}
           >
-            +
-          </button>
-        </div>
-        {visible.map((node) => (
-          <TreeRow
-            key={node.id}
-            node={node}
-            selected={tree.selectedId === node.id}
-            expanded={tree.expanded.has(node.id)}
-            draft={tree.renaming?.id === node.id ? tree.renaming.draft : null}
-            dropZone={drop?.id === node.id ? drop.zone : null}
-            onContextMenu={(e) => {
-              e.stopPropagation();
-              openMenu(e, node);
-            }}
-            onDragOver={(e) => onDragOver(e, node)}
-            onDragLeave={() => setDrop((d) => (d?.id === node.id ? null : d))}
-            onDrop={(e) => onDrop(e, node)}
-          />
-        ))}
-      </div>
-      {menu !== null && <ContextMenu menu={menu} onClose={closeMenu} />}
+            <div
+              role="treeitem"
+              aria-level={1}
+              aria-selected={tree.selectedId === null}
+              className={`tree-row root${tree.selectedId === null ? " selected" : ""}`}
+              onClick={() => p().select(null)}
+            >
+              <span className="tree-disclosure" />
+              <CollectionIcon />
+              <span className="tree-name">Collection</span>
+            </div>
+            <div
+              role="treeitem"
+              aria-level={1}
+              aria-selected={false}
+              aria-expanded={tree.playlistsOpen}
+              className={`tree-row root${drop?.id === ROOT ? " drop-into" : ""}`}
+              onClick={() => p().dispatch({ type: "togglePlaylists" })}
+              onDragOver={(e) => {
+                if (!hasType(e.dataTransfer, NODE_MIME)) return;
+                e.preventDefault();
+                setDrop({ id: ROOT, zone: "into" });
+              }}
+              onDragLeave={() => setDrop((d) => (d?.id === ROOT ? null : d))}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDrop(null);
+                const moved = readNode(e.dataTransfer);
+                if (moved !== null) {
+                  void p().mutate({ type: "move", id: moved, parentId: null, position: rootCount });
+                }
+              }}
+            >
+              <Disclosure open={tree.playlistsOpen} />
+              <span className="tree-name">Playlists</span>
+              <button
+                type="button"
+                className="tree-add"
+                title="New playlist"
+                aria-label="New playlist"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!tree.playlistsOpen) p().dispatch({ type: "togglePlaylists" });
+                  void p().create("playlist", selected);
+                }}
+              >
+                +
+              </button>
+            </div>
+            {visible.map((node) => (
+              <TreeRow
+                key={node.id}
+                node={node}
+                selected={tree.selectedId === node.id}
+                expanded={tree.expanded.has(node.id)}
+                draft={tree.renaming?.id === node.id ? tree.renaming.draft : null}
+                dropZone={drop?.id === node.id ? drop.zone : null}
+                onContextMenu={() => {
+                  hit.current = node;
+                }}
+                onDragOver={(e) => onDragOver(e, node)}
+                onDragLeave={() => setDrop((d) => (d?.id === node.id ? null : d))}
+                onDrop={(e) => onDrop(e, node)}
+              />
+            ))}
+          </div>
+        </ContextMenuTrigger>
+        {/* Focus stays where the choice put it (rename starts an input there). */}
+        <ContextMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+          <ContextMenuItem onSelect={() => void p().create("playlist", menuNode)}>
+            New playlist
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => void p().create("folder", menuNode)}>
+            New folder
+          </ContextMenuItem>
+          {menuNode !== null && (
+            <>
+              <ContextMenuItem
+                onSelect={() =>
+                  p().dispatch({ type: "startRename", id: menuNode.id, name: menuNode.name })
+                }
+              >
+                Rename
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => p().requestDelete(menuNode)}>
+                Delete…
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
     </section>
   );
 }
@@ -272,7 +292,7 @@ function TreeRow({
   expanded: boolean;
   draft: string | null;
   dropZone: DropZone | null;
-  onContextMenu: (e: MouseEvent) => void;
+  onContextMenu: () => void;
   onDragOver: (e: DragEvent<HTMLElement>) => void;
   onDragLeave: () => void;
   onDrop: (e: DragEvent<HTMLElement>) => void;

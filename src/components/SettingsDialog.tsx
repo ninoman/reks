@@ -7,10 +7,31 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import { cn } from "../lib/cn";
+
 import type { KeyNotation } from "../lib/ipc";
 import { usePlayer } from "../store/player";
 import { useScan } from "../store/scan";
 import { useSettings } from "../store/settings";
+import { Button } from "./ui/Button";
+import { Card } from "./ui/Card";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/Dialog";
+import { Field } from "./ui/Field";
+import { Segment, SegmentedControl } from "./ui/SegmentedControl";
+import { Select } from "./ui/Select";
+
+const item = "px-4 py-3.5";
+const itemTitle = "m-0 text-sm font-semibold";
+const hint = "mt-0.5 mb-0 text-xs text-fg-muted";
+const path = "font-mono text-xs [overflow-wrap:anywhere] select-text";
+const row = "mt-3 flex items-center gap-2";
 
 /** Last scan as a short local date and time, e.g. "19 Oct 2026, 20:48". */
 function scanDate(iso: string): string {
@@ -31,31 +52,32 @@ export function SettingsDialog() {
 
 function SettingsWindow() {
   const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => closeRef.current?.focus(), []);
   const close = () => useSettings.getState().setDialogOpen(false);
   return (
-    <div className="dialog-backdrop">
-      <div
-        className="dialog wizard settings"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Settings"
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.stopPropagation();
-            close();
-          }
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
+    >
+      <DialogContent
+        size="md"
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          closeRef.current?.focus();
         }}
       >
-        <h3>Settings</h3>
+        <DialogHeader className="pt-5">
+          <DialogTitle className="text-lg">Settings</DialogTitle>
+        </DialogHeader>
         <SettingsBody />
-        <div className="dialog-buttons">
-          <button type="button" className="primary" ref={closeRef} onClick={close}>
+        <DialogFooter className="pt-5">
+          <Button variant="primary" ref={closeRef} onClick={close}>
             Close
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -63,9 +85,9 @@ function SettingsBody() {
   const settings = useSettings((s) => s.settings);
   const error = useSettings((s) => s.error);
   return (
-    <div className="dialog-body">
+    <DialogBody className="gap-5">
       {error !== null && (
-        <p className="wizard-error" role="alert">
+        <p className="text-danger" role="alert">
           {error}
         </p>
       )}
@@ -83,16 +105,18 @@ function SettingsBody() {
           </Group>
         </>
       )}
-    </div>
+    </DialogBody>
   );
 }
 
 /** A titled card; its items are split by thin rules. */
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="settings-group" aria-label={title}>
-      <h4>{title}</h4>
-      <div className="settings-card">{children}</div>
+    <section aria-label={title}>
+      <h4 className="mt-0 mb-2 ml-0.5 text-2xs font-semibold tracking-caption text-fg-muted uppercase">
+        {title}
+      </h4>
+      <Card>{children}</Card>
     </section>
   );
 }
@@ -113,45 +137,47 @@ function LibraryFolders() {
   }
 
   return (
-    <div className="settings-item">
-      <h5>Library folders</h5>
-      <p className="hint">
+    <div className={item}>
+      <h5 className={itemTitle}>Library folders</h5>
+      <p className={hint}>
         Scanned folders are listed here. Removing one keeps its tracks in the library.
       </p>
       {roots.length > 0 && (
-        <ul className="settings-roots">
-          {roots.map((r) => (
-            <li key={r.id}>
-              <span className="path" title={r.path}>
-                {r.path}
-              </span>
-              <span className="scanned">
-                {r.lastScan === null ? "Never scanned" : `Scanned ${scanDate(r.lastScan)}`}
-              </span>
-              <button
-                type="button"
-                className="quiet"
-                aria-label={`Remove ${r.path}`}
-                disabled={scanning}
-                onClick={() => void removeRoot(r.id)}
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="settings-row">
-        <button type="button" disabled={scanning} onClick={() => void add()}>
-          Add folder…
-        </button>
-        <button
-          type="button"
-          disabled={scanning || roots.length === 0}
-          onClick={() => void rescan()}
+        <Card
+          variant="surface"
+          className="mt-2.5 rounded-md [&_li]:grid [&_li]:grid-cols-[1fr_auto_auto] [&_li]:items-center [&_li]:gap-3 [&_li]:py-1.5 [&_li]:pr-1.5 [&_li]:pl-2.5"
+          asChild
         >
+          <ul className="m-0 list-none p-0">
+            {roots.map((r) => (
+              <li key={r.id}>
+                <span className={path} title={r.path}>
+                  {r.path}
+                </span>
+                <span className="text-xs whitespace-nowrap text-fg-muted">
+                  {r.lastScan === null ? "Never scanned" : `Scanned ${scanDate(r.lastScan)}`}
+                </span>
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  aria-label={`Remove ${r.path}`}
+                  disabled={scanning}
+                  onClick={() => void removeRoot(r.id)}
+                >
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      <div className={row}>
+        <Button disabled={scanning} onClick={() => void add()}>
+          Add folder…
+        </Button>
+        <Button disabled={scanning || roots.length === 0} onClick={() => void rescan()}>
           {scanning ? "Scanning…" : "Rescan all"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -171,10 +197,13 @@ function OutputDevice({ device }: { device: string | null }) {
   // A chosen device that is not connected stays listed so the choice shows.
   const options = device !== null && !devices.includes(device) ? [device, ...devices] : devices;
   return (
-    <div className="settings-item">
-      <label className="settings-row settings-field">
-        <span className="item-title">Output device</span>
-        <select value={device ?? ""} onChange={(e) => void choose(e.target.value)}>
+    <div className={item}>
+      <Field label="Output device" orientation="horizontal">
+        <Select
+          className="min-w-55"
+          value={device ?? ""}
+          onChange={(e) => void choose(e.target.value)}
+        >
           <option value="">System default</option>
           {options.map((d) => (
             <option key={d} value={d}>
@@ -182,31 +211,30 @@ function OutputDevice({ device }: { device: string | null }) {
               {devices.includes(d) ? "" : " (not connected)"}
             </option>
           ))}
-        </select>
-      </label>
+        </Select>
+      </Field>
     </div>
   );
 }
 
 function KeyNotationChoice({ notation }: { notation: KeyNotation }) {
   return (
-    <div className="settings-item">
-      <h5>Key notation</h5>
-      <p className="hint">How keys are shown. Key edits accept any notation.</p>
-      <div className="settings-radios" role="radiogroup" aria-label="Key notation">
+    <div className={item}>
+      <h5 className={itemTitle}>Key notation</h5>
+      <p className={hint}>How keys are shown. Key edits accept any notation.</p>
+      <SegmentedControl
+        className="mt-2.5"
+        aria-label="Key notation"
+        value={notation}
+        onValueChange={(v) => void useSettings.getState().update({ keyNotation: v as KeyNotation })}
+      >
         {NOTATIONS.map((n) => (
-          <label key={n.id}>
-            <input
-              type="radio"
-              name="key-notation"
-              checked={notation === n.id}
-              onChange={() => void useSettings.getState().update({ keyNotation: n.id })}
-            />
+          <Segment key={n.id} value={n.id}>
             {n.label}
-            <span className="example">{n.example}</span>
-          </label>
+            <span className="font-normal text-fg-subtle">{n.example}</span>
+          </Segment>
         ))}
-      </div>
+      </SegmentedControl>
     </div>
   );
 }
@@ -227,34 +255,36 @@ function CacheFolder({ cacheDir }: { cacheDir: string }) {
   }
 
   return (
-    <div className="settings-item">
-      <h5>Cache folder</h5>
-      <p className="hint">Artwork and waveforms. Move it to an empty or new folder.</p>
-      <p className="settings-current path">{cacheDir}</p>
+    <div className={item}>
+      <h5 className={itemTitle}>Cache folder</h5>
+      <p className={hint}>Artwork and waveforms. Move it to an empty or new folder.</p>
+      <p
+        className={cn(
+          path,
+          "mt-2.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-fg",
+        )}
+      >
+        {cacheDir}
+      </p>
       {target === null ? (
-        <div className="settings-row">
-          <button type="button" disabled={moving || scanning} onClick={() => void pick()}>
+        <div className={row}>
+          <Button disabled={moving || scanning} onClick={() => void pick()}>
             Move…
-          </button>
+          </Button>
         </div>
       ) : (
-        <div className="settings-confirm">
-          <p>
-            Move the cache to <span className="path">{target}</span>? The old folder is deleted
+        <div className="mt-3 rounded-md border border-border bg-surface px-3 py-2.5">
+          <p className="m-0">
+            Move the cache to <span className={path}>{target}</span>? The old folder is deleted
             after the copy.
           </p>
-          <div className="settings-row">
-            <button
-              type="button"
-              className="primary"
-              disabled={moving}
-              onClick={() => void move(target)}
-            >
+          <div className={row}>
+            <Button variant="primary" disabled={moving} onClick={() => void move(target)}>
               {moving ? "Moving…" : "Move"}
-            </button>
-            <button type="button" disabled={moving} onClick={() => setTarget(null)}>
+            </Button>
+            <Button disabled={moving} onClick={() => setTarget(null)}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}

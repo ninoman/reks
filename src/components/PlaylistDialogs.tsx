@@ -4,7 +4,7 @@
  * counts as a duplicate.
  */
 import { usePlaylists } from "../store/playlists";
-import { Dialog } from "./Dialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 export function DuplicateDialog() {
   const pending = usePlaylists((s) => s.pendingDuplicates);
@@ -13,7 +13,7 @@ export function DuplicateDialog() {
   const { duplicateCount, requested } = pending.outcome;
   const all = duplicateCount >= requested;
   return (
-    <Dialog
+    <ConfirmDialog
       title="Duplicate tracks"
       buttons={[
         { label: "Add anyway", onClick: () => void resolve("allow"), primary: all },
@@ -24,7 +24,7 @@ export function DuplicateDialog() {
       ]}
     >
       {duplicateCount} of {requested} tracks are already in {pending.playlistName}
-    </Dialog>
+    </ConfirmDialog>
   );
 }
 
@@ -33,7 +33,7 @@ export function DeleteDialog() {
   const resolve = usePlaylists((s) => s.resolveDelete);
   if (node === null) return null;
   return (
-    <Dialog
+    <ConfirmDialog
       title={node.isFolder ? "Delete folder" : "Delete playlist"}
       buttons={[
         { label: "Delete", onClick: () => void resolve(true), primary: true },
@@ -44,6 +44,6 @@ export function DeleteDialog() {
         ? `Delete the folder “${node.name}” and everything in it?`
         : `Delete the playlist “${node.name}”?`}{" "}
       The tracks stay in the library.
-    </Dialog>
+    </ConfirmDialog>
   );
 }

@@ -8,6 +8,21 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import type { ImportPreview, ImportReport, Unmatched, UnmatchedReason } from "../lib/ipc";
 import { useImportWizard } from "../store/importWizard";
+import { Button } from "./ui/Button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/Dialog";
+import { Progress } from "./ui/Progress";
+
+const counts =
+  "m-0 mb-3 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 [&_dt]:text-fg-muted [&_dd]:m-0 [&_dd]:text-right [&_dd]:tabular-nums";
+const pathList = "my-1 mb-2 pl-4.5 font-mono text-xs [overflow-wrap:anywhere]";
 
 function n(v: number): string {
   return v.toLocaleString();
@@ -31,28 +46,22 @@ export function ImportWizard() {
   const path = useImportWizard((s) => s.path);
   if (step === "closed" || path === null) return null;
   return (
-    <div className="dialog-backdrop">
-      <div
-        className="dialog wizard"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Import rekordbox XML"
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.stopPropagation();
-            useImportWizard.getState().close();
-          }
-        }}
-      >
-        <h3>Import rekordbox XML</h3>
-        <div className="wizard-file" title={path}>
-          {fileName(path)}
-        </div>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) useImportWizard.getState().close();
+      }}
+    >
+      <DialogContent size="lg" className="select-text">
+        <DialogHeader>
+          <DialogTitle>Import rekordbox XML</DialogTitle>
+          <DialogDescription title={path}>{fileName(path)}</DialogDescription>
+        </DialogHeader>
         {step === "review" && <Review />}
         {step === "importing" && <Importing />}
         {step === "report" && <Report />}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -70,75 +79,72 @@ function Review() {
 
   return (
     <>
-      <div className="dialog-body">
+      <DialogBody>
         {error !== null && (
-          <p className="wizard-error" role="alert">
+          <p className="text-danger" role="alert">
             {error}
           </p>
         )}
         {preview === null ? (
-          previewing && <p className="muted">Reading the collection…</p>
+          previewing && <p className="text-fg-muted">Reading the collection…</p>
         ) : (
           <PreviewCounts preview={preview} />
         )}
         {preview !== null && preview.filesNotFound > 0 && (
-          <div className="wizard-missing">
-            <p className="warn">
+          <div>
+            <p className="text-warning">
               {plural(preview.filesNotFound, "file")} not found
               {preview.missingRoot !== null ? ` in ${preview.missingRoot}` : ""}. They are imported
               as missing (cues, grids and playlists kept) unless you map their folder to where it is
               now.
             </p>
-            <ul className="wizard-paths">
+            <ul className={pathList}>
               {preview.notFoundSample.map((p) => (
                 <li key={p}>{p}</li>
               ))}
             </ul>
             {preview.missingRoot !== null && (
-              <button
-                type="button"
+              <Button
+                size="sm"
                 disabled={previewing}
                 onClick={() => void mapFolder(preview.missingRoot as string)}
               >
                 Map folder…
-              </button>
+              </Button>
             )}
           </div>
         )}
         {remap.length > 0 && (
-          <div className="wizard-remaps">
-            <div className="muted">Folder mappings</div>
-            <ul>
+          <div>
+            <div className="text-fg-muted">Folder mappings</div>
+            <ul className={pathList}>
               {remap.map((r, i) => (
                 <li key={`${r.from}\u0000${r.to}`}>
                   <span>{r.from}</span> → <span>{r.to}</span>{" "}
-                  <button
-                    type="button"
-                    className="link"
+                  <Button
+                    variant="link"
+                    size="sm"
                     aria-label={`Remove mapping of ${r.from}`}
                     onClick={() => void removeRemap(i)}
                   >
                     Remove
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
           </div>
         )}
-      </div>
-      <div className="dialog-buttons">
-        <button
-          type="button"
-          className="primary"
+      </DialogBody>
+      <DialogFooter>
+        <Button
+          variant="primary"
           disabled={preview === null || previewing || preview.total === 0}
           onClick={() => void start()}
         >
           Import
-        </button>
-        <button type="button" onClick={close}>
-          Cancel
-        </button>
-      </div>
+        </Button>
+        <Button onClick={close}>Cancel</Button>
+      </DialogFooter>
     </>
   );
 }
@@ -146,13 +152,13 @@ function Review() {
 function PreviewCounts({ preview: p }: { preview: ImportPreview }) {
   const notStored = p.noLocation + p.notAFile + p.invalidLocation;
   return (
-    <dl className="wizard-counts">
+    <dl className={counts}>
       <dt>Tracks</dt>
       <dd>{n(p.total)}</dd>
       <dt>Files found</dt>
       <dd>{n(p.filesFound)}</dd>
       <dt>Files not found</dt>
-      <dd className={p.filesNotFound > 0 ? "warn" : undefined}>{n(p.filesNotFound)}</dd>
+      <dd className={p.filesNotFound > 0 ? "text-warning" : undefined}>{n(p.filesNotFound)}</dd>
       {notStored > 0 && (
         <>
           <dt>Not stored (no local file)</dt>
@@ -184,25 +190,26 @@ function Importing() {
   const saving = progress?.stage === "database";
   return (
     <>
-      <div className="dialog-body">
+      <DialogBody>
         <p>{stopping ? "Stopping…" : label}</p>
-        <progress
+        <Progress
           max={progress?.total ?? 1}
           value={progress?.done ?? undefined}
           aria-label="Import progress"
         />
-        {unmatched > 0 && <p className="warn">{plural(unmatched, "track")} without a file</p>}
-      </div>
-      <div className="dialog-buttons">
-        <button
-          type="button"
+        {unmatched > 0 && (
+          <p className="text-warning">{plural(unmatched, "track")} without a file</p>
+        )}
+      </DialogBody>
+      <DialogFooter>
+        <Button
           disabled={saving || stopping}
           title={saving ? "Saving runs as one step and can't be stopped" : undefined}
           onClick={() => void useImportWizard.getState().cancel()}
         >
           Stop
-        </button>
-      </div>
+        </Button>
+      </DialogFooter>
     </>
   );
 }
@@ -245,23 +252,23 @@ function Report() {
   const canRemap = !report.cancelled && report.missing > 0 && report.missingRoot !== null;
   return (
     <>
-      <div className="dialog-body">
+      <DialogBody>
         {report.cancelled ? (
           <p>Cancelled: nothing was imported.</p>
         ) : (
           <ReportBody report={report} />
         )}
-      </div>
-      <div className="dialog-buttons">
+      </DialogBody>
+      <DialogFooter>
         {canRemap && (
-          <button type="button" onClick={() => void mapAndReview(report.missingRoot as string)}>
+          <Button onClick={() => void mapAndReview(report.missingRoot as string)}>
             Map folder and re-import…
-          </button>
+          </Button>
         )}
-        <button type="button" className="primary" onClick={close}>
+        <Button variant="primary" onClick={close}>
           Done
-        </button>
-      </div>
+        </Button>
+      </DialogFooter>
     </>
   );
 }
@@ -273,7 +280,7 @@ function ReportBody({ report: r }: { report: ImportReport }) {
   })).filter((g) => g.rows.length > 0);
   return (
     <>
-      <dl className="wizard-counts">
+      <dl className={counts}>
         <dt>Tracks</dt>
         <dd>{n(r.total)}</dd>
         <dt>New</dt>
@@ -283,7 +290,7 @@ function ReportBody({ report: r }: { report: ImportReport }) {
           {n(r.matchedByPath)} / {n(r.matchedByLocation)} / {n(r.matchedByFallback)}
         </dd>
         <dt>Missing files</dt>
-        <dd className={r.missing > 0 ? "warn" : undefined}>{n(r.missing)}</dd>
+        <dd className={r.missing > 0 ? "text-warning" : undefined}>{n(r.missing)}</dd>
         <dt>Beatgrid markers / cues</dt>
         <dd>
           {n(r.beatgridRows)} / {n(r.cueRows)}
@@ -300,20 +307,20 @@ function ReportBody({ report: r }: { report: ImportReport }) {
         <dd>{(r.elapsedMs / 1000).toFixed(1)} s</dd>
       </dl>
       {r.missing > 0 && r.missingRoot !== null && (
-        <p className="warn">Missing files are under {r.missingRoot}.</p>
+        <p className="text-warning">Missing files are under {r.missingRoot}.</p>
       )}
       {groups.map((g) => (
-        <details key={g.kind} className="wizard-group">
+        <details key={g.kind} className="mt-2">
           <summary>
             {g.title}: {n(g.rows.length)}
           </summary>
-          <table>
+          <table className="w-full border-collapse text-xs [&_td]:py-0.5 [&_td]:pr-1.5 [&_td]:align-top">
             <tbody>
               {g.rows.map((u) => (
                 <tr key={u.trackId}>
                   <td>{u.artist ?? ""}</td>
                   <td>{u.name ?? ""}</td>
-                  <td className="path">{reasonDetail(u)}</td>
+                  <td className="text-fg-muted [overflow-wrap:anywhere]">{reasonDetail(u)}</td>
                 </tr>
               ))}
             </tbody>
@@ -321,9 +328,9 @@ function ReportBody({ report: r }: { report: ImportReport }) {
         </details>
       ))}
       {r.warnings.length > 0 && (
-        <details className="wizard-group">
+        <details className="mt-2">
           <summary>Warnings: {n(r.warnings.length)}</summary>
-          <ul>
+          <ul className={pathList}>
             {r.warnings.map((w, i) => (
               // Warnings have no id; their order is stable for one report.
               // biome-ignore lint/suspicious/noArrayIndexKey: see above

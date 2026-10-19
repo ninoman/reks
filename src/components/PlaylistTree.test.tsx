@@ -122,6 +122,22 @@ describe("PlaylistTree", () => {
     expect(playlistsMutate).not.toHaveBeenCalled();
   });
 
+  it("right-click on a row selects it and offers rename for it", async () => {
+    render(<PlaylistTree />);
+    fireEvent.contextMenu(item("Warm-up"));
+    expect(usePlaylists.getState().tree.selectedId).toBe(2);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
+    const input = await screen.findByRole("textbox", { name: "Name" });
+    expect((input as HTMLInputElement).value).toBe("Warm-up");
+  });
+
+  it("right-click on empty tree space offers only new items", async () => {
+    render(<PlaylistTree />);
+    fireEvent.contextMenu(screen.getByRole("tree"));
+    await screen.findByRole("menuitem", { name: "New playlist" });
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+  });
+
   it("Delete asks first, then deletes", async () => {
     render(
       <>

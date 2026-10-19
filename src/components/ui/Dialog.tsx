@@ -1,7 +1,8 @@
 /**
- * Modal dialog (Radix): backdrop, focus trap, Escape and outside clicks go
- * to `onOpenChange(false)`. Compose Header / Title / Body / Footer inside
- * `DialogContent`.
+ * Modal dialog (Radix): backdrop and focus trap; Escape goes to
+ * `onOpenChange(false)`, and so does a click on the backdrop when
+ * `closeOnOutsideClick` is set. Compose Header / Title / Body / Footer
+ * inside `DialogContent`.
  */
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -24,16 +25,23 @@ export const Dialog = DialogPrimitive.Root;
 
 export function DialogContent({
   size,
+  closeOnOutsideClick = false,
   className,
   children,
+  onPointerDownOutside,
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content> & VariantProps<typeof dialogContentVariants>) {
+}: ComponentProps<typeof DialogPrimitive.Content> &
+  VariantProps<typeof dialogContentVariants> & { closeOnOutsideClick?: boolean }) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-(--z-dialog) bg-overlay" />
       <DialogPrimitive.Content
         aria-describedby={undefined}
         className={cn(dialogContentVariants({ size }), className)}
+        onPointerDownOutside={(e) => {
+          if (!closeOnOutsideClick) e.preventDefault();
+          onPointerDownOutside?.(e);
+        }}
         {...props}
       >
         {children}
@@ -68,7 +76,12 @@ export function DialogDescription({
 }
 
 export function DialogBody({ className, ...props }: ComponentProps<"div">) {
-  return <div className={cn("min-h-0 overflow-auto px-5 py-2", className)} {...props} />;
+  return (
+    <div
+      className={cn("flex min-h-0 flex-col gap-3 overflow-auto px-5 py-2 [&>p]:m-0", className)}
+      {...props}
+    />
+  );
 }
 
 export function DialogFooter({ className, ...props }: ComponentProps<"div">) {
