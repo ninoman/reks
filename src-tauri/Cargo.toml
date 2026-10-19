@@ -28,3 +28,4 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 reks-core = { workspace = true }
 reks-mix = { workspace = true }
+reks-export-rb = { workspace = true }
