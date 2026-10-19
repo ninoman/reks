@@ -5,6 +5,7 @@
 pub mod audiocheck;
 pub mod device;
 pub mod plan;
+pub mod rbcache;
 pub mod target;
 
 pub use target::TargetProfile;

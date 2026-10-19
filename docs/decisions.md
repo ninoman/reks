@@ -83,7 +83,8 @@ Date of decisions: 2026-10-18.
 ## D7. rekordbox legacy USB export writer: `baken-export` behind our adapter
 
 - Licence: MIT (deps verified: baken-core MIT, mp3rgain MIT, symphonia
-  MPL-2.0, rusqlite MIT, image MIT/Apache, RustCrypto crates MIT/Apache).
+  MPL-2.0, rusqlite MIT, image MIT/Apache, RustCrypto crates MIT/Apache,
+  jpeg-encoder MIT/Apache AND IJG, see D18). Pinned `=4.6.1` (2026-10-19).
 - Decision: Phase 2 writes `export.pdb` + ANLZ by (1) generating a rekordbox
   `collection.xml` from our library into a temp dir (we need the XML writer
   anyway, D11), (2) calling `baken_export::plan(&Options)` then
@@ -253,6 +254,13 @@ Date of decisions: 2026-10-18.
   pulled transitively; prefer rustls). Deny: GPL-2.0-only, EPL-1.0, CDDL,
   AGPL-3.0 (requires a recorded decision), SSPL, BUSL, unlicensed.
 - Rationale: CLAUDE.md licence rules must be machine-enforced.
+- 2026-10-19: `IJG` (Independent JPEG Group License) added for `jpeg-encoder`
+  0.7.1 (`(MIT OR Apache-2.0) AND IJG`), pulled in by `baken-export` (D7) for
+  artwork. FSF lists it as free and GPL-compatible
+  (https://www.gnu.org/licenses/license-list.html#ijg). It asks binary
+  distributions to say in their documentation that the software is based in
+  part on the work of the Independent JPEG Group: release notices must carry
+  that line.
 
 ## D19. Naming and identifiers
 
