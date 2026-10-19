@@ -3,12 +3,13 @@
  * the DOM; rows come from the store's page cache, which fetches pages from
  * `library_query` as they scroll into view.
  */
-import { useEffect, useMemo, useRef, type KeyboardEvent, type MouseEvent } from "react";
+
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { type KeyboardEvent, type MouseEvent, useEffect, useMemo, useRef } from "react";
 
 import { rowAt, useLibrary } from "../store/library";
-import { ROW_HEIGHT } from "./trackTableModel";
 import type { ColumnSpec } from "./columns";
+import { ROW_HEIGHT } from "./trackTableModel";
 
 export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const total = useLibrary((s) => s.total);
@@ -35,11 +36,13 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const first = items[0]?.index ?? 0;
   const last = items[items.length - 1]?.index ?? 0;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new total or result generation must re-check the visible range.
   useEffect(() => {
     ensureRange(first, last);
   }, [first, last, total, pagesGeneration, ensureRange]);
 
   // A new result starts at the top.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pagesGeneration is the trigger, not an input.
   useEffect(() => {
     virtualizer.scrollToOffset(0);
   }, [pagesGeneration, virtualizer]);

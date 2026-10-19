@@ -249,6 +249,20 @@ Date of decisions: 2026-10-18.
   `reks.sqlite` in `app_data_dir` (`app_local_data_dir` on Windows); caches
   in `app_cache_dir`.
 
+## D20. UI lint and format: Biome
+
+- Licence: `@biomejs/biome` MIT OR Apache-2.0 (dev dependency only).
+- Date: 2026-10-19 (maintainer's call). Replaces ESLint (typescript-eslint strict, React
+  hooks/refresh plugins) and Prettier.
+- Rationale: one fast tool, one config ([`biome.jsonc`](../biome.jsonc)), no plugin stack.
+  The recommended rules plus the React domain cover hook dependencies and hook placement.
+  Formatting matches the old Prettier settings (100 columns, double quotes, trailing commas).
+- `react-refresh/only-export-components` maps to Biome's `useComponentExportOnlyModules`.
+  Lost: typescript-eslint's `strict` set, which Biome only partly covers. `tsc -b` in
+  `npm run build` still type-checks strictly.
+- `TrackTable.tsx` turns off three a11y rules that don't fit its virtualised ARIA grid
+  of divs; the reason is in `biome.jsonc`.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

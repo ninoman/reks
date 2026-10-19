@@ -4,13 +4,12 @@
  * later tasks (docs/phases/phase-1.md).
  */
 import { useEffect } from "react";
-
+import { DEFAULT_HIDDEN } from "./components/columns";
 import { FiltersSidebar } from "./components/FiltersSidebar";
 import { LibraryToolbar } from "./components/LibraryToolbar";
 import { TrackDetailPanel } from "./components/TrackDetailPanel";
 import { TrackTable } from "./components/TrackTable";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
-import { DEFAULT_HIDDEN } from "./components/columns";
 import { rowAt, useLibrary } from "./store/library";
 import { primaryIndex } from "./store/selection";
 

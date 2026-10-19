@@ -86,7 +86,8 @@ Rust
   stored in milliseconds (i64) or samples (i64), never floats of seconds.
 
 TypeScript / React
-- Strict TS, ESLint + Prettier. Functional components, hooks, Zustand store.
+- Strict TS, Biome for lint and format (`npm run lint`, `npm run format`; config in
+  `biome.jsonc`). Functional components, hooks, Zustand store.
 - Tauri calls go through `src/lib/ipc.ts` typed wrappers only. Large binary
   payloads (waveforms) come back as `ArrayBuffer` via `tauri::ipc::Response`,
   never as JSON arrays.

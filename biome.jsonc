@@ -1,0 +1,58 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    // UI code only; Rust is formatted by rustfmt. `.claude/` holds agent worktrees.
+    "includes": [
+      "**",
+      "!**/.claude",
+      "!**/src-tauri",
+      "!**/crates",
+      "!**/fixtures",
+      "!**/target",
+      "!**/dist",
+      "!**/package-lock.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": { "quoteStyle": "double", "trailingCommas": "all" }
+  },
+  "linter": {
+    "enabled": true,
+    "domains": { "react": "recommended" },
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        // Was react-refresh/only-export-components: keeps Vite fast refresh working.
+        "useComponentExportOnlyModules": {
+          "level": "error",
+          "options": { "allowConstantExport": true }
+        }
+      }
+    }
+  },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "overrides": [
+    {
+      // The track table is a virtualised ARIA grid built from divs: the container
+      // holds focus and moves it between rows with the keyboard (WAI-ARIA grid
+      // pattern), and <table> can't be absolutely positioned per row.
+      "includes": ["src/components/TrackTable.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off",
+            "useFocusableInteractive": "off",
+            "useKeyWithClickEvents": "off"
+          }
+        }
+      }
+    }
+  ]
+}

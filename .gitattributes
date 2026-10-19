@@ -1,4 +1,4 @@
-# Normalise line endings to LF on every platform so Prettier, rustfmt and
+# Normalise line endings to LF on every platform so Biome, rustfmt and
 # golden-file comparisons behave the same on Windows CI as on macOS/Linux.
 * text=auto eol=lf
 

@@ -1,5 +1,5 @@
 /** Filter sidebar. Options (genres, keys, colours, playlists) come from `library_facets`. */
-import { useLibrary, type FilterState } from "../store/library";
+import { type FilterState, useLibrary } from "../store/library";
 
 function triState(v: boolean | null): string {
   return v === null ? "" : String(v);
