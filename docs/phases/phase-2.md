@@ -1,6 +1,6 @@
 # Phase 2 — Legacy USB export (`export.pdb` + ANLZ)
 
-Status: in progress (tasks 2–6 done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
+Status: in progress (tasks 2–6 done, 1, 12, 13 backend done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
 `rb_track_id`/`rb_location`). Read `docs/decisions.md` D7, D8, D16, D23 and
 `docs/research.md` §1, §4, §10 first.
 
@@ -154,6 +154,7 @@ CREATE TABLE export_manifest (              -- latest export to each stick
   exported_at   TEXT NOT NULL,
   PRIMARY KEY (volume_serial, stick_path)
 );
+CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON DELETE SET NULL
 ```
 
 ## Tasks
@@ -267,10 +268,39 @@ CREATE TABLE export_manifest (              -- latest export to each stick
     start of `apply`; `HistoryPolicy`; dry-run and UI wording. Tests: fixture
     `export.pdb` with history → counts and planned backups; a failing backup
     leaves the stick untouched; `Discard` needs the explicit flag.
+    - [x] Backend: `reks_export_rb::history`
+      ([history.rs](../../crates/reks-export-rb/src/history.rs)).
+      `read_history(root, serial)` counts table 11/12 rows with rekordcrate
+      0.3.0 (own page walk, bounded and cycle-checked; damaged or unreadable
+      PDB → `pdb_unreadable`), notes `exportLibrary.db`; names matched
+      case-insensitively. `plan_backups(root, &history, policy, discard_confirmed)`
+      lists `PIONEER/rekordbox/*.pdb` and `exportLibrary.db` (+ `-wal`/`-shm`/
+      `-journal`) only when the stick may hold history; `Discard` without the
+      flag is `DiscardNotConfirmed`. `run_backups(&plan, app_data_dir)` copies
+      into `stick-backups/<serial|unknown-serial>/<UTC time, ':'→'-'>/` keeping
+      the stick layout, fsyncs, checks BLAKE3 of a second stick read and of the
+      copy, writes `manifest.json` last; any error removes the new folder and
+      returns a typed `HistoryError`. Only reads from the stick. Tests on
+      synthetic PDBs built in code (with/without history, garbage, truncated,
+      looping page chain) and temp-dir sticks.
+    - [ ] Planner (task 4) puts `StickHistory` and the `BackupPlan` files into
+      `ExportPlan`; `apply` (task 9) calls `run_backups` first and aborts on error.
+    - [ ] Real played-stick fixture: `played_stick_fixture_counts` is `#[ignore]`d
+      until `fixtures/rekordbox/played-<ver>/` exists (checklist step 7).
+    - [ ] Dry-run and UI wording (task 10); `reks-cli rb history` (task 11).
+    - [ ] macOS keys backups by `VolumeUUID`, Windows/Linux by the FAT serial
+      (R§10.1), so one stick gets two backup folders across OSes.
 13. **Export manifest**: migration adding `export_manifest`; rows from the
     validator's read-back after each successful export. Tests: re-export
     replaces the serial's rows; deleting a library track keeps its row with
     `track_id` NULL; no serial → no rows, export still succeeds.
+    - [x] Migration `0002_export_manifest.sql` (table above plus a `track_id`
+      index); `Library::replace_manifest(Option<serial>, rows)` (one
+      transaction; no serial → `Ok(0)`, nothing stored; bad rows keep the old
+      ones), `manifest(serial)`, `manifest_entry(serial, stick_path)` in
+      [manifest.rs](../../crates/reks-core/src/manifest.rs), with the three tests.
+    - [ ] Build the rows from the validator's read-back (task 8) and call
+      `replace_manifest` after a successful validation in `apply` (task 9).
 14. **Hardware campaign**: run the checklist on CDJ-2000NXS2 and CDJ-3000
     (and any other player available); fix; log in `docs/hw-test-log.md`.
     Tasks 12–13 come first: the checklist re-exports a played stick.
