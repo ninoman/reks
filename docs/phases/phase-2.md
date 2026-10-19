@@ -75,8 +75,9 @@ pub fn plan(lib: &Library, sel: &Selection, dev: &DeviceInfo, opts: &ExportOptio
 // ExportOptions { target, keep_stale, missing_analysis, artwork, skip_unsupported, history: HistoryPolicy,
 //                 discard_history_confirmed }
 pub struct CacheLocator;   // AnlzLocator over rbcache: CacheLocator::for_selection(lib, sel, RbCache::scan(roots)?)
-pub fn apply(plan: &ExportPlan, writer: &dyn RekordboxWriter, progress: impl Fn(ExportEvent), cancel: &CancelToken)
-    -> Result<ExportReport>;
+pub fn apply(plan: &ExportPlan, writer: &dyn RekordboxWriter, env: &ApplyEnv /* library, app_data_dir, StickCheck */,
+             progress: &(dyn Fn(ApplyEvent) + Sync), cancel: &CancelToken)
+    -> Result<ExportReport, ApplyError>;   // done: crates/reks-export-rb/src/apply/
 
 pub trait RekordboxWriter {   // done: crates/reks-export-rb/src/writer/
     /// Writes PDB + ANLZ + audio for the plan into `device_root`; the module docs say what
@@ -306,12 +307,31 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    delete an ANLZ or audio file, corrupt PPTH, empty PQTZ, clear a track
    row's presence bit, and change plan order/tree/cues. Byte-diff
    (`reks-cli rb diff`) left for task 11, with the rekordbox reference export.
-9. **Export orchestration**: `apply` = pre-flight (free space, device still
+9. [x] **Export orchestration**: `apply` = pre-flight (free space, device still
    mounted, no rekordbox running? warn), history backup (task 12), writer,
    fsync, validate, export manifest (task 13), report;
    cancellation leaves the stick in its previous DB state (verified in task
    7 for cancel and stick-wide errors; a single failed track still gets a new
    PDB without it, see task 7).
+   Done in [apply/](../../crates/reks-export-rb/src/apply/mod.rs) (module docs
+   list the steps and what each outcome leaves on the stick). Pre-flight also
+   refuses a stick whose volume serial differs from the plan's
+   (`StickCheck::Mounted`; `Directory` for fake sticks) and one whose history
+   changed since the dry run (`PlanOutOfDate`: its new history would have no
+   planned backup). rekordbox running is a warning (process `rekordbox` /
+   `rekordbox.exe`, UNVERIFIED; needs sysinfo's `system` feature). `Err` =
+   old `export.pdb` in place; `Ok(ExportReport)` with `status` `Cancelled`
+   (old PDB), `Success` or `Problems` (new PDB; failed tracks, findings or
+   errors after the PDB was written, `AfterDatabase` included, are in the
+   report). The manifest is recorded only on `Success`. fsync covers
+   `PIONEER/rekordbox`, the planned ANLZ files, copied audio (and
+   `PIONEER/Artwork` with artwork). Progress: `ApplyEvent` (`stage`, `writer`
+   wrapping `ExportEvent`, `warning`). Tests on temp-dir sticks: played stick
+   backed up, written, validated clean, manifest recorded; second identical
+   export copies nothing; failing backup leaves the stick byte-identical with
+   no manifest; cancel mid-write keeps the old PDB; dry run and validation
+   leave mtimes unchanged; no serial → success without rows; stick played
+   after the dry run, pre-flight and writer refusals write nothing.
 10. **Export UI**: wizard (device → playlists → options → dry-run table with
     warnings/errors/deletes → progress → report with "Eject"). The device's
     selection is its stick profile (task 15).
@@ -326,7 +346,15 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
       dry run, exits non-zero when blocked.
     - [x] `reks rb history <stick> [--json]`: sessions (`HISTORY 001`, ...) with
       entry counts via `history::read_sessions`, and `exportLibrary.db` presence.
-    - [ ] `rb export` (task 9), `rb validate` (task 8), `rb diff`.
+    - [x] `reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]`:
+      prints the dry run; only `--yes` writes (through `apply`), then prints
+      the report; non-zero exit unless `Success`. Backups go to `--data-dir`,
+      by default the library's folder (as in the app).
+    - [x] `reks rb validate <stick> <plan flags> [--json]`: plans again and
+      reads the stick back (read-only); non-zero exit on findings. Needs the
+      export's flags (`--missing-analysis` above all). `Finding` implements
+      `Display` for this and the UI.
+    - [ ] `rb diff` (needs the rekordbox reference export, task 8).
 12. **History safeguard**: `StickHistory` in the planner; volume serial from
     the OS (`diskutil` on macOS, `GetVolumeInformationW` on Windows, `blkid`
     UUID on Linux; UNVERIFIED, R§8 item 14); `backups` with hash check at the
@@ -357,7 +385,7 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
       may hold history, `Warning::NoVolumeSerial` without a serial,
       `Problem::DiscardNotConfirmed` for an unconfirmed `Discard` on such a
       stick (a stick without history needs no confirmation).
-    - [ ] `apply` (task 9) calls `run_backups(&plan.backup_plan(), ..)` first
+    - [x] `apply` (task 9) calls `run_backups(&plan.backup_plan(), ..)` first
       and aborts on error.
     - [ ] Real played-stick fixture: `played_stick_fixture_counts` is `#[ignore]`d
       until `fixtures/rekordbox/played-<ver>/` exists (checklist step 7).
@@ -377,7 +405,7 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
       ones), `manifest(serial)`, `manifest_entry(serial, stick_path)` in
       [manifest.rs](../../crates/reks-core/src/manifest.rs), with the three tests.
     - [x] Rows from the validator's read-back: `ValidationReport::manifest_rows()`.
-    - [ ] Call `replace_manifest` after a successful validation in `apply` (task 9).
+    - [x] Call `replace_manifest` after a successful validation in `apply` (task 9).
 14. **Hardware campaign**: run the checklist on CDJ-2000NXS2 and CDJ-3000
     (and any other player available); fix; log in `docs/hw-test-log.md`.
     Tasks 12–13 come first: the checklist re-exports a played stick.

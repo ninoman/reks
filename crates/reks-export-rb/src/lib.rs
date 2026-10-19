@@ -2,6 +2,7 @@
 //!
 //! Phase 2 lands here piece by piece; see `docs/phases/phase-2.md`.
 
+pub mod apply;
 pub mod audiocheck;
 pub mod device;
 pub mod history;
@@ -13,6 +14,7 @@ pub mod testutil;
 pub mod validate;
 pub mod writer;
 
+pub use apply::{apply, ApplyEnv, ApplyError, ApplyEvent, ExportReport, ExportStatus, StickCheck};
 pub use target::TargetProfile;
 
 /// Crate version, from Cargo metadata.

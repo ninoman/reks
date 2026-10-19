@@ -10,6 +10,10 @@
 //!                               import a rekordbox XML (or, with --dry-run, preview it)
 //! reks rb plan <stick> --library <library.sqlite> --playlist <id|Folder/Name>... [...]
 //!                               dry run of a rekordbox USB export (flags: see `rb.rs`)
+//! reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]
+//!                               dry run, then with --yes write and validate the stick
+//! reks rb validate <stick> <plan flags>
+//!                               read the stick back against a fresh plan
 //! reks rb history <stick> [--json]
 //!                               list the play history players left on the stick
 //! ```
@@ -57,7 +61,7 @@ fn main() -> anyhow::Result<()> {
         _ => bail!(
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
              | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run] \
-             | rb plan <stick> ... | rb history <stick> [--json]]"
+             | rb plan|export|validate <stick> ... | rb history <stick> [--json]]"
         ),
     }
 }
