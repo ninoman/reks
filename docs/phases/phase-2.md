@@ -438,6 +438,19 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
     and capacity bar; Sync records `device_synced_playlist`. Tests per
     stick-profiles §8 (status property test, identity, profile → `Selection`
     equals hand-built plan). Depends on tasks 9, 12, 13.
+    - [x] Backend: migration `0003_device_profiles.sql`; rows in
+      [reks-core `device`](../../crates/reks-core/src/device.rs), API in
+      [reks-export-rb `devices`](../../crates/reks-export-rb/src/devices/mod.rs)
+      (`identify`, `create`, `link`, `rename`, `set_target`, `set_selection`,
+      `selection`, `profile_status`, `record_sync`; wording in Rust). Status
+      reads a mounted stick with `validate::read` and maps entries through the
+      export manifest. Tests: status and "frees" property tests, identity
+      cases, profile → `Selection` → plan, a real baken sync recorded and
+      compared mounted and unmounted across library edits.
+    - [ ] Devices panel UI (status list, "frees X MB", capacity bar, the
+      identify prompts).
+    - [ ] Export wizard takes its selection from the stick's profile.
+    - [ ] Sync calls `devices::record_sync` after `apply`.
 
 ## Acceptance criteria
 

@@ -5,6 +5,7 @@
 pub mod apply;
 pub mod audiocheck;
 pub mod device;
+pub mod devices;
 pub mod dryrun;
 pub mod history;
 pub mod plan;

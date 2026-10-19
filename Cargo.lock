@@ -3574,6 +3574,7 @@ dependencies = [
  "baken-export",
  "binrw",
  "blake3",
+ "proptest",
  "rekordcrate",
  "reks-anlz",
  "reks-audio",
