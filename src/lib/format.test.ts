@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBpmRange, formatPosition, formatRgb, hotCueLabel, keyLabel } from "./format";
+import {
+  formatBpmRange,
+  formatBytes,
+  formatPosition,
+  formatRgb,
+  hotCueLabel,
+  keyLabel,
+} from "./format";
 
 describe("detail formatters", () => {
   it("formats positions as m:ss.mmm", () => {
@@ -22,6 +29,17 @@ describe("detail formatters", () => {
   it("formats RGB", () => {
     expect(formatRgb(0xff0000)).toBe("#ff0000");
     expect(formatRgb(0x25)).toBe("#000025");
+  });
+});
+
+describe("formatBytes", () => {
+  it("uses decimal units with one decimal under 10", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(999)).toBe("999 B");
+    expect(formatBytes(1_500_000)).toBe("1.5 MB");
+    expect(formatBytes(18_402_000_000)).toBe("18 GB");
+    expect(formatBytes(31_978_000_000)).toBe("32 GB");
+    expect(formatBytes(2_000_000_000_000)).toBe("2.0 TB");
   });
 });
 

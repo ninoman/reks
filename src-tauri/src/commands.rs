@@ -12,6 +12,7 @@ use reks_core::{
     PlaylistTree, ScanEvent, ScanReport, Settings, SettingsPatch, TrackDetail, TrackId, TrackPage,
     TrackPatch, TrackQuery,
 };
+use reks_export_rb::device::{self, DeviceInfo};
 use reks_mix::{PlayerState, Reopened};
 use serde::Serialize;
 use tauri::ipc::{Channel, Response};
@@ -401,4 +402,16 @@ pub async fn overview_waveform(state: State<'_, AppState>, id: TrackId) -> CmdRe
     blocking(&state, move |lib| lib.overview_waveform(id))
         .await
         .map(Response::new)
+}
+
+/// Removable volumes an export can target (phase 2 task 1).
+#[tauri::command]
+pub async fn devices_list() -> CmdResult<Vec<DeviceInfo>> {
+    Ok(tauri::async_runtime::spawn_blocking(device::list_removable).await?)
+}
+
+/// Unmounts and ejects the removable volume mounted at `mount_point`.
+#[tauri::command]
+pub async fn device_eject(mount_point: PathBuf) -> CmdResult<()> {
+    Ok(tauri::async_runtime::spawn_blocking(move || device::eject_at(&mount_point)).await??)
 }

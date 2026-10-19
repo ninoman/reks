@@ -3482,6 +3482,7 @@ name = "reks-app"
 version = "0.1.0"
 dependencies = [
  "reks-core",
+ "reks-export-rb",
  "reks-mix",
  "serde",
  "serde_json",

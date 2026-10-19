@@ -489,3 +489,35 @@ export function libraryRootRemove(id: number): Promise<void> {
 export function cacheDirMove(path: string): Promise<Settings> {
   return invoke("cache_dir_move", { path });
 }
+
+/** File system of a volume (`device::FsKind`). The planner turns it into warnings. */
+export type FsKind =
+  | { kind: "fat32" }
+  | { kind: "exFat" }
+  | { kind: "hfs" }
+  /** `name`: the OS's name for it (`apfs`, `ntfs`, …). */
+  | { kind: "other"; name: string };
+
+/** A mounted volume (`device::DeviceInfo`). */
+export interface DeviceInfo {
+  mountPoint: string;
+  fs: FsKind;
+  /** The OS's file system string (`msdos`, `vfat`, `FAT32`). */
+  fsName: string;
+  removable: boolean;
+  totalBytes: number;
+  freeBytes: number;
+  /** May be empty. */
+  label: string;
+  osName: string;
+}
+
+/** Mounted volumes the OS reports as removable. */
+export function devicesList(): Promise<DeviceInfo[]> {
+  return invoke("devices_list");
+}
+
+/** Unmounts and ejects the removable volume at `mountPoint`. */
+export function deviceEject(mountPoint: string): Promise<void> {
+  return invoke("device_eject", { mountPoint });
+}

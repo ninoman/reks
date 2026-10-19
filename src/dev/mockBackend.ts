@@ -7,6 +7,7 @@
 import { mockIPC } from "@tauri-apps/api/mocks";
 
 import type {
+  DeviceInfo,
   Facets,
   ImportPreview,
   ImportReport,
@@ -301,6 +302,39 @@ const REPORT: ImportReport = {
   cancelled: false,
 };
 
+let devices: DeviceInfo[] = [
+  {
+    mountPoint: "/Volumes/REKS",
+    fs: { kind: "fat32" },
+    fsName: "msdos",
+    removable: true,
+    totalBytes: 31_978_000_000,
+    freeBytes: 18_402_000_000,
+    label: "REKS",
+    osName: "disk4s1",
+  },
+  {
+    mountPoint: "/Volumes/GIGS",
+    fs: { kind: "exFat" },
+    fsName: "exfat",
+    removable: true,
+    totalBytes: 63_996_000_000,
+    freeBytes: 61_120_000_000,
+    label: "GIGS",
+    osName: "disk5s1",
+  },
+  {
+    mountPoint: "/Volumes/Backup",
+    fs: { kind: "other", name: "apfs" },
+    fsName: "apfs",
+    removable: true,
+    totalBytes: 500_000_000_000,
+    freeBytes: 120_000_000_000,
+    label: "Backup",
+    osName: "disk6s1",
+  },
+];
+
 mockIPC((cmd, payload) => {
   const args = (payload ?? {}) as Record<string, unknown>;
   switch (cmd) {
@@ -361,6 +395,11 @@ mockIPC((cmd, payload) => {
       return PREVIEW;
     case "rbxml_import_start":
       return REPORT;
+    case "devices_list":
+      return devices;
+    case "device_eject":
+      devices = devices.filter((d) => d.mountPoint !== args.mountPoint);
+      return null;
     case "plugin:dialog|open":
       return "/Users/dj/Music/rekordbox/collection.xml";
     default:

@@ -9,6 +9,7 @@
 import { useEffect } from "react";
 import { AppHeader } from "./components/AppHeader";
 import { DEFAULT_HIDDEN } from "./components/columns";
+import { DevicesDialog } from "./components/DevicesDialog";
 import { FilterBar } from "./components/FilterBar";
 import { ImportWizard } from "./components/ImportWizard";
 import { LibraryToolbar } from "./components/LibraryToolbar";
@@ -101,6 +102,7 @@ export default function App() {
       <DeleteDialog />
       <ImportWizard />
       <SettingsDialog />
+      <DevicesDialog />
     </div>
   );
 }

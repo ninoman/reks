@@ -1,6 +1,6 @@
 # Phase 2 — Legacy USB export (`export.pdb` + ANLZ)
 
-Status: in progress (tasks 2–6 done, 1, 12, 13 backend done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
+Status: in progress (tasks 2–6 done; 1 done except the Windows/Linux stick check; 12, 13 backend done; 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
 `rb_track_id`/`rb_location`). Read `docs/decisions.md` D7, D8, D16, D23 and
 `docs/research.md` §1, §4, §10 first.
 
@@ -173,8 +173,14 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
      Checked live on macOS with a FAT32 disk image (ignored test
      `live_volume_discovery_serial_and_eject`); Windows and Linux paths only
      compile-checked (clippy for both targets).
-   - [ ] Tauri commands (list, eject) and the UI picker: wait for the UI
-     redesign; build with task 10.
+   - [x] Tauri commands `devices_list` (removable only) and `device_eject`
+     (takes a mount point; `device::eject_at` looks the volume up again, so
+     the UI can't name a non-removable one). UI: header button "USB devices"
+     opens [DevicesDialog.tsx](../../src/components/DevicesDialog.tsx) (file
+     system, free space, a note for exFAT / HFS+ / unreadable file systems,
+     Eject; refreshes every 2 s while open). `DeviceList` with
+     `selected`/`onSelect` is the wizard's device step (task 10). Volumes
+     the OS reports as fixed (some USB SSDs on Windows, R§6) are not listed.
    - [ ] Eject on Windows and Linux, and `volume_serial` on all three OSes,
      against a real stick.
 2. [x] **fsname + path planning**: implement `fsname`, `/Contents` layout, depth
