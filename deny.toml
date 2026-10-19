@@ -23,6 +23,7 @@ allow = [
   "BSL-1.0",
   "Unicode-DFS-2016",
   "Unicode-3.0",
+  "IJG",  # jpeg-encoder via baken-export; GPL-compatible, attribution in docs (D18)
 ]
 # GPL-2.0-only, EPL-1.0, CDDL, AGPL-3.0, SSPL, BUSL and unlicensed crates are
 # rejected by default because they are not in the allow list.

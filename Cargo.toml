@@ -33,6 +33,8 @@ reks-export-engine = { version = "0.1.0", path = "crates/reks-export-engine" }
 
 # Shared external dependencies (pin here, reference with `workspace = true`).
 anyhow = "1"
+# Exact pin (D7): young single-maintainer crate; bump only with the writer integration test.
+baken-export = "=4.6.1"
 blake3 = "1.8"
 cpal = "0.18"
 deunicode = "1.6"
