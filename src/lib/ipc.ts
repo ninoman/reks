@@ -340,3 +340,58 @@ export function playlistsGet(): Promise<PlaylistTree> {
 export function playlistsMutate(op: PlaylistOp): Promise<PlaylistOutcome> {
   return invoke("playlists_mutate", { op });
 }
+
+/** `player_*` commands: the preview player (reks-mix, docs/decisions.md D5). */
+export interface PlayerStatus {
+  loaded: boolean;
+  playing: boolean;
+  positionMs: number;
+  durationMs: number;
+  /** 0..1, the knob position (squared taper in Rust). */
+  volume: number;
+  device: string | null;
+  deviceLost: boolean;
+  trackId: number | null;
+}
+
+/** Output device names, the system default first. */
+export function playerDevices(): Promise<string[]> {
+  return invoke("player_devices");
+}
+
+export function playerLoad(id: number, play: boolean): Promise<PlayerStatus> {
+  return invoke("player_load", { id, play });
+}
+
+/** `null`: the system default. */
+export function playerSetDevice(device: string | null): Promise<PlayerStatus> {
+  return invoke("player_set_device", { device });
+}
+
+export function playerPlay(): Promise<PlayerStatus> {
+  return invoke("player_play");
+}
+
+export function playerPause(): Promise<PlayerStatus> {
+  return invoke("player_pause");
+}
+
+export function playerSeek(ms: number): Promise<PlayerStatus> {
+  return invoke("player_seek", { ms: Math.max(0, Math.round(ms)) });
+}
+
+export function playerVolume(volume: number): Promise<PlayerStatus> {
+  return invoke("player_volume", { volume });
+}
+
+export function playerState(): Promise<PlayerStatus> {
+  return invoke("player_state");
+}
+
+/**
+ * Overview waveform: little-endian f32 `[min, max]` pairs, one per 1,000
+ * source frames (raw `ipc::Response`, not JSON).
+ */
+export function overviewWaveform(id: number): Promise<ArrayBuffer> {
+  return invoke("overview_waveform", { id });
+}

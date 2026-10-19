@@ -46,6 +46,15 @@ pub fn run() {
             commands::scan_start,
             commands::scan_cancel,
             commands::rbxml_import_start,
+            commands::player_devices,
+            commands::player_load,
+            commands::player_set_device,
+            commands::player_play,
+            commands::player_pause,
+            commands::player_seek,
+            commands::player_volume,
+            commands::player_state,
+            commands::overview_waveform,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

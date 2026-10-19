@@ -413,14 +413,20 @@ pub fn decode_f32(path: &Path) -> Result<Pcm>;              // interleaved f32 +
 pub fn tags(path: &Path) -> Result<Tags>;                   // lofty crate
 pub fn embedded_artwork(path: &Path) -> Result<Option<Picture>>;
 
-pub struct Player { /* owns the output thread */ }
+pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded>; // stereo i16 + overview
+
+// reks-mix (D5): one deck of the Phase 6 engine
+pub struct Player { /* opens the cpal output on first use */ }
 impl Player {
-    pub fn new(device: Option<String>) -> Result<Self>;
-    pub fn load(&self, path: &Path) -> Result<()>;           // decodes ahead on a worker
-    pub fn play(&self); pub fn pause(&self); pub fn seek_ms(&self, ms: u64); pub fn set_volume(&self, v: f32);
-    pub fn position_ms(&self) -> u64;
-    pub fn devices() -> Vec<String>;
+    pub fn new(device: Option<String>) -> Self;
+    pub fn sample_rate(&mut self) -> Result<u32>;            // decode at this rate
+    pub fn load(&mut self, samples: Vec<i16>, sample_rate: u32) -> Result<()>;
+    pub fn play(&mut self) -> Result<()>; pub fn pause(&mut self) -> Result<()>;
+    pub fn seek_ms(&mut self, ms: u64) -> Result<()>; pub fn set_volume(&mut self, v: f32) -> Result<()>;
+    pub fn state(&mut self) -> PlayerState;                  // position_ms, duration_ms, playing, device
+    pub fn set_device(&mut self, device: Option<String>) -> Result<Reopened>;
 }
+pub fn output_devices() -> Result<Vec<String>>;
 ```
 
 Notes (task 4, [`reks-audio`](../../crates/reks-audio/src/))
@@ -449,13 +455,43 @@ Scan rules (task 5, [`scan.rs`](../../crates/reks-core/src/scan.rs))
   (unplugged drive), or under a folder that could not be read. Rows are never
   deleted by a scan.
 
+Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5)
+- `reks-audio::decode_stereo` decodes the whole track to stereo `i16` (mono
+  copied to both sides, channels past two dropped) and resamples it to the
+  output rate with rubato (FFT, off the audio thread). Tracks over 60 minutes
+  are refused. Corrupt packets are skipped; a truncated file plays what decoded.
+- The audio thread never allocates, frees, locks or does I/O; a unit test with
+  a counting allocator enforces it. A replaced track goes back to the control
+  side to be freed.
+- Play, pause and load fade over 5 ms, so none of them clicks. Seek is
+  instant: the new position plays from the next audio frame. While playing,
+  the old position fades out under it with a 20 ms equal-power crossfade
+  (`SEEK_XFADE_MS`), so there is no gap, dip or click (maintainer's call,
+  2026-10-19: a hard cut was too rough, fade-out/fade-in too slow). Until the
+  audio thread takes a seek, `player_state` reports the target, so the
+  playhead never snaps back.
+  Loading stops the deck at the start. Volume is a 0..1 knob with a squared taper.
+- Output: the system default until Settings (task 13) stores a device, at
+  44.1 kHz when the device offers it (`reks_mix::PREFERRED_RATE`), else its
+  default rate. L/R go
+  to the first two channels, mono outputs get (L + R) / 2. A lost device
+  shows in the transport; the next command reopens the output. A device at
+  another rate means the track is decoded again and the position restored.
+- Overview: min/max per 1,000 source frames over both channels, computed on
+  every decode and cached in `<cache_dir>/waveform/overview/<key>.f32` (key:
+  hash of path, size and mtime).
+- UI: double-click or Enter plays a row; Space plays and pauses (except in
+  text fields); the overview is the position slider (seeks on pointer-down and
+  on every move while dragging, arrow keys ±5 s; the store sends only the
+  newest target while a seek call is in flight). `reks-cli devices` and `reks-cli play <file>` drive it headless.
+
 ### Tauri commands (`src-tauri`)
 
 `library_query`, `library_facets`, `library_track`, `library_update_track`, `playlists_get`,
 `playlists_mutate`, `scan_start` (progress via `Channel<ScanEvent>`), `scan_cancel`,
 `rbxml_import_start` (progress via Channel), `rbxml_export`,
-`player_load/play/pause/seek/volume/devices`, `player_state` (polled or event
-every 100 ms), `artwork_get(artwork_id) -> Response(bytes)`, `overview_waveform(id) ->
+`player_load(id, play)`, `player_play/pause/seek/volume/devices/set_device`,
+`player_state` (polled every 100 ms while playing), `artwork_get(artwork_id) -> Response(bytes)`, `overview_waveform(id) ->
 Response(bytes)`.
 
 ## Tasks (each sized for one coding session)
@@ -496,8 +532,8 @@ Response(bytes)`.
    grid listing (read-only), artwork display via `artwork_get`.
 10. [x] **Playlists UI**: tree, create/rename/delete folder/playlist, drag tracks,
     reorder, context menu; backed by `playlists_mutate` ops.
-11. [ ] **Player**: `reks-audio::Player` on rodio (Symphonia decoders), output
-    device list, seek; Tauri commands; transport bar with position slider and
+11. [ ] **Player**: one-deck slice of the Phase 6 engine (`reks-mix`, D5) with
+    Symphonia decoding in `reks-audio`, output device list, seek; Tauri commands; transport bar with position slider and
     a simple overview waveform (min/max per 1,000 samples, computed on first
     load, cached as `.f32` in cache dir, sent as bytes).
 12. [ ] **Import wizard**: choose `collection.xml`, show counts, run import with

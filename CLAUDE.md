@@ -22,7 +22,8 @@ is the worst possible bug; correctness and conservative defaults beat features.
   it calls Rust commands.
 - Library: SQLite via `rusqlite` (bundled) + `rusqlite_migration`. WAL mode.
 - Decoding: Symphonia 0.6 (features: mp3, aac, alac, isomp4, aiff, flac, wav).
-- Playback: Rust-side (rodio/cpal), not the WebView `<audio>` element.
+- Playback: Rust-side, our own `cpal` engine (`reks-mix`, D5), not the WebView
+  `<audio>` element.
 - rekordbox legacy export: `baken-export` (MIT) behind our own adapter trait;
   `rekordcrate` (MPL-2.0) for read-back validation. Spec of record: Deep
   Symmetry `crate-digger` `.ksy` + djl-analysis docs.
@@ -52,7 +53,8 @@ reks/
   crates/
     reks-core/      library model, SQLite schema + migrations, scan/import, tags,
                     artwork, playlists, rekordbox XML import/export, services
-    reks-audio/     Symphonia decode, PCM cache, preview player
+    reks-audio/     Symphonia decode, resampling, overview waveform
+    reks-mix/       real-time cpal engine: decks, offline render (player now, mixer Phase 6)
     reks-analysis/  BPM/beatgrid, key, waveform generation (Phase 3)
     reks-anlz/      Pioneer ANLZ model + writer/reader helpers (Phase 2/3)
     reks-export-rb/ legacy rekordbox USB export (plan/dry-run/write/validate)

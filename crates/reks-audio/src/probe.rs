@@ -169,7 +169,7 @@ fn stream_bit_rate(path: &Path) -> Option<u32> {
     file.properties().audio_bitrate().filter(|&b| b > 0)
 }
 
-fn decode_err(path: &Path, source: symphonia::core::errors::Error) -> Error {
+pub(crate) fn decode_err(path: &Path, source: symphonia::core::errors::Error) -> Error {
     use symphonia::core::errors::Error as SymErr;
     match source {
         SymErr::Unsupported(what) => Error::Unsupported {

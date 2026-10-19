@@ -15,7 +15,7 @@ speakers. It is a preparation tool. Nothing here is meant for playing a gig.
 
 - `reks-mix` crate: real-time engine on a raw `cpal` stream, decks, sync, mixer
   DSP, and an offline `render()` that runs the same graph without a device.
-  The Phase 1 preview player moves onto this engine and rodio goes (D5).
+  The Phase 1 preview player already runs on this engine (D5).
 - Decks (2 shown, 4 on demand): load from the track table or a playlist,
   play/pause, CDJ-style cue (set and return), jump to the track's hot cues, seek
   on the waveform, tempo fader (±8/±16/±50%), pitch-bend nudge, quantise.
@@ -92,6 +92,8 @@ pub enum Control {
 
 - Control values are 0..=1 like a knob; `reks-mix::taper` maps each to dB, Hz
   or a curve, with a test per taper. Every parameter is smoothed (≥ 5 ms ramp).
+  Seek, cue and hot-cue jumps are instant with a short equal-power crossfade
+  from the old position (`SEEK_XFADE_MS`, Phase 1 player).
   Filter-type and assign switches crossfade, so they don't click (the hardware does).
 - Whole tracks are decoded to memory by `reks-audio` before `Load`, so seeks and
   sync corrections never wait on the decoder. Four 6-minute decks use about 250 MB.
@@ -100,10 +102,10 @@ pub enum Control {
 
 ## Tasks
 
-1. **Engine skeleton**: `reks-mix` crate, cpal stream with device, rate and
-   buffer selection; `rtrb` control/state queues; `render()`; allocation guard;
-   preview player moved onto the engine, rodio removed, D5 updated; crate added
-   to CLAUDE.md's repo structure.
+1. **Engine skeleton**: done in Phase 1 task 11 (D5): `reks-mix` crate, cpal
+   stream with device selection, `rtrb` control/state queues, `render()`,
+   allocation guard, one deck. Left for this phase: rate and buffer-size
+   selection, more than one deck, and the `Control`/`EngineState` variants below.
 2. **Deck**: `DeckSource` loading, play/pause/cue/seek/hot cue, varispeed with
    `rubato`, nudge, quantise. Tests: at ratio 1.0 the render equals the decode
    sample for sample; at 1.05 click spacing is 1/1.05 of the original within 1 sample.

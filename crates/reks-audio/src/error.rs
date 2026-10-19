@@ -24,6 +24,18 @@ pub enum Error {
         source: symphonia::core::errors::Error,
     },
 
+    /// The track is longer than whole-track decode allows ([`crate::MAX_DECODE_MS`]).
+    #[error("{path} is too long to decode whole ({duration_ms} ms, limit {max_ms} ms)")]
+    TooLong {
+        path: PathBuf,
+        duration_ms: u64,
+        max_ms: u64,
+    },
+
+    /// The resampler rejected the rates or buffers.
+    #[error("cannot resample {path}: {reason}")]
+    Resample { path: PathBuf, reason: String },
+
     /// lofty could not read the file's tags or properties.
     #[error("cannot read tags in {path}: {source}")]
     Tags {

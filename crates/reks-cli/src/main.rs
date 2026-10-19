@@ -4,6 +4,8 @@
 //! ```text
 //! reks                          print versions
 //! reks synth-xml <N> <out.xml>  write a synthetic rekordbox XML with N tracks
+//! reks devices                  list audio output devices
+//! reks play <file> [seconds]    play a file on the default output (engine smoke test)
 //! ```
 
 use std::io::BufWriter;
@@ -28,8 +30,47 @@ fn main() -> anyhow::Result<()> {
             let n: u32 = n.parse().context("track count")?;
             synth_xml(n, Path::new(out))
         }
-        _ => bail!("usage: reks [synth-xml <tracks> <out.xml>]"),
+        [cmd] if cmd == "devices" => {
+            for name in reks_mix::output_devices()? {
+                println!("{name}");
+            }
+            Ok(())
+        }
+        [cmd, file] if cmd == "play" => play(Path::new(file), 10),
+        [cmd, file, secs] if cmd == "play" => {
+            play(Path::new(file), secs.parse().context("seconds")?)
+        }
+        _ => bail!("usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds]]"),
     }
+}
+
+/// Plays `file` for `secs` seconds through the preview player, printing the
+/// position and the device's xrun count.
+fn play(file: &Path, secs: u64) -> anyhow::Result<()> {
+    let mut player = reks_mix::Player::new(None);
+    let rate = player.sample_rate()?;
+    let decoded = reks_audio::decode_stereo(file, Some(rate))?;
+    println!(
+        "{} Hz -> {rate} Hz, {} ms",
+        decoded.source_rate,
+        decoded.pcm.duration_ms()
+    );
+    player.load(decoded.pcm.samples, rate)?;
+    player.play()?;
+    for _ in 0..secs * 4 {
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        let st = player.state();
+        println!(
+            "{:>7} ms playing={} device={:?}",
+            st.position_ms, st.playing, st.device
+        );
+        if !st.playing && st.position_ms > 0 {
+            break;
+        }
+    }
+    player.pause()?;
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    Ok(())
 }
 
 /// Writes a rekordbox XML with `n` varied synthetic tracks (genres, keys,

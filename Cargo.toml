@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "crates/reks-core",
   "crates/reks-audio",
+  "crates/reks-mix",
   "crates/reks-analysis",
   "crates/reks-anlz",
   "crates/reks-export-rb",
@@ -23,6 +24,7 @@ publish = false
 # Internal crates. Explicit versions keep cargo-deny's wildcard check happy.
 reks-core = { version = "0.1.0", path = "crates/reks-core" }
 reks-audio = { version = "0.1.0", path = "crates/reks-audio" }
+reks-mix = { version = "0.1.0", path = "crates/reks-mix" }
 reks-analysis = { version = "0.1.0", path = "crates/reks-analysis" }
 reks-anlz = { version = "0.1.0", path = "crates/reks-anlz" }
 reks-export-rb = { version = "0.1.0", path = "crates/reks-export-rb" }
@@ -32,12 +34,15 @@ reks-export-engine = { version = "0.1.0", path = "crates/reks-export-engine" }
 # Shared external dependencies (pin here, reference with `workspace = true`).
 anyhow = "1"
 blake3 = "1.8"
+cpal = "0.18"
 hound = "3"
 imagesize = { version = "0.15", default-features = false, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
 lofty = "0.25"
 percent-encoding = "2.3"
 quick-xml = "0.42"
 rusqlite = { version = "0.40", features = ["bundled"] }
+rubato = "5"
+rtrb = "0.4"
 rusqlite_migration = "2.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -70,3 +75,16 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# Dev builds still decode and resample at usable speed: unoptimised Symphonia
+# and rubato take ~30 s for a 6-minute FLAC resampled to 48 kHz, ~0.7 s at
+# opt-level 3. reks-audio is listed because rubato's generics are compiled
+# there; reks-mix runs the audio callback. Debug info and checks stay on.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev.package.reks-audio]
+opt-level = 3
+
+[profile.dev.package.reks-mix]
+opt-level = 3

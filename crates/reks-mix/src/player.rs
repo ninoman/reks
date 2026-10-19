@@ -1,0 +1,339 @@
+//! The Phase 1 preview player: one deck on the [`Engine`], in milliseconds.
+//!
+//! The engine opens on first use, so a machine without an output device
+//! still runs the rest of the app. Decoding is the caller's job: hand
+//! [`Player::load`] stereo `i16` at [`Player::sample_rate`].
+
+use std::sync::Arc;
+
+use crate::engine::{Engine, EngineConfig};
+use crate::error::{Error, Result};
+use crate::graph::{Control, DeckSource, DeckState};
+
+const DECK: u8 = 0;
+
+/// What the transport bar shows.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerState {
+    pub loaded: bool,
+    pub playing: bool,
+    pub position_ms: u64,
+    pub duration_ms: u64,
+    /// 0..=1, the knob position.
+    pub volume: f32,
+    /// The open device, if any.
+    pub device: Option<String>,
+    /// The device went away; the next command reopens the output.
+    pub device_lost: bool,
+}
+
+/// Whether the caller must decode the track again after a device change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reopened {
+    /// Same rate: the track, position and play state carried over.
+    Kept,
+    /// The rate changed: load the track again at the new rate, then seek to
+    /// `position_ms` (and play if `playing`).
+    Reload { position_ms: u64, playing: bool },
+    /// No track was loaded.
+    Empty,
+}
+
+#[derive(Debug)]
+struct Loaded {
+    src: Arc<DeckSource>,
+    sample_rate: u32,
+}
+
+/// The latest seek sent, reported as the position until the audio thread's
+/// snapshot shows it applied, so the playhead never snaps back.
+#[derive(Debug, Clone, Copy)]
+struct SentSeek {
+    /// The deck's `seeks` count once this seek is applied.
+    seq: u32,
+    frame: i64,
+}
+
+/// One-deck player.
+#[derive(Debug)]
+pub struct Player {
+    device: Option<String>,
+    engine: Option<Engine>,
+    loaded: Option<Loaded>,
+    volume: f32,
+    /// Seeks sent on the current engine (wrapping); matches the deck's count.
+    seeks: u32,
+    last_seek: Option<SentSeek>,
+    /// The last play/pause sent, reported until the deck takes a load.
+    want_playing: bool,
+}
+
+impl Player {
+    /// A player for `device` (`None`: system default). Opens nothing yet.
+    pub fn new(device: Option<String>) -> Self {
+        Self {
+            device,
+            engine: None,
+            loaded: None,
+            volume: 1.0,
+            seeks: 0,
+            last_seek: None,
+            want_playing: false,
+        }
+    }
+
+    /// The output's sample rate; opens the output if needed.
+    pub fn sample_rate(&mut self) -> Result<u32> {
+        Ok(self.engine()?.info().sample_rate)
+    }
+
+    /// Loads interleaved stereo at `sample_rate`, stopped at the start.
+    pub fn load(&mut self, samples: Vec<i16>, sample_rate: u32) -> Result<()> {
+        let rate = self.sample_rate()?;
+        if rate != sample_rate {
+            return Err(Error::RateMismatch {
+                track: sample_rate,
+                device: rate,
+            });
+        }
+        let src = Arc::new(DeckSource::new(samples));
+        self.engine()?.send(Control::Load {
+            deck: DECK,
+            src: Arc::clone(&src),
+        })?;
+        self.loaded = Some(Loaded { src, sample_rate });
+        self.last_seek = None;
+        self.want_playing = false;
+        Ok(())
+    }
+
+    pub fn unload(&mut self) -> Result<()> {
+        self.loaded = None;
+        self.want_playing = false;
+        self.send(Control::Unload { deck: DECK })
+    }
+
+    pub fn play(&mut self) -> Result<()> {
+        self.send(Control::Play { deck: DECK })?;
+        self.want_playing = true;
+        Ok(())
+    }
+
+    pub fn pause(&mut self) -> Result<()> {
+        self.send(Control::Pause { deck: DECK })?;
+        self.want_playing = false;
+        Ok(())
+    }
+
+    pub fn seek_ms(&mut self, ms: u64) -> Result<()> {
+        let Some(l) = &self.loaded else {
+            return Ok(());
+        };
+        let frame = i64::try_from(ms.saturating_mul(u64::from(l.sample_rate)) / 1000)
+            .unwrap_or(i64::MAX)
+            .clamp(0, l.src.frames());
+        self.send(Control::Seek { deck: DECK, frame })?;
+        self.seeks = self.seeks.wrapping_add(1);
+        self.last_seek = Some(SentSeek {
+            seq: self.seeks,
+            frame,
+        });
+        Ok(())
+    }
+
+    /// 0..=1 like a knob (squared taper, [`crate::volume_gain`]).
+    pub fn set_volume(&mut self, v: f32) -> Result<()> {
+        self.volume = if v.is_finite() {
+            v.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        self.send(Control::Volume { value: self.volume })
+    }
+
+    /// Current state. Does not open the output.
+    pub fn state(&mut self) -> PlayerState {
+        let duration_ms = self
+            .loaded
+            .as_ref()
+            .map_or(0, |l| frames_to_ms(l.src.frames(), l.sample_rate));
+        let mut st = PlayerState {
+            loaded: self.loaded.is_some(),
+            duration_ms,
+            volume: self.volume,
+            ..PlayerState::default()
+        };
+        if let Some(engine) = self.engine.as_mut() {
+            let deck = engine.poll_state().decks[usize::from(DECK)];
+            let rate = engine.info().sample_rate;
+            st.device = Some(engine.info().device.clone());
+            st.device_lost = engine.device_lost();
+            let loaded_frames = self.loaded.as_ref().map(|l| l.src.frames());
+            (st.playing, st.position_ms) =
+                shown(deck, loaded_frames, self.last_seek, self.want_playing, rate);
+        }
+        st
+    }
+
+    /// Switches to `device` (`None`: system default) and carries the track
+    /// over when the new output runs at the same rate.
+    pub fn set_device(&mut self, device: Option<String>) -> Result<Reopened> {
+        let before = self.state();
+        self.engine = None;
+        self.device = device;
+        let rate = self.sample_rate()?;
+        let volume = self.volume;
+        self.send(Control::Volume { value: volume })?;
+        let Some(l) = &self.loaded else {
+            return Ok(Reopened::Empty);
+        };
+        if l.sample_rate != rate {
+            self.loaded = None;
+            return Ok(Reopened::Reload {
+                position_ms: before.position_ms,
+                playing: before.playing,
+            });
+        }
+        let src = Arc::clone(&l.src);
+        self.send(Control::Load { deck: DECK, src })?;
+        self.seek_ms(before.position_ms)?;
+        if before.playing {
+            self.play()?;
+        }
+        Ok(Reopened::Kept)
+    }
+
+    /// The open engine; reopens it after a lost device.
+    fn engine(&mut self) -> Result<&mut Engine> {
+        if self.engine.as_ref().is_some_and(Engine::device_lost) {
+            tracing::info!("reopening audio output after device loss");
+            self.engine = None;
+            self.loaded = None;
+        }
+        match &mut self.engine {
+            Some(e) => Ok(e),
+            slot @ None => {
+                let e = Engine::start(EngineConfig {
+                    device: self.device.clone(),
+                })?;
+                // A new graph counts seeks from zero.
+                self.seeks = 0;
+                self.last_seek = None;
+                Ok(slot.insert(e))
+            }
+        }
+    }
+
+    fn send(&mut self, c: Control) -> Result<()> {
+        self.engine()?.send(c)
+    }
+}
+
+/// Play state and position to report. Until the audio thread has taken the
+/// load (a new track, or the same one on a new device), the deck state is
+/// stale: report what was asked for, so the transport keeps polling and the
+/// playhead does not drop to zero.
+fn shown(
+    deck: DeckState,
+    loaded_frames: Option<i64>,
+    last_seek: Option<SentSeek>,
+    want_playing: bool,
+    rate: u32,
+) -> (bool, u64) {
+    match loaded_frames {
+        None => (false, 0),
+        Some(frames) if deck.frames != frames => (
+            want_playing,
+            last_seek.map_or(0, |s| frames_to_ms(s.frame, rate)),
+        ),
+        Some(_) => {
+            let position = match last_seek {
+                Some(s) if s.seq != deck.seeks => s.frame,
+                _ => deck.position,
+            };
+            (deck.playing, frames_to_ms(position, rate))
+        }
+    }
+}
+
+fn frames_to_ms(frames: i64, rate: u32) -> u64 {
+    u64::try_from(frames).unwrap_or(0) * 1000 / u64::from(rate.max(1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn state_without_an_output_is_empty_and_opens_nothing() {
+        let mut p = Player::new(None);
+        let st = p.state();
+        assert_eq!(
+            st,
+            PlayerState {
+                volume: 1.0,
+                ..PlayerState::default()
+            }
+        );
+        assert!(p.engine.is_none());
+        // Seeking with nothing loaded is a no-op, not an error.
+        assert!(p.seek_ms(1_000).is_ok());
+        assert!(p.engine.is_none());
+    }
+
+    #[test]
+    fn pending_load_reports_what_was_asked_for() {
+        // A device switch sent Load, Seek to 1 s and Play; the new engine's
+        // deck is still empty.
+        let seek = Some(SentSeek {
+            seq: 1,
+            frame: 48_000,
+        });
+        assert_eq!(
+            shown(DeckState::default(), Some(96_000), seek, true, 48_000),
+            (true, 1_000)
+        );
+        // A fresh load with no seek shows zero, stopped unless asked to play.
+        assert_eq!(
+            shown(DeckState::default(), Some(96_000), None, false, 48_000),
+            (false, 0)
+        );
+        assert_eq!(
+            shown(DeckState::default(), None, None, true, 48_000),
+            (false, 0)
+        );
+    }
+
+    #[test]
+    fn taken_load_reports_the_deck() {
+        let deck = DeckState {
+            playing: true,
+            position: 72_000,
+            frames: 96_000,
+            seeks: 1,
+            ..DeckState::default()
+        };
+        let applied = Some(SentSeek {
+            seq: 1,
+            frame: 48_000,
+        });
+        assert_eq!(
+            shown(deck, Some(96_000), applied, false, 48_000),
+            (true, 1_500)
+        );
+        // A newer seek not applied yet still shows its target.
+        let newer = Some(SentSeek {
+            seq: 2,
+            frame: 24_000,
+        });
+        assert_eq!(shown(deck, Some(96_000), newer, true, 48_000), (true, 500));
+    }
+
+    #[test]
+    fn frames_to_ms_rounds_down() {
+        assert_eq!(frames_to_ms(48_000, 48_000), 1_000);
+        assert_eq!(frames_to_ms(47_999, 48_000), 999);
+        assert_eq!(frames_to_ms(-5, 48_000), 0);
+    }
+}

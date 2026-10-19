@@ -21,6 +21,10 @@ pub enum Error {
         source: std::io::Error,
     },
 
+    /// Decoding a track for playback or its waveform failed.
+    #[error(transparent)]
+    Audio(#[from] reks_audio::Error),
+
     /// SQLite refused WAL mode (e.g. a filesystem without shared-memory support).
     #[error("could not enable WAL journal mode (got {0:?})")]
     JournalMode(String),

@@ -1,6 +1,6 @@
 [package]
 name = "reks-audio"
-description = "reks audio: Symphonia decoding, PCM cache, preview player"
+description = "reks audio: Symphonia decoding, resampling, overview waveform"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,9 +11,11 @@ workspace = true
 
 [dependencies]
 lofty = { workspace = true }
+rubato = { workspace = true }
 symphonia = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+hound = { workspace = true }
 tempfile = { workspace = true }
