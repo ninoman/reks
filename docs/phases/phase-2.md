@@ -1,6 +1,6 @@
 # Phase 2 — Legacy USB export (`export.pdb` + ANLZ)
 
-Status: not started. Depends on: Phase 1 (library, XML writer, playlists,
+Status: in progress (task 2 done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
 `rb_track_id`/`rb_location`). Read `docs/decisions.md` D7, D8, D16, D23 and
 `docs/research.md` §1, §4, §10 first.
 
@@ -152,9 +152,17 @@ CREATE TABLE export_manifest (              -- latest export to each stick
    `NSRemovableVolumesUsageDescription`; eject command (`diskutil` on macOS,
    IOCTL on Windows, `udisksctl`/`eject` on Linux). Tests with a temp dir
    "fake device".
-2. **fsname + path planning**: implement `fsname`, `/Contents` layout, depth
+2. [x] **fsname + path planning**: implement `fsname`, `/Contents` layout, depth
    and length limits (255 full path, 8 levels), case-insensitive dedupe,
-   NFC; property tests.
+   NFC; property tests. Done in `reks-core::fsname`
+   ([fsname.rs](../../crates/reks-core/src/fsname.rs)): stick paths are
+   ASCII-transliterated (D24); forbidden characters become `_`; reserved
+   names get a `_` (`CON` → `CON_`); artist/album folders ≤ 64 characters and
+   `contents_path` leaves 6 characters for a dedupe suffix; `check_path`
+   validates any stick path (also non-ASCII ones rekordbox wrote) for the
+   planner and validator. Folders that differ only in case are not merged
+   (same folder on FAT32); the planner (task 4) seeds `dedupe` with the
+   stick's existing paths via `fold_key`.
 3. **audiocheck**: parse WAV/AIFF headers (format tag, bit depth, float),
    MP3 Xing/Info presence, sample rate/channels from probe; map to `Issue`
    with target-dependent severity (FLAC/ALAC warn on NXS, error on NXS1);
