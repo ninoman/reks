@@ -306,8 +306,11 @@ Notes (task 8, [`query.rs`](../../crates/reks-core/src/query.rs), [`src/`](../..
   playlist tree, so key and colour knowledge stays in Rust.
 - App: `AppState` opens `reks.sqlite` in `app_data_dir` (`app_local_data_dir` on
   Windows, D19); commands run on `spawn_blocking`. `scan_start` / `rbxml_import_start`
-  stream progress over a `Channel`; the toolbar uses them (folder/XML picked with
-  `tauri-plugin-dialog`, optional one-prefix remap) until the wizard (task 12).
+  stream progress over a `Channel`; the toolbar uses them until the wizard (task 12).
+  "Import rekordbox XML…" is one step (pick the file, it imports). If files are not
+  found, it names the folder they were expected in (`ImportReport.missing_root`: the
+  deepest common folder of the not-found paths, `None` when only a filesystem root is
+  shared) and offers "Locate folder…", which re-imports with that prefix remapped.
 - UI: Zustand store (`src/store/library.ts`) builds the `TrackQuery`; a generation
   counter drops stale pages. Selection is a pure reducer over row indices of the current
   result (click, cmd/ctrl toggle, shift range, arrows/Page/Home/End with shift-extend,
@@ -315,7 +318,8 @@ Notes (task 8, [`query.rs`](../../crates/reks-core/src/query.rs), [`src/`](../..
   persisted yet (task 13). Vitest covers query building, the selection reducer and the
   search debounce; a `tauri-driver` smoke test is skipped (optional).
 - 10k manual check: `reks synth-xml 10000 synth.xml` writes a synthetic collection (files
-  missing) to import in the app.
+  missing) to import in the app. The fixture XML imports with its files missing until
+  "Locate folder…" points it at `fixtures/audio`.
 
 ### Audio (`reks-audio`)
 

@@ -153,6 +153,8 @@ export interface ImportReport {
   playlistsMatched: number;
   playlistEntries: number;
   playlistEntriesSkipped: number;
+  /** Deepest folder holding every file not found; the remap `from` to suggest. */
+  missingRoot: string | null;
   elapsedMs: number;
 }
 

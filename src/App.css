@@ -174,24 +174,11 @@ select {
 .error {
   color: #d0342c;
 }
-.import-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: center;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+.status-line .warn {
+  color: #c77700;
 }
-.import-form label {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-.import-form input {
-  width: 260px;
-}
-.import-form .hint {
-  color: #d0342c;
+.status-line .link {
+  margin-left: 6px;
 }
 .column-chooser {
   position: relative;
