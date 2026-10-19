@@ -75,8 +75,14 @@ impl Env {
     }
 }
 
+/// `p` as the scan reports it. Re-collecting the components gives native
+/// separators (`join("set/x.mp3")` keeps the `/` on Windows).
 fn path_str(p: &Path) -> String {
-    p.to_str().unwrap().to_owned()
+    p.components()
+        .collect::<PathBuf>()
+        .to_str()
+        .unwrap()
+        .to_owned()
 }
 
 /// Five fixtures, plus files the scan must skip or reject.
