@@ -1,6 +1,6 @@
 # Phase 2.6 — File converter (WAV, AIFF, FLAC)
 
-Status: tasks 1–3 done (2026-10-19, started ahead of the Phase 2 hardware
+Status: tasks 1–4 done (2026-10-19, started ahead of the Phase 2 hardware
 campaign with the maintainer's approval: pure `reks-audio` code). Depends on:
 Phase 1 (decode, tags, library) and Phase 2 (`audiocheck`, export, hardware
 campaign). Independent of Phase 2.5; either can
@@ -129,9 +129,24 @@ and grid copied.
    widens exactly, rounds to 24 bits and applies seeded TPDF dither at 16 bits
    (deterministic output). Fixtures: `reks-fixtures-gen` renders the 24/96 and
    float WAVs on the fly (fixtures/README.md).
-4. **`convert()`**: pipeline, progress, cancel, verify; tags and artwork copy
+4. [x] **`convert()`**: pipeline, progress, cancel, verify; tags and artwork copy
    with `lofty`; tests per source × target on fixtures (the 24/96 and float
    WAV generators are in `fixtures/gen`, task 3).
+   Done in [`reks-audio::convert`](../../crates/reks-audio/src/convert.rs):
+   creates `tmp` with `create_new` (never overwrites), streams packet by
+   packet, fsyncs, copies tags (primary tag first, others fill gaps; ID3v2
+   for WAV/AIFF, Vorbis + PICTURE for FLAC), then decodes the file back and
+   checks rate, depth, frame count and [`pcm_hash`](../../crates/reks-audio/src/convert.rs)
+   (BLAKE3 of the samples) against what was written, on every path.
+   Same rate and depth gives the source's own `pcm_hash`. A drop guard removes
+   `tmp` on any error or cancel. `CancelToken` lives in `reks-audio` for now;
+   task 5 makes `reks-core` re-export it instead of its own copy.
+   Found on the way: Symphonia gives no bit depth for ALAC (now read from the
+   magic cookie, in `probe` too), and rubato's delay is half a frame off when
+   its FFT output block is odd (96 → 44.1 kHz); `StreamResampler` now picks
+   an even block. Tests: [convert.rs](../../crates/reks-audio/tests/convert.rs)
+   over WAV, AIFF, FLAC, 24/96 ALAC (new fixture), 24/96 and float WAV × the
+   three targets.
 5. **Library plan/apply**: migration for the superseded-file table, scan skips
    those paths, Replace / Add as new, Trash option (`trash` crate, licence
    check), collision naming, report. Tests on a temp library: cues, grid,

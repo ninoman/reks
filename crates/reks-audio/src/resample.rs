@@ -10,10 +10,40 @@
 //! at `f64`, which keeps 24-bit sources exact to well below one LSB.
 
 use rubato::audioadapter_buffers::direct::InterleavedSlice;
-use rubato::{Fft, FixedSync, Indexing, Resampler, Sample};
+use rubato::{Fft, FixedSync, Indexing, Resampler, Sample, WindowFunction};
 
-/// Input frames per resampler chunk.
+/// Input frames per resampler chunk, for most rate pairs (see [`layout`]).
 pub const CHUNK: usize = 1024;
+
+/// FFT sub-chunks per [`CHUNK`]: what rubato's `Fft::new` picks.
+const SUB_CHUNKS: usize = CHUNK / 256;
+
+/// Input chunk and sub-chunk count for `from` → `to` Hz.
+///
+/// rubato's `Fft` reports its delay as `fft_size_out / 2` output frames,
+/// rounded down. When the FFT output block is odd (96 → 44.1 kHz: 147
+/// frames) the true delay is half a frame more, and removing the rounded
+/// value would shift the output half a frame early. Such pairs get one
+/// sub-chunk of an even number of minimum blocks, which makes the output
+/// block even.
+fn layout(from: usize, to: usize) -> (usize, usize) {
+    let g = gcd(from, to);
+    let (min_in, min_out) = (from / g, to / g);
+    // As rubato computes it for FixedSync::Input.
+    let blocks = (CHUNK / SUB_CHUNKS).div_ceil(min_in).max(1);
+    if (blocks * min_out).is_multiple_of(2) {
+        return (CHUNK, SUB_CHUNKS);
+    }
+    let pairs = (CHUNK / (2 * min_in)).max(1);
+    (2 * pairs * min_in, 1)
+}
+
+fn gcd(mut a: usize, mut b: usize) -> usize {
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
+}
 
 /// The resampler rejected the rates, channel count or buffers.
 #[derive(Debug, thiserror::Error)]
@@ -28,7 +58,9 @@ fn err(e: impl std::fmt::Display) -> ResampleError {
 pub struct StreamResampler<T: Sample> {
     fft: Fft<T>,
     channels: usize,
-    /// Interleaved input of the chunk being filled (`< CHUNK` frames between calls).
+    /// Input frames per chunk.
+    chunk: usize,
+    /// Interleaved input of the chunk being filled (`< chunk` frames between calls).
     input: Vec<T>,
     /// Scratch output of one chunk.
     output: Vec<T>,
@@ -60,11 +92,14 @@ impl<T: Sample> StreamResampler<T> {
                 "{from} Hz to {to} Hz, {channels} channels"
             )));
         }
-        let fft = Fft::<T>::new(
+        let (chunk, sub_chunks) = layout(from as usize, to as usize);
+        let fft = Fft::<T>::new_custom(
             from as usize,
             to as usize,
-            CHUNK,
+            chunk,
+            sub_chunks,
             channels,
+            WindowFunction::BlackmanHarris2,
             FixedSync::Input,
         )
         .map_err(err)?;
@@ -73,7 +108,8 @@ impl<T: Sample> StreamResampler<T> {
         Ok(Self {
             fft,
             channels,
-            input: Vec::with_capacity(CHUNK * channels),
+            chunk,
+            input: Vec::with_capacity(chunk * channels),
             output,
             skip,
             from: u64::from(from),
@@ -98,7 +134,7 @@ impl<T: Sample> StreamResampler<T> {
             )));
         }
         self.frames_in += (input.len() / self.channels) as u64;
-        let chunk = CHUNK * self.channels;
+        let chunk = self.chunk * self.channels;
         let mut rest = input;
         while !rest.is_empty() {
             let take = (chunk - self.input.len()).min(rest.len());
@@ -116,7 +152,7 @@ impl<T: Sample> StreamResampler<T> {
     /// this, `output_len(input frames)` frames have been appended in total.
     pub fn finish(&mut self, out: &mut Vec<T>) -> Result<(), ResampleError> {
         let expected = self.output_len(self.frames_in);
-        let chunk = CHUNK * self.channels;
+        let chunk = self.chunk * self.channels;
         // The last partial chunk, then silence until the delay is flushed.
         let partial = self.input.len() / self.channels;
         self.input.resize(chunk, T::zero());
@@ -137,7 +173,7 @@ impl<T: Sample> StreamResampler<T> {
         limit: u64,
     ) -> Result<(), ResampleError> {
         let ch = self.channels;
-        let input = InterleavedSlice::new(&self.input[..], ch, CHUNK).map_err(err)?;
+        let input = InterleavedSlice::new(&self.input[..], ch, self.chunk).map_err(err)?;
         let frames_max = self.output.len() / ch;
         let mut output =
             InterleavedSlice::new_mut(&mut self.output[..], ch, frames_max).map_err(err)?;
@@ -200,6 +236,43 @@ mod tests {
             .map(|n| (out[n] - input[2 * n]).abs())
             .fold(0.0f64, f64::max);
         assert!(worst < 1e-3, "worst error {worst}");
+    }
+
+    #[test]
+    fn no_sub_frame_shift_for_any_converter_rate() {
+        // Phase of a 440 Hz sine after resampling, in output frames: 0 when
+        // the delay is removed exactly.
+        let sources = [
+            32_000, 44_100, 48_000, 88_200, 96_000, 176_400, 192_000, 384_000,
+        ];
+        for from in sources {
+            for to in [44_100u32, 48_000] {
+                if from == to {
+                    continue;
+                }
+                let tau = std::f64::consts::TAU;
+                let input: Vec<f64> = (0..from as usize)
+                    .map(|i| 0.25 * (i as f64 * tau * 440.0 / f64::from(from)).sin())
+                    .collect();
+                let mut rs = StreamResampler::<f64>::new(from, to, 1).unwrap();
+                let mut out = Vec::new();
+                rs.push(&input, &mut out).unwrap();
+                rs.finish(&mut out).unwrap();
+                let w = tau * 440.0 / f64::from(to);
+                let (mut s, mut c) = (0.0, 0.0);
+                for (k, &y) in out
+                    .iter()
+                    .enumerate()
+                    .skip(to as usize / 4)
+                    .take(to as usize / 2)
+                {
+                    s += y * (k as f64 * w).sin();
+                    c += y * (k as f64 * w).cos();
+                }
+                let lag = c.atan2(s) / w;
+                assert!(lag.abs() < 0.01, "{from} -> {to}: {lag} frames");
+            }
+        }
     }
 
     #[test]

@@ -453,6 +453,12 @@ Date of decisions: 2026-10-18.
   24 bits (32-bit and float sources, resampled audio) rounds, since that error
   is about 144 dB below full scale. The dither generator is seeded, so the same
   input always gives the same bytes.
+- 2026-10-19 (task 4): tag copy uses `lofty` 0.25, already in the tree (MIT OR
+  Apache-2.0); `convert()` adds no new crate beyond `blake3` (already used by
+  `reks-core`) for the PCM hash. `cargo deny check licenses` passes unchanged.
+  Verification is a full read-back with a hash compare on every conversion,
+  not only on the sample-exact ones: the writers are lossless, so what was
+  written must decode to the same samples even after resampling or dither.
 
 ## D26. UI styling: Tailwind v4 + cva + Radix
 

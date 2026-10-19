@@ -40,7 +40,14 @@ eval ffmpeg -y -i sine-click-128.wav -c:a libmp3lame -b:a 64k $C sine-click-128.
 eval ffmpeg -y -i sine-click-128.wav -c:a flac -compression_level 8 $C sine-click-128.flac
 eval ffmpeg -y -i sine-click-128.wav -c:a pcm_s16be $C sine-click-128.aiff
 eval ffmpeg -y -i sine-click-128.wav -c:a aac -b:a 64k $C sine-click-128.m4a
+cargo run -p reks-fixtures-gen -- hires /tmp/hires.wav
+eval ffmpeg -y -i /tmp/hires.wav -t 1 -c:a alac $C sine-click-128-hires.m4a
 ```
+
+`sine-click-128-hires.m4a` (270,155 bytes) is not the 30 s signal: it is the
+converter's ALAC source, the first second of `write_wav_hires` (below), 24-bit
+96 kHz stereo, same title and artist tags. A test checks it decodes to exactly
+the first 96,000 frames of `render_hires()`.
 
 Tags: MP3, FLAC and M4A carry title `Sine Click 128` and artist `reks fixtures`;
 AIFF carries the title only (ffmpeg's AIFF muxer drops `artist`); WAV has no tags.

@@ -111,7 +111,7 @@ pub fn probe(path: &Path) -> Result<Probe> {
     let duration_ms =
         duration_ms(track, sample_rate).ok_or_else(|| unsupported("unknown duration"))?;
     let bit_depth = if kind.is_lossless() {
-        params.bits_per_sample.and_then(|b| u8::try_from(b).ok())
+        bits_per_sample(params)
     } else {
         None
     };
@@ -132,6 +132,33 @@ pub fn probe(path: &Path) -> Result<Probe> {
         bit_depth,
         bit_rate_kbps,
     })
+}
+
+/// Significant bits per sample from the codec parameters, or for ALAC (whose
+/// parameters Symphonia leaves without it) from the magic cookie.
+pub(crate) fn bits_per_sample(params: &AudioCodecParameters) -> Option<u8> {
+    match params.bits_per_sample {
+        Some(b) => u8::try_from(b).ok(),
+        None if params.codec == CODEC_ID_ALAC => {
+            params.extra_data.as_deref().and_then(alac_bit_depth)
+        }
+        None => None,
+    }
+}
+
+/// `bitDepth` of an ALAC magic cookie (`ALACSpecificConfig`: frame length
+/// u32, compatible version u8, bit depth u8, …), skipping the optional
+/// `frma` and `alac` atom headers as Symphonia's ALAC decoder does.
+fn alac_bit_depth(mut cookie: &[u8]) -> Option<u8> {
+    for atom in [b"frma", b"alac"] {
+        if cookie.get(4..8) == Some(&atom[..]) {
+            cookie = cookie.get(12..)?;
+        }
+    }
+    if cookie.len() != 24 && cookie.len() != 48 {
+        return None;
+    }
+    cookie.get(5).copied().filter(|&b| b > 0)
 }
 
 fn kind_of(params: &AudioCodecParameters, container: &str) -> Option<Kind> {
@@ -184,5 +211,23 @@ pub(crate) fn decode_err(path: &Path, source: symphonia::core::errors::Error) ->
             path: path.to_path_buf(),
             source,
         },
+    }
+}
+
+#[cfg(test)]
+mod alac_tests {
+    use super::alac_bit_depth;
+
+    #[test]
+    fn reads_the_cookie_bit_depth() {
+        let mut cookie = vec![0u8; 24];
+        cookie[5] = 24;
+        assert_eq!(alac_bit_depth(&cookie), Some(24));
+        let mut atom = vec![0, 0, 0, 36];
+        atom.extend_from_slice(b"alac");
+        atom.extend_from_slice(&[0; 4]);
+        atom.extend_from_slice(&cookie);
+        assert_eq!(alac_bit_depth(&atom), Some(24));
+        assert_eq!(alac_bit_depth(&cookie[..20]), None);
     }
 }

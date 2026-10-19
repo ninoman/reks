@@ -3574,6 +3574,7 @@ dependencies = [
 name = "reks-audio"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "flacenc",
  "hound",
  "lofty",
