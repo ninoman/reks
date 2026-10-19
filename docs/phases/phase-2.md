@@ -152,6 +152,18 @@ CREATE TABLE export_manifest (              -- latest export to each stick
    `NSRemovableVolumesUsageDescription`; eject command (`diskutil` on macOS,
    IOCTL on Windows, `udisksctl`/`eject` on Linux). Tests with a temp dir
    "fake device".
+   - [x] Backend: `reks_export_rb::device` — `list_devices`/`list_removable`,
+     `device_for_path`, `eject` (typed `DeviceError`, refuses non-removable
+     volumes), `volume_serial` for task 12 (UNVERIFIED, R§10.1). Parsing is
+     pure (`device::parse`, captured `diskutil` plist in `fixtures/device/`);
+     `src-tauri/Info.plist` carries `NSRemovableVolumesUsageDescription`.
+     Checked live on macOS with a FAT32 disk image (ignored test
+     `live_volume_discovery_serial_and_eject`); Windows and Linux paths only
+     compile-checked (clippy for both targets).
+   - [ ] Tauri commands (list, eject) and the UI picker: wait for the UI
+     redesign; build with task 10.
+   - [ ] Eject on Windows and Linux, and `volume_serial` on all three OSes,
+     against a real stick.
 2. **fsname + path planning**: implement `fsname`, `/Contents` layout, depth
    and length limits (255 full path, 8 levels), case-insensitive dedupe,
    NFC; property tests.
