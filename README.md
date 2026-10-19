@@ -55,6 +55,11 @@ cargo install tauri-cli --version '^2' --locked
 cargo tauri dev
 ```
 
+Unsigned developer builds for macOS, Windows and Linux are attached to draft
+GitHub releases when a `vX.Y.Z` tag is pushed
+([`.github/workflows/release.yml`](.github/workflows/release.yml)). They are not
+code-signed, so the OS will warn on first launch.
+
 Checks run by CI: `npm run lint`, `npm test`, `npm run build`,
 `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
 `cargo test --workspace`, `cargo deny check licenses`, `npm run licenses:check`.

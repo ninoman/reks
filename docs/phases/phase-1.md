@@ -437,6 +437,23 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
   The import of the real collection was 8.1 s (task 7). The wizard run on it is still to
   be checked by hand (manual checklist).
 
+Notes (task 14, [`release.yml`](../../.github/workflows/release.yml), [`icons/`](../../src-tauri/icons/))
+- App icon: a record with a blue label (the UI accent) and an amber cue dot, drawn in
+  `src-tauri/icons/app-icon.svg` (1024 canvas, 824 px body on the macOS grid). Every
+  bundled size comes from it: `cargo tauri icon src-tauri/icons/app-icon.svg`, then keep
+  only the files already in `icons/` (the Android and iOS sets are not used).
+- Window state: `tauri-plugin-window-state` restores size, position and maximised state
+  and saves them on close, in `app_config_dir/.window-state.json`. It is not in the
+  `setting` table, since it is per machine and is not a preference. A saved position
+  on no connected monitor is skipped, so the window opens at the default place.
+- Release: pushing a tag `vX.Y.Z` runs `release.yml`. It first checks that the tag
+  equals the version in `Cargo.toml`, `package.json` and `tauri.conf.json`, then builds
+  macOS arm64, macOS x86_64, Windows and Linux (Ubuntu 22.04) with `tauri-action@v1`
+  and uploads the bundles to a draft pre-release. Builds are unsigned (D17); signing,
+  notarisation and the updater come later.
+- Not checked yet: a tag run on GitHub, and window state across restarts in the
+  running app (manual checklist).
+
 ### Audio (`reks-audio`)
 
 ```rust
@@ -576,7 +593,7 @@ Response(bytes)`.
     replacement).
 13. [ ] **Settings**: library roots, cache dir, audio device, rekordbox key
     notation preference; stored in `setting`.
-14. [ ] **Polish + release pipeline**: app icon, window state persistence, unsigned
+14. [x] **Polish + release pipeline**: app icon, window state persistence, unsigned
     dev builds via `tauri-action` on tags (signing is Phase 2+ concern; see
     decisions.md).
 
@@ -620,6 +637,8 @@ Response(bytes)`.
   with a reason); spot-check 20 tracks against rekordbox side by side.
 - Export XML, import into rekordbox 7 as a test playlist; confirm cues/grids.
 - Play a track on each OS; switch output device while playing.
+- Resize and move the window, quit, reopen: same size and place. Push a test tag and
+  install the draft release's bundle on each OS.
 
 ## Risks
 

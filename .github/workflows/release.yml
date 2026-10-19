@@ -1,0 +1,89 @@
+name: Release
+
+# Unsigned developer builds (docs/decisions.md D17). Pushing a tag `vX.Y.Z` builds the
+# app on every platform and attaches the bundles to a draft GitHub release, which the
+# maintainer reviews and publishes by hand. Signing, notarisation and the updater
+# (`latest.json`) come later; until then these builds are for developers only.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Two macOS builds, not one universal binary (D17).
+          - name: macOS arm64
+            os: macos-latest
+            target: aarch64-apple-darwin
+          - name: macOS x86_64
+            os: macos-latest
+            target: x86_64-apple-darwin
+          - name: Windows x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+          # Oldest supported Ubuntu, so the AppImage and deb run on newer distros.
+          - name: Linux x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tag, Cargo.toml, package.json and tauri.conf.json must agree, or the
+      # release would be named after a different version than it contains.
+      - name: Check tag matches app version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          pkg=$(node -p "require('./package.json').version")
+          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          echo "tag=$tag tauri.conf=$conf package.json=$pkg Cargo.toml=$cargo"
+          [ "$tag" = "$conf" ] && [ "$tag" = "$pkg" ] && [ "$tag" = "$cargo" ]
+
+      - name: Install Linux system dependencies (Tauri prerequisites)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev build-essential curl wget file patchelf xdg-utils \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # Toolchain from rust-toolchain.toml, plus the cross target for Intel macOS.
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+
+      - name: npm ci
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tauriScript: npx tauri
+          args: --target ${{ matrix.target }}
+          tagName: ${{ github.ref_name }}
+          releaseName: reks ${{ github.ref_name }} (unsigned developer build)
+          releaseBody: |
+            Unsigned developer build. Not notarised or code-signed: macOS Gatekeeper and
+            Windows SmartScreen will warn, and there is no auto-update yet.
+            Not tested on CDJs; see docs/hw-test-log.md.
+          releaseDraft: true
+          prerelease: true
