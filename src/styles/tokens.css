@@ -30,11 +30,12 @@
   --warm-925: #1e1d1a;
   --warm-950: #1a1916;
 
-  --orange-400: #ff8547;
-  --orange-500: #ff6a1f;
-  --orange-600: #f54e00;
-  --orange-650: #e24800;
-  --orange-700: #d04200;
+  --violet-400: #b9a7ff;
+  --violet-500: #a48dff;
+  --violet-550: #8c70f0;
+  --violet-600: #6741d9;
+  --violet-650: #5935c4;
+  --violet-700: #4c2db0;
 
   --red-500: #e85a7c;
   --red-600: #cf2d56;
@@ -81,9 +82,9 @@
   --color-border-subtle: var(--warm-100);
   --color-border-strong: var(--warm-300);
 
-  --color-accent: var(--orange-600);
-  --color-accent-hover: var(--orange-650);
-  --color-accent-active: var(--orange-700);
+  --color-accent: var(--violet-600);
+  --color-accent-hover: var(--violet-650);
+  --color-accent-active: var(--violet-700);
   --color-accent-fg: var(--warm-0);
 
   --color-danger: var(--red-600);
@@ -154,9 +155,9 @@
     --color-border: var(--warm-775);
     --color-border-subtle: var(--warm-800);
     --color-border-strong: var(--warm-700);
-    --color-accent: var(--orange-500);
-    --color-accent-hover: var(--orange-400);
-    --color-accent-active: var(--orange-600);
+    --color-accent: var(--violet-500);
+    --color-accent-hover: var(--violet-400);
+    --color-accent-active: var(--violet-550);
     --color-accent-fg: var(--warm-950);
     --color-danger: var(--red-500);
     --color-danger-fg: var(--warm-950);

@@ -2,8 +2,12 @@
 
 How the React UI is styled. Why this stack: [D24](decisions.md#d24-ui-styling-tailwind-v4--cva--radix).
 The look is adapted from a design analysis of Cursor's marketing site (warm
-cream canvas, warm ink, hairline depth, one scarce orange accent, 8px control
-radius) at desktop density, with system fonts and a derived dark theme.
+cream canvas, warm ink, hairline depth, one scarce accent, 8px control radius)
+at desktop density, with system fonts and a derived dark theme. The accent is
+violet rather than the reference's orange: orange failed AA contrast for small
+text on the cream canvas (3.4:1), and red, pink, green, amber and aqua already
+mean something here (danger, success, rating/warning, track colours). Violet
+is 6.0:1 on cream and 6.6:1 on the dark background.
 
 ## Where things live
 
@@ -26,7 +30,7 @@ No raw colours or one-off sizes outside `tokens.css`.
 
 Three layers in `tokens.css`:
 
-1. **Primitives** (`--warm-*`, `--orange-*`, `--red-*`, `--rb-*` …) in plain
+1. **Primitives** (`--warm-*`, `--violet-*`, `--red-*`, `--rb-*` …) in plain
    `:root`. Raw values; no utilities. The only hex values in `src/`.
 2. **Semantic tokens** in `@theme static`. These become utilities:
    `--color-surface` → `bg-surface`, `--radius-md` → `rounded-md`,
@@ -42,14 +46,14 @@ Semantic colours: `bg`, `bg-subtle` (chrome), `row-alt`, `surface`,
 `warning`, `rating`, `focus-ring`, `overlay`, `waveform-*`, `track-*`
 (rekordbox colours: data, the same in both themes).
 
-Orange (`accent`) stays scarce: primary buttons, the loaded track, the played
+The violet `accent` stays scarce: primary buttons, the loaded track, the played
 waveform, focus rings, drop indicators. Selection and toggles that are on
 use the neutral `selected` tint.
 
 ### Common edits (one line each in `tokens.css`)
 
-- Accent colour: `--color-accent: var(--orange-600);` (and its dark-block twin
-  for the dark theme).
+- Accent colour: `--color-accent: var(--violet-600);` (and its dark-block twin
+  for the dark theme; `-hover` / `-active` follow the same ramp).
 - Control radius: `--radius-md: 8px;` (sizes `md`/`lg` read it via `--ctl-r-*`).
 - Height of `md` controls: `--ctl-h-md: 28px;`.
 - Row height: `--row-h: 26px;` and `ROW_HEIGHT` in `trackTableModel.ts`

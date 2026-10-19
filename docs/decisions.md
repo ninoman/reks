@@ -369,8 +369,10 @@ Date of decisions: 2026-10-18.
 
 - Date: 2026-10-19 (maintainer's call). Design reference: an analysis of Cursor's
   marketing site (DESIGN.md, not in the repo), adapted to desktop density: warm
-  cream canvas, warm ink, hairline depth, one scarce orange accent, 8px control
-  radius, system fonts. How it is set up: [`ui.md`](ui.md).
+  cream canvas, warm ink, hairline depth, one scarce accent, 8px control
+  radius, system fonts. Accent: violet (maintainer's call, 2026-10-19), not the
+  reference's orange, which fails AA for small text on cream (3.4:1). How it is
+  set up: [`ui.md`](ui.md).
 - Decision: tokens CSS-first in `src/styles/tokens.css` (`@theme`, light and dark
   via `prefers-color-scheme`); Tailwind CSS v4 (`@tailwindcss/vite`) utilities;
   `class-variance-authority` for variants and `clsx` + `tailwind-merge` as `cn()`;
