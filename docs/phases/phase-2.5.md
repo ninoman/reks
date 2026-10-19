@@ -179,11 +179,26 @@ Divider rules
    33 playlist entries in order (rekordcrate), 3 WAVs with ANLZ, zero validator
    findings; a second identical export copies nothing; removing a divider and
    re-exporting deletes exactly its WAV and ANLZ.
-5. **History reader**: `HistoryPlaylist` / `HistoryEntry` rows via rekordcrate;
+5. [x] **History reader**: `HistoryPlaylist` / `HistoryEntry` rows via rekordcrate;
    resolve each entry to its PDB track row (stick path, title, artist,
    duration); dates from table 19 when decodable (HIST1), else NULL; works on a
    stick and on a backup folder. Golden JSON test on the played-stick fixture
    from Phase 2 (two or more history playlists from different dates).
+   Done in `reks_export_rb::history::read`
+   ([read.rs](../../crates/reks-export-rb/src/history/read.rs)):
+   `read_play_history(&HistorySource, &HistoryReadOptions) -> PlayHistory`.
+   It lives in reks-export-rb, not reks-core, because rekordcrate is here and
+   reks-core can't depend on this crate; task 6's `reks-core::history::scan`
+   takes the `PlayHistory` from the caller. A backup is read only with its
+   `manifest.json` (serial from there) and when `export.pdb` hashes as recorded.
+   A missing track or artist row leaves the entry's fields `None` (unmatched
+   later). Dates: a heuristic over table 19 (**UNVERIFIED**, no source; see the
+   module docs), behind `HistoryReadOptions::hist1_dates`, off by default, so
+   `played_on` is NULL until the fixture confirms it. Synthetic tests cover two
+   dated sessions, a missing track row, undecodable dates and a backup folder.
+   The golden JSON test (`played_stick_fixture_golden_json`) is `#[ignore]`
+   until `fixtures/rekordbox/played-<ver>/` (with `history.json`) exists from
+   the hardware session.
 6. **Matching, fingerprint, import plan**: as above. Tests: manifest hit,
    divider entry, suffix fallback, metadata fallback (unique only), unmatched
    kept and linkable; fingerprint skip, extend, different serial.
@@ -255,7 +270,9 @@ Divider rules
 - DIV4 Whether the divider's artist should stay empty or carry the playlist name
   (changes how it looks in All Tracks and search).
 - HIST1 History dates (PDB table 19): rows reported with ascending id and ASCII
-  `YYYY-MM-DD`, layout undecoded.
+  `YYYY-MM-DD`, layout undecoded. Task 5's heuristic (one date per row, one row
+  per playlist, paired by ascending id) is off until the played-stick fixture
+  confirms or replaces it.
 - HIST2 What a player logs: loaded but not played? minimum play time?
 - HIST3 One history playlist per mount, or appended across mounts?
 - HIST4 Volume serial via the OS: tracked as Phase 2 task 12.

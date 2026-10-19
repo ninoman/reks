@@ -8,12 +8,69 @@ pub const PAGE: usize = 4096;
 pub const T_HISTORY_PLAYLISTS: u32 = 11;
 pub const T_HISTORY_ENTRIES: u32 = 12;
 pub const T_TRACKS: u32 = 0;
+pub const T_ARTISTS: u32 = 2;
+/// Table 19 (`history`): layout undecoded (HIST1).
+pub const T_HISTORY: u32 = 19;
+
+/// A DeviceSQL short ASCII string: ((len + 1) << 1) | 1, then the bytes.
+pub fn short_string(s: &str) -> Vec<u8> {
+    let mut out = vec![(((s.len() + 1) << 1) | 1) as u8];
+    out.extend_from_slice(s.as_bytes());
+    out
+}
+
+/// A track row (crate-digger `track_row`): `id`, `artist_id`, `duration`
+/// in seconds; strings empty except title (17), filename (19), file path (20).
+pub fn track_row(
+    id: u32,
+    artist_id: u32,
+    duration_s: u16,
+    title: &str,
+    file_path: &str,
+) -> Vec<u8> {
+    let mut row = vec![0u8; 0x5E + 2 * 21];
+    put_u16(&mut row, 0x00, 0x24);
+    put_u32(&mut row, 0x44, artist_id);
+    put_u32(&mut row, 0x48, id);
+    put_u16(&mut row, 0x54, duration_s);
+    let filename = file_path.rsplit('/').next().unwrap_or_default();
+    for i in 0..21 {
+        let s = match i {
+            17 => title,
+            19 => filename,
+            20 => file_path,
+            _ => "",
+        };
+        let at = row.len() as u16;
+        put_u16(&mut row, 0x5E + 2 * i, at);
+        row.extend_from_slice(&short_string(s));
+    }
+    row
+}
+
+/// An artist row with a near name offset (subtype `0x60`).
+pub fn artist_row(id: u32, name: &str) -> Vec<u8> {
+    let mut row = vec![0u8; 10];
+    put_u16(&mut row, 0, 0x60);
+    put_u32(&mut row, 4, id);
+    row[8] = 0x03;
+    row[9] = 10;
+    row.extend_from_slice(&short_string(name));
+    row
+}
+
+/// A guessed table-19 row: a u32 id and an ASCII `YYYY-MM-DD` string. The
+/// real layout is undecoded (HIST1); the reader only relies on the date text.
+pub fn history_date_row(id: u32, date: &str) -> Vec<u8> {
+    let mut row = id.to_le_bytes().to_vec();
+    row.extend_from_slice(&[0, 0, 0, 0]);
+    row.extend_from_slice(&short_string(date));
+    row
+}
 
 pub fn history_playlist(id: u32, name: &str) -> Vec<u8> {
     let mut row = id.to_le_bytes().to_vec();
-    // DeviceSQL short ASCII string: ((len + 1) << 1) | 1, then the bytes.
-    row.push((((name.len() + 1) << 1) | 1) as u8);
-    row.extend_from_slice(name.as_bytes());
+    row.extend_from_slice(&short_string(name));
     row
 }
 
