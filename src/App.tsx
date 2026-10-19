@@ -3,7 +3,8 @@
  * playlist tree on the left; toolbar, filter bar and track table in the
  * middle, with the track info panel sliding over the table's right edge when
  * its toolbar button is on; the transport bar along the bottom. Space plays
- * and pauses unless a text field has focus; Cmd/Ctrl+, opens Settings.
+ * and pauses wherever focus is, except in text fields, dialogs and menus;
+ * Cmd/Ctrl+, opens Settings.
  * Settings load first and restore the window state (columns, panels, volume).
  */
 import { useEffect } from "react";
@@ -22,11 +23,15 @@ import { TrackTable } from "./components/TrackTable";
 import { TransportBar } from "./components/TransportBar";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
 import { Sheet } from "./components/ui/Sheet";
+import { keepsSpace } from "./lib/keys";
 import { useLibrary } from "./store/library";
 import { usePanels } from "./store/panels";
 import { usePlayer } from "./store/player";
 import { usePlaylists } from "./store/playlists";
 import { startUiSync, useSettings } from "./store/settings";
+
+/** Pressed alone, these change nothing on screen. */
+const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta"]);
 
 export default function App() {
   const table = useTrackTable();
@@ -58,15 +63,21 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const root = document.documentElement;
     function onKeyDown(e: KeyboardEvent) {
+      const space = e.code === "Space" && !keepsSpace(e.target);
+      // Hides the focus ring a key press would draw on the last clicked
+      // control (index.css); any other key brings it back.
+      if (!MODIFIERS.has(e.key)) root.toggleAttribute("data-space-key", space);
       if (e.key === "," && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         useSettings.getState().setDialogOpen(true);
         return;
       }
-      if (e.code !== "Space" || e.repeat || isEditable(e.target)) return;
+      if (!space) return;
+      // Also stops a focused button or checkbox from taking the press.
       e.preventDefault();
-      void usePlayer.getState().toggle();
+      if (!e.repeat) void usePlayer.getState().toggle();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -106,13 +117,5 @@ export default function App() {
       <DevicesDialog />
       <ExportWizard />
     </div>
-  );
-}
-
-/** Text fields, selects, buttons and editable content keep Space for themselves. */
-function isEditable(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName)
   );
 }

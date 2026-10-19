@@ -65,7 +65,10 @@ pub struct Player {
     /// Seeks sent on the current engine (wrapping); matches the deck's count.
     seeks: u32,
     last_seek: Option<SentSeek>,
-    /// The last play/pause sent, reported until the deck takes a load.
+    /// Play/pause controls sent on the current engine (wrapping); matches
+    /// the deck's count once the last one is applied.
+    transports: u32,
+    /// The last play/pause sent, reported until the deck takes it.
     want_playing: bool,
 }
 
@@ -79,6 +82,7 @@ impl Player {
             volume: 1.0,
             seeks: 0,
             last_seek: None,
+            transports: 0,
             want_playing: false,
         }
     }
@@ -126,12 +130,14 @@ impl Player {
 
     pub fn play(&mut self) -> Result<()> {
         self.send(Control::Play { deck: DECK })?;
+        self.transports = self.transports.wrapping_add(1);
         self.want_playing = true;
         Ok(())
     }
 
     pub fn pause(&mut self) -> Result<()> {
         self.send(Control::Pause { deck: DECK })?;
+        self.transports = self.transports.wrapping_add(1);
         self.want_playing = false;
         Ok(())
     }
@@ -180,8 +186,11 @@ impl Player {
             st.device = Some(engine.info().device.clone());
             st.device_lost = engine.device_lost();
             let loaded_frames = self.loaded.as_ref().map(|l| l.src.frames());
-            (st.playing, st.position_ms) =
-                shown(deck, loaded_frames, self.last_seek, self.want_playing, rate);
+            let want = Wanted {
+                playing: self.want_playing,
+                taken: deck.transports == self.transports,
+            };
+            (st.playing, st.position_ms) = shown(deck, loaded_frames, self.last_seek, want, rate);
         }
         st
     }
@@ -233,9 +242,10 @@ impl Player {
                     r => r?,
                 };
                 e.send(Control::Volume { value: self.volume })?;
-                // A new graph counts seeks from zero.
+                // A new graph counts seeks and play/pause from zero.
                 self.seeks = 0;
                 self.last_seek = None;
+                self.transports = 0;
                 Ok(slot.insert(e))
             }
         }
@@ -246,21 +256,30 @@ impl Player {
     }
 }
 
+/// The last play/pause sent, and whether the deck's snapshot includes it.
+#[derive(Debug, Clone, Copy)]
+struct Wanted {
+    playing: bool,
+    taken: bool,
+}
+
 /// Play state and position to report. Until the audio thread has taken the
 /// load (a new track, or the same one on a new device), the deck state is
 /// stale: report what was asked for, so the transport keeps polling and the
-/// playhead does not drop to zero.
+/// playhead does not drop to zero. The same goes for a play or pause the
+/// snapshot does not include yet: `player_play` answers at once, and a stale
+/// "stopped" would leave the transport showing Play over a running track.
 fn shown(
     deck: DeckState,
     loaded_frames: Option<i64>,
     last_seek: Option<SentSeek>,
-    want_playing: bool,
+    want: Wanted,
     rate: u32,
 ) -> (bool, u64) {
     match loaded_frames {
         None => (false, 0),
         Some(frames) if deck.frames != frames => (
-            want_playing,
+            want.playing,
             last_seek.map_or(0, |s| frames_to_ms(s.frame, rate)),
         ),
         Some(_) => {
@@ -268,7 +287,12 @@ fn shown(
                 Some(s) if s.seq != deck.seeks => s.frame,
                 _ => deck.position,
             };
-            (deck.playing, frames_to_ms(position, rate))
+            let playing = if want.taken {
+                deck.playing
+            } else {
+                want.playing
+            };
+            (playing, frames_to_ms(position, rate))
         }
     }
 }
@@ -298,6 +322,20 @@ mod tests {
         assert!(p.engine.is_none());
     }
 
+    /// A play/pause the snapshot does not include yet.
+    fn want(playing: bool) -> Wanted {
+        Wanted {
+            playing,
+            taken: false,
+        }
+    }
+
+    /// The last play/pause is in the snapshot; `playing` no longer matters.
+    const TAKEN: Wanted = Wanted {
+        playing: false,
+        taken: true,
+    };
+
     #[test]
     fn pending_load_reports_what_was_asked_for() {
         // A device switch sent Load, Seek to 1 s and Play; the new engine's
@@ -307,16 +345,22 @@ mod tests {
             frame: 48_000,
         });
         assert_eq!(
-            shown(DeckState::default(), Some(96_000), seek, true, 48_000),
+            shown(DeckState::default(), Some(96_000), seek, want(true), 48_000),
             (true, 1_000)
         );
         // A fresh load with no seek shows zero, stopped unless asked to play.
         assert_eq!(
-            shown(DeckState::default(), Some(96_000), None, false, 48_000),
+            shown(
+                DeckState::default(),
+                Some(96_000),
+                None,
+                want(false),
+                48_000
+            ),
             (false, 0)
         );
         assert_eq!(
-            shown(DeckState::default(), None, None, true, 48_000),
+            shown(DeckState::default(), None, None, want(true), 48_000),
             (false, 0)
         );
     }
@@ -335,7 +379,7 @@ mod tests {
             frame: 48_000,
         });
         assert_eq!(
-            shown(deck, Some(96_000), applied, false, 48_000),
+            shown(deck, Some(96_000), applied, TAKEN, 48_000),
             (true, 1_500)
         );
         // A newer seek not applied yet still shows its target.
@@ -343,7 +387,35 @@ mod tests {
             seq: 2,
             frame: 24_000,
         });
-        assert_eq!(shown(deck, Some(96_000), newer, true, 48_000), (true, 500));
+        assert_eq!(shown(deck, Some(96_000), newer, TAKEN, 48_000), (true, 500));
+    }
+
+    #[test]
+    fn untaken_play_or_pause_reports_what_was_asked_for() {
+        let stopped = DeckState {
+            position: 48_000,
+            frames: 96_000,
+            ..DeckState::default()
+        };
+        // Play sent, the snapshot still shows the deck stopped.
+        assert_eq!(
+            shown(stopped, Some(96_000), None, want(true), 48_000),
+            (true, 1_000)
+        );
+        // Once taken, the deck decides (it may have run off the end).
+        assert_eq!(
+            shown(stopped, Some(96_000), None, TAKEN, 48_000),
+            (false, 1_000)
+        );
+        // Pause sent while the snapshot still shows it playing.
+        let running = DeckState {
+            playing: true,
+            ..stopped
+        };
+        assert_eq!(
+            shown(running, Some(96_000), None, want(false), 48_000),
+            (false, 1_000)
+        );
     }
 
     #[test]
