@@ -4,6 +4,7 @@
 
 pub mod audiocheck;
 pub mod device;
+pub mod history;
 pub mod target;
 
 pub use target::TargetProfile;
