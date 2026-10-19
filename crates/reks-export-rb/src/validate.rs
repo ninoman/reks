@@ -269,6 +269,120 @@ impl Finding {
     }
 }
 
+/// One line per finding, for the CLI and the export UI's report.
+impl std::fmt::Display for Finding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PdbMissing => f.write_str("no export.pdb on the stick"),
+            Self::PdbUnreadable { message } => write!(f, "export.pdb does not parse: {message}"),
+            Self::TableMissing { page_type } => {
+                write!(f, "export.pdb lacks table type {page_type}")
+            }
+            Self::TableUnexpected { page_type } => {
+                write!(
+                    f,
+                    "export.pdb has an unexpected or repeated table type {page_type}"
+                )
+            }
+            Self::TrackCount { expected, found } => {
+                write!(f, "{found} track rows, the plan has {expected} tracks")
+            }
+            Self::TrackNotInPdb { track_id, path } => {
+                write!(f, "track {track_id} ({path}) is not in export.pdb")
+            }
+            Self::UnexpectedTrack { pdb_id, path } => {
+                write!(f, "track row {pdb_id} ({path}) is not in the plan")
+            }
+            Self::DuplicateTrackRow { path } => write!(f, "several track rows point at {path}"),
+            Self::TrackRowUnreadable { message } => {
+                write!(f, "a track row does not decode: {message}")
+            }
+            Self::AudioMissing { track_id, path } => {
+                write!(f, "track {track_id}: audio {path} is not on the stick")
+            }
+            Self::AnlzPathEmpty { track_id } => {
+                write!(f, "track {track_id}: the row has no analysis path")
+            }
+            Self::AnlzMissing { track_id, path } => {
+                write!(f, "track {track_id}: analysis {path} is not on the stick")
+            }
+            Self::AnlzDirMismatch {
+                track_id,
+                expected,
+                found,
+            } => write!(
+                f,
+                "track {track_id}: analysis is in {found}, players look in {expected}"
+            ),
+            Self::AnlzUnreadable {
+                track_id,
+                path,
+                message,
+            } => write!(f, "track {track_id}: {path} does not parse: {message}"),
+            Self::PpthMismatch {
+                track_id,
+                path,
+                expected,
+                found,
+            } => write!(
+                f,
+                "track {track_id}: {path} names {}, not {expected}",
+                found.as_deref().unwrap_or("no file")
+            ),
+            Self::GridEmpty { track_id, path } => {
+                write!(f, "track {track_id}: {path} has no beatgrid")
+            }
+            Self::CueCount {
+                track_id,
+                path,
+                expected,
+                found,
+            } => write!(
+                f,
+                "track {track_id}: {path} has {found} cues, the plan {expected}"
+            ),
+            Self::PlaylistMissing { path } => write!(f, "playlist {path} is not on the stick"),
+            Self::UnexpectedPlaylist { path } => {
+                write!(f, "playlist {path} on the stick is not in the plan")
+            }
+            Self::PlaylistKind {
+                path,
+                expected_folder,
+            } => write!(
+                f,
+                "{path} should be a {}",
+                if *expected_folder {
+                    "folder"
+                } else {
+                    "playlist"
+                }
+            ),
+            Self::PlaylistOrder {
+                parent,
+                expected,
+                found,
+            } => write!(
+                f,
+                "playlists under {:?} are in the order {}, the plan has {}",
+                parent,
+                found.join(", "),
+                expected.join(", ")
+            ),
+            Self::PlaylistEntries {
+                path,
+                expected_len,
+                found_len,
+                first_difference,
+            } => write!(
+                f,
+                "playlist {path} has {found_len} entries, the plan {expected_len}; \
+                 first difference at position {}",
+                first_difference + 1
+            ),
+        }
+    }
+}
+
 /// Reads the stick at `device_root` back and checks it against `plan`.
 pub fn validate(device_root: &Path, plan: &ExportPlan) -> Result<ValidationReport, ValidateError> {
     let mut report = ValidationReport::default();

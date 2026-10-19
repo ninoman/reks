@@ -5,7 +5,7 @@
 //! plan's tracks at the plan's `dst_rel` paths, their ANLZ files where the
 //! player computes them from those paths ([`crate::plan::anlz_dir`]), and an
 //! `export.pdb` listing them. Orchestration (backups, validation, manifest)
-//! is `apply`'s job (task 9), not the writer's.
+//! is [`crate::apply`]'s job (task 9), not the writer's.
 //!
 //! What stays on the stick when a write fails (baken 4.6.1, read from its
 //! source and covered by tests where a test can provoke it):
