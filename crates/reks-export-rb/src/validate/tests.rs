@@ -146,6 +146,8 @@ fn stick() -> Stick {
         copies: vec![],
         anlz: vec![],
         deletes: vec![],
+        history: Default::default(),
+        backups: vec![],
         warnings: vec![],
         errors: vec![],
         bytes_to_write: 0,
