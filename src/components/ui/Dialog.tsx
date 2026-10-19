@@ -78,7 +78,7 @@ export function DialogDescription({
 export function DialogBody({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
-      className={cn("flex min-h-0 flex-col gap-3 overflow-auto px-5 py-2 [&>p]:m-0", className)}
+      className={cn("flex min-h-0 flex-col gap-3 overflow-auto px-5 py-2", className)}
       {...props}
     />
   );

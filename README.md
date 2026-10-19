@@ -42,6 +42,7 @@ Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
 | [`docs/research.md`](docs/research.md) | Evidence and sources behind the decisions |
 | [`docs/research/`](docs/research/) | Raw research notes per topic |
 | [`docs/hw-test-log.md`](docs/hw-test-log.md) | Real-player test results |
+| [`docs/ui.md`](docs/ui.md) | UI design system: tokens, size scale, components |
 | [`fixtures/README.md`](fixtures/README.md) | Test fixtures: generated audio signal, ffmpeg commands, sample rekordbox XML |
 
 ## Building from source

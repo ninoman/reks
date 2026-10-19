@@ -22,7 +22,7 @@ import { Progress } from "./ui/Progress";
 
 const counts =
   "m-0 mb-3 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 [&_dt]:text-fg-muted [&_dd]:m-0 [&_dd]:text-right [&_dd]:tabular-nums";
-const pathList = "my-1 mb-2 pl-4.5 font-mono text-xs [overflow-wrap:anywhere]";
+const pathList = "my-1 mb-2 list-disc pl-4.5 font-mono text-xs [overflow-wrap:anywhere]";
 
 function n(v: number): string {
   return v.toLocaleString();

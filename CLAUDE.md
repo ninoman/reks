@@ -94,6 +94,9 @@ TypeScript / React
   payloads (waveforms) come back as `ArrayBuffer` via `tauri::ipc::Response`,
   never as JSON arrays.
 - Keep the UI dumb: list, filter, select, invoke. No format logic in TS.
+- Styling: tokens in `src/styles/tokens.css`, base components in
+  `src/components/ui/` (Tailwind v4 + cva + Radix, see `docs/ui.md`). No raw
+  colours or one-off sizes in feature components.
 
 Git
 - Conventional Commits (`feat(core): ...`, `fix(export-rb): ...`).

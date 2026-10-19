@@ -1,14 +1,8 @@
-/* Element defaults. Everything else is a utility or a component in src/components/ui. */
-*,
-::before,
-::after {
-  box-sizing: border-box;
-}
-
+/* Element defaults on top of Tailwind's preflight. Everything else is a
+   utility or a component in src/components/ui. */
 html,
 body,
 #root {
-  margin: 0;
   height: 100%;
 }
 
@@ -23,14 +17,6 @@ body {
   /* App chrome is not text; fields and paths opt back in with `select-text`. */
   user-select: none;
   -webkit-user-select: none;
-}
-
-button,
-input,
-select,
-textarea {
-  font: inherit;
-  color: inherit;
 }
 
 :focus-visible {

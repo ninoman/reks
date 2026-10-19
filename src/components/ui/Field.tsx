@@ -22,12 +22,12 @@ export const fieldVariants = cva("flex min-w-0", {
   defaultVariants: { orientation: "vertical", active: false },
 });
 
-export const fieldLabelVariants = cva("text-fg-muted", {
+export const fieldLabelVariants = cva("", {
   variants: {
     orientation: {
-      vertical: "text-xs",
+      vertical: "text-xs text-fg-muted",
       horizontal: "text-sm font-semibold text-fg",
-      inline: "text-xs",
+      inline: "text-xs text-fg-muted",
     },
   },
   defaultVariants: { orientation: "vertical" },

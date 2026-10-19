@@ -24,11 +24,11 @@ export const controlSquare: Record<ControlSize, string> = {
 
 /** Keyboard focus: the accent ring, outside the control. */
 export const focusRing =
-  "outline-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-offset-1 focus-visible:outline-focus-ring";
+  "outline-hidden focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-offset-1 focus-visible:outline-focus-ring";
 
 /** Same ring, inset, for things that fill their parent (rows, cells). */
 export const focusRingInset =
-  "outline-none focus-visible:outline-(length:--focus-ring-width) focus-visible:-outline-offset-2 focus-visible:outline-focus-ring";
+  "outline-hidden focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:-outline-offset-2 focus-visible:outline-focus-ring";
 
 export const disabledState =
   "disabled:cursor-default disabled:opacity-45 aria-disabled:cursor-default aria-disabled:opacity-45";
