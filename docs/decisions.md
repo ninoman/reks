@@ -501,6 +501,29 @@ Date of decisions: 2026-10-18.
   on playlist count/depth (UNVERIFIED); whether baken keeps `/Contents` paths
   so unchanged tracks are not re-copied; rekordcrate reading a rekordbox 7 stick.
 
+## D28. Stick identity: the OS's own volume ID, no file on the stick
+
+- Date: 2026-10-19 (maintainer's call). Applies to D23 (backups, `export_manifest`)
+  and D27 (`device.volume_serial`, [`stick-profiles.md`](stick-profiles.md) §4.2).
+- Decision: a stick's key is whatever the OS gives without privileges:
+  `VolumeUUID` on macOS, the FAT/exFAT serial on Windows and Linux
+  (`device::volume_serial`). One column, no aliases. The library DB lives on one
+  computer, so one library only ever sees one kind of ID. Moving a library to
+  another OS (or dual-booting onto one DB) makes each stick unknown once; the
+  §4.2 label + size prompt relinks it and replaces the stored ID, as for a
+  reformat.
+- Finding (R§10.1): macOS can't read the serial without root. `VolumeUUID` is
+  a one-way MD5 of the serial (plus BPB total sectors on FAT); the raw device
+  is `root:operator 0640`.
+- Rejected: a reks stick-ID file (`/.reks/stick-id`): an extra root folder is
+  untested on players and D27 rules out reks files on the stick; per-device ID
+  aliases (only needed when one DB spans OSes, which the prompt covers);
+  bridging exFAT IDs across OSes (same reason); brute-forcing the UUID;
+  `authopen` or a privileged helper (admin password on every export).
+- Risks: a user answering "New stick" to the relink prompt gets a second device
+  (a later "merge devices" action fixes it); Windows/Linux serial reads
+  UNVERIFIED on a real stick (Phase 2 task 1).
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

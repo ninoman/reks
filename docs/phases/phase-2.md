@@ -364,8 +364,9 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
     - [x] Dry-run wording (`Display` for `Warning`/`Problem`) and
       `reks rb history` (task 11; `history::read_sessions` lists sessions).
     - [ ] UI wording (task 10).
-    - [ ] macOS keys backups by `VolumeUUID`, Windows/Linux by the FAT serial
-      (R§10.1), so one stick gets two backup folders across OSes.
+    - [x] macOS keys backups by `VolumeUUID`, Windows/Linux by the FAT serial
+      (R§10.1). Kept by D28: one library sees one kind of ID; a library moved
+      to another OS relinks each stick once (stick-profiles §4.2).
 13. **Export manifest**: migration adding `export_manifest`; rows from the
     validator's read-back after each successful export. Tests: re-export
     replaces the serial's rows; deleting a library track keeps its row with

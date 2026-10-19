@@ -596,6 +596,19 @@ maintainer's play-history PRD of the same date; we did not re-check its sources.
   (`GetVolumeInformationW`) and Linux (`/dev/disk/by-uuid`, `blkid`) report the
   serial itself, so the same stick gets a different key per OS. Not yet checked
   on Windows, Linux or a real stick (**UNVERIFIED**).
+- macOS `VolumeUUID` derivation (Apple msdosfs source, `msdosfs_vfsops.c`
+  `msdosfs_generate_volume_uuid` and `msdos_appex/utils.m`, commit c9f076c,
+  2025-10-16; checked 2026-10-19 on macOS 26 against 64 MB `hdiutil` images):
+  MD5 over namespace `B3E20F39-F292-11D6-97A4-00306543ECAC`, the 4 serial
+  bytes as on disk, and for FAT the BPB total sectors as LE u32, then forced
+  to version 3. FAT32 serial `49CC-1DF8`, 131070 sectors →
+  `ECDD941D-AD33-38A9-BCB2-F3F0681ED3E2`, matching `diskutil`. exFAT (closed
+  source; checked empirically) hashes the serial only: `6AD6-5E23` →
+  `FE42BE2B-2FA4-3F54-A2B6-6A605C659CB0`. The hash can't be reversed, and
+  the raw device a real stick shows up as is `root:operator 0640`
+  (`hdiutil` images are owned by the attaching user). So macOS can't give the
+  serial without root; see D28. Source:
+  https://github.com/apple-oss-distributions/msdosfs
 - OneLibrary keeps history in `history` / `history_content` (§2); Engine in
   `hm.db` (§5; whether players write it on the stick is **UNVERIFIED**).
 

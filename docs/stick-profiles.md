@@ -49,10 +49,13 @@ carrying stale playlists.
 
 ### 4.2 Stick identity
 
-- Key: FAT/exFAT volume serial (same source as D23, R§8 item 14).
+- Key: the OS's volume ID, `device::volume_serial` (D28): `VolumeUUID` on
+  macOS, the FAT/exFAT serial on Windows and Linux. Never a file on the stick.
 - Unknown serial: if label and size match an existing device, ask
   "Is this '<name>'?" (covers a reformat). Otherwise offer "New stick" or
   "Adopt" (if a Device Library is present).
+  The same prompt relinks every stick once after the library moves to
+  another OS; on yes the stored ID is replaced.
 - No serial available on this OS: fall back to label + size with an explicit
   user confirm every time; no silent match.
 
