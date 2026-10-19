@@ -586,6 +586,13 @@ maintainer's play-history PRD of the same date; we did not re-check its sources.
   leaving them out". Audio goes to `/Contents/<Artist>/<Album>/<file>`, names
   cut at 48 characters, collisions suffixed `-1`, `-2`; empty artist/album
   handling is not documented (**UNVERIFIED**).
+- Volume serial per OS (checked 2026-10-19 on macOS 26 with a FAT32 disk
+  image, see `fixtures/device/`): `diskutil info -plist` has no raw FAT serial,
+  only `VolumeUUID` (a version-3 UUID, `10DE9FD0-…-3F77-…` for boot-sector
+  serial `4993-1CFB`), stable across detach/attach. Windows
+  (`GetVolumeInformationW`) and Linux (`/dev/disk/by-uuid`, `blkid`) report the
+  serial itself, so the same stick gets a different key per OS. Not yet checked
+  on Windows, Linux or a real stick (**UNVERIFIED**).
 - OneLibrary keeps history in `history` / `history_content` (§2); Engine in
   `hm.db` (§5; whether players write it on the stick is **UNVERIFIED**).
 

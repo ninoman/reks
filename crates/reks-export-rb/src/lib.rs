@@ -1,9 +1,9 @@
 //! reks legacy rekordbox USB export: plan, dry-run, write, validate
 //!
-//! Phase 2 in progress: [`audiocheck`] and [`TargetProfile`] so far. See
-//! `docs/phases/phase-2.md` for what lands here.
+//! Phase 2 lands here piece by piece; see `docs/phases/phase-2.md`.
 
 pub mod audiocheck;
+pub mod device;
 pub mod target;
 
 pub use target::TargetProfile;

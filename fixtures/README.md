@@ -61,3 +61,11 @@ rekordbox 7.0.0) for parser and import tests:
   on track 1.
 - Playlists: `ROOT` → folder `reks fixtures` → `All fixtures` (tracks 1–3) and
   `Lossless` (track 2).
+
+## `device/diskutil-info-fat32.plist`
+
+Output of `diskutil info -plist /Volumes/REKSTEST` on macOS 26 for a 64 MB
+disk image (`hdiutil create -size 64m -fs "MS-DOS FAT32" -volname REKSTEST
+-layout MBRSPUD`), used by `reks-export-rb`'s plist parser tests. Its
+`VolumeUUID` is `10DE9FD0-1935-3F77-BDA8-01229E4D1714`; the FAT32 boot
+sector's volume serial is `4993-1CFB`.
