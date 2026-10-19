@@ -9,6 +9,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Synthetic export.pdb / ANLZ builders for other crates' tests (reks-cli).
+test-util = []
+
 [dependencies]
 baken-core = { workspace = true }
 baken-export = { workspace = true }

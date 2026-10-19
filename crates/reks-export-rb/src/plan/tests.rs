@@ -69,7 +69,14 @@ impl World {
     }
 
     fn plan(&self, sources: &Sources, opts: &ExportOptions) -> ExportPlan {
-        plan_sources(sources.clone(), &self.dev(), opts, &self.locator()).unwrap()
+        plan_sources(
+            sources.clone(),
+            &self.dev(),
+            serial(),
+            opts,
+            &self.locator(),
+        )
+        .unwrap()
     }
 
     /// What a writer would do with `plan` (audio, ANLZ slots, prune).
@@ -90,7 +97,10 @@ impl World {
         for d in &plan.deletes {
             fs::remove_file(on_stick(&self.stick, &d.dst_rel)).unwrap();
         }
-        self.stick_file("/PIONEER/rekordbox/export.pdb", b"pdb");
+        self.stick_file(
+            "/PIONEER/rekordbox/export.pdb",
+            &crate::testutil::unplayed_pdb(),
+        );
     }
 
     /// Modification time of every file on the stick.
@@ -109,6 +119,10 @@ impl World {
         walk(&self.stick, &mut out);
         out
     }
+}
+
+fn serial() -> Option<String> {
+    Some("4993-1CFB".into())
 }
 
 fn track(id: TrackId, src: PathBuf, artist: &str, album: &str) -> SourceTrack {
@@ -400,7 +414,14 @@ fn identical_files_each_get_their_own_stick_file() {
 fn missing_analysis_skips_or_generates() {
     let w = World::new();
     let src = three(&w);
-    let plan = plan_sources(src.clone(), &w.dev(), &ExportOptions::default(), &NoAnlz).unwrap();
+    let plan = plan_sources(
+        src.clone(),
+        &w.dev(),
+        serial(),
+        &ExportOptions::default(),
+        &NoAnlz,
+    )
+    .unwrap();
     assert!(plan.tracks.is_empty());
     assert!(plan.copies.is_empty());
     assert_eq!(
@@ -424,7 +445,7 @@ fn missing_analysis_skips_or_generates() {
             missing_analysis: mode,
             ..ExportOptions::default()
         };
-        let plan = plan_sources(src.clone(), &w.dev(), &opts, &NoAnlz).unwrap();
+        let plan = plan_sources(src.clone(), &w.dev(), serial(), &opts, &NoAnlz).unwrap();
         assert_eq!(plan.tracks.len(), 3);
         assert_eq!(plan.anlz[0], want);
     }
@@ -499,7 +520,14 @@ fn device_checks() {
     dev.free_bytes = 1_000;
     dev.removable = false;
     dev.fs = FsKind::ExFat;
-    let plan = plan_sources(src.clone(), &dev, &ExportOptions::default(), &w.locator()).unwrap();
+    let plan = plan_sources(
+        src.clone(),
+        &dev,
+        serial(),
+        &ExportOptions::default(),
+        &w.locator(),
+    )
+    .unwrap();
     assert!(matches!(
         plan.errors.as_slice(),
         [Problem::NotEnoughSpace { free: 1_000, .. }]
@@ -513,7 +541,7 @@ fn device_checks() {
     dev.fs = FsKind::Other("apfs".into());
     dev.fs_name = "apfs".into();
     dev.free_bytes = 1 << 30;
-    let plan = plan_sources(src, &dev, &ExportOptions::default(), &w.locator()).unwrap();
+    let plan = plan_sources(src, &dev, serial(), &ExportOptions::default(), &w.locator()).unwrap();
     assert_eq!(
         plan.errors,
         [Problem::UnsupportedFilesystem {
@@ -636,4 +664,267 @@ fn loads_selection_from_the_library() {
 
     let src = load(&lib, &Selection::default()).unwrap();
     assert_eq!(src.problems, [Problem::NothingSelected]);
+}
+
+/// A library with `a.wav` and `b.mp3` (no beat grids) in playlist "Set".
+fn library(w: &World) -> (Library, PlaylistId, Vec<TrackId>) {
+    w.add("sine-click-128.wav", "a.wav");
+    w.add("sine-click-128.mp3", "b.mp3");
+    let lib = Library::open_in_memory(&w.cache.join("lib")).unwrap();
+    reks_core::scan(
+        std::slice::from_ref(&w.music),
+        &lib,
+        &CancelToken::new(),
+        |_| {},
+    )
+    .unwrap();
+    let ids: Vec<TrackId> = lib
+        .tracks(&reks_core::TrackQuery::default())
+        .unwrap()
+        .rows
+        .iter()
+        .map(|r| r.id)
+        .collect();
+    let set = match lib
+        .playlist_mutate(PlaylistOp::CreatePlaylist {
+            parent_id: None,
+            name: "Set".into(),
+            position: None,
+        })
+        .unwrap()
+    {
+        PlaylistOutcome::Done { created_id, .. } => created_id.unwrap(),
+        other => panic!("{other:?}"),
+    };
+    lib.playlist_mutate(PlaylistOp::AddTracks {
+        playlist_id: set,
+        track_ids: ids.clone(),
+        before: None,
+        duplicates: reks_core::DuplicateMode::Allow,
+    })
+    .unwrap();
+    (lib, set, ids)
+}
+
+/// `<cache>/USBANLZ/000/<dir>/ANLZ0000.DAT` (+ `.EXT`).
+fn rb_anlz(w: &World, dir: &str, bytes: &[u8]) -> PathBuf {
+    let d = w.cache.join("USBANLZ").join("000").join(dir);
+    fs::create_dir_all(&d).unwrap();
+    fs::write(d.join("ANLZ0000.DAT"), bytes).unwrap();
+    fs::write(d.join("ANLZ0000.EXT"), bytes).unwrap();
+    d.join("ANLZ0000.DAT")
+}
+
+#[test]
+fn rekordbox_cache_locator_finds_or_explains() {
+    use crate::rbcache::{Missing, RbCache};
+    use crate::testutil::anlz_dat;
+
+    let w = World::new();
+    let (lib, set, ids) = library(&w);
+    // a.wav: grid-less analysis, as rekordbox stores for a track without a
+    // grid. b.mp3: an analysis with a grid, which a grid-less track refuses.
+    let a_dat = rb_anlz(&w, "a", &anlz_dat("?/a.wav", 0, 0, 0));
+    rb_anlz(&w, "b", &anlz_dat("?/b.mp3", 630, 12600, 50));
+    let cache = RbCache::scan(&[w.cache.join("USBANLZ")]).unwrap();
+    assert_eq!(cache.files_indexed(), 2);
+
+    // Unknown ids are the planner's to report, not the locator's.
+    let sel = Selection {
+        playlists: vec![set, 999],
+    };
+    let locator = CacheLocator::for_selection(&lib, &sel, cache).unwrap();
+    let sources = load(&lib, &sel).unwrap();
+    let plan = plan_sources(
+        sources,
+        &w.dev(),
+        serial(),
+        &ExportOptions::default(),
+        &locator,
+    )
+    .unwrap();
+
+    let (a, b) = if lib.track(ids[0]).unwrap().track.path.ends_with("a.wav") {
+        (ids[0], ids[1])
+    } else {
+        (ids[1], ids[0])
+    };
+    assert_eq!(plan.tracks.len(), 1);
+    assert_eq!(plan.tracks[0].track_id, a);
+    assert_eq!(
+        plan.tracks[0].anlz_source,
+        AnlzSource::RekordboxCache { dat: a_dat.clone() }
+    );
+    assert_eq!(
+        plan.anlz,
+        [AnlzOp::CopyFromCache {
+            track_id: a,
+            dat: a_dat.clone(),
+            bytes: 2 * size(&a_dat),
+        }]
+    );
+    assert!(plan.warnings.contains(&Warning::Skipped {
+        track_id: b,
+        reason: Missing::Mismatch.to_string(),
+    }));
+    assert_eq!(plan.errors, [Problem::PlaylistNotFound { id: 999 }]);
+
+    // No cache at all: every track says so.
+    let none = RbCache::scan(&[w.cache.join("nope")]).unwrap();
+    let locator = CacheLocator::for_selection(&lib, &sel, none).unwrap();
+    let plan = plan_sources(
+        load(&lib, &sel).unwrap(),
+        &w.dev(),
+        serial(),
+        &ExportOptions::default(),
+        &locator,
+    )
+    .unwrap();
+    assert!(plan.tracks.is_empty());
+    assert!(plan.warnings.contains(&Warning::Skipped {
+        track_id: a,
+        reason: Missing::NoRoots.to_string(),
+    }));
+
+    // An empty selection gives an empty locator, not an error.
+    let empty = RbCache::scan(&[]).unwrap();
+    let locator = CacheLocator::for_selection(&lib, &Selection::default(), empty).unwrap();
+    assert!(locator.cache().roots().is_empty());
+}
+
+#[test]
+fn played_stick_reports_history_and_plans_backups() {
+    let w = World::new();
+    let src = three(&w);
+    w.stick_file(
+        "/PIONEER/rekordbox/export.pdb",
+        &crate::testutil::played_pdb(),
+    );
+    w.stick_file("/PIONEER/rekordbox/exportLibrary.db", b"sqlite");
+    let before = w.mtimes();
+    let plan = w.plan(&src, &ExportOptions::default());
+    assert_eq!(w.mtimes(), before, "a dry run never writes");
+    assert!(!plan.is_blocked(), "{:?}", plan.errors);
+
+    assert_eq!(
+        (plan.history.pdb_sessions, plan.history.pdb_entries),
+        (2, 3)
+    );
+    assert!(plan.history.onelibrary_db);
+    assert_eq!(plan.history.volume_serial, serial());
+    let rels: Vec<&str> = plan.backups.iter().map(|b| b.dst_rel.as_str()).collect();
+    assert_eq!(
+        rels,
+        [
+            "/PIONEER/rekordbox/export.pdb",
+            "/PIONEER/rekordbox/exportLibrary.db"
+        ]
+    );
+    assert!(plan
+        .backups
+        .iter()
+        .all(|b| b.reason == OpReason::HistoryBackup && b.src.is_none()));
+    assert!(plan.warnings.contains(&Warning::StickHistory {
+        sessions: 2,
+        entries: 3,
+        unreadable: false,
+        onelibrary_db: true,
+        policy: HistoryPolicy::BackUp,
+    }));
+    assert!(!plan.warnings.contains(&Warning::NoVolumeSerial));
+    // Backups go to the app data dir: not counted against the stick.
+    let audio: u64 = plan.copies.iter().map(|c| c.bytes).sum();
+    let anlz: u64 = plan
+        .anlz
+        .iter()
+        .map(|a| match a {
+            AnlzOp::CopyFromCache { bytes, .. } => *bytes,
+            _ => 0,
+        })
+        .sum();
+    assert_eq!(plan.bytes_to_write, audio + anlz);
+
+    // The plan's backups are exactly what `run_backups` needs.
+    let direct =
+        history::plan_backups(&w.stick, &plan.history, HistoryPolicy::BackUp, false).unwrap();
+    assert_eq!(plan.backup_plan(), direct);
+    let data = tempfile::tempdir().unwrap();
+    let report = history::run_backups(&plan.backup_plan(), data.path())
+        .unwrap()
+        .unwrap();
+    assert_eq!(report.files.len(), 2);
+    assert_eq!(w.mtimes(), before);
+}
+
+#[test]
+fn discarding_history_needs_the_confirmation() {
+    let w = World::new();
+    let src = three(&w);
+    w.stick_file(
+        "/PIONEER/rekordbox/export.pdb",
+        &crate::testutil::played_pdb(),
+    );
+    let discard = ExportOptions {
+        history: HistoryPolicy::Discard,
+        ..ExportOptions::default()
+    };
+    let plan = w.plan(&src, &discard);
+    assert_eq!(plan.errors, [Problem::DiscardNotConfirmed]);
+    assert!(plan.backups.is_empty());
+
+    let confirmed = ExportOptions {
+        discard_history_confirmed: true,
+        ..discard
+    };
+    let plan = w.plan(&src, &confirmed);
+    assert!(!plan.is_blocked(), "{:?}", plan.errors);
+    assert!(plan.backups.is_empty());
+    assert!(plan.warnings.iter().any(|x| matches!(
+        x,
+        Warning::StickHistory {
+            policy: HistoryPolicy::Discard,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn clean_or_unreadable_sticks() {
+    let w = World::new();
+    let src = three(&w);
+    // Our own previous export, never played: nothing to back up or warn about,
+    // and Discard needs no confirmation.
+    let first = w.plan(&src, &ExportOptions::default());
+    w.apply(&first);
+    let discard = ExportOptions {
+        history: HistoryPolicy::Discard,
+        ..ExportOptions::default()
+    };
+    for opts in [ExportOptions::default(), discard] {
+        let plan = w.plan(&src, &opts);
+        assert!(!plan.is_blocked(), "{:?}", plan.errors);
+        assert!(plan.backups.is_empty());
+        assert!(!plan
+            .warnings
+            .iter()
+            .any(|x| matches!(x, Warning::StickHistory { .. })));
+    }
+
+    // A damaged export.pdb may hold history: back it up.
+    w.stick_file("/PIONEER/rekordbox/export.pdb", b"damaged");
+    let plan = w.plan(&src, &ExportOptions::default());
+    assert!(plan.history.pdb_unreadable);
+    assert_eq!(plan.backups.len(), 1);
+    assert!(plan.warnings.iter().any(|x| matches!(
+        x,
+        Warning::StickHistory {
+            unreadable: true,
+            ..
+        }
+    )));
+
+    // No serial from the OS: said so.
+    let plan = plan_sources(src, &w.dev(), None, &ExportOptions::default(), &NoAnlz).unwrap();
+    assert!(plan.warnings.contains(&Warning::NoVolumeSerial));
+    assert_eq!(plan.backup_plan().volume_serial, None);
 }

@@ -13,12 +13,13 @@
 //! `manifest.json` with each file's size and BLAKE3 hash. They live in the data
 //! dir, not the cache dir (D19): a backup can be the only copy.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-use binrw::{BinRead, Endian};
+use binrw::{BinRead, BinWrite, Endian};
+use rekordcrate::pdb::string::DeviceSQLString;
 use rekordcrate::pdb::{Header, Page, PageType, Row, Table};
 use serde::{Deserialize, Serialize};
 
@@ -86,6 +87,10 @@ pub enum HistoryError {
         expected: String,
         actual: String,
     },
+
+    /// `export.pdb` could not be parsed.
+    #[error("cannot read the history in {path}: {message}")]
+    Unreadable { path: PathBuf, message: String },
 
     #[error("could not write the backup manifest: {0}")]
     Manifest(#[from] serde_json::Error),
@@ -187,6 +192,32 @@ pub fn read_history(device_root: &Path, volume_serial: Option<String>) -> StickH
     // An error here would also hide a OneLibrary file; assume one is there.
     history.onelibrary_db = find_ci(&rb_dir, "exportLibrary.db").map_or(true, |p| p.is_some());
     history
+}
+
+/// One history playlist (a player session) in `export.pdb`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistorySession {
+    /// The history playlist's row id (table 11).
+    pub id: u32,
+    /// `HISTORY 001`, ...; `None` for entries whose playlist row is missing.
+    pub name: Option<String>,
+    /// History entries (table 12) pointing at this playlist.
+    pub entries: u32,
+}
+
+/// The history sessions in the stick's `export.pdb`, by id, for
+/// `reks-cli rb history`. No `export.pdb` → empty. A damaged one is an error
+/// here ([`read_history`] treats it as "may hold history" instead).
+pub fn read_sessions(device_root: &Path) -> Result<Vec<HistorySession>, HistoryError> {
+    let Some(rb_dir) = rekordbox_dir(device_root).map_err(io_err(device_root))? else {
+        return Ok(Vec::new());
+    };
+    let Some(pdb) = find_ci(&rb_dir, "export.pdb").map_err(io_err(&rb_dir))? else {
+        return Ok(Vec::new());
+    };
+    let bytes = fs::read(&pdb).map_err(io_err(&pdb))?;
+    parse_sessions(&bytes).map_err(|message| HistoryError::Unreadable { path: pdb, message })
 }
 
 /// Plans the backups for `history` under `policy`. `Discard` returns an
@@ -466,33 +497,111 @@ struct HistoryCounts {
 }
 
 /// Counts history playlist and entry rows (tables 11/12) in an `export.pdb`.
+fn count_history(bytes: &[u8]) -> Result<HistoryCounts, String> {
+    let mut counts = HistoryCounts::default();
+    walk_history(bytes, |row| match row {
+        Row::HistoryPlaylist(_) => counts.sessions += 1,
+        Row::HistoryEntry(_) => counts.entries += 1,
+        _ => {}
+    })?;
+    Ok(counts)
+}
+
+/// The history sessions in an `export.pdb`, by id, with their entry counts.
+fn parse_sessions(bytes: &[u8]) -> Result<Vec<HistorySession>, String> {
+    let mut names: HashMap<u32, String> = HashMap::new();
+    let mut entries: HashMap<u32, u32> = HashMap::new();
+    let mut bad: Option<String> = None;
+    walk_history(bytes, |row| {
+        let mut raw = Cursor::new(Vec::new());
+        let written = match row {
+            Row::HistoryPlaylist(p) => p.write(&mut raw),
+            Row::HistoryEntry(e) => e.write(&mut raw),
+            _ => return,
+        };
+        if let Err(e) = written {
+            bad.get_or_insert(e.to_string());
+            return;
+        }
+        // rekordcrate keeps the fields private; re-read the row's bytes:
+        // playlist = id u32 + DeviceSQL name, entry = track, playlist, index.
+        let raw = raw.into_inner();
+        match row {
+            Row::HistoryPlaylist(_) => match history_playlist_fields(&raw) {
+                Ok((id, name)) => {
+                    names.insert(id, name);
+                    entries.entry(id).or_default();
+                }
+                Err(e) => {
+                    bad.get_or_insert(e);
+                }
+            },
+            _ => match raw.get(4..8).and_then(|b| b.try_into().ok()) {
+                Some(b) => *entries.entry(u32::from_le_bytes(b)).or_default() += 1,
+                None => {
+                    bad.get_or_insert("short history entry row".to_owned());
+                }
+            },
+        }
+    })?;
+    if let Some(e) = bad {
+        return Err(e);
+    }
+    let mut sessions: Vec<HistorySession> = entries
+        .into_iter()
+        .map(|(id, entries)| HistorySession {
+            id,
+            name: names.remove(&id),
+            entries,
+        })
+        .collect();
+    sessions.sort_by_key(|s| s.id);
+    Ok(sessions)
+}
+
+fn history_playlist_fields(raw: &[u8]) -> Result<(u32, String), String> {
+    let id = raw
+        .get(..4)
+        .and_then(|b| b.try_into().ok())
+        .map(u32::from_le_bytes)
+        .ok_or("short history playlist row")?;
+    let name = DeviceSQLString::read(&mut Cursor::new(raw.get(4..).unwrap_or_default()))
+        .map_err(|e| format!("history playlist name: {e}"))?
+        .into_string()
+        .map_err(|e| format!("history playlist name: {e}"))?;
+    Ok((id, name))
+}
+
+/// Calls `f` for every row of the history tables (11/12) in an `export.pdb`.
 /// Walks each table's page chain itself, bounded by the file size and with a
 /// cycle check, because a player- or tool-damaged file must not hang us.
-fn count_history(bytes: &[u8]) -> Result<HistoryCounts, String> {
+fn walk_history(bytes: &[u8], mut f: impl FnMut(&Row)) -> Result<(), String> {
     let mut reader = Cursor::new(bytes);
     let header = Header::read(&mut reader).map_err(|e| format!("PDB header: {e}"))?;
     if !(512..=65_536).contains(&header.page_size) {
         return Err(format!("implausible page size {}", header.page_size));
     }
-    let mut counts = HistoryCounts::default();
     for table in &header.tables {
-        match table.page_type {
-            PageType::HistoryPlaylists => {
-                counts.sessions += count_rows(&mut reader, &header, table)?
-            }
-            PageType::HistoryEntries => counts.entries += count_rows(&mut reader, &header, table)?,
-            _ => {}
+        if matches!(
+            table.page_type,
+            PageType::HistoryPlaylists | PageType::HistoryEntries
+        ) {
+            walk_rows(&mut reader, &header, table, &mut f)?;
         }
     }
-    Ok(counts)
+    Ok(())
 }
 
-fn count_rows(reader: &mut Cursor<&[u8]>, header: &Header, table: &Table) -> Result<u32, String> {
+fn walk_rows(
+    reader: &mut Cursor<&[u8]>,
+    header: &Header,
+    table: &Table,
+    f: &mut impl FnMut(&Row),
+) -> Result<(), String> {
     let page_size = u64::from(header.page_size);
     let len = reader.get_ref().len() as u64;
     let mut seen = HashSet::new();
     let mut index = table.first_page.clone();
-    let mut rows = 0u32;
     loop {
         let offset = index.offset(header.page_size);
         // Page 0 is the file header; a table page past the end is damage.
@@ -520,13 +629,12 @@ fn count_rows(reader: &mut Cursor<&[u8]>, header: &Header, table: &Table) -> Res
             ));
         }
         for group in &page.row_groups {
-            rows += group
-                .present_rows()
-                .filter(|row| matches!(row, Row::HistoryPlaylist(_) | Row::HistoryEntry(_)))
-                .count() as u32;
+            for row in group.present_rows() {
+                f(&row);
+            }
         }
         if page.page_index == table.last_page {
-            return Ok(rows);
+            return Ok(());
         }
         index = page.next_page;
     }
@@ -538,107 +646,7 @@ mod tests {
 
     use super::*;
 
-    const PAGE: usize = 4096;
-    const T_HISTORY_PLAYLISTS: u32 = 11;
-    const T_HISTORY_ENTRIES: u32 = 12;
-    const T_TRACKS: u32 = 0;
-
-    fn history_playlist(id: u32, name: &str) -> Vec<u8> {
-        let mut row = id.to_le_bytes().to_vec();
-        // DeviceSQL short ASCII string: ((len + 1) << 1) | 1, then the bytes.
-        row.push((((name.len() + 1) << 1) | 1) as u8);
-        row.extend_from_slice(name.as_bytes());
-        row
-    }
-
-    fn history_entry(track_id: u32, playlist_id: u32, index: u32) -> Vec<u8> {
-        [track_id, playlist_id, index]
-            .iter()
-            .flat_map(|v| v.to_le_bytes())
-            .collect()
-    }
-
-    fn put_u16(buf: &mut [u8], at: usize, v: u16) {
-        buf[at..at + 2].copy_from_slice(&v.to_le_bytes());
-    }
-
-    fn put_u32(buf: &mut [u8], at: usize, v: u32) {
-        buf[at..at + 4].copy_from_slice(&v.to_le_bytes());
-    }
-
-    /// A minimal `export.pdb`: page 0 is the header, then each table's pages
-    /// in order. `tables` = (page type, pages, each page's rows (≤ 16)).
-    fn synthetic_pdb(tables: &[(u32, Vec<Vec<Vec<u8>>>)]) -> Vec<u8> {
-        let total_pages = 1 + tables.iter().map(|t| t.1.len()).sum::<usize>();
-        let mut buf = vec![0u8; total_pages * PAGE];
-        put_u32(&mut buf, 4, PAGE as u32);
-        put_u32(&mut buf, 8, tables.len() as u32);
-        put_u32(&mut buf, 12, total_pages as u32); // next_unused_page
-        put_u32(&mut buf, 20, 1); // sequence
-        let mut next = 1usize;
-        for (t, (page_type, pages)) in tables.iter().enumerate() {
-            let at = 28 + 16 * t;
-            put_u32(&mut buf, at, *page_type);
-            put_u32(&mut buf, at + 8, next as u32);
-            put_u32(&mut buf, at + 12, (next + pages.len() - 1) as u32);
-            for (p, rows) in pages.iter().enumerate() {
-                let index = next + p;
-                let base = index * PAGE;
-                let next_page = if p + 1 < pages.len() {
-                    index + 1
-                } else {
-                    total_pages
-                };
-                put_u32(&mut buf, base + 4, index as u32);
-                put_u32(&mut buf, base + 8, *page_type);
-                put_u32(&mut buf, base + 12, next_page as u32);
-                buf[base + 24] = rows.len() as u8; // num_rows_small
-                buf[base + 27] = 0x34; // page flags: has data
-                put_u16(&mut buf, base + 38, 1); // unknown7: 1 on history pages
-                let heap = base + 0x28;
-                let mut used = 0usize;
-                let mut present = 0u16;
-                for (i, row) in rows.iter().enumerate() {
-                    buf[heap + used..heap + used + row.len()].copy_from_slice(row);
-                    put_u16(&mut buf, base + PAGE - 4 - 2 * (i + 1), used as u16);
-                    present |= 1 << i;
-                    used += row.len().next_multiple_of(4);
-                }
-                put_u16(&mut buf, base + 30, used as u16); // used_size
-                put_u16(&mut buf, base + PAGE - 4, present);
-            }
-            next += pages.len();
-        }
-        buf
-    }
-
-    fn played_pdb() -> Vec<u8> {
-        synthetic_pdb(&[
-            (T_TRACKS, vec![vec![]]),
-            (
-                T_HISTORY_PLAYLISTS,
-                vec![vec![
-                    history_playlist(1, "HISTORY 001"),
-                    history_playlist(2, "HISTORY 002"),
-                ]],
-            ),
-            (
-                T_HISTORY_ENTRIES,
-                vec![
-                    vec![history_entry(5, 1, 1), history_entry(7, 1, 2)],
-                    vec![history_entry(5, 2, 1)],
-                ],
-            ),
-        ])
-    }
-
-    fn unplayed_pdb() -> Vec<u8> {
-        synthetic_pdb(&[
-            (T_TRACKS, vec![vec![]]),
-            (T_HISTORY_PLAYLISTS, vec![vec![]]),
-            (T_HISTORY_ENTRIES, vec![vec![]]),
-        ])
-    }
+    use crate::testutil::*;
 
     fn stick(files: &[(&str, &[u8])]) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -682,6 +690,46 @@ mod tests {
             count_history(&unplayed_pdb()).unwrap(),
             HistoryCounts::default()
         );
+    }
+
+    #[test]
+    fn sessions_list_names_and_entry_counts() {
+        let s = stick(&[("PIONEER/rekordbox/export.pdb", &played_pdb())]);
+        let session = |id, name: &str, entries| HistorySession {
+            id,
+            name: Some(name.to_owned()),
+            entries,
+        };
+        assert_eq!(
+            read_sessions(s.path()).unwrap(),
+            [session(1, "HISTORY 001", 2), session(2, "HISTORY 002", 1)]
+        );
+
+        let unplayed = stick(&[("PIONEER/rekordbox/export.pdb", &unplayed_pdb())]);
+        assert!(read_sessions(unplayed.path()).unwrap().is_empty());
+        let empty = tempfile::tempdir().unwrap();
+        assert!(read_sessions(empty.path()).unwrap().is_empty());
+
+        // An entry whose playlist row is gone still shows up.
+        let orphan = synthetic_pdb(&[
+            (T_HISTORY_PLAYLISTS, vec![vec![]]),
+            (T_HISTORY_ENTRIES, vec![vec![history_entry(5, 9, 1)]]),
+        ]);
+        let s = stick(&[("PIONEER/rekordbox/export.pdb", &orphan)]);
+        assert_eq!(
+            read_sessions(s.path()).unwrap(),
+            [HistorySession {
+                id: 9,
+                name: None,
+                entries: 1
+            }]
+        );
+
+        let bad = stick(&[("PIONEER/rekordbox/export.pdb", b"garbage")]);
+        assert!(matches!(
+            read_sessions(bad.path()),
+            Err(HistoryError::Unreadable { .. })
+        ));
     }
 
     #[test]

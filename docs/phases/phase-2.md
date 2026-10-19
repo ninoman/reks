@@ -1,6 +1,6 @@
 # Phase 2 — Legacy USB export (`export.pdb` + ANLZ)
 
-Status: in progress (tasks 2–8 done, 1, 12, 13 backend done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
+Status: in progress (tasks 2–8 done, 1, 12, 13 backend done 2026-10-19; planner wired to rbcache and history, first `reks rb` commands). Depends on: Phase 1 (library, XML writer, playlists,
 `rb_track_id`/`rb_location`). Read `docs/decisions.md` D7, D8, D16, D23 and
 `docs/research.md` §1, §4, §10 first.
 
@@ -53,8 +53,8 @@ pub struct ExportPlan {
     pub copies: Vec<FileOp>,                 // audio to copy (src, dst, bytes, reason)
     pub anlz: Vec<AnlzOp>,                   // per track: CopyFromCache{src}, Generate, Missing
     pub deletes: Vec<FileOp>,                // stale audio/ANLZ/artwork to remove (prune)
-    pub history: StickHistory,               // what players left on the stick (D23); task 12, not in the code yet
-    pub backups: Vec<FileOp>,                // stick DB files copied to app_data_dir before any write; task 12
+    pub history: StickHistory,               // what players left on the stick (D23)
+    pub backups: Vec<FileOp>,                // stick DB files copied to app_data_dir before any write; .backup_plan() feeds run_backups
     pub warnings: Vec<Warning>,              // e.g. FLAC on NXS target, path > 255, exFAT
     pub errors: Vec<Problem>,                // blockers: missing file, > 4 GiB on FAT32, WAV_EXTENSIBLE
     pub bytes_to_write: u64, pub bytes_free_after: i64,
@@ -72,6 +72,9 @@ pub enum HistoryPolicy { BackUp /* default */, Discard /* only after an explicit
 
 pub fn plan(lib: &Library, sel: &Selection, dev: &DeviceInfo, opts: &ExportOptions, anlz: &dyn AnlzLocator)
     -> Result<ExportPlan, PlanError>;   // done: crates/reks-export-rb/src/plan/
+// ExportOptions { target, keep_stale, missing_analysis, artwork, skip_unsupported, history: HistoryPolicy,
+//                 discard_history_confirmed }
+pub struct CacheLocator;   // AnlzLocator over rbcache: CacheLocator::for_selection(lib, sel, RbCache::scan(roots)?)
 pub fn apply(plan: &ExportPlan, writer: &dyn RekordboxWriter, progress: impl Fn(ExportEvent), cancel: &CancelToken)
     -> Result<ExportReport>;
 
@@ -209,9 +212,11 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    `/PIONEER/Artwork` is the writer's and no deletes are listed there.
    Per-track blockers (missing source, audiocheck errors) block the plan
    unless `skip_unsupported`; tracks without analysis follow
-   `MissingAnalysis` (default `Skip`). `AnlzLocator` is the seam for task 5
-   (`NoAnlz` until then). `history`/`backups` are not in `ExportPlan` yet
-   (task 12). For task 7: baken assigns its own `/Contents` paths (Unicode,
+   `MissingAnalysis` (default `Skip`). ANLZ comes from an `AnlzLocator`
+   (`CacheLocator` for rekordbox's cache, task 5; `NoAnlz` in tests); its
+   `why_missing` text goes into the `Skipped` warning. `history`/`backups`:
+   task 12. `Warning`/`Problem` implement `Display` (dry-run wording for the
+   CLI and the UI). For task 7: baken assigns its own `/Contents` paths (Unicode,
    48-character cut), so the writer must make it use the plan's `dst_rel`,
    or plan and stick disagree.
 5. [x] **rbcache locate**: find rekordbox's local ANLZ for an imported track
@@ -225,7 +230,9 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    without a grid only takes an analysis without one. `Missing` says why:
    no root, never analysed, or a same-named file that doesn't match. Build
    `AnlzQuery` from the temp XML parsed with `baken_export::collection`, so
-   both see the same values. macOS root checked on the maintainer's machine
+   both see the same values: `plan::CacheLocator::for_selection` does this
+   (in memory, `rbxml::export` → baken `Library::parse`), with the cache
+   scanned once per locator. macOS root checked on the maintainer's machine
    (2026-10-19, `USBANLZ/<3 hex>/<id>/ANLZ0000.{DAT,EXT,2EX}`, PPTH
    `?/<file name>`); Windows and library-drive roots UNVERIFIED.
 6. [x] **XML bridge for baken**: `rbxml::export(lib, selection)` to a temp file
@@ -304,6 +311,16 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
     selection per device label.
 11. **`reks-cli rb export/validate/diff/history`** for headless iteration
     (`history` lists the stick's history playlists and entry counts).
+    The binary is `reks`; commands live in [rb.rs](../../crates/reks-cli/src/rb.rs).
+    A `<stick>` that is not a mount point is used as the stick root, without
+    a volume serial (fake sticks for testing).
+    - [x] `reks rb plan <stick> --library <db> --playlist <id|Folder/Name>...`
+      (options as flags, `--anlz-root` overrides rekordbox's folders,
+      `--discard-history` is the explicit confirmation, `--json`): prints the
+      dry run, exits non-zero when blocked.
+    - [x] `reks rb history <stick> [--json]`: sessions (`HISTORY 001`, ...) with
+      entry counts via `history::read_sessions`, and `exportLibrary.db` presence.
+    - [ ] `rb export` (task 9), `rb validate` (task 8), `rb diff`.
 12. **History safeguard**: `StickHistory` in the planner; volume serial from
     the OS (`diskutil` on macOS, `GetVolumeInformationW` on Windows, `blkid`
     UUID on Linux; UNVERIFIED, R§8 item 14); `backups` with hash check at the
@@ -325,11 +342,22 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
       returns a typed `HistoryError`. Only reads from the stick. Tests on
       synthetic PDBs built in code (with/without history, garbage, truncated,
       looping page chain) and temp-dir sticks.
-    - [ ] Planner (task 4) puts `StickHistory` and the `BackupPlan` files into
-      `ExportPlan`; `apply` (task 9) calls `run_backups` first and aborts on error.
+    - [x] Planner: `ExportPlan.history` from `read_history` (serial from
+      `device::volume_serial` in `plan`, passed in to `plan_sources`);
+      `ExportPlan.backups` from `plan_backups` with `ExportOptions.history` /
+      `discard_history_confirmed` (stick paths, `OpReason::HistoryBackup`,
+      not counted in `bytes_to_write`); `ExportPlan::backup_plan()` rebuilds
+      the `BackupPlan`. `Warning::StickHistory` whenever the stick holds or
+      may hold history, `Warning::NoVolumeSerial` without a serial,
+      `Problem::DiscardNotConfirmed` for an unconfirmed `Discard` on such a
+      stick (a stick without history needs no confirmation).
+    - [ ] `apply` (task 9) calls `run_backups(&plan.backup_plan(), ..)` first
+      and aborts on error.
     - [ ] Real played-stick fixture: `played_stick_fixture_counts` is `#[ignore]`d
       until `fixtures/rekordbox/played-<ver>/` exists (checklist step 7).
-    - [ ] Dry-run and UI wording (task 10); `reks-cli rb history` (task 11).
+    - [x] Dry-run wording (`Display` for `Warning`/`Problem`) and
+      `reks rb history` (task 11; `history::read_sessions` lists sessions).
+    - [ ] UI wording (task 10).
     - [ ] macOS keys backups by `VolumeUUID`, Windows/Linux by the FAT serial
       (R§10.1), so one stick gets two backup folders across OSes.
 13. **Export manifest**: migration adding `export_manifest`; rows from the
