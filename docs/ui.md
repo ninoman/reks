@@ -10,7 +10,7 @@ radius) at desktop density, with system fonts and a derived dark theme.
 | Path | What |
 |---|---|
 | [`src/styles/tokens.css`](../src/styles/tokens.css) | **The only place that sets the look**: palette, semantic colours (light + dark), type, radii, shadow, layers, motion, control sizes, row heights |
-| [`src/styles/base.css`](../src/styles/base.css) | Element defaults on top of Tailwind preflight (body, `user-select: none` for chrome, focus outline) |
+| [`src/styles/base.css`](../src/styles/base.css) | Our reset (instead of Tailwind preflight) and element defaults (body, `user-select: none` for chrome, focus outline) |
 | [`src/styles/index.css`](../src/styles/index.css) | Entry: Tailwind, tokens, base |
 | [`src/components/ui/`](../src/components/ui/) | Base components (one per file, each exports its `cva` variants) |
 | [`src/components/ui/control.ts`](../src/components/ui/control.ts) | The control size scale and shared focus / disabled / hover states |
@@ -57,6 +57,20 @@ use the neutral `selected` tint.
 - Slide timings: `--duration-slide-*` and `--ease-*`, mirrored in
   `src/lib/motion.ts` for tests (also checked by `tokens.test.ts`).
 - Flat overlays (no shadow at all): `--shadow-overlay: none;`.
+
+## Reset
+
+`base.css` replaces Tailwind's preflight with a reset of the same intent
+(`box-sizing`, zero margins, `border: 0 solid`, form controls inherit the
+font, lists unstyled, media block). It leaves out preflight's universal
+`::before, ::after, ::backdrop` selectors: they made every track-table row
+pay for pseudo-element styles while scrolling (dev build, 20-row scroll
+step: p50 8.9 → 8.3 ms). If a component needs a pseudo-element, give it
+`before:`/`after:` utilities; nothing resets those.
+
+Measured on the mock library (3,000 rows, 1280×800), production build, per
+20-row scroll step including style and layout: p50 1.6 ms before and after
+the redesign; p95 3.8–4.0 ms before, 2.5–3.1 ms after.
 
 ## Control size scale
 

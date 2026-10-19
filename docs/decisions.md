@@ -389,8 +389,13 @@ Date of decisions: 2026-10-18.
   CSS Modules (scoping, but no variant system or shared scale, so the same
   drift); React Aria (stronger a11y and i18n, but larger, hooks-first API and more
   code per component than this app needs).
+- Tailwind's preflight is replaced by our own reset in `src/styles/base.css`
+  (no pseudo-element selectors in the universal rule; measured faster table
+  scrolling). Track-table scroll cost unchanged by the redesign in the
+  production build (numbers in [`ui.md`](ui.md#reset)).
 - Risks: Tailwind's native oxide/lightningcss binaries per platform (CI builds on
-  all three); Radix menus portal to `<body>`, so tests query `document`.
+  all three); Radix menus portal to `<body>`, so tests query `document`; the JS
+  bundle grew from 353 kB to 506 kB (Radix), over Vite's 500 kB warning.
 
 ## Open risks (cross-cutting)
 
