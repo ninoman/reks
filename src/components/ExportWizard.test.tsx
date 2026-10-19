@@ -1,19 +1,30 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DeviceInfo, DryRun, PlaylistNode } from "../lib/ipc";
+import type {
+  DeviceInfo,
+  DryRun,
+  ExportProgress,
+  ExportReportView,
+  PlaylistNode,
+} from "../lib/ipc";
 
 vi.mock("../lib/ipc", async (original) => ({
   ...(await original<typeof import("../lib/ipc")>()),
   devicesList: vi.fn(),
   deviceEject: vi.fn(),
   exportPlan: vi.fn(),
+  exportApply: vi.fn(),
+  exportCancel: vi.fn(),
 }));
 
 const ipc = await import("../lib/ipc");
 const devicesList = vi.mocked(ipc.devicesList);
+const deviceEject = vi.mocked(ipc.deviceEject);
 const exportPlan = vi.mocked(ipc.exportPlan);
+const exportApply = vi.mocked(ipc.exportApply);
+const exportCancel = vi.mocked(ipc.exportCancel);
 const { useExportWizard } = await import("../store/exportWizard");
 const { usePlaylists } = await import("../store/playlists");
 const { ExportWizard } = await import("./ExportWizard");
@@ -55,6 +66,7 @@ const group = { count: 0, bytes: 0, totalText: "None", files: [] };
 
 function dryRun(over: Partial<DryRun> = {}): DryRun {
   return {
+    planId: 7,
     ready: true,
     status: "Ready to export. Nothing has been written to the stick yet.",
     device: {
@@ -98,9 +110,64 @@ function dryRun(over: Partial<DryRun> = {}): DryRun {
   };
 }
 
+const progress = (p: Partial<ExportProgress>): ExportProgress => ({
+  stage: "write",
+  title: "Writing tracks",
+  detail: null,
+  done: 0,
+  total: 0,
+  cancellable: true,
+  warnings: [],
+  ...p,
+});
+
+const backedUp = {
+  title: "Play history backed up",
+  text: "Before writing, reks copied 1 database file (4.1 KB) from the stick to the folder below.",
+  folder:
+    "/Users/dj/Library/Application Support/app.reks/stick-backups/4993-1CFB/2026-10-19T21-04-12Z",
+  files: ["/PIONEER/rekordbox/export.pdb"],
+};
+
+function report(over: Partial<ExportReportView> = {}): ExportReportView {
+  return {
+    outcome: "success",
+    title: "Export finished",
+    status: "reks wrote the stick and read it back: it matches the plan.",
+    mountPoint: "/Volumes/REKS",
+    deviceName: "REKS",
+    facts: [
+      { label: "Tracks", value: "12 in the stick's database" },
+      { label: "Library record", value: "12 tracks recorded as on this stick" },
+    ],
+    history: backedUp,
+    problems: [],
+    warnings: [],
+    ...over,
+  };
+}
+
+/** `exportApply` that hands back its progress callback and a way to finish. */
+function pendingExport() {
+  const run = {
+    send: (_: ExportProgress) => {},
+    finish: (_: ExportReportView) => {},
+  };
+  exportApply.mockImplementation((_id, onEvent) => {
+    run.send = (p) => act(() => onEvent(p));
+    return new Promise((resolve) => {
+      run.finish = resolve;
+    });
+  });
+  return run;
+}
+
 beforeEach(() => {
   devicesList.mockReset().mockResolvedValue([stick]);
+  deviceEject.mockReset().mockResolvedValue();
   exportPlan.mockReset();
+  exportApply.mockReset();
+  exportCancel.mockReset().mockResolvedValue();
   usePlaylists.setState({ nodes: NODES });
   useExportWizard.getState().close();
 });
@@ -116,20 +183,20 @@ async function toOptions() {
   fireEvent.click(button("Next"));
   fireEvent.click(screen.getByRole("checkbox", { name: /Other/ }));
   fireEvent.click(button("Next"));
-  await screen.findByText("Step 3 of 4: Options");
+  await screen.findByText("Step 3 of 6: Options");
 }
 
 describe("ExportWizard", () => {
   it("needs a stick and a playlist before going on", async () => {
     useExportWizard.getState().open();
     render(<ExportWizard />);
-    expect(screen.getByText("Step 1 of 4: Stick")).toBeTruthy();
+    expect(screen.getByText("Step 1 of 6: Stick")).toBeTruthy();
     expect(button("Next").disabled).toBe(true);
     fireEvent.click(await screen.findByRole("radio", { name: "REKS" }));
     expect(button("Next").disabled).toBe(false);
     fireEvent.click(button("Next"));
 
-    expect(screen.getByText("Step 2 of 4: Playlists")).toBeTruthy();
+    expect(screen.getByText("Step 2 of 6: Playlists")).toBeTruthy();
     expect(button("Next").disabled).toBe(true);
     // Ticking a folder ticks (and locks) what is under it.
     fireEvent.click(screen.getByRole("checkbox", { name: /Gigs/ }));
@@ -139,7 +206,7 @@ describe("ExportWizard", () => {
     expect(button("Next").disabled).toBe(false);
 
     fireEvent.click(button("Back"));
-    expect(screen.getByText("Step 1 of 4: Stick")).toBeTruthy();
+    expect(screen.getByText("Step 1 of 6: Stick")).toBeTruthy();
   });
 
   it("Discard needs the explicit confirmation", async () => {
@@ -161,7 +228,7 @@ describe("ExportWizard", () => {
     );
   });
 
-  it("shows the dry run; Export stays disabled until writing is wired in", async () => {
+  it("shows the dry run with the history backup", async () => {
     exportPlan.mockResolvedValue(
       dryRun({
         history: {
@@ -190,11 +257,10 @@ describe("ExportWizard", () => {
     expect(screen.getByText("1 track left out")).toBeTruthy();
     expect(screen.getByText("A – B: no analysis")).toBeTruthy();
     expect(screen.getByText("Copy: 1 file, 9.0 MB")).toBeTruthy();
-    expect(button("Export").disabled).toBe(true);
-    expect(screen.getByText(/Writing to the stick isn't available/)).toBeTruthy();
+    expect(button("Export").disabled).toBe(false);
 
     fireEvent.click(button("Back"));
-    expect(screen.getByText("Step 3 of 4: Options")).toBeTruthy();
+    expect(screen.getByText("Step 3 of 6: Options")).toBeTruthy();
   });
 
   it("a blocked plan says why and can't proceed", async () => {
@@ -234,5 +300,156 @@ describe("ExportWizard", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("Could not plan: volume not found");
     fireEvent.click(button("Try again"));
     await waitFor(() => expect(screen.getByText(/Ready to export/)).toBeTruthy());
+  });
+
+  it("exports with progress, then reports the backup folder and ejects", async () => {
+    exportPlan.mockResolvedValue(dryRun());
+    const run = pendingExport();
+    await toOptions();
+    fireEvent.click(button("Dry run"));
+    await screen.findByText(/Ready to export/);
+    fireEvent.click(button("Export"));
+
+    expect(screen.getByText("Step 5 of 6: Writing")).toBeTruthy();
+    expect(exportApply).toHaveBeenCalledWith(7, expect.any(Function));
+    expect(screen.getByRole("status").textContent).toBe("Starting the export…");
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+    run.send(
+      progress({
+        detail: "Track 3 of 12: Alpha – First",
+        done: 3,
+        total: 12,
+        warnings: ["rekordbox is running; quit it while exporting so it does not touch the stick."],
+      }),
+    );
+    expect(screen.getByRole("status").textContent).toBe("Writing tracks");
+    expect(screen.getByText("Track 3 of 12: Alpha – First")).toBeTruthy();
+    const bar = screen.getByRole("progressbar", { name: "Export progress" }) as HTMLProgressElement;
+    expect([bar.value, bar.max]).toEqual([3, 12]);
+    expect(screen.getByText(/rekordbox is running/)).toBeTruthy();
+
+    // Escape doesn't close a running export.
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.getByText("Step 5 of 6: Writing")).toBeTruthy();
+
+    await act(async () => run.finish(report()));
+    expect(screen.getByText("Step 6 of 6: Report")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("Export finished");
+    expect(screen.getByText("12 tracks recorded as on this stick")).toBeTruthy();
+    const history = screen.getByRole("region", { name: "Play history backed up" });
+    expect(within(history).getByText(backedUp.folder)).toBeTruthy();
+    expect(within(history).getByText("/PIONEER/rekordbox/export.pdb")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Plan again" })).toBeNull();
+
+    fireEvent.click(button("Eject"));
+    expect(deviceEject).toHaveBeenCalledWith("/Volumes/REKS");
+    expect(await screen.findByText("REKS ejected. You can remove it.")).toBeTruthy();
+    expect(button("Eject").disabled).toBe(true);
+
+    fireEvent.click(button("Done"));
+    expect(useExportWizard.getState().step).toBe("closed");
+  });
+
+  it("cancels until the new database is being written", async () => {
+    exportPlan.mockResolvedValue(dryRun());
+    const run = pendingExport();
+    await toOptions();
+    fireEvent.click(button("Dry run"));
+    await screen.findByText(/Ready to export/);
+    fireEvent.click(button("Export"));
+
+    run.send(progress({ done: 1, total: 12 }));
+    fireEvent.click(button("Cancel export"));
+    await waitFor(() => expect(exportCancel).toHaveBeenCalledTimes(1));
+    expect(button("Cancel export").disabled).toBe(true);
+    expect(screen.getByText("Cancelling…")).toBeTruthy();
+
+    await act(async () =>
+      run.finish(
+        report({
+          outcome: "cancelled",
+          title: "Export cancelled",
+          status: "The stick keeps its previous database.",
+          facts: [],
+        }),
+      ),
+    );
+    expect(screen.getByRole("status").textContent).toBe("Export cancelled");
+    expect(screen.getByText("The stick keeps its previous database.")).toBeTruthy();
+
+    // Plan again goes back to a fresh dry run.
+    exportPlan.mockResolvedValue(dryRun({ planId: 8 }));
+    fireEvent.click(button("Plan again"));
+    await screen.findByText(/Ready to export/);
+    expect(screen.getByText("Step 4 of 6: Dry run")).toBeTruthy();
+    expect(exportPlan).toHaveBeenCalledTimes(2);
+  });
+
+  it("can't cancel once the database is being written", async () => {
+    exportPlan.mockResolvedValue(dryRun());
+    const run = pendingExport();
+    await toOptions();
+    fireEvent.click(button("Dry run"));
+    await screen.findByText(/Ready to export/);
+    fireEvent.click(button("Export"));
+    run.send(
+      progress({
+        title: "Writing the stick's database and removing stale files",
+        cancellable: false,
+      }),
+    );
+    expect(button("Cancel export").disabled).toBe(true);
+    // No count: an indeterminate bar.
+    expect(screen.getByRole("progressbar").hasAttribute("value")).toBe(false);
+  });
+
+  it("reports problems and failures", async () => {
+    exportPlan.mockResolvedValue(dryRun());
+    exportApply.mockResolvedValueOnce(
+      report({
+        outcome: "problems",
+        title: "Export finished with problems",
+        problems: [
+          {
+            kind: "trackFailed",
+            title: "1 track could not be written",
+            items: ["Alpha – First: source unreadable"],
+          },
+          {
+            kind: "databaseFinding",
+            title: "Read back: 1 problem with the database",
+            items: ["No export.pdb on the stick"],
+          },
+        ],
+        warnings: [{ kind: "applyWarning", title: "rekordbox is running.", items: [] }],
+      }),
+    );
+    await toOptions();
+    fireEvent.click(button("Dry run"));
+    await screen.findByText(/Ready to export/);
+    fireEvent.click(button("Export"));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Export finished with problems");
+    const problems = screen.getByRole("region", { name: "Problems" });
+    expect(within(problems).getByText("1 track could not be written")).toBeTruthy();
+    expect(within(problems).getByText("Alpha – First: source unreadable")).toBeTruthy();
+    expect(within(problems).getByText("No export.pdb on the stick")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Warnings" }).textContent).toBe(
+      "Warningsrekordbox is running.",
+    );
+    expect(button("Plan again")).toBeTruthy();
+  });
+
+  it("shows a refused export", async () => {
+    exportPlan.mockResolvedValue(dryRun());
+    exportApply.mockRejectedValueOnce("this dry run is out of date or was already exported");
+    await toOptions();
+    fireEvent.click(button("Dry run"));
+    await screen.findByText(/Ready to export/);
+    fireEvent.click(button("Export"));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Could not export: this dry run is out of date or was already exported",
+    );
+    expect(button("Plan again")).toBeTruthy();
   });
 });

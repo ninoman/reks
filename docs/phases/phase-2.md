@@ -332,7 +332,7 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    no manifest; cancel mid-write keeps the old PDB; dry run and validation
    leave mtimes unchanged; no serial → success without rows; stick played
    after the dry run, pre-flight and writer refusals write nothing.
-10. **Export UI**: wizard (device → playlists → options → dry-run table with
+10. [x] **Export UI**: wizard (device → playlists → options → dry-run table with
     warnings/errors/deletes → progress → report with "Eject"). The device's
     selection is its stick profile (task 15).
     - [x] Wizard through the dry run:
@@ -351,12 +351,39 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
       problems; Export stays disabled. Checked in the browser with the mock
       backend and `plan_at` against a mounted FAT32 image
       (`live_plan_at_a_mounted_stick`, ignored).
-    - [ ] Wire Export to `apply` (task 9); re-plan or keep the shown plan so
-      what is written is what the user saw.
-    - [ ] Progress (writer events, cancel).
-    - [ ] Report (validator findings, backup folder) with Eject.
-    - [ ] UI wording for history (task 12): review the dry-run text with the
-      report step.
+    - [x] Wire Export to `apply` (task 9): the shown plan is kept.
+      `export_plan` stores the `ExportPlan` and its `Selection` in `AppState`
+      under a `planId` the `DryRun` carries (the newest call wins);
+      `export_apply(plan_id)` takes it (once) and runs
+      [`report::export`](../../crates/reks-export-rb/src/report.rs)
+      on a blocking worker: a `BakenWriter` in a temp folder, then `apply`
+      with `StickCheck::Mounted` and the app data dir. A replaced or used
+      plan is refused ("plan again"); a stick that changed since is refused
+      by `apply`'s pre-flight, a changed library by the writer
+      (`PlanMismatch`).
+    - [x] Progress: `ApplyEvent`s become `report::ProgressView`s
+      (`ProgressTracker`: stage title, `Track 3 of 40: Artist – Title`,
+      counts for the bar, warnings) streamed over a `Channel`. `export_cancel`
+      cancels the token; `cancellable` turns false once the writer replaces
+      `export.pdb` (from then on the run goes on to validate). The wizard
+      can't be closed while writing.
+    - [x] Report: `report::ReportView` worded in Rust: outcome
+      (`success | problems | cancelled | failed`, `Err(ApplyError)` is
+      `failed`), what the stick holds now, facts (tracks, audio, analysis,
+      stale files, read back, manifest rows), writer failures, findings
+      (by track with names, playlists, database) and errors as notice groups,
+      apply warnings, and the history outcome with the backup folder and
+      files. Eject (`device_eject`), Plan again (unless success), Done.
+      Checked in the browser with the mock backend, and `report::export`
+      against a mounted FAT32 `hdiutil` image (`live_export_to_a_mounted_stick`,
+      ignored: played `export.pdb` backed up, 3 tracks written, read back
+      clean, manifest recorded).
+    - [x] UI wording for history (task 12): dry run says the report shows
+      where the backup is and that a confirmed `Discard` erases without a
+      backup; the report says backed up (folder, files; the new database
+      starts without history, or the stick still has it when nothing was
+      replaced), discarded, kept, or that the backup failed and nothing was
+      written.
 11. **`reks-cli rb export/validate/diff/history`** for headless iteration
     (`history` lists the stick's history playlists and entry counts).
     The binary is `reks`; commands live in [rb.rs](../../crates/reks-cli/src/rb.rs).
@@ -413,7 +440,7 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
       until `fixtures/rekordbox/played-<ver>/` exists (checklist step 7).
     - [x] Dry-run wording (`Display` for `Warning`/`Problem`) and
       `reks rb history` (task 11; `history::read_sessions` lists sessions).
-    - [ ] UI wording (task 10).
+    - [x] UI wording (task 10): dry-run and report text, see task 10.
     - [x] macOS keys backups by `VolumeUUID`, Windows/Linux by the FAT serial
       (R§10.1). Kept by D28: one library sees one kind of ID; a library moved
       to another OS relinks each stick once (stick-profiles §4.2).

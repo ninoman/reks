@@ -1,9 +1,10 @@
 //! App state shared by the commands.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use reks_core::{CancelToken, Library, TrackId};
+use reks_export_rb::plan::{ExportPlan, Selection};
 use reks_mix::Player;
 
 /// File name of the library database (docs/decisions.md D19).
@@ -16,7 +17,23 @@ pub struct AppState {
     pub scan_cancel: Mutex<Option<CancelToken>>,
     /// Cancels the running rekordbox XML import, if any.
     pub import_cancel: Mutex<Option<CancelToken>>,
+    /// Cancels the running USB export, if any.
+    pub export_cancel: Mutex<Option<CancelToken>>,
+    /// The export plan the wizard's dry run shows; Export writes exactly it.
+    pub shown_plan: Mutex<ShownPlan>,
+    /// App data dir (D19): stick backups go under it.
+    pub data_dir: PathBuf,
     pub player: Mutex<PlayerSlot>,
+}
+
+/// The last export plan returned to the UI, under the id the UI sends back.
+#[derive(Debug, Default)]
+pub struct ShownPlan {
+    /// Id of the newest `export_plan` call; ids only grow.
+    pub last_id: u64,
+    /// `(id, plan, selection)` of the newest plan that finished; taken by
+    /// `export_apply`.
+    pub plan: Option<(u64, ExportPlan, Selection)>,
 }
 
 /// The preview player and the track on it.
@@ -46,6 +63,9 @@ impl AppState {
             library: Arc::new(library),
             scan_cancel: Mutex::new(None),
             import_cancel: Mutex::new(None),
+            export_cancel: Mutex::new(None),
+            shown_plan: Mutex::new(ShownPlan::default()),
+            data_dir: data_dir.to_path_buf(),
             player: Mutex::new(PlayerSlot {
                 player: Player::new(settings.audio_device).with_volume(settings.ui.volume),
                 track: None,

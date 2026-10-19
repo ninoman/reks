@@ -4,12 +4,16 @@
  * playlists, settings and an import preview. Loaded by `main.tsx` only in
  * dev builds outside Tauri; never part of a release bundle.
  */
+
+import type { Channel } from "@tauri-apps/api/core";
 import { mockIPC } from "@tauri-apps/api/mocks";
 
 import type {
   DeviceInfo,
   DryRun,
   ExportOptions,
+  ExportProgress,
+  ExportReportView,
   ExportSelection,
   Facets,
   ImportPreview,
@@ -338,6 +342,107 @@ let devices: DeviceInfo[] = [
   },
 ];
 
+let planId = 0;
+let lastPlan: { mountPoint: string; label: string; played: boolean; opts: ExportOptions } | null =
+  null;
+let cancelled = false;
+
+/** Writes "12 tracks" in steps, then reports like `report::ReportView`. */
+async function exportApply(onEvent: Channel<ExportProgress>): Promise<ExportReportView> {
+  const plan = lastPlan;
+  if (plan === null)
+    throw new Error("this dry run is out of date or was already exported; plan again");
+  lastPlan = null;
+  cancelled = false;
+  const send = (p: Partial<ExportProgress>) =>
+    onEvent.onmessage({
+      stage: "preflight",
+      title: "Checking the stick",
+      detail: null,
+      done: 0,
+      total: 0,
+      cancellable: true,
+      warnings: [],
+      ...p,
+    });
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  send({});
+  await wait(400);
+  if (plan.played && plan.opts.history === "backUp") {
+    send({ stage: "backup", title: "Backing up the stick's play history" });
+    await wait(500);
+  }
+  const total = 12;
+  for (let done = 1; done <= total && !cancelled; done++) {
+    const t = TRACKS[done - 1] as TrackRow;
+    send({
+      stage: "write",
+      title: "Writing tracks",
+      detail: `Track ${done} of ${total}: ${t.artist ?? ""} – ${t.title ?? ""}`,
+      done,
+      total,
+    });
+    await wait(350);
+  }
+  const backupFolder = `/Users/dj/Library/Application Support/app.reks/stick-backups/4993-1CFB/2026-10-19T21-04-12Z`;
+  const backedUp = plan.played && plan.opts.history === "backUp";
+  const history = backedUp
+    ? {
+        title: "Play history backed up",
+        text: `Before writing, reks copied 1 database file (412.0 KB) from the stick to the folder below and checked the copies. They keep the sessions players logged on this stick. ${cancelled ? "The stick still has them too: its database was not replaced." : "The stick's new database starts without history."}`,
+        folder: backupFolder,
+        files: ["/PIONEER/rekordbox/export.pdb"],
+      }
+    : plan.played
+      ? {
+          title: "Play history discarded",
+          text: "As you chose, the stick's play history was erased without a backup.",
+          folder: null,
+          files: [],
+        }
+      : {
+          title: "No play history on this stick",
+          text: "Players had not logged any sessions here, so nothing was lost.",
+          folder: null,
+          files: [],
+        };
+  const base = { mountPoint: plan.mountPoint, deviceName: plan.label, history, warnings: [] };
+  if (cancelled) {
+    return {
+      ...base,
+      outcome: "cancelled",
+      title: "Export cancelled",
+      status:
+        "The stick keeps its previous database. Audio and analysis copied before you cancelled stay on the stick; the old database doesn't list them.",
+      facts: [],
+      problems: [],
+    };
+  }
+  for (const [stage, title] of [
+    ["sync", "Flushing the written files to the stick"],
+    ["validate", "Reading the stick back to check it"],
+    ["manifest", "Recording what is on the stick"],
+  ] as const) {
+    send({ stage, title, cancellable: false });
+    await wait(400);
+  }
+  return {
+    ...base,
+    outcome: "success",
+    title: "Export finished",
+    status:
+      "reks wrote the stick and read it back: it matches the plan. Eject it before unplugging.",
+    facts: [
+      { label: "Tracks", value: "12 in the stick's database" },
+      { label: "Audio", value: "12 copied, 0 already on the stick" },
+      { label: "Analysis", value: "36 files written, 0 unchanged" },
+      { label: "Read back", value: "12 tracks and 2 playlists and folders, as planned" },
+      { label: "Library record", value: "12 tracks recorded as on this stick" },
+    ],
+    problems: [],
+  };
+}
+
 /** A dry run in the shape `dryrun::DryRun` gives: GIGS holds play history, Backup is blocked. */
 function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): DryRun {
   const dev = devices.find((d) => d.mountPoint === mountPoint) ?? (devices[0] as DeviceInfo);
@@ -367,7 +472,9 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
   }
   const none = { count: 0, bytes: 0, totalText: "None", files: [] };
   const write = copies.length * 9_400_000;
+  lastPlan = { mountPoint: dev.mountPoint, label: dev.label, played, opts };
   return {
+    planId: ++planId,
     ready: problems.length === 0,
     status:
       problems.length === 0
@@ -428,7 +535,7 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
           text: "The stick's export.pdb holds 2 history sessions with 31 played tracks. Exporting rebuilds the stick's database, which erases it.",
           actionText:
             opts.history === "backUp"
-              ? "Before writing anything, reks copies 1 database file (412.0 KB) to its data folder and checks the copies; if the backup fails, nothing is written."
+              ? "Before writing anything, reks copies 1 database file (412.0 KB) to its data folder and checks the copies; if the backup fails, nothing is written. The report after the export shows where the copies are."
               : opts.discardHistoryConfirmed
                 ? "You chose to discard it: no backup is made."
                 : "Discarding it needs your confirmation in the options.",
@@ -545,6 +652,11 @@ mockIPC((cmd, payload) => {
           600,
         ),
       );
+    case "export_apply":
+      return exportApply(args.onEvent as Channel<ExportProgress>);
+    case "export_cancel":
+      cancelled = true;
+      return null;
     case "plugin:dialog|open":
       return "/Users/dj/Music/rekordbox/collection.xml";
     default:

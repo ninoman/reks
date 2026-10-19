@@ -15,6 +15,8 @@ use reks_core::{
 use reks_export_rb::device::{self, DeviceInfo};
 use reks_export_rb::dryrun::{self, DryRun};
 use reks_export_rb::plan::{ExportOptions, Selection};
+use reks_export_rb::report::{self, ProgressView, ReportView};
+use reks_export_rb::{ApplyEnv, StickCheck};
 use reks_mix::{PlayerState, Reopened};
 use serde::Serialize;
 use tauri::ipc::{Channel, Response};
@@ -418,22 +420,121 @@ pub async fn device_eject(mount_point: PathBuf) -> CmdResult<()> {
     Ok(tauri::async_runtime::spawn_blocking(move || device::eject_at(&mount_point)).await??)
 }
 
+/// A dry run and the id `export_apply` takes to write exactly that plan.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannedExport {
+    plan_id: u64,
+    #[serde(flatten)]
+    dry_run: DryRun,
+}
+
 /// Dry run of exporting `selection` to the stick mounted at `mount_point`
 /// (phase 2 task 10): plans, writes nothing, returns the plan as the UI shows
 /// it. Scans rekordbox's analysis folders and samples file bytes, so it runs
-/// on a blocking worker.
+/// on a blocking worker. The plan is kept under the returned id (the newest
+/// call wins) for `export_apply`.
 #[tauri::command]
 pub async fn export_plan(
     state: State<'_, AppState>,
     mount_point: PathBuf,
     selection: Selection,
     options: ExportOptions,
-) -> CmdResult<DryRun> {
+) -> CmdResult<PlannedExport> {
+    let plan_id = {
+        let mut shown = state
+            .shown_plan
+            .lock()
+            .map_err(|_| "export state poisoned")?;
+        shown.last_id += 1;
+        shown.last_id
+    };
     let lib = Arc::clone(&state.library);
-    let dry_run = tauri::async_runtime::spawn_blocking(move || {
-        dryrun::plan_at(&lib, &selection, &mount_point, &options)
-            .map(|plan| DryRun::build(&lib, &plan))
+    let sel = selection.clone();
+    let (plan, dry_run) = tauri::async_runtime::spawn_blocking(move || {
+        dryrun::plan_at(&lib, &sel, &mount_point, &options).map(|plan| {
+            let dry_run = DryRun::build(&lib, &plan);
+            (plan, dry_run)
+        })
     })
     .await??;
-    Ok(dry_run)
+    let mut shown = state
+        .shown_plan
+        .lock()
+        .map_err(|_| "export state poisoned")?;
+    if shown.last_id == plan_id {
+        shown.plan = Some((plan_id, plan, selection));
+    }
+    Ok(PlannedExport { plan_id, dry_run })
+}
+
+/// Writes the plan the dry run `plan_id` showed to its stick
+/// (`reks_export_rb::apply`), streaming progress to `on_event`. Refused when
+/// a newer dry run replaced it or it was already exported; `apply` itself
+/// refuses a stick that changed since. Problems with the export are in the
+/// returned report, not errors.
+#[tauri::command]
+pub async fn export_apply(
+    state: State<'_, AppState>,
+    plan_id: u64,
+    on_event: Channel<ProgressView>,
+) -> CmdResult<ReportView> {
+    let (_, plan, selection) = {
+        let mut shown = state
+            .shown_plan
+            .lock()
+            .map_err(|_| "export state poisoned")?;
+        match shown.plan.take() {
+            Some(p) if p.0 == plan_id => p,
+            other => {
+                shown.plan = other;
+                return Err(CmdError(
+                    "this dry run is out of date or was already exported; plan again".into(),
+                ));
+            }
+        }
+    };
+    let cancel = CancelToken::new();
+    {
+        let mut running = state
+            .export_cancel
+            .lock()
+            .map_err(|_| "export state poisoned")?;
+        if running.is_some() {
+            return Err(CmdError("an export is already running".into()));
+        }
+        *running = Some(cancel.clone());
+    }
+    let lib = Arc::clone(&state.library);
+    let data_dir = state.data_dir.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let labels = dryrun::plan_track_labels(&lib, &plan);
+        let env = ApplyEnv {
+            library: &lib,
+            app_data_dir: &data_dir,
+            stick: StickCheck::Mounted,
+        };
+        let progress = |v: ProgressView| {
+            if let Err(err) = on_event.send(v) {
+                tracing::warn!(%err, "export progress channel closed");
+            }
+        };
+        report::export(&env, &plan, &selection, labels, &progress, &cancel)
+    })
+    .await;
+    if let Ok(mut running) = state.export_cancel.lock() {
+        *running = None;
+    }
+    Ok(result?)
+}
+
+/// Asks the running export, if any, to stop. Takes effect until the new
+/// `export.pdb` is written; the progress says when that is.
+#[tauri::command]
+pub fn export_cancel(state: State<'_, AppState>) {
+    if let Ok(running) = state.export_cancel.lock() {
+        if let Some(c) = running.as_ref() {
+            c.cancel();
+        }
+    }
 }

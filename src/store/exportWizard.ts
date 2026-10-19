@@ -1,28 +1,52 @@
 /**
  * USB export wizard (phase 2 task 10): device → playlists → options → dry
- * run. Entering the dry-run step asks Rust for the plan (`export_plan`);
- * going back and forward plans again, and a newer plan drops older answers.
- * Writing (task 9's `apply`), progress and the report come later.
+ * run → writing → report. Entering the dry-run step asks Rust for the plan
+ * (`export_plan`); going back and forward plans again, and a newer plan drops
+ * older answers. Export writes exactly the plan the dry run shows
+ * (`export_apply` with its `planId`); the wizard can't be closed while it
+ * runs.
  */
 import { create } from "zustand";
 
 import {
   type DryRun,
+  deviceEject,
   type ExportOptions,
+  type ExportProgress,
+  type ExportReportView,
   type ExportSelection,
+  exportApply,
+  exportCancel,
   exportPlan,
   type PlaylistNode,
 } from "../lib/ipc";
+import { useDevices } from "./devices";
 import { usePlaylists } from "./playlists";
 
-export type ExportStep = "closed" | "device" | "playlists" | "options" | "dryRun";
+export type ExportStep =
+  | "closed"
+  | "device"
+  | "playlists"
+  | "options"
+  | "dryRun"
+  | "writing"
+  | "report";
 
 export const EXPORT_STEPS: Exclude<ExportStep, "closed">[] = [
   "device",
   "playlists",
   "options",
   "dryRun",
+  "writing",
+  "report",
 ];
+
+/** Ejecting the stick from the report step. */
+export interface EjectState {
+  state: "idle" | "ejecting" | "done" | "failed";
+  /** "REKS ejected. You can remove it." or the error. */
+  message: string | null;
+}
 
 /** `ExportOptions::default()` in Rust. */
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
@@ -43,6 +67,11 @@ interface ExportWizardState {
   options: ExportOptions;
   dryRun: DryRun | null;
   planning: boolean;
+  /** Latest progress of the running export. */
+  progress: ExportProgress | null;
+  cancelling: boolean;
+  report: ExportReportView | null;
+  eject: EjectState;
   error: string | null;
 
   open(init?: { mountPoint?: string | null; playlists?: number[] }): void;
@@ -55,6 +84,14 @@ interface ExportWizardState {
   back(): void;
   /** Plans again (dry-run step). */
   replan(nodes: PlaylistNode[]): Promise<void>;
+  /** Writes the shown plan (dry-run step, when it is ready). */
+  startExport(): Promise<void>;
+  /** Asks the running export to stop. */
+  cancelExport(): Promise<void>;
+  /** Report step: back to a fresh dry run. */
+  planAgain(nodes: PlaylistNode[]): Promise<void>;
+  /** Report step: ejects the stick. */
+  ejectStick(): Promise<void>;
 }
 
 /** Ids that a ticked folder above them already covers. */
@@ -101,6 +138,10 @@ const idle = {
   options: DEFAULT_EXPORT_OPTIONS,
   dryRun: null,
   planning: false,
+  progress: null,
+  cancelling: false,
+  report: null,
+  eject: { state: "idle", message: null } as EjectState,
   error: null,
 };
 
@@ -120,6 +161,8 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
   },
 
   close() {
+    // The export runs to its end; the user can cancel it instead.
+    if (get().step === "writing") return;
     generation++;
     set(idle);
   },
@@ -152,6 +195,7 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
   },
 
   back() {
+    if (get().step === "writing" || get().step === "report") return;
     const i = EXPORT_STEPS.indexOf(get().step as (typeof EXPORT_STEPS)[number]);
     const step = EXPORT_STEPS[i - 1];
     if (step === undefined) return;
@@ -170,6 +214,59 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
     } catch (e) {
       if (mine === generation) set({ planning: false, error: `Could not plan: ${String(e)}` });
     }
+  },
+
+  async startExport() {
+    const { step, dryRun, planning } = get();
+    if (step !== "dryRun" || planning || dryRun === null || !dryRun.ready) return;
+    const mine = ++generation;
+    set({ step: "writing", progress: null, cancelling: false, report: null, error: null });
+    try {
+      const report = await exportApply(dryRun.planId, (progress) => {
+        if (mine === generation) set({ progress });
+      });
+      if (mine === generation) set({ step: "report", report });
+    } catch (e) {
+      if (mine === generation) set({ step: "report", error: `Could not export: ${String(e)}` });
+    }
+  },
+
+  async cancelExport() {
+    const { step, progress, cancelling } = get();
+    if (step !== "writing" || cancelling || progress?.cancellable === false) return;
+    set({ cancelling: true });
+    try {
+      await exportCancel();
+    } catch {
+      set({ cancelling: false });
+    }
+  },
+
+  async planAgain(nodes) {
+    if (get().step !== "report") return;
+    set({
+      step: "dryRun",
+      report: null,
+      progress: null,
+      eject: idle.eject,
+      error: null,
+    });
+    await get().replan(nodes);
+  },
+
+  async ejectStick() {
+    const { step, report, mountPoint, eject } = get();
+    const target = report?.mountPoint ?? mountPoint;
+    if (step !== "report" || target === null || eject.state === "ejecting") return;
+    const name = report?.deviceName ?? target;
+    set({ eject: { state: "ejecting", message: null } });
+    try {
+      await deviceEject(target);
+      set({ eject: { state: "done", message: `${name} ejected. You can remove it.` } });
+    } catch (e) {
+      set({ eject: { state: "failed", message: `Could not eject ${name}: ${String(e)}` } });
+    }
+    void useDevices.getState().refresh();
   },
 }));
 

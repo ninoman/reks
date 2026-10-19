@@ -184,12 +184,22 @@ pub type TrackLabels = HashMap<TrackId, String>;
 /// Labels for every track a warning or problem of `plan` names, from `lib`.
 /// Tracks no longer in the library are left out (shown as `track <id>`).
 pub fn track_labels(lib: &Library, plan: &ExportPlan) -> TrackLabels {
-    let mut ids: Vec<TrackId> = plan
-        .warnings
-        .iter()
-        .filter_map(warning_track)
-        .chain(plan.errors.iter().filter_map(problem_track))
-        .collect();
+    labels_for(
+        lib,
+        plan.warnings
+            .iter()
+            .filter_map(warning_track)
+            .chain(plan.errors.iter().filter_map(problem_track)),
+    )
+}
+
+/// Labels for every track of `plan`, for the export's progress and report.
+pub fn plan_track_labels(lib: &Library, plan: &ExportPlan) -> TrackLabels {
+    labels_for(lib, plan.tracks.iter().map(|t| t.track_id))
+}
+
+fn labels_for(lib: &Library, ids: impl Iterator<Item = TrackId>) -> TrackLabels {
+    let mut ids: Vec<TrackId> = ids.collect();
     ids.sort_unstable();
     ids.dedup();
     ids.into_iter()
@@ -211,6 +221,14 @@ pub fn track_labels(lib: &Library, plan: &ExportPlan) -> TrackLabels {
         .collect()
 }
 
+/// `labels[id]`, else `track <id>`.
+pub(crate) fn track_label(labels: &TrackLabels, id: TrackId) -> String {
+    labels
+        .get(&id)
+        .cloned()
+        .unwrap_or_else(|| format!("track {id}"))
+}
+
 impl DryRun {
     /// [`Self::new`] with labels from `lib`.
     pub fn build(lib: &Library, plan: &ExportPlan) -> Self {
@@ -218,12 +236,7 @@ impl DryRun {
     }
 
     pub fn new(plan: &ExportPlan, labels: &TrackLabels) -> Self {
-        let track = |id: TrackId| {
-            labels
-                .get(&id)
-                .cloned()
-                .unwrap_or_else(|| format!("track {id}"))
-        };
+        let track = |id: TrackId| track_label(labels, id);
         let playlist_names: HashMap<PlaylistId, &str> = plan
             .playlists
             .iter()
@@ -287,7 +300,7 @@ pub fn target_label(t: TargetProfile) -> &'static str {
     }
 }
 
-fn count(n: usize, one: &str, many: &str) -> String {
+pub(crate) fn count(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
 
@@ -298,17 +311,9 @@ fn device_view(dev: &DeviceInfo, volume_serial: Option<String>) -> DeviceView {
         FsKind::Hfs => "Mac OS Extended",
         FsKind::Other(name) => name.as_str(),
     };
-    let name = if dev.label.is_empty() {
-        dev.mount_point.file_name().map_or_else(
-            || dev.mount_point.display().to_string(),
-            |n| n.to_string_lossy().into_owned(),
-        )
-    } else {
-        dev.label.clone()
-    };
     DeviceView {
         mount_point: dev.mount_point.clone(),
-        name,
+        name: device_name(dev),
         fs_text: if dev.fs_name.is_empty() || dev.fs_name.eq_ignore_ascii_case(kind) {
             kind.to_owned()
         } else {
@@ -320,6 +325,18 @@ fn device_view(dev: &DeviceInfo, volume_serial: Option<String>) -> DeviceView {
             human_bytes(dev.total_bytes)
         ),
         volume_serial,
+    }
+}
+
+/// The label, else the mount point's last component.
+pub(crate) fn device_name(dev: &DeviceInfo) -> String {
+    if dev.label.is_empty() {
+        dev.mount_point.file_name().map_or_else(
+            || dev.mount_point.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        )
+    } else {
+        dev.label.clone()
     }
 }
 
@@ -509,12 +526,13 @@ fn history_view(plan: &ExportPlan) -> HistoryView {
     let action_text = match policy {
         HistoryPolicy::BackUp => format!(
             "Before writing anything, reks copies {} ({}) to its data folder and checks the \
-             copies; if the backup fails, nothing is written.",
+             copies; if the backup fails, nothing is written. The report after the export \
+             shows where the copies are.",
             count(backups.count, "database file", "database files"),
             human_bytes(backups.bytes)
         ),
         HistoryPolicy::Discard if confirmed => {
-            "You chose to discard it: no backup is made.".to_owned()
+            "You chose to discard it: it is erased without a backup.".to_owned()
         }
         HistoryPolicy::Discard => {
             "Discarding it needs your confirmation in the options.".to_owned()
@@ -530,7 +548,7 @@ fn history_view(plan: &ExportPlan) -> HistoryView {
     }
 }
 
-fn capitalise(s: &str) -> String {
+pub(crate) fn capitalise(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
         Some(f) => f.to_uppercase().chain(c).collect(),
@@ -540,13 +558,13 @@ fn capitalise(s: &str) -> String {
 
 /// Groups notices by kind, keeping the order kinds first appear in.
 #[derive(Default)]
-struct Groups {
+pub(crate) struct Groups {
     order: Vec<&'static str>,
     items: HashMap<&'static str, Vec<String>>,
 }
 
 impl Groups {
-    fn push(&mut self, kind: &'static str, item: String) {
+    pub(crate) fn push(&mut self, kind: &'static str, item: String) {
         let items = self.items.entry(kind).or_insert_with(|| {
             self.order.push(kind);
             Vec::new()
@@ -556,7 +574,10 @@ impl Groups {
 
     /// `title(kind, items)` titles a list of items; for kinds where it gives
     /// `None`, each item is a sentence and they become the title.
-    fn finish(mut self, title: impl Fn(&str, &[String]) -> Option<String>) -> Vec<NoticeGroup> {
+    pub(crate) fn finish(
+        mut self,
+        title: impl Fn(&str, &[String]) -> Option<String>,
+    ) -> Vec<NoticeGroup> {
         self.order
             .iter()
             .map(|&kind| {
