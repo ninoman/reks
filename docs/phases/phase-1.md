@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (tasks 1–8 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–9 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -172,8 +172,9 @@ impl Library {
     pub fn open(db_path: &Path, cache_dir: &Path) -> Result<Self>;      // runs migrations
     pub fn tracks(&self, q: &TrackQuery) -> Result<TrackPage>;          // { rows, total }; paged, sorted, filtered
     pub fn facets(&self) -> Result<Facets>;                             // genres, keys, colours, playlists for filters
-    pub fn track(&self, id: TrackId) -> Result<TrackDetail>;            // with grid, cues, artwork
-    pub fn update_track(&self, id: TrackId, patch: TrackPatch) -> Result<()>;
+    pub fn track(&self, id: TrackId) -> Result<TrackDetail>;            // track, cues, grid summary
+    pub fn update_track(&self, id: TrackId, patch: &TrackPatch) -> Result<TrackDetail>;
+    pub fn artwork(&self, id: ArtworkId) -> Result<Vec<u8>>;            // image bytes
     pub fn playlists(&self) -> Result<PlaylistTree>;
     pub fn playlist_mutate(&self, op: PlaylistOp) -> Result<()>;
 }
@@ -321,6 +322,36 @@ Notes (task 8, [`query.rs`](../../crates/reks-core/src/query.rs), [`src/`](../..
   missing) to import in the app. The fixture XML imports with its files missing until
   "Locate folder…" points it at `fixtures/audio`.
 
+Notes (task 9, [`track.rs`](../../crates/reks-core/src/track.rs), [`TrackDetailPanel`](../../src/components/TrackDetailPanel.tsx))
+- `Library::track(id) -> TrackDetail { track, cues, beatgrid }`. `Track` serialises as the
+  `TrackRow` fields (flattened) plus every other column and `artwork { id, mime, width,
+  height }`, so the UI can drop it into the table cache. Cues come hot cues by slot first,
+  then memory cues and loops by start. `beatgrid` is `{ markers, firstBeatMs, bpmMinX100,
+  bpmMaxX100 }`, or `null` when there is no grid. An unknown id is `Error::TrackNotFound`.
+- Editable: title, artist, album, album_artist, genre, composer, remixer, label, mix,
+  grouping, comment, track_no, disc_no, year, rating, color, key. BPM, grid and cues are
+  read-only (grid editing is a later phase). Edits change the DB only, never the file tags.
+- `TrackPatch`: an absent field is unchanged, `null` clears it. Unknown fields are refused.
+  Every field is validated before anything is written, and a failure is
+  `Error::InvalidField { field, reason }` with the row left unchanged. Text is trimmed,
+  empty means NULL, and the limit is 1,024 chars (our own guard). Control characters are
+  refused (comment allows LF and tab), since they can't round-trip through rekordbox XML.
+  track_no and disc_no take 1–999, year 1–9999 and rating 0–5. Colour is a
+  `TRACK_COLOURS` name in any case, stored lowercase. Key accepts any `keys.rs` notation,
+  stored canonical with `key_source = 'manual'`; clearing it clears `key_source`.
+- An edit sets `updated_at` (UTC ISO-8601) in the same transaction. An empty patch writes
+  nothing. The 0001 `track_fts_au` trigger re-indexes FTS when a searched column changes.
+- `artwork_get(artwork_id)` returns the cached image as raw bytes (`ipc::Response`). The UI
+  shows it through a Blob URL with `artwork.mime`, and shows a placeholder when there is
+  no artwork or the cache file is gone.
+- UI: the panel follows the primary selected row (`primaryIndex`: the focused row if it is
+  selected, else the lowest selected one), so with several rows selected it shows one track.
+  Bulk edit is not built yet. Save sends only the changed fields; Revert or Esc resets.
+  Switching tracks drops unsaved edits, and a rejected save shows the core error inline.
+  After a save, `replaceRow` swaps the row into the loaded pages without re-querying, so
+  selection and scroll stay put. A row that no longer matches the filter or sort stays until
+  the next refresh. Facets are reloaded so a new genre shows up in the filter.
+
 ### Audio (`reks-audio`)
 
 ```rust
@@ -373,7 +404,7 @@ Scan rules (task 5, [`scan.rs`](../../crates/reks-core/src/scan.rs))
 `playlists_mutate`, `scan_start` (progress via `Channel<ScanEvent>`), `scan_cancel`,
 `rbxml_import_start` (progress via Channel), `rbxml_export`,
 `player_load/play/pause/seek/volume/devices`, `player_state` (polled or event
-every 100 ms), `artwork_get(id) -> Response(bytes)`, `overview_waveform(id) ->
+every 100 ms), `artwork_get(artwork_id) -> Response(bytes)`, `overview_waveform(id) ->
 Response(bytes)`.
 
 ## Tasks (each sized for one coding session)
@@ -410,7 +441,7 @@ Response(bytes)`.
 8. [x] **Track table UI**: virtualised table (`@tanstack/react-virtual` +
    `@tanstack/react-table`), column chooser, sorting, 50 ms debounced search
    calling `library_query`, filters sidebar, multi-select, keyboard navigation.
-9. [ ] **Track detail + inline edit**: side panel with editable fields, cue and
+9. [x] **Track detail + inline edit**: side panel with editable fields, cue and
    grid listing (read-only), artwork display via `artwork_get`.
 10. [ ] **Playlists UI**: tree, create/rename/delete folder/playlist, drag tracks,
     reorder, context menu; backed by `playlists_mutate` ops.
