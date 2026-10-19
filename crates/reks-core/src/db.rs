@@ -14,7 +14,10 @@ use rusqlite_migration::{Migrations, M};
 use crate::error::{Error, Result};
 
 /// Ordered schema migrations. Append only; never edit a released migration.
-const MIGRATION_LIST: &[M<'static>] = &[M::up(include_str!("../migrations/0001_init.sql"))];
+const MIGRATION_LIST: &[M<'static>] = &[
+    M::up(include_str!("../migrations/0001_init.sql")),
+    M::up(include_str!("../migrations/0002_export_manifest.sql")),
+];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 
 /// Schema version after all migrations (SQLite `user_version`).
@@ -189,12 +192,14 @@ mod tests {
             ("table", "library_root"),
             ("table", "setting"),
             ("table", "track_fts"),
+            ("table", "export_manifest"),
             ("index", "track_artist_idx"),
             ("index", "track_bpm_idx"),
             ("index", "track_key_idx"),
             ("index", "beatgrid_track_idx"),
             ("index", "cue_track_idx"),
             ("index", "playlist_track_track_idx"),
+            ("index", "export_manifest_track_idx"),
             ("trigger", "track_fts_ai"),
             ("trigger", "track_fts_ad"),
             ("trigger", "track_fts_au"),

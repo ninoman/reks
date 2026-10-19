@@ -10,3 +10,21 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+baken-export = { workspace = true }
+binrw = { workspace = true }
+blake3 = { workspace = true }
+rekordcrate = { workspace = true }
+reks-audio = { workspace = true }
+reks-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sysinfo = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+unicode-normalization = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

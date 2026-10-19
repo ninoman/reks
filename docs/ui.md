@@ -1,6 +1,6 @@
 # UI design system
 
-How the React UI is styled. Why this stack: [D24](decisions.md#d24-ui-styling-tailwind-v4--cva--radix).
+How the React UI is styled. Why this stack: [D26](decisions.md#d26-ui-styling-tailwind-v4--cva--radix).
 The look is adapted from a design analysis of Cursor's marketing site (warm
 cream canvas, warm ink, hairline depth, one scarce accent, 8px control radius)
 at desktop density, with system fonts and a derived dark theme. The accent is

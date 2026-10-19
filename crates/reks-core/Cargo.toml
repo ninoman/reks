@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 blake3 = { workspace = true }
+deunicode = { workspace = true }
 imagesize = { workspace = true }
 percent-encoding = { workspace = true }
 quick-xml = { workspace = true }
@@ -26,5 +27,7 @@ unicode-normalization = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
+baken-export = { workspace = true }
 lofty = { workspace = true }
+proptest = { workspace = true }
 tempfile = { workspace = true }

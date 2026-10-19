@@ -201,7 +201,7 @@ pub mod rbxml {  // rekordbox XML
     pub fn import(c: &Collection, lib: &Library, opts: ImportOptions, progress: impl Fn(ImportEvent))
         -> Result<ImportReport>;
     pub fn preview(c: &Collection, lib: &Library, opts: &ImportOptions) -> Result<ImportPreview>;  // writes nothing
-    pub fn export(lib: &Library, selection: Selection) -> Result<Collection>;
+    pub fn export(lib: &Library, sel: &Selection) -> Result<XmlExport>;   // Phase 2 task 6; XmlExport.collection
     pub fn location_to_path(url: &str) -> Result<PathBuf>;              // file://localhost/... → path, percent-decoded, NFC
     pub fn path_to_location(path: &Path) -> Result<String>;             // inverse, for export
 }

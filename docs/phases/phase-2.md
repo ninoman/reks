@@ -1,6 +1,6 @@
 # Phase 2 — Legacy USB export (`export.pdb` + ANLZ)
 
-Status: not started. Depends on: Phase 1 (library, XML writer, playlists,
+Status: in progress (tasks 2–6 done, 1, 12, 13 backend done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
 `rb_track_id`/`rb_location`). Read `docs/decisions.md` D7, D8, D16, D23 and
 `docs/research.md` §1, §4, §10 first.
 
@@ -53,8 +53,8 @@ pub struct ExportPlan {
     pub copies: Vec<FileOp>,                 // audio to copy (src, dst, bytes, reason)
     pub anlz: Vec<AnlzOp>,                   // per track: CopyFromCache{src}, Generate, Missing
     pub deletes: Vec<FileOp>,                // stale audio/ANLZ/artwork to remove (prune)
-    pub history: StickHistory,               // what players left on the stick (D23)
-    pub backups: Vec<FileOp>,                // stick DB files copied to app_data_dir before any write
+    pub history: StickHistory,               // what players left on the stick (D23); task 12, not in the code yet
+    pub backups: Vec<FileOp>,                // stick DB files copied to app_data_dir before any write; task 12
     pub warnings: Vec<Warning>,              // e.g. FLAC on NXS target, path > 255, exFAT
     pub errors: Vec<Problem>,                // blockers: missing file, > 4 GiB on FAT32, WAV_EXTENSIBLE
     pub bytes_to_write: u64, pub bytes_free_after: i64,
@@ -70,7 +70,8 @@ pub struct StickHistory { pub volume_serial: Option<String>,             // FAT/
                           pub onelibrary_db: bool }                     // exportLibrary.db present (baken removes it)
 pub enum HistoryPolicy { BackUp /* default */, Discard /* only after an explicit confirm */ }   // Phase 2.5 adds Import
 
-pub fn plan(lib: &Library, sel: &Selection, dev: &DeviceInfo, opts: &ExportOptions) -> Result<ExportPlan>;
+pub fn plan(lib: &Library, sel: &Selection, dev: &DeviceInfo, opts: &ExportOptions, anlz: &dyn AnlzLocator)
+    -> Result<ExportPlan, PlanError>;   // done: crates/reks-export-rb/src/plan/
 pub fn apply(plan: &ExportPlan, writer: &dyn RekordboxWriter, progress: impl Fn(ExportEvent), cancel: &CancelToken)
     -> Result<ExportReport>;
 
@@ -88,13 +89,24 @@ pub mod fsname {   // FAT32-safe naming, shared with Phase 4/5
     pub fn contents_path(artist: &str, album: &str, file: &str) -> String; // /Contents/<Artist>/<Album>/<file>, depth ≤ 3
     pub fn dedupe(existing: &mut HashSet<String>, path: String) -> String; // case-insensitive, -1/-2 suffixes
 }
-pub mod audiocheck {
-    pub enum Issue { WavExtensible, FloatWav, SampleRateUnsupported(u32), Channels(u8), AiffC, VbrNoXing, Over4GiB, Codec(Kind) }
-    pub fn check(path: &Path, probe: &Probe, target: TargetProfile) -> Vec<Issue>;
+pub mod audiocheck {   // done: crates/reks-export-rb/src/audiocheck.rs
+    pub enum Issue { WavExtensible, FloatWav, WavFormat(u16), BitDepth(u8), SampleRateUnsupported(u32),
+                     Channels(u8), AiffC, VbrNoXing, Over4GiB, Codec(Kind) }
+    pub enum Severity { Warning, Error }                       // Issue::severity(target)
+    pub fn check(path: &Path, probe: &Probe, target: TargetProfile) -> Result<Vec<Issue>, Error>;  // Err = unreadable/malformed header
 }
-pub mod rbcache {   // rekordbox's local analysis files for imported tracks
-    pub fn default_roots() -> Vec<PathBuf>;                      // macOS: ~/Library/Pioneer/rekordbox/share/PIONEER/USBANLZ, Windows: %APPDATA%\Pioneer\rekordbox\share\PIONEER\USBANLZ (verify)
-    pub fn locate(track: &TrackRow, roots: &[PathBuf]) -> Option<AnlzSet>; // delegate to baken's locate, or own index of PPTH → files
+pub mod rbcache {   // done: crates/reks-export-rb/src/rbcache.rs
+    pub fn default_roots() -> Vec<PathBuf>;                      // baken's: macOS ~/Library/Pioneer/rekordbox/share/PIONEER/USBANLZ (verified), Windows %APPDATA%\... (UNVERIFIED), library drives
+    pub struct AnlzQuery { pub path: String, pub total_time_s: u32, pub first_tempo: Option<(f64, f64)> } // From<&baken Track>
+    pub struct RbCache;                                          // RbCache::scan(roots) once, then .locate(&AnlzQuery) -> Lookup
+    pub enum Lookup { Found(AnlzSet), Missing(Missing) }         // Missing::{NoRoots, NotAnalysed, Mismatch}
+    pub struct AnlzSet { pub dat: PathBuf, pub ext: Option<PathBuf>, pub two_ex: Option<PathBuf>, pub beats: u32 }
+}
+pub mod rbxml {     // in reks-core; done: crates/reks-core/src/rbxml/export.rs
+    pub struct Selection { pub playlists: Vec<PlaylistId> }      // playlists or folders (= every playlist under it)
+    pub fn export(lib: &Library, sel: &Selection) -> Result<XmlExport>;          // { collection, playlists: Vec<(id, "Folder/Name")> }
+    pub fn export_file(lib: &Library, sel: &Selection, path: &Path) -> Result<XmlExport>;
+    impl XmlExport { pub fn baken_playlists(&self) -> Vec<String>; }            // Options.playlists
 }
 ```
 
@@ -142,6 +154,7 @@ CREATE TABLE export_manifest (              -- latest export to each stick
   exported_at   TEXT NOT NULL,
   PRIMARY KEY (volume_serial, stick_path)
 );
+CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON DELETE SET NULL
 ```
 
 ## Tasks
@@ -152,24 +165,83 @@ CREATE TABLE export_manifest (              -- latest export to each stick
    `NSRemovableVolumesUsageDescription`; eject command (`diskutil` on macOS,
    IOCTL on Windows, `udisksctl`/`eject` on Linux). Tests with a temp dir
    "fake device".
-2. **fsname + path planning**: implement `fsname`, `/Contents` layout, depth
+   - [x] Backend: `reks_export_rb::device` — `list_devices`/`list_removable`,
+     `device_for_path`, `eject` (typed `DeviceError`, refuses non-removable
+     volumes), `volume_serial` for task 12 (UNVERIFIED, R§10.1). Parsing is
+     pure (`device::parse`, captured `diskutil` plist in `fixtures/device/`);
+     `src-tauri/Info.plist` carries `NSRemovableVolumesUsageDescription`.
+     Checked live on macOS with a FAT32 disk image (ignored test
+     `live_volume_discovery_serial_and_eject`); Windows and Linux paths only
+     compile-checked (clippy for both targets).
+   - [ ] Tauri commands (list, eject) and the UI picker: wait for the UI
+     redesign; build with task 10.
+   - [ ] Eject on Windows and Linux, and `volume_serial` on all three OSes,
+     against a real stick.
+2. [x] **fsname + path planning**: implement `fsname`, `/Contents` layout, depth
    and length limits (255 full path, 8 levels), case-insensitive dedupe,
-   NFC; property tests.
-3. **audiocheck**: parse WAV/AIFF headers (format tag, bit depth, float),
-   MP3 Xing/Info presence, sample rate/channels from probe; map to `Issue`
-   with target-dependent severity (FLAC/ALAC warn on NXS, error on NXS1);
-   tests on crafted headers in fixtures.
-4. **Planner**: selection → `ExportPlan` with copies, anlz ops, deletes,
+   NFC; property tests. Done in `reks-core::fsname`
+   ([fsname.rs](../../crates/reks-core/src/fsname.rs)): stick paths are
+   ASCII-transliterated (D24); forbidden characters become `_`; reserved
+   names get a `_` (`CON` → `CON_`); artist/album folders ≤ 64 characters and
+   `contents_path` leaves 6 characters for a dedupe suffix; `check_path`
+   validates any stick path (also non-ASCII ones rekordbox wrote) for the
+   planner and validator. Folders that differ only in case are not merged
+   (same folder on FAT32); the planner (task 4) seeds `dedupe` with the
+   stick's existing paths via `fold_key`.
+3. [x] **audiocheck**: parse WAV/AIFF headers (format tag, bit depth, float),
+   MP3 Xing/Info/VBRI presence, sample rate/channels from probe; map to `Issue`
+   with target-dependent severity (FLAC/ALAC warn on NXS2/XDJ-XZ/Generic,
+   error on NXS1; VBR without seek header warns; 88.2/96 kHz on CDJ-3000
+   warns, UNVERIFIED; the rest are errors); tests on headers crafted in code
+   plus the generated fixtures.
+4. [x] **Planner**: selection → `ExportPlan` with copies, anlz ops, deletes,
    warnings, errors, byte totals; stable `/Contents` paths across re-exports
    (reuse existing path if the same source file is already on the stick:
    compare size + mtime or hash); unit tests on fake device trees.
-5. **rbcache locate**: find rekordbox's local ANLZ for an imported track
+   Done in `reks_export_rb::plan` ([plan/](../../crates/reks-export-rb/src/plan/mod.rs)):
+   `plan(lib, sel, dev, opts, anlz)`; `plan_sources` takes pre-loaded
+   `Sources` (tests). Reuse = same size and extension, stick copy not older
+   than the source (2 s FAT slack; baken doesn't keep source times), and 3 ×
+   64 KiB sampled bytes equal; only ASCII paths are reused (D24). New copies
+   never overwrite: `dedupe` is seeded with every path on the stick. Stale
+   ANLZ is found through `anlz_dir` (path hash, R§4); with `artwork` on,
+   `/PIONEER/Artwork` is the writer's and no deletes are listed there.
+   Per-track blockers (missing source, audiocheck errors) block the plan
+   unless `skip_unsupported`; tracks without analysis follow
+   `MissingAnalysis` (default `Skip`). `AnlzLocator` is the seam for task 5
+   (`NoAnlz` until then). `history`/`backups` are not in `ExportPlan` yet
+   (task 12). For task 7: baken assigns its own `/Contents` paths (Unicode,
+   48-character cut), so the writer must make it use the plan's `dst_rel`,
+   or plan and stick disagree.
+5. [x] **rbcache locate**: find rekordbox's local ANLZ for an imported track
    (use baken's `anlz_roots` default resolution; add an index that scans
    roots once and maps PPTH → files for our own needs); report `Missing`.
-6. **XML bridge for baken**: `rbxml::export(lib, selection)` to a temp file
+   Done in [rbcache.rs](../../crates/reks-export-rb/src/rbcache.rs): wraps
+   baken's `AnlzIndex` (one scan, PPTH file name → `.DAT`s), so the dry run
+   predicts exactly what baken copies. baken matches on the file name, then
+   requires the first beat (±2 ms) and BPM of the XML's first `TEMPO`, and
+   prefers a grid whose length agrees with `TotalTime` (±3 s); a track
+   without a grid only takes an analysis without one. `Missing` says why:
+   no root, never analysed, or a same-named file that doesn't match. Build
+   `AnlzQuery` from the temp XML parsed with `baken_export::collection`, so
+   both see the same values. macOS root checked on the maintainer's machine
+   (2026-10-19, `USBANLZ/<3 hex>/<id>/ANLZ0000.{DAT,EXT,2EX}`, PPTH
+   `?/<file name>`); Windows and library-drive roots UNVERIFIED.
+6. [x] **XML bridge for baken**: `rbxml::export(lib, selection)` to a temp file
    with only the planned playlists; map our `Selection` to baken
    `Options.playlists` (`Folder/Name` paths). Test that the temp XML parses
    with our parser and baken's `collection` module.
+   Done in [rbxml/export.rs](../../crates/reks-core/src/rbxml/export.rs),
+   tests in [rbxml_export.rs](../../crates/reks-core/tests/rbxml_export.rs).
+   The file holds the selected playlists (a folder = all playlists under
+   it), their ancestor folders in library order, and each referenced track
+   once; `TrackID` is our track id, `KeyType` 0. Fields are the inverse of
+   the import (stars × 51, colour name → RGB, `Kind` from `track.kind` with
+   ALAC as `ALAC File`, which baken reads to tell ALAC from AAC). baken picks
+   a playlist by its first exact path match, so when two exported playlists
+   share a path (same-named siblings, or a `/` in a name) `baken_playlists`
+   returns an empty list, which baken reads as every playlist in the file:
+   the same set.
 7. **BakenWriter**: implement `RekordboxWriter` with `baken_export::plan` +
    `export`; translate its `Plan`/`Report`/`Skipped` into our events; handle
    `Error::DeviceWrite`; set `prune`, `no_settings` (unless settings sourced),
@@ -196,10 +268,39 @@ CREATE TABLE export_manifest (              -- latest export to each stick
     start of `apply`; `HistoryPolicy`; dry-run and UI wording. Tests: fixture
     `export.pdb` with history → counts and planned backups; a failing backup
     leaves the stick untouched; `Discard` needs the explicit flag.
+    - [x] Backend: `reks_export_rb::history`
+      ([history.rs](../../crates/reks-export-rb/src/history.rs)).
+      `read_history(root, serial)` counts table 11/12 rows with rekordcrate
+      0.3.0 (own page walk, bounded and cycle-checked; damaged or unreadable
+      PDB → `pdb_unreadable`), notes `exportLibrary.db`; names matched
+      case-insensitively. `plan_backups(root, &history, policy, discard_confirmed)`
+      lists `PIONEER/rekordbox/*.pdb` and `exportLibrary.db` (+ `-wal`/`-shm`/
+      `-journal`) only when the stick may hold history; `Discard` without the
+      flag is `DiscardNotConfirmed`. `run_backups(&plan, app_data_dir)` copies
+      into `stick-backups/<serial|unknown-serial>/<UTC time, ':'→'-'>/` keeping
+      the stick layout, fsyncs, checks BLAKE3 of a second stick read and of the
+      copy, writes `manifest.json` last; any error removes the new folder and
+      returns a typed `HistoryError`. Only reads from the stick. Tests on
+      synthetic PDBs built in code (with/without history, garbage, truncated,
+      looping page chain) and temp-dir sticks.
+    - [ ] Planner (task 4) puts `StickHistory` and the `BackupPlan` files into
+      `ExportPlan`; `apply` (task 9) calls `run_backups` first and aborts on error.
+    - [ ] Real played-stick fixture: `played_stick_fixture_counts` is `#[ignore]`d
+      until `fixtures/rekordbox/played-<ver>/` exists (checklist step 7).
+    - [ ] Dry-run and UI wording (task 10); `reks-cli rb history` (task 11).
+    - [ ] macOS keys backups by `VolumeUUID`, Windows/Linux by the FAT serial
+      (R§10.1), so one stick gets two backup folders across OSes.
 13. **Export manifest**: migration adding `export_manifest`; rows from the
     validator's read-back after each successful export. Tests: re-export
     replaces the serial's rows; deleting a library track keeps its row with
     `track_id` NULL; no serial → no rows, export still succeeds.
+    - [x] Migration `0002_export_manifest.sql` (table above plus a `track_id`
+      index); `Library::replace_manifest(Option<serial>, rows)` (one
+      transaction; no serial → `Ok(0)`, nothing stored; bad rows keep the old
+      ones), `manifest(serial)`, `manifest_entry(serial, stick_path)` in
+      [manifest.rs](../../crates/reks-core/src/manifest.rs), with the three tests.
+    - [ ] Build the rows from the validator's read-back (task 8) and call
+      `replace_manifest` after a successful validation in `apply` (task 9).
 14. **Hardware campaign**: run the checklist on CDJ-2000NXS2 and CDJ-3000
     (and any other player available); fix; log in `docs/hw-test-log.md`.
     Tasks 12–13 come first: the checklist re-exports a played stick.

@@ -83,7 +83,8 @@ Date of decisions: 2026-10-18.
 ## D7. rekordbox legacy USB export writer: `baken-export` behind our adapter
 
 - Licence: MIT (deps verified: baken-core MIT, mp3rgain MIT, symphonia
-  MPL-2.0, rusqlite MIT, image MIT/Apache, RustCrypto crates MIT/Apache).
+  MPL-2.0, rusqlite MIT, image MIT/Apache, RustCrypto crates MIT/Apache,
+  jpeg-encoder MIT/Apache AND IJG, see D18). Pinned `=4.6.1` (2026-10-19).
 - Decision: Phase 2 writes `export.pdb` + ANLZ by (1) generating a rekordbox
   `collection.xml` from our library into a temp dir (we need the XML writer
   anyway, D11), (2) calling `baken_export::plan(&Options)` then
@@ -253,6 +254,13 @@ Date of decisions: 2026-10-18.
   pulled transitively; prefer rustls). Deny: GPL-2.0-only, EPL-1.0, CDDL,
   AGPL-3.0 (requires a recorded decision), SSPL, BUSL, unlicensed.
 - Rationale: CLAUDE.md licence rules must be machine-enforced.
+- 2026-10-19: `IJG` (Independent JPEG Group License) added for `jpeg-encoder`
+  0.7.1 (`(MIT OR Apache-2.0) AND IJG`), pulled in by `baken-export` (D7) for
+  artwork. FSF lists it as free and GPL-compatible
+  (https://www.gnu.org/licenses/license-list.html#ijg). It asks binary
+  distributions to say in their documentation that the software is based in
+  part on the work of the Independent JPEG Group: release notices must carry
+  that line.
 
 ## D19. Naming and identifiers
 
@@ -365,7 +373,53 @@ Date of decisions: 2026-10-18.
 - Risks: history format unknowns (date table, appends across mounts, what a
   player logs as a play) and volume serial access per OS; see R§8 item 14.
 
-## D24. UI styling: Tailwind v4 + cva + Radix
+## D24. Stick paths: ASCII transliteration, metadata stays Unicode
+
+- Date: 2026-10-19 (Phase 2 task 2). Code: `reks-core::fsname`.
+- Decision: every path reks writes under `/Contents` is ASCII. Names are NFC
+  normalised, then transliterated with `deunicode` (BSD-3-Clause): `Кино` →
+  `Kino`, `Sigur Rós` → `Sigur Ros`, kana → romaji, Han → Mandarin readings
+  (`坂本龍一` → `Ban Ben Long Yi`), emoji → words (`🔥` → `fire`). Titles,
+  artists and albums in `export.pdb`/OneLibrary/Engine keep their Unicode, so
+  browse and search are unaffected; only the file name is folded. Collisions
+  that folding creates are resolved by `fsname::dedupe` (`-1`, `-2`).
+- Rationale: CLAUDE.md requires ASCII-safe paths; NFC/NFD and case handling
+  on players have no Pioneer source (R§4, R§8 item 4) and a non-ASCII artist
+  froze an NXS2 in baken before #168 (R§1). ASCII makes the PPTH/`file_path`
+  string identical however the OS or player normalises, and makes character
+  and byte limits the same.
+- Rejected: writing NFC Unicode paths (what rekordbox does; unverified on
+  older players); `_` for every non-ASCII character (unreadable folders,
+  more collisions); hashing names.
+- Risks: Han readings are Mandarin, odd for Japanese users browsing by
+  folder (players browse by metadata, so rarely seen). Revisit if a hardware
+  test shows Unicode paths are safe on all target players.
+
+## D25. File converter: lossless sources to WAV / AIFF / FLAC, own PCM writers, `flacenc`
+
+- Date: 2026-10-19 (maintainer's request). Plan: [`phases/phase-2.6.md`](phases/phase-2.6.md),
+  after Phase 2, independent of Phase 2.5.
+- Decision: convert selected tracks to WAV, AIFF or FLAC with a few settings
+  (bit depth, sample rate, destination, replace or add) and two presets, Older
+  players and Save space. Sources must be lossless (FLAC, ALAC, WAV, AIFF). The
+  converted file takes over the library track; the original is kept unless the
+  user moves it to the Trash. Plan → dry run → apply, as for exports.
+- Licence: `flacenc` 0.5 Apache-2.0 (pure Rust, R§11); `trash` for the optional
+  Trash move (licence to check in task 5); rubato, lofty, Symphonia already in the tree.
+- Rationale: FLAC/ALAC, rates above 48 kHz, float and `WAVE_FORMAT_EXTENSIBLE`
+  WAVs don't load on CDJ-2000NXS and older (R§4); Lexicon and rekordbox-edit
+  fix this by converting (R§11). Cues and grids live in our DB in ms, so a
+  lossless conversion keeps them valid.
+- Own WAV and AIFF writers: `hound` writes `WAVE_FORMAT_EXTENSIBLE` for anything
+  above 16 bits (hound 3.5.1 `write.rs`), the E-8305 breaker (R§4).
+- Rejected: lossy sources (no quality gain, and MP3 decoder-delay handling would
+  shift cues, D4); lossy targets (generation loss, and all players already
+  play MP3/AAC); FFmpeg (D4); `libflac-sys` (C build for no gain); converting
+  during export (a transcoder in the export path; needs its own decision).
+- Risks: rekordbox ANLZ reuse after Replace (CONV1), ID3 chunks in WAV (CONV2),
+  mono on players (CONV3), all **UNVERIFIED** until the Phase 2.6 hardware session.
+
+## D26. UI styling: Tailwind v4 + cva + Radix
 
 - Date: 2026-10-19 (maintainer's call). Design reference: an analysis of Cursor's
   marketing site (DESIGN.md, not in the repo), adapted to desktop density: warm

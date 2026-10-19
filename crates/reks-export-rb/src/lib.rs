@@ -1,6 +1,15 @@
 //! reks legacy rekordbox USB export: plan, dry-run, write, validate
 //!
-//! Scaffold only (Phase 1 task 1). See `docs/phases/` for what lands here.
+//! Phase 2 lands here piece by piece; see `docs/phases/phase-2.md`.
+
+pub mod audiocheck;
+pub mod device;
+pub mod history;
+pub mod plan;
+pub mod rbcache;
+pub mod target;
+
+pub use target::TargetProfile;
 
 /// Crate version, from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
