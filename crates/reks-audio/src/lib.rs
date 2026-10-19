@@ -7,8 +7,10 @@
 //! Phase 2.6 converter building blocks: streaming decode at the source's
 //! precision ([`NativeStream`]), streaming resampling ([`resample`]),
 //! bit-depth conversion with TPDF dither ([`dither`]) and the WAV, AIFF and
-//! FLAC writers ([`write`]). See `docs/phases/phase-2.6.md`.
+//! FLAC writers ([`write`]), and the pipeline that joins them ([`convert()`]).
+//! See `docs/phases/phase-2.6.md`.
 
+pub mod convert;
 pub mod decode;
 pub mod dither;
 pub mod error;
@@ -19,6 +21,7 @@ pub mod resample;
 pub mod tags;
 pub mod write;
 
+pub use convert::{convert, pcm_hash, CancelToken, ConvertSpec, Depth, Output, Rate, Target};
 pub use decode::{decode_stereo, Decoded, StereoPcm, MAX_DECODE_MS};
 pub use dither::Requantiser;
 pub use error::{Error, Result};

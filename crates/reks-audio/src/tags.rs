@@ -93,15 +93,29 @@ pub fn embedded_artwork(path: &Path) -> Result<Option<Picture>> {
     Ok(chosen.filter(|p| !p.data().is_empty()).map(to_picture))
 }
 
-fn read(path: &Path) -> Result<TaggedFile> {
-    lofty::read_from_path(path).map_err(|source| Error::Tags {
+/// Reads `path`, recognising the format by content when the extension does
+/// not name it (the converter's `.reks-tmp` files).
+pub(crate) fn read(path: &Path) -> Result<TaggedFile> {
+    let err = |source| Error::Tags {
         path: path.to_path_buf(),
         source,
-    })
+    };
+    match lofty::read_from_path(path) {
+        Err(e) if e.is_unknown_format() => lofty::probe::Probe::open(path)
+            .map_err(err)?
+            .guess_file_type()
+            .map_err(|source| Error::Io {
+                path: path.to_path_buf(),
+                source,
+            })?
+            .read()
+            .map_err(err),
+        other => other.map_err(err),
+    }
 }
 
 /// Primary tag first, then the rest in file order.
-fn ordered_tags(file: &TaggedFile) -> Vec<&Tag> {
+pub(crate) fn ordered_tags(file: &TaggedFile) -> Vec<&Tag> {
     let primary = file.primary_tag();
     primary
         .into_iter()

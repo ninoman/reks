@@ -47,6 +47,30 @@ pub enum Error {
         #[source]
         source: lofty::error::FileParseError,
     },
+
+    /// lofty could not write tags into a converted file.
+    #[error("cannot write tags to {path}: {source}")]
+    TagWrite {
+        path: PathBuf,
+        #[source]
+        source: lofty::error::FileEncodingError,
+    },
+
+    /// A converter writer failed (I/O, format limits).
+    #[error("cannot write {path}: {source}")]
+    Write {
+        path: PathBuf,
+        #[source]
+        source: crate::write::WriteError,
+    },
+
+    /// The converted file did not read back as written.
+    #[error("{path} failed verification: {reason}")]
+    Verify { path: PathBuf, reason: String },
+
+    /// The operation was cancelled through its [`crate::CancelToken`].
+    #[error("cancelled while converting {path}")]
+    Cancelled { path: PathBuf },
 }
 
 /// Result alias for `reks-audio`.

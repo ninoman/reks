@@ -86,9 +86,7 @@ impl NativeStream {
         let bits_per_sample = if float {
             32
         } else {
-            params
-                .bits_per_sample
-                .and_then(|b| u8::try_from(b).ok())
+            crate::probe::bits_per_sample(&params)
                 .filter(|b| (1..=32).contains(b))
                 .ok_or_else(|| unsupported("unknown bit depth".to_owned()))?
         };
