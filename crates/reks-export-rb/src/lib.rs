@@ -4,6 +4,7 @@
 
 pub mod audiocheck;
 pub mod device;
+pub mod dryrun;
 pub mod history;
 pub mod plan;
 pub mod rbcache;
