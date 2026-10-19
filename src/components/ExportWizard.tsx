@@ -5,7 +5,7 @@
  * `export_apply` → `ExportProgress` / `ExportReportView`); this lays them
  * out.
  */
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 
 import { cn } from "../lib/cn";
 import type {
@@ -22,6 +22,7 @@ import type {
 } from "../lib/ipc";
 import { canContinue, coveredIds, EXPORT_STEPS, useExportWizard } from "../store/exportWizard";
 import { usePlaylists } from "../store/playlists";
+import { useProfiles } from "../store/profiles";
 import { DeviceList } from "./DevicesDialog";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
@@ -74,15 +75,18 @@ const list = "m-0 mt-1 list-disc pl-4.5 text-xs [overflow-wrap:anywhere]";
 export function ExportWizard() {
   const step = useExportWizard((s) => s.step);
   const mountPoint = useExportWizard((s) => s.mountPoint);
+  const device = useExportWizard((s) => s.device);
   const checked = useExportWizard((s) => s.checked);
   const options = useExportWizard((s) => s.options);
   const dryRun = useExportWizard((s) => s.dryRun);
   const planning = useExportWizard((s) => s.planning);
+  const error = useExportWizard((s) => s.error);
   const nodes = usePlaylists((s) => s.nodes);
   if (step === "closed") return null;
   const w = useExportWizard.getState();
   const index = EXPORT_STEPS.indexOf(step);
-  const ready = canContinue({ step, mountPoint, checked, options }, nodes);
+  const ready = canContinue({ step, mountPoint, device, checked, options }, nodes);
+  const stepError = step === "device" || step === "playlists" || step === "options";
 
   return (
     <Dialog
@@ -111,6 +115,11 @@ export function ExportWizard() {
           </ol>
         </DialogHeader>
         <DialogBody className="min-h-60">
+          {stepError && error !== null && (
+            <p className="m-0 text-danger select-text" role="alert">
+              {error}
+            </p>
+          )}
           {step === "device" && <DeviceStep />}
           {step === "playlists" && <PlaylistsStep nodes={nodes} />}
           {step === "options" && <OptionsStep />}
@@ -297,9 +306,18 @@ function ReportFooter({ nodes }: { nodes: PlaylistNode[] }) {
 
 function DeviceStep() {
   const mountPoint = useExportWizard((s) => s.mountPoint);
+  const match = useProfiles((s) => (mountPoint === null ? null : s.mounted[mountPoint]?.match));
+  // Once the picked stick is known (now, or after the identify prompt), its
+  // profile ticks the playlists.
+  useEffect(() => {
+    if (match?.type === "known") void useExportWizard.getState().takeProfile(match.device);
+  }, [match]);
   return (
     <>
-      <p className="m-0 text-fg-muted">Which stick? Nothing is written until the last step.</p>
+      <p className="m-0 text-fg-muted">
+        Which stick? reks remembers the playlists each stick carries. Nothing is written until the
+        last step.
+      </p>
       <DeviceList
         selected={mountPoint}
         onSelect={(d) => useExportWizard.getState().setDevice(d.mountPoint)}
@@ -310,6 +328,7 @@ function DeviceStep() {
 
 function PlaylistsStep({ nodes }: { nodes: PlaylistNode[] }) {
   const checked = useExportWizard((s) => s.checked);
+  const device = useExportWizard((s) => s.device);
   const covered = coveredIds(nodes, checked);
   if (nodes.length === 0) {
     return <p className="m-0 text-fg-muted">The library has no playlists yet.</p>;
@@ -317,7 +336,9 @@ function PlaylistsStep({ nodes }: { nodes: PlaylistNode[] }) {
   return (
     <>
       <p className="m-0 text-fg-muted">
-        Pick playlists and folders. A folder exports every playlist under it.
+        Pick playlists and folders for {device?.name ?? "the stick"}. A folder exports every
+        playlist under it, including ones you add later. Unticked playlists are removed from the
+        stick. Next saves the ticks.
       </p>
       <Card role="group" aria-label="Playlists" divided={false} className="py-1">
         {nodes.map((n) => {

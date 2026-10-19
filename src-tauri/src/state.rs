@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use reks_core::{CancelToken, Library, TrackId};
+use reks_export_rb::devices::DeviceId;
 use reks_export_rb::plan::{ExportPlan, Selection};
 use reks_mix::Player;
 
@@ -31,9 +32,9 @@ pub struct AppState {
 pub struct ShownPlan {
     /// Id of the newest `export_plan` call; ids only grow.
     pub last_id: u64,
-    /// `(id, plan, selection)` of the newest plan that finished; taken by
-    /// `export_apply`.
-    pub plan: Option<(u64, ExportPlan, Selection)>,
+    /// `(id, plan, selection, stick profile)` of the newest plan that
+    /// finished; taken by `export_apply`.
+    pub plan: Option<(u64, ExportPlan, Selection, Option<DeviceId>)>,
 }
 
 /// The preview player and the track on it.

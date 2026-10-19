@@ -75,7 +75,7 @@ impl World {
         }
     }
 
-    fn dev(&self) -> DeviceInfo {
+    pub(crate) fn dev(&self) -> DeviceInfo {
         DeviceInfo {
             mount_point: self.stick.clone(),
             fs: FsKind::Fat32,

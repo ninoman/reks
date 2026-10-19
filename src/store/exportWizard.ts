@@ -1,14 +1,18 @@
 /**
  * USB export wizard (phase 2 task 10): device → playlists → options → dry
- * run → writing → report. Entering the dry-run step asks Rust for the plan
- * (`export_plan`); going back and forward plans again, and a newer plan drops
- * older answers. Export writes exactly the plan the dry run shows
- * (`export_apply` with its `planId`); the wizard can't be closed while it
- * runs.
+ * run → writing → report. The stick must be a known stick (task 15, D27):
+ * its saved profile ticks the playlists, leaving the playlists step saves
+ * the ticks as its profile (`profile_set_selection`), and leaving the
+ * options step saves the target. Entering the dry-run step asks Rust for the
+ * plan (`export_plan`); going back and forward plans again, and a newer plan
+ * drops older answers. Export writes exactly the plan the dry run shows
+ * (`export_apply` with its `planId`) and records the sync in the stick's
+ * profile; the wizard can't be closed while it runs.
  */
 import { create } from "zustand";
 
 import {
+  type Device,
   type DryRun,
   deviceEject,
   type ExportOptions,
@@ -19,6 +23,9 @@ import {
   exportCancel,
   exportPlan,
   type PlaylistNode,
+  profileSelection,
+  profileSetSelection,
+  profileSetTarget,
 } from "../lib/ipc";
 import { useDevices } from "./devices";
 import { usePlaylists } from "./playlists";
@@ -62,6 +69,8 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
 interface ExportWizardState {
   step: ExportStep;
   mountPoint: string | null;
+  /** The known stick at `mountPoint` (its profile); null until identified. */
+  device: Device | null;
   /** Ticked playlists and folders. */
   checked: ReadonlySet<number>;
   options: ExportOptions;
@@ -77,6 +86,8 @@ interface ExportWizardState {
   open(init?: { mountPoint?: string | null; playlists?: number[] }): void;
   close(): void;
   setDevice(mountPoint: string): void;
+  /** The stick at `mountPoint` is `device`: tick its profile and take its target. */
+  takeProfile(device: Device): Promise<void>;
   /** Ticks or unticks a playlist or folder. */
   toggle(id: number): void;
   setOptions(patch: Partial<ExportOptions>): void;
@@ -116,12 +127,12 @@ export function selectionOf(nodes: PlaylistNode[], checked: ReadonlySet<number>)
 
 /** Whether `step` has what it needs to go on. */
 export function canContinue(
-  s: Pick<ExportWizardState, "step" | "mountPoint" | "checked" | "options">,
+  s: Pick<ExportWizardState, "step" | "mountPoint" | "device" | "checked" | "options">,
   nodes: PlaylistNode[],
 ): boolean {
   switch (s.step) {
     case "device":
-      return s.mountPoint !== null;
+      return s.mountPoint !== null && s.device !== null;
     case "playlists":
       return selectionOf(nodes, s.checked).playlists.length > 0;
     case "options":
@@ -134,6 +145,7 @@ export function canContinue(
 const idle = {
   step: "closed" as ExportStep,
   mountPoint: null,
+  device: null as Device | null,
   checked: new Set<number>() as ReadonlySet<number>,
   options: DEFAULT_EXPORT_OPTIONS,
   dryRun: null,
@@ -168,7 +180,22 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
   },
 
   setDevice(mountPoint) {
-    set({ mountPoint });
+    if (mountPoint !== get().mountPoint) set({ mountPoint, device: null });
+  },
+
+  async takeProfile(device) {
+    if (get().device?.id === device.id) return;
+    const mine = ++generation;
+    set({ device, options: { ...get().options, target: device.target }, error: null });
+    try {
+      const sel = await profileSelection(device.id);
+      // An empty profile keeps what the wizard opened with (the sidebar's selection).
+      if (mine === generation && sel.playlists.length > 0) {
+        set({ checked: new Set(sel.playlists) });
+      }
+    } catch (e) {
+      if (mine === generation) set({ error: `Could not read the stick's playlists: ${String(e)}` });
+    }
   },
 
   toggle(id) {
@@ -190,6 +217,7 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
     const i = EXPORT_STEPS.indexOf(s.step as (typeof EXPORT_STEPS)[number]);
     const step = EXPORT_STEPS[i + 1];
     if (step === undefined) return;
+    if (!(await saveProfile(s, nodes))) return;
     set({ step, error: null });
     if (step === "dryRun") await get().replan(nodes);
   },
@@ -204,12 +232,17 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
   },
 
   async replan(nodes) {
-    const { mountPoint, checked, options } = get();
+    const { mountPoint, device, checked, options } = get();
     if (mountPoint === null) return;
     const mine = ++generation;
     set({ planning: true, dryRun: null, error: null });
     try {
-      const dryRun = await exportPlan(mountPoint, selectionOf(nodes, checked), options);
+      const dryRun = await exportPlan(
+        mountPoint,
+        selectionOf(nodes, checked),
+        options,
+        device?.id ?? null,
+      );
       if (mine === generation) set({ dryRun, planning: false });
     } catch (e) {
       if (mine === generation) set({ planning: false, error: `Could not plan: ${String(e)}` });
@@ -269,6 +302,31 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
     void useDevices.getState().refresh();
   },
 }));
+
+/**
+ * Saves what the step being left set on the stick's profile: the ticks
+ * (playlists step) or the target (options step). False, with the error
+ * shown, when saving failed.
+ */
+async function saveProfile(
+  s: Pick<ExportWizardState, "step" | "device" | "checked" | "options">,
+  nodes: PlaylistNode[],
+): Promise<boolean> {
+  const device = s.device;
+  if (device === null) return true;
+  try {
+    if (s.step === "playlists") {
+      await profileSetSelection(device.id, selectionOf(nodes, s.checked).playlists);
+    } else if (s.step === "options" && s.options.target !== device.target) {
+      const saved = await profileSetTarget(device.id, s.options.target);
+      useExportWizard.setState({ device: saved });
+    }
+    return true;
+  } catch (e) {
+    useExportWizard.setState({ error: `Could not save the stick's profile: ${String(e)}` });
+    return false;
+  }
+}
 
 /** Opens the wizard with the sidebar's selected playlist or folder ticked. */
 export function openExportWizard(mountPoint: string | null = null) {

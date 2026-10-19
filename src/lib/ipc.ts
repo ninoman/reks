@@ -525,6 +525,141 @@ export function deviceEject(mountPoint: string): Promise<void> {
 /** Player family the export is checked against (`TargetProfile`). */
 export type TargetProfile = "Cdj2000Nxs" | "Cdj2000Nxs2" | "Cdj3000" | "XdjXz" | "Generic";
 
+/** A known stick with a saved profile (`devices::Device`, D27). */
+export interface Device {
+  id: number;
+  /** The OS's volume ID (D28); null when the OS gives none. */
+  volumeSerial: string | null;
+  label: string;
+  sizeBytes: number;
+  /** User-given. */
+  name: string;
+  target: TargetProfile;
+  createdAt: string;
+  lastSyncedAt: string | null;
+}
+
+/** What a mounted stick is to this library (`devices::DeviceMatch`); every string is final. */
+export type DeviceMatch =
+  | { type: "known"; device: Device }
+  | {
+      type: "ambiguous";
+      volumeSerial: string | null;
+      reason: "serialChanged" | "noSerial";
+      candidates: Device[];
+      prompt: string;
+      note: string;
+    }
+  | {
+      /** `foreign`: holds a rekordbox library reks did not write. */
+      type: "new" | "foreign";
+      volumeSerial: string | null;
+      suggestedName: string;
+      prompt: string;
+      note: string;
+    };
+
+/** How a stick playlist compares with the profile (`devices::SyncState`). */
+export type SyncState =
+  | { state: "inSync" }
+  | {
+      state: "changed";
+      added: number;
+      removed: number;
+      reordered: boolean;
+      movedFrom: string[] | null;
+    }
+  | { state: "new" }
+  | { state: "willRemove" };
+
+export interface PlaylistStatus {
+  playlistId: number | null;
+  path: string[];
+  pathText: string;
+  tracks: number;
+  state: SyncState;
+  text: string;
+}
+
+/** A ticked profile entry and what unticking it frees. */
+export interface EntryStatus {
+  playlistId: number;
+  name: string;
+  pathText: string;
+  isFolder: boolean;
+  playlists: number;
+  tracks: number;
+  freesBytes: number;
+  freesText: string;
+}
+
+/** Status of a stick profile (`devices::ProfileStatus`); every string is final. */
+export interface ProfileStatus {
+  device: Device;
+  source: "stick" | "lastSync" | "neverSynced";
+  sourceText: string;
+  playlists: PlaylistStatus[];
+  entries: EntryStatus[];
+  plannedBytes: number;
+  capacityBytes: number;
+  overCapacity: boolean;
+  capacityText: string;
+  summary: string;
+  notes: string[];
+}
+
+/** Known sticks, in the order they were added. */
+export function profilesList(): Promise<Device[]> {
+  return invoke("profiles_list");
+}
+
+/** Identifies the mounted stick `info` (asks the OS for its volume ID). */
+export function profileIdentify(info: DeviceInfo): Promise<DeviceMatch> {
+  return invoke("profile_identify", { info });
+}
+
+/** Remembers the mounted stick `info` as a new stick with an empty profile. */
+export function profileCreate(
+  info: DeviceInfo,
+  volumeSerial: string | null,
+  name: string,
+  target: TargetProfile,
+): Promise<Device> {
+  return invoke("profile_create", { info, volumeSerial, name, target });
+}
+
+/** Confirms an `ambiguous` match: the stick `info` is `id` (its stored volume ID is replaced). */
+export function profileLink(
+  id: number,
+  info: DeviceInfo,
+  volumeSerial: string | null,
+): Promise<Device> {
+  return invoke("profile_link", { id, info, volumeSerial });
+}
+
+export function profileRename(id: number, name: string): Promise<Device> {
+  return invoke("profile_rename", { id, name });
+}
+
+export function profileSetTarget(id: number, target: TargetProfile): Promise<Device> {
+  return invoke("profile_set_target", { id, target });
+}
+
+/** The stick's profile as an export selection, in library tree order. */
+export function profileSelection(id: number): Promise<ExportSelection> {
+  return invoke("profile_selection", { id });
+}
+
+/** Saves the stick's profile: these playlists and folders. */
+export function profileSetSelection(id: number, playlists: number[]): Promise<void> {
+  return invoke("profile_set_selection", { id, playlists });
+}
+
+/** Profile status; reads the stick at `mountPoint` when it is plugged in. */
+export function profileStatus(id: number, mountPoint: string | null): Promise<ProfileStatus> {
+  return invoke("profile_status", { id, mountPoint });
+}
+
 /** Tracks without rekordbox analysis (`MissingAnalysis`). The writer refuses `exportWithout`. */
 export type MissingAnalysis = "skip" | "generate" | "exportWithout";
 
@@ -614,13 +749,17 @@ export interface DryRun {
   warnings: NoticeGroup[];
 }
 
-/** Plans an export to the stick at `mountPoint` without writing anything (slow: reads the stick and the files). */
+/**
+ * Plans an export to the stick at `mountPoint` without writing anything (slow: reads the stick
+ * and the files). `deviceId`: the stick profile the export records its sync in.
+ */
 export function exportPlan(
   mountPoint: string,
   selection: ExportSelection,
   options: ExportOptions,
+  deviceId: number | null = null,
 ): Promise<DryRun> {
-  return invoke("export_plan", { mountPoint, selection, options });
+  return invoke("export_plan", { mountPoint, selection, options, deviceId });
 }
 
 /** Steps of an export (`apply::ApplyStage`), in order. */

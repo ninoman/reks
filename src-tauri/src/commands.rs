@@ -13,10 +13,11 @@ use reks_core::{
     TrackPatch, TrackQuery,
 };
 use reks_export_rb::device::{self, DeviceInfo};
+use reks_export_rb::devices::{self, Device, DeviceId, DeviceMatch, ProfileStatus};
 use reks_export_rb::dryrun::{self, DryRun};
 use reks_export_rb::plan::{ExportOptions, Selection};
 use reks_export_rb::report::{self, ProgressView, ReportView};
-use reks_export_rb::{ApplyEnv, StickCheck};
+use reks_export_rb::{ApplyEnv, StickCheck, TargetProfile};
 use reks_mix::{PlayerState, Reopened};
 use serde::Serialize;
 use tauri::ipc::{Channel, Response};
@@ -37,10 +38,11 @@ impl<E: std::fmt::Display> From<E> for CmdError {
 type CmdResult<T> = Result<T, CmdError>;
 
 /// Runs `f` with the library on a blocking worker thread.
-async fn blocking<T, F>(state: &State<'_, AppState>, f: F) -> CmdResult<T>
+async fn blocking<T, E, F>(state: &State<'_, AppState>, f: F) -> CmdResult<T>
 where
     T: Send + 'static,
-    F: FnOnce(&Library) -> reks_core::Result<T> + Send + 'static,
+    E: std::fmt::Display + Send + 'static,
+    F: FnOnce(&Library) -> Result<T, E> + Send + 'static,
 {
     let lib = Arc::clone(&state.library);
     let result = tauri::async_runtime::spawn_blocking(move || f(&lib)).await?;
@@ -420,6 +422,101 @@ pub async fn device_eject(mount_point: PathBuf) -> CmdResult<()> {
     Ok(tauri::async_runtime::spawn_blocking(move || device::eject_at(&mount_point)).await??)
 }
 
+/// Known sticks (stick profiles, D27), in the order they were added.
+#[tauri::command]
+pub async fn profiles_list(state: State<'_, AppState>) -> CmdResult<Vec<Device>> {
+    blocking(&state, Library::devices).await
+}
+
+/// What the mounted stick `info` is to this library: known, or a prompt.
+#[tauri::command]
+pub async fn profile_identify(
+    state: State<'_, AppState>,
+    info: DeviceInfo,
+) -> CmdResult<DeviceMatch> {
+    blocking(&state, move |lib| devices::identify(&info, lib)).await
+}
+
+/// Remembers the mounted stick `info` as a new stick with an empty profile.
+#[tauri::command]
+pub async fn profile_create(
+    state: State<'_, AppState>,
+    info: DeviceInfo,
+    volume_serial: Option<String>,
+    name: String,
+    target: TargetProfile,
+) -> CmdResult<Device> {
+    blocking(&state, move |lib| {
+        devices::create(lib, &info, volume_serial.as_deref(), &name, target)
+    })
+    .await
+}
+
+/// Confirms an "Is this '<name>'?" prompt: the stick `info` is `id`.
+#[tauri::command]
+pub async fn profile_link(
+    state: State<'_, AppState>,
+    id: DeviceId,
+    info: DeviceInfo,
+    volume_serial: Option<String>,
+) -> CmdResult<Device> {
+    blocking(&state, move |lib| {
+        devices::link(lib, id, &info, volume_serial.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn profile_rename(
+    state: State<'_, AppState>,
+    id: DeviceId,
+    name: String,
+) -> CmdResult<Device> {
+    blocking(&state, move |lib| devices::rename(lib, id, &name)).await
+}
+
+#[tauri::command]
+pub async fn profile_set_target(
+    state: State<'_, AppState>,
+    id: DeviceId,
+    target: TargetProfile,
+) -> CmdResult<Device> {
+    blocking(&state, move |lib| devices::set_target(lib, id, target)).await
+}
+
+/// The stick's profile as the export selection.
+#[tauri::command]
+pub async fn profile_selection(state: State<'_, AppState>, id: DeviceId) -> CmdResult<Selection> {
+    blocking(&state, move |lib| devices::selection(lib, id)).await
+}
+
+/// Replaces the stick's profile with `playlists` (playlists and folders).
+#[tauri::command]
+pub async fn profile_set_selection(
+    state: State<'_, AppState>,
+    id: DeviceId,
+    playlists: Vec<reks_core::PlaylistId>,
+) -> CmdResult<()> {
+    blocking(&state, move |lib| {
+        devices::set_selection(lib, id, &playlists)
+    })
+    .await
+}
+
+/// Per-playlist status, "frees" and capacity of the stick's profile; reads
+/// the stick at `mount_point` when it is plugged in.
+#[tauri::command]
+pub async fn profile_status(
+    state: State<'_, AppState>,
+    id: DeviceId,
+    mount_point: Option<PathBuf>,
+) -> CmdResult<ProfileStatus> {
+    blocking(&state, move |lib| {
+        devices::profile_status(lib, id, mount_point.as_deref())
+    })
+    .await
+}
+
 /// A dry run and the id `export_apply` takes to write exactly that plan.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -433,13 +530,15 @@ pub struct PlannedExport {
 /// (phase 2 task 10): plans, writes nothing, returns the plan as the UI shows
 /// it. Scans rekordbox's analysis folders and samples file bytes, so it runs
 /// on a blocking worker. The plan is kept under the returned id (the newest
-/// call wins) for `export_apply`.
+/// call wins) for `export_apply`, with `device_id`: the stick profile the
+/// export records its sync in.
 #[tauri::command]
 pub async fn export_plan(
     state: State<'_, AppState>,
     mount_point: PathBuf,
     selection: Selection,
     options: ExportOptions,
+    device_id: Option<DeviceId>,
 ) -> CmdResult<PlannedExport> {
     let plan_id = {
         let mut shown = state
@@ -463,7 +562,7 @@ pub async fn export_plan(
         .lock()
         .map_err(|_| "export state poisoned")?;
     if shown.last_id == plan_id {
-        shown.plan = Some((plan_id, plan, selection));
+        shown.plan = Some((plan_id, plan, selection, device_id));
     }
     Ok(PlannedExport { plan_id, dry_run })
 }
@@ -479,7 +578,7 @@ pub async fn export_apply(
     plan_id: u64,
     on_event: Channel<ProgressView>,
 ) -> CmdResult<ReportView> {
-    let (_, plan, selection) = {
+    let (_, plan, selection, device_id) = {
         let mut shown = state
             .shown_plan
             .lock()
@@ -519,7 +618,9 @@ pub async fn export_apply(
                 tracing::warn!(%err, "export progress channel closed");
             }
         };
-        report::export(&env, &plan, &selection, labels, &progress, &cancel)
+        report::export(
+            &env, &plan, &selection, labels, &progress, &cancel, device_id,
+        )
     })
     .await;
     if let Ok(mut running) = state.export_cancel.lock() {

@@ -162,6 +162,12 @@ records what the stick really holds) with playlist ids from the plan; it
 refuses a cancelled export, a report without a read-back and a report from
 another volume ID.
 
+In the app: the Devices panel and the export wizard's stick step run
+`identify` on each plugged-in volume and show its prompt; the wizard only goes
+on with a known stick, ticks its profile, and saves the ticks when leaving the
+playlists step. `report::export` takes the stick's id and calls `record_sync`
+after `apply`; a failed record is a report warning, never a failed export.
+
 ## 6. Effort
 
 | Part | Phase | Effort |

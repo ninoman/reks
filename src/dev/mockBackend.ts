@@ -9,7 +9,9 @@ import type { Channel } from "@tauri-apps/api/core";
 import { mockIPC } from "@tauri-apps/api/mocks";
 
 import type {
+  Device,
   DeviceInfo,
+  DeviceMatch,
   DryRun,
   ExportOptions,
   ExportProgress,
@@ -21,6 +23,8 @@ import type {
   KeyInfo,
   PlayerStatus,
   PlaylistNode,
+  PlaylistStatus,
+  ProfileStatus,
   Settings,
   SortColumn,
   TrackDetail,
@@ -342,6 +346,138 @@ let devices: DeviceInfo[] = [
   },
 ];
 
+/** Known sticks (stick profiles): REKS is "Main"; "Old gig stick" is not plugged in. */
+let known: Device[] = [
+  {
+    id: 1,
+    volumeSerial: "4993-1CFB",
+    label: "REKS",
+    sizeBytes: 31_978_000_000,
+    name: "Main",
+    target: "Cdj2000Nxs2",
+    createdAt: "2026-10-01T10:00:00.000Z",
+    lastSyncedAt: "2026-10-18T21:04:12.000Z",
+  },
+  {
+    id: 2,
+    volumeSerial: "7A21-0C3E",
+    label: "OLDGIG",
+    sizeBytes: 7_990_000_000,
+    name: "Old gig stick",
+    target: "Generic",
+    createdAt: "2026-09-12T10:00:00.000Z",
+    lastSyncedAt: "2026-09-12T18:30:00.000Z",
+  },
+];
+const profiles: Record<number, number[]> = { 1: [1, 4], 2: [5] };
+/** Playlists the last sync put on each stick. */
+const onStick: Record<number, number[]> = { 1: [2, 3, 5], 2: [5] };
+
+function identify(info: DeviceInfo): DeviceMatch {
+  const device = known.find((d) => d.label === info.label && d.sizeBytes === info.totalBytes);
+  if (device !== undefined) return { type: "known", device };
+  return {
+    type: "new",
+    volumeSerial: `${info.osName.toUpperCase()}-0001`,
+    suggestedName: info.label || "USB stick",
+    prompt: "This stick is new to reks.",
+    note: "Name it and tick the playlists it should carry.",
+  };
+}
+
+function mb(bytes: number): string {
+  return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${(bytes / 1e6).toFixed(1)} MB`;
+}
+
+/** Like `devices::profile_status`, with 9 MB per track. */
+function profileStatus(id: number, mountPoint: string | null): ProfileStatus {
+  const device = known.find((d) => d.id === id) as Device;
+  const ticked = NODES.filter((n) => (profiles[id] ?? []).includes(n.id));
+  const under = (n: PlaylistNode) => (n.isFolder ? NODES.filter((c) => c.parentId === n.id) : [n]);
+  const covered = new Set(ticked.flatMap(under).map((n) => n.id));
+  const path = (n: PlaylistNode) => {
+    const parent = NODES.find((p) => p.id === n.parentId);
+    return parent ? [parent.name, n.name] : [n.name];
+  };
+  const was = onStick[id] ?? [];
+  const playlists: PlaylistStatus[] = NODES.filter((n) => covered.has(n.id)).map((n) => {
+    const fresh = !was.includes(n.id);
+    const state: PlaylistStatus["state"] = fresh
+      ? { state: "new" }
+      : n.id === 3
+        ? { state: "changed", added: 3, removed: 1, reordered: false, movedFrom: null }
+        : { state: "inSync" };
+    const text = fresh
+      ? "New on the stick at the next sync"
+      : n.id === 3
+        ? "3 tracks added, 1 removed"
+        : "In sync";
+    return {
+      playlistId: n.id,
+      path: path(n),
+      pathText: path(n).join(" / "),
+      tracks: n.entries,
+      state,
+      text,
+    };
+  });
+  for (const n of NODES.filter((x) => was.includes(x.id) && !covered.has(x.id))) {
+    playlists.push({
+      playlistId: n.id,
+      path: path(n),
+      pathText: path(n).join(" / "),
+      tracks: n.entries,
+      state: { state: "willRemove" },
+      text: "Removed from the stick at the next sync",
+    });
+  }
+  const tracksOf = (n: PlaylistNode) => new Set(under(n).flatMap((c) => PLAYLISTS[c.id] ?? []));
+  const all = new Set(ticked.flatMap((n) => [...tracksOf(n)]));
+  const entries = ticked.map((n) => {
+    const others = new Set(ticked.filter((o) => o !== n).flatMap((o) => [...tracksOf(o)]));
+    const unique = [...tracksOf(n)].filter((t) => !others.has(t)).length;
+    return {
+      playlistId: n.id,
+      name: n.name,
+      pathText: path(n).join(" / "),
+      isFolder: n.isFolder,
+      playlists: under(n).length,
+      tracks: tracksOf(n).size,
+      freesBytes: unique * 9e6,
+      freesText:
+        unique === 0
+          ? "Unticking frees nothing: other ticked playlists hold all its tracks"
+          : `Unticking frees ${mb(unique * 9e6)}`,
+    };
+  });
+  const plannedBytes = all.size * 9e6;
+  const counts = ["new", "changed", "willRemove"].map(
+    (k) => playlists.filter((p) => p.state.state === k).length,
+  );
+  const parts = [
+    counts[0] ? `${counts[0]} new` : "",
+    counts[1] ? `${counts[1]} changed` : "",
+    counts[2] ? `${counts[2]} to remove` : "",
+  ].filter(Boolean);
+  return {
+    device,
+    source: mountPoint === null ? "lastSync" : "stick",
+    sourceText:
+      mountPoint === null
+        ? `As of the last sync, ${(device.lastSyncedAt ?? "").slice(0, 16).replace("T", " ")} UTC`
+        : "Read from the stick",
+    playlists,
+    entries,
+    plannedBytes,
+    capacityBytes: device.sizeBytes,
+    overCapacity: plannedBytes > device.sizeBytes,
+    capacityText: `${mb(plannedBytes)} of ${mb(device.sizeBytes)}`,
+    summary:
+      playlists.length === 0 ? "No playlists in this profile" : parts.join(", ") || "In sync",
+    notes: [],
+  };
+}
+
 let planId = 0;
 let lastPlan: { mountPoint: string; label: string; played: boolean; opts: ExportOptions } | null =
   null;
@@ -638,6 +774,37 @@ mockIPC((cmd, payload) => {
     case "device_eject":
       devices = devices.filter((d) => d.mountPoint !== args.mountPoint);
       return null;
+    case "profiles_list":
+      return known;
+    case "profile_identify":
+      return identify(args.info as DeviceInfo);
+    case "profile_create": {
+      const info = args.info as DeviceInfo;
+      const device: Device = {
+        id: known.length + 1,
+        volumeSerial: args.volumeSerial as string | null,
+        label: info.label,
+        sizeBytes: info.totalBytes,
+        name: args.name as string,
+        target: args.target as Device["target"],
+        createdAt: new Date().toISOString(),
+        lastSyncedAt: null,
+      };
+      known = [...known, device];
+      return device;
+    }
+    case "profile_selection":
+      return { playlists: profiles[args.id as number] ?? [] };
+    case "profile_set_selection":
+      profiles[args.id as number] = args.playlists as number[];
+      return null;
+    case "profile_set_target":
+      known = known.map((d) =>
+        d.id === args.id ? { ...d, target: args.target as Device["target"] } : d,
+      );
+      return known.find((d) => d.id === args.id);
+    case "profile_status":
+      return profileStatus(args.id as number, args.mountPoint as string | null);
     case "export_plan":
       return new Promise((resolve) =>
         setTimeout(
