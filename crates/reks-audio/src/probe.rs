@@ -4,6 +4,8 @@
 use std::fs::File;
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
+
 use symphonia::core::codecs::audio::well_known::{
     CODEC_ID_AAC, CODEC_ID_ALAC, CODEC_ID_FLAC, CODEC_ID_MP3,
 };
@@ -16,7 +18,8 @@ use symphonia::core::meta::MetadataOptions;
 use crate::error::{Error, Result};
 
 /// Audio file kind, as stored in the library's `track.kind` column.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Kind {
     Mp3,
     Aac,
@@ -46,7 +49,8 @@ impl Kind {
 }
 
 /// What [`probe`] learns from a file's headers.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Probe {
     pub kind: Kind,
     /// Playable length (encoder delay/padding excluded when the file says so).

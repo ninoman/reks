@@ -1,6 +1,6 @@
 # Phase 2 — Legacy USB export (`export.pdb` + ANLZ)
 
-Status: in progress (task 2 done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
+Status: in progress (tasks 2–4 done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
 `rb_track_id`/`rb_location`). Read `docs/decisions.md` D7, D8, D16, D23 and
 `docs/research.md` §1, §4, §10 first.
 
@@ -53,8 +53,8 @@ pub struct ExportPlan {
     pub copies: Vec<FileOp>,                 // audio to copy (src, dst, bytes, reason)
     pub anlz: Vec<AnlzOp>,                   // per track: CopyFromCache{src}, Generate, Missing
     pub deletes: Vec<FileOp>,                // stale audio/ANLZ/artwork to remove (prune)
-    pub history: StickHistory,               // what players left on the stick (D23)
-    pub backups: Vec<FileOp>,                // stick DB files copied to app_data_dir before any write
+    pub history: StickHistory,               // what players left on the stick (D23); task 12, not in the code yet
+    pub backups: Vec<FileOp>,                // stick DB files copied to app_data_dir before any write; task 12
     pub warnings: Vec<Warning>,              // e.g. FLAC on NXS target, path > 255, exFAT
     pub errors: Vec<Problem>,                // blockers: missing file, > 4 GiB on FAT32, WAV_EXTENSIBLE
     pub bytes_to_write: u64, pub bytes_free_after: i64,
@@ -70,7 +70,8 @@ pub struct StickHistory { pub volume_serial: Option<String>,             // FAT/
                           pub onelibrary_db: bool }                     // exportLibrary.db present (baken removes it)
 pub enum HistoryPolicy { BackUp /* default */, Discard /* only after an explicit confirm */ }   // Phase 2.5 adds Import
 
-pub fn plan(lib: &Library, sel: &Selection, dev: &DeviceInfo, opts: &ExportOptions) -> Result<ExportPlan>;
+pub fn plan(lib: &Library, sel: &Selection, dev: &DeviceInfo, opts: &ExportOptions, anlz: &dyn AnlzLocator)
+    -> Result<ExportPlan, PlanError>;   // done: crates/reks-export-rb/src/plan/
 pub fn apply(plan: &ExportPlan, writer: &dyn RekordboxWriter, progress: impl Fn(ExportEvent), cancel: &CancelToken)
     -> Result<ExportReport>;
 
@@ -183,10 +184,25 @@ CREATE TABLE export_manifest (              -- latest export to each stick
    error on NXS1; VBR without seek header warns; 88.2/96 kHz on CDJ-3000
    warns, UNVERIFIED; the rest are errors); tests on headers crafted in code
    plus the generated fixtures.
-4. **Planner**: selection → `ExportPlan` with copies, anlz ops, deletes,
+4. [x] **Planner**: selection → `ExportPlan` with copies, anlz ops, deletes,
    warnings, errors, byte totals; stable `/Contents` paths across re-exports
    (reuse existing path if the same source file is already on the stick:
    compare size + mtime or hash); unit tests on fake device trees.
+   Done in `reks_export_rb::plan` ([plan/](../../crates/reks-export-rb/src/plan/mod.rs)):
+   `plan(lib, sel, dev, opts, anlz)`; `plan_sources` takes pre-loaded
+   `Sources` (tests). Reuse = same size and extension, stick copy not older
+   than the source (2 s FAT slack; baken doesn't keep source times), and 3 ×
+   64 KiB sampled bytes equal; only ASCII paths are reused (D24). New copies
+   never overwrite: `dedupe` is seeded with every path on the stick. Stale
+   ANLZ is found through `anlz_dir` (path hash, R§4); with `artwork` on,
+   `/PIONEER/Artwork` is the writer's and no deletes are listed there.
+   Per-track blockers (missing source, audiocheck errors) block the plan
+   unless `skip_unsupported`; tracks without analysis follow
+   `MissingAnalysis` (default `Skip`). `AnlzLocator` is the seam for task 5
+   (`NoAnlz` until then). `history`/`backups` are not in `ExportPlan` yet
+   (task 12). For task 7: baken assigns its own `/Contents` paths (Unicode,
+   48-character cut), so the writer must make it use the plan's `dst_rel`,
+   or plan and stick disagree.
 5. **rbcache locate**: find rekordbox's local ANLZ for an imported track
    (use baken's `anlz_roots` default resolution; add an index that scans
    roots once and maps PPTH → files for our own needs); report `Missing`.
