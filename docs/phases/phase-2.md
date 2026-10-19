@@ -1,6 +1,6 @@
 # Phase 2 — Legacy USB export (`export.pdb` + ANLZ)
 
-Status: in progress (tasks 2–6 done, 1, 12, 13 backend done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
+Status: in progress (tasks 2–7 done, 1, 12, 13 backend done 2026-10-19). Depends on: Phase 1 (library, XML writer, playlists,
 `rb_track_id`/`rb_location`). Read `docs/decisions.md` D7, D8, D16, D23 and
 `docs/research.md` §1, §4, §10 first.
 
@@ -75,12 +75,13 @@ pub fn plan(lib: &Library, sel: &Selection, dev: &DeviceInfo, opts: &ExportOptio
 pub fn apply(plan: &ExportPlan, writer: &dyn RekordboxWriter, progress: impl Fn(ExportEvent), cancel: &CancelToken)
     -> Result<ExportReport>;
 
-pub trait RekordboxWriter {
-    /// Writes PDB + ANLZ + audio for the plan into `device_root`. Must be atomic per file and leave
-    /// any existing export.pdb untouched on failure.
-    fn write(&self, plan: &ExportPlan, device_root: &Path, progress: &dyn Fn(ExportEvent)) -> Result<WriterReport>;
+pub trait RekordboxWriter {   // done: crates/reks-export-rb/src/writer/
+    /// Writes PDB + ANLZ + audio for the plan into `device_root`; the module docs say what
+    /// each kind of failure leaves on the stick.
+    fn write(&self, plan: &ExportPlan, device_root: &Path, progress: &(dyn Fn(ExportEvent) + Sync),
+             cancel: &CancelToken) -> Result<WriterReport, WriterError>;
 }
-pub struct BakenWriter { /* builds temp collection.xml, calls baken_export::plan/export */ }
+pub struct BakenWriter;   // BakenWriter::prepare(lib, sel, work_dir) writes the temp collection.xml
 
 pub fn validate(device_root: &Path, plan: &ExportPlan) -> Result<ValidationReport>;  // rekordcrate read-back
 
@@ -242,21 +243,47 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    share a path (same-named siblings, or a `/` in a name) `baken_playlists`
    returns an empty list, which baken reads as every playlist in the file:
    the same set.
-7. **BakenWriter**: implement `RekordboxWriter` with `baken_export::plan` +
+7. [x] **BakenWriter**: implement `RekordboxWriter` with `baken_export::plan` +
    `export`; translate its `Plan`/`Report`/`Skipped` into our events; handle
    `Error::DeviceWrite`; set `prune`, `no_settings` (unless settings sourced),
    `artwork`, `generate_analysis` (option). Integration test on a temp dir.
+   Done in [writer/](../../crates/reks-export-rb/src/writer/mod.rs), test in
+   [tests/writer.rs](../../crates/reks-export-rb/tests/writer.rs). Paths: between
+   baken's `plan` and `export` the writer rewrites baken's public `Plan` to
+   ours: planned tracks only, in plan order, `usb_path` = `dst_rel`, ANLZ
+   slot from baken's `AnlzSlots` on that path, ANLZ source = the plan's
+   (`generate_analysis` always on, empty ANLZ root, planned `.DAT` handed in),
+   so PDB `file_path`, PPTH and USBANLZ all carry our ASCII path; no upstream
+   patch needed. A planned track missing from baken's plan or with another
+   source is `PlanMismatch` before any write; `ExportWithout` is refused
+   (baken writes ANLZ for every track). `prune` = `!keep_stale`, settings via
+   `SettingsSource` (default `Skip` = baken `no_settings`), device name = the
+   plan's label, `cancel` is passed to baken between tracks. Failure
+   behaviour (read from baken 4.6.1 and tested where it can be provoked):
+   cancel and stick-wide errors (`DeviceWrite`, `NotEnoughSpace`) leave the
+   old `export.pdb` byte for byte; `export.pdb` is written beside the old one
+   and renamed; a single failing track does **not** stop the run (new PDB
+   without it, prune skipped, `WriterReport::failures`); errors after the PDB
+   was replaced are `AfterDatabase`. The test reads the stick back with
+   rekordcrate: 20 tables, one row per planned track, `file_path` = `dst_rel`,
+   `file_type` codes, UTF-16 for non-ASCII titles/artists, PPTH = `dst_rel`.
 8. **Read-back validator**: parse `export.pdb` with rekordcrate; check
    track count = plan, every `file_path` exists, every `analyze_path` exists
    with PPTH matching `file_path`, PQTZ non-empty where `has_grid`, cue
    counts match, playlists tree and order match, all 20 tables present;
    produce `ValidationReport` with per-track findings. Optional byte-diff
    tool against a rekordbox reference export (`reks-cli rb diff`).
+   Note from task 7: rekordcrate 0.3.0 keeps PDB row fields private (the
+   writer test re-serialises a row and reads string offsets) and its ANLZ
+   parser rejects baken's files: `CueType` knows 0 and 2, baken writes 1 for
+   a point cue in `PCOB`. Walk ANLZ sections by header (as the test does) or
+   parse only the tags needed.
 9. **Export orchestration**: `apply` = pre-flight (free space, device still
    mounted, no rekordbox running? warn), history backup (task 12), writer,
    fsync, validate, export manifest (task 13), report;
-   cancellation leaves the stick in its previous DB state (baken keeps the
-   old `export.pdb` on failure; verify).
+   cancellation leaves the stick in its previous DB state (verified in task
+   7 for cancel and stick-wide errors; a single failed track still gets a new
+   PDB without it, see task 7).
 10. **Export UI**: wizard (device → playlists → options → dry-run table with
     warnings/errors/deletes → progress → report with "Eject"). Persist last
     selection per device label.

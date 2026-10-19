@@ -71,7 +71,9 @@ Details that matter
   open PR #259 (Jul 2026) "create exports from scratch" (PDB + settings, no
   ANLZ). Hardware note from that PR: a CDJ-350 crashes in the TRACK menu if a
   track row is shorter than 221 bytes. Best-documented parser; use it to
-  parse what we write.
+  parse what we write. 0.3.0 limits found 2026-10-19 (Phase 2 task 7): PDB
+  row fields are private (no getters), and its ANLZ `CueType` accepts only 0
+  and 2, so it rejects the `PCPT` type 1 that baken writes for a point cue.
 - **crate-digger** licence was clarified in Sept 2026 (issues #49/#50):
   `.ksy` files are `EPL-2.0 OR MPL-2.0 OR LGPL-3.0-only` and the maintainer
   states generated parsers carry the same election. Safe for GPL.
