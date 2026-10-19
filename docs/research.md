@@ -477,3 +477,7 @@ hardware run, and the result recorded in `docs/decisions.md` or
    Tahoe Gatekeeper behaviour; WebView2/WKWebView codec sets (moot if Rust playback).
 10. `libkeyfinder` accuracy figures; `stratum-dsp` quality; Mixxx downbeat support in 2.6/2.7.
 11. rekordbox 7.2 XML import menu path.
+12. rekordbox XML output details: attribute order, omitted vs empty
+    attributes, `Location` percent-encoding set, decimal precision of
+    positions, acceptance of `&apos;`/`&#10;` on import (added 2026-10-19,
+    Phase 1 task 6; see `docs/phases/phase-1.md` task 6 notes).

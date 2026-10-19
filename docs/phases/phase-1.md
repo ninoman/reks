@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (tasks 1–5 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–6 done 2026-10-19). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -190,13 +190,15 @@ pub mod scan {   // folder import
 }
 
 pub mod rbxml {  // rekordbox XML
-    pub struct Collection { pub product: Product, pub tracks: Vec<XmlTrack>, pub playlists: XmlNode }
+    pub struct Collection { pub version: String, pub product: Product, pub tracks: Vec<XmlTrack>,
+                            pub playlists: XmlNode /* ROOT folder */, pub extra: Extra }
     pub fn parse(reader: impl BufRead) -> Result<Collection>;          // quick-xml, streaming
     pub fn write(c: &Collection, w: impl Write) -> Result<()>;
     pub fn import(c: &Collection, lib: &Library, opts: ImportOptions, progress: impl Fn(ImportEvent))
         -> Result<ImportReport>;
     pub fn export(lib: &Library, selection: Selection) -> Result<Collection>;
     pub fn location_to_path(url: &str) -> Result<PathBuf>;              // file://localhost/... → path, percent-decoded, NFC
+    pub fn path_to_location(path: &Path) -> Result<String>;             // inverse, for export
 }
 ```
 
@@ -207,6 +209,32 @@ Comments, PlayCount, LastPlayed, Rating, Location, Remixer, Tonality, Label,
 Mix, Colour) plus `Vec<Tempo{inizio,bpm,metro,battito}>` and
 `Vec<PositionMark{name,type,start,end,num,red,green,blue}>`. Unknown attributes
 are preserved in a `extra: BTreeMap<String,String>` so round-trips don't lose data.
+
+Notes (task 6, [`rbxml`](../../crates/reks-core/src/rbxml/))
+- Model: text attributes and dates are `Option<String>` kept raw (missing ≠
+  `""`); numbers are typed. Positions and BPM stay `f64` seconds/BPM as in the
+  XML; conversion to ms happens at import (task 7). `PositionMark.rgb` is set
+  only when Red, Green and Blue are all present. Playlist `NODE`s are a
+  `Folder`/`Playlist { key_type, keys }` tree; a missing `KeyType` reads as 0.
+- Lossless: unknown attributes on every element go to `extra`. A known
+  optional value that doesn't parse (`Year=""`, `Colour="red"`, `NaN`) is kept
+  raw in `extra` under its own name. Missing or invalid *required* values
+  (`TrackID`, `TEMPO` Inizio/Bpm, `POSITION_MARK` Type/Start/Num, `NODE` Type/Name)
+  are errors. Unknown elements are skipped with a warning. `Entries`/`Count`
+  are checked (warning on mismatch) and recomputed on write.
+- Writer: the attribute order and layout of the spec list and the fixture
+  (which it reproduces byte for byte), then `extra` sorted by name. Seconds are
+  written with 3 decimals and BPM with 2, falling back to the shortest exact
+  form when that would round, so `parse(write(c)) == c`. Tab/CR/LF in values
+  become `&#9;`/`&#13;`/`&#10;`; other C0 controls are dropped (illegal in XML 1.0).
+- `Location`: `file://localhost/` (and `file:///`) only; percent-decoded to
+  UTF-8, then NFC. `#`, `?`, `+` and stray `%` are literal. `/C:/...` becomes
+  `C:/...`. `path_to_location` encodes everything except `A–Z a–z 0–9 - . _ ~ /`.
+- UNVERIFIED until checked against a real rekordbox 6/7 export (task 7):
+  rekordbox's own attribute order and which attributes it omits vs writes
+  empty; which characters it leaves unencoded in `Location`; whether it ever
+  writes more than 3 decimals for Inizio/Start/End; whether it accepts `&apos;`
+  and `&#10;` in attribute values on import.
 
 ### Audio (`reks-audio`)
 
@@ -284,7 +312,7 @@ Response(bytes)`.
 5. [x] **Folder scan**: walk roots (`walkdir`), extension filter, NFC normalise
    paths, insert/update by path, detect moves by `content_hash`, mark missing,
    progress events, cancellation token. Tests on a temp dir.
-6. [ ] **rekordbox XML parser/writer**: streaming parse with `quick-xml` into
+6. [x] **rekordbox XML parser/writer**: streaming parse with `quick-xml` into
    `Collection`; writer that reproduces rekordbox's element order and the
    `file://localhost/` Location form (percent-encoding rules from the XML
    spec); round-trip test on `collection-small.xml` and on a 3,000-track

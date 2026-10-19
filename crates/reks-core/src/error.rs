@@ -8,6 +8,9 @@ pub enum Error {
     #[error("database error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 
+    #[error("rekordbox XML: {0}")]
+    RbXml(#[from] crate::rbxml::RbXmlError),
+
     #[error("database migration failed: {0}")]
     Migration(#[from] rusqlite_migration::Error),
 
