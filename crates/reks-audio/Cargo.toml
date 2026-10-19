@@ -10,6 +10,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+flacenc = { workspace = true }
 lofty = { workspace = true }
 rubato = { workspace = true }
 serde = { workspace = true }
@@ -18,5 +19,8 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# Test-only (D25): hound writes WAVE_FORMAT_EXTENSIBLE above 16 bits, so the
+# converter's writers are our own (src/write/).
 hound = { workspace = true }
+reks-fixtures-gen = { workspace = true }
 tempfile = { workspace = true }

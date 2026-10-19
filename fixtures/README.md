@@ -46,6 +46,22 @@ Tags: MP3, FLAC and M4A carry title `Sine Click 128` and artist `reks fixtures`;
 AIFF carries the title only (ffmpeg's AIFF muxer drops `artist`); WAV has no tags.
 The MP3 decodes to 30.04 s because of the encoder's padding frame.
 
+## Converter sources (generated, not checked in)
+
+`reks-fixtures-gen` also renders two short stereo signals for the converter
+(Phase 2.6). Tests generate them on the fly; `cargo run -p reks-fixtures-gen
+-- hires|float <out.wav>` writes one to disk for manual checks.
+
+| Function | Format | Length |
+| --- | --- | --- |
+| `write_wav_hires` | 96 kHz, 24-bit (all 24 bits used), `WAVE_FORMAT_EXTENSIBLE` | 3.75 s = 360,000 frames |
+| `write_wav_float` | 44.1 kHz, 32-bit float, `WAVE_FORMAT_EXTENSIBLE` | 3.75 s = 165,375 frames |
+
+Signal: left 440 Hz at 0.25, right 660 Hz at 0.2 (so a channel swap shows),
+and the 128 BPM click (8 beats) on both channels. Both are written by `hound`,
+which uses the EXTENSIBLE header above 16 bits: the form older CDJs reject
+(docs/research.md §4). That is why the converter has its own writers.
+
 ## `rekordbox/collection-small.xml`
 
 A hand-written rekordbox `collection.xml` (rekordbox XML format, `PRODUCT`

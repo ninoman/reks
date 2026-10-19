@@ -24,6 +24,10 @@ pub enum Error {
         source: symphonia::core::errors::Error,
     },
 
+    /// The decoded audio failed the file's own check (FLAC MD5).
+    #[error("{path} is corrupt: {reason}")]
+    Corrupt { path: PathBuf, reason: String },
+
     /// The track is longer than whole-track decode allows ([`crate::MAX_DECODE_MS`]).
     #[error("{path} is too long to decode whole ({duration_ms} ms, limit {max_ms} ms)")]
     TooLong {

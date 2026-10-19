@@ -30,6 +30,7 @@ reks-anlz = { version = "0.1.0", path = "crates/reks-anlz" }
 reks-export-rb = { version = "0.1.0", path = "crates/reks-export-rb" }
 reks-export-onelibrary = { version = "0.1.0", path = "crates/reks-export-onelibrary" }
 reks-export-engine = { version = "0.1.0", path = "crates/reks-export-engine" }
+reks-fixtures-gen = { version = "0.1.0", path = "fixtures/gen" }
 
 # Shared external dependencies (pin here, reference with `workspace = true`).
 anyhow = "1"
@@ -42,6 +43,8 @@ binrw = "0.14"
 blake3 = "1.8"
 cpal = "0.18"
 deunicode = "1.6"
+# Pure-Rust FLAC encoder for the converter (D25). No default features: no rayon-style threads, no serde.
+flacenc = { version = "0.5", default-features = false }
 hound = "3"
 imagesize = { version = "0.15", default-features = false, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
 lofty = "0.25"
