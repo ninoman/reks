@@ -387,6 +387,30 @@ Date of decisions: 2026-10-18.
   folder (players browse by metadata, so rarely seen). Revisit if a hardware
   test shows Unicode paths are safe on all target players.
 
+## D25. File converter: lossless sources to WAV / AIFF / FLAC, own PCM writers, `flacenc`
+
+- Date: 2026-10-19 (maintainer's request). Plan: [`phases/phase-2.6.md`](phases/phase-2.6.md),
+  after Phase 2, independent of Phase 2.5.
+- Decision: convert selected tracks to WAV, AIFF or FLAC with a few settings
+  (bit depth, sample rate, destination, replace or add) and two presets, Older
+  players and Save space. Sources must be lossless (FLAC, ALAC, WAV, AIFF). The
+  converted file takes over the library track; the original is kept unless the
+  user moves it to the Trash. Plan → dry run → apply, as for exports.
+- Licence: `flacenc` 0.5 Apache-2.0 (pure Rust, R§11); `trash` for the optional
+  Trash move (licence to check in task 5); rubato, lofty, Symphonia already in the tree.
+- Rationale: FLAC/ALAC, rates above 48 kHz, float and `WAVE_FORMAT_EXTENSIBLE`
+  WAVs don't load on CDJ-2000NXS and older (R§4); Lexicon and rekordbox-edit
+  fix this by converting (R§11). Cues and grids live in our DB in ms, so a
+  lossless conversion keeps them valid.
+- Own WAV and AIFF writers: `hound` writes `WAVE_FORMAT_EXTENSIBLE` for anything
+  above 16 bits (hound 3.5.1 `write.rs`), the E-8305 breaker (R§4).
+- Rejected: lossy sources (no quality gain, and MP3 decoder-delay handling would
+  shift cues, D4); lossy targets (generation loss, and all players already
+  play MP3/AAC); FFmpeg (D4); `libflac-sys` (C build for no gain); converting
+  during export (a transcoder in the export path; needs its own decision).
+- Risks: rekordbox ANLZ reuse after Replace (CONV1), ID3 chunks in WAV (CONV2),
+  mono on players (CONV3), all **UNVERIFIED** until the Phase 2.6 hardware session.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

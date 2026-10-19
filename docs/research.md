@@ -17,6 +17,7 @@ Contents
 8. Consolidated list of unverified items
 9. DJ mixer reference and real-time audio crates (Phase 6)
 10. Play history and playlist dividers (Phases 2 and 2.5)
+11. File conversion (Phase 2.6)
 
 ---
 
@@ -627,3 +628,29 @@ https://github.com/mixxxdj/mixxx/pull/3140 ·
 https://community.enginedj.com/t/multi-source-sets-and-shared-merged-history-no-start-time-on-history-exports/58299 ·
 https://www.digitaldjtips.com/lexicon-1-10-brings-serato-4-0-support-track-timeline-play-history/ ·
 https://community.algoriddim.com/t/edit-play-count-on-macos-windows/23018
+
+---
+
+## 11. File conversion (Phase 2.6)
+
+Research date: 2026-10-19. Supports D25.
+
+- Need: which formats each player loads is in §4. In short, WAV/AIFF 16/24-bit
+  at 44.1/48 kHz load everywhere; FLAC/ALAC and rates above 48 kHz don't on
+  CDJ-2000NXS and older.
+- Other tools convert to fix this. Lexicon auto-fixes the §4 list.
+  rekordbox-edit `convert` writes AIFF (default), FLAC, WAV or MP3, repoints
+  the rekordbox DB entry so cues and grids stay, skips lossy sources, and
+  deletes originals only when nothing was lost. rekordbox itself treats a
+  converted file as a new track; cues live in its DB, not in the file.
+- `hound` 3.5.1 (`src/write.rs`, `new_with_spec_ex`) picks
+  `WAVE_FORMAT_EXTENSIBLE` when channels > 2 or bits per sample > 16. So
+  24-bit WAVs written with hound hit the E-8305 issue (§4).
+- `flacenc` 0.5.1: Apache-2.0, pure Rust FLAC encoder, last publish
+  2025-12-18, ~750k downloads (crates.io API, 2026-10-19).
+
+Sources: https://rekordbox-edit.readthedocs.io/en/latest/commands/convert/ ·
+https://pypi.org/project/rekordbox-playlist-converter/ ·
+https://www.mixgraph.io/tools/wav-to-aiff ·
+https://crates.io/api/v1/crates/flacenc · https://github.com/yotarok/flacenc-rs/ ·
+https://docs.rs/hound/3.5.1/src/hound/write.rs.html

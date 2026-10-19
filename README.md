@@ -16,6 +16,9 @@ Engine DJ players.
 - Then: playlist dividers that show on the player, and play history imported
   from played sticks, with practice sessions left out of play counts
   ([`docs/phases/phase-2.5.md`](docs/phases/phase-2.5.md)).
+- Converts lossless tracks to WAV, AIFF or FLAC, for older players or to save
+  space, keeping cues and playlists
+  ([`docs/phases/phase-2.6.md`](docs/phases/phase-2.6.md)).
 - Analyses tracks itself (BPM, beatgrid, key, waveforms) in Pioneer formats.
 - Later: the newer rekordbox "Device Library Plus" (`exportLibrary.db`) format
   and Denon Engine DJ libraries.
@@ -38,7 +41,7 @@ Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
 | --- | --- |
 | [`CLAUDE.md`](CLAUDE.md) | Brief for contributors and coding agents: stack, rules, conventions |
 | [`docs/decisions.md`](docs/decisions.md) | Architecture and product decisions, with status |
-| [`docs/phases/`](docs/phases/) | Phase 1–6 plans (plus 2.5) with task checklists |
+| [`docs/phases/`](docs/phases/) | Phase 1–6 plans (plus 2.5 and 2.6) with task checklists |
 | [`docs/research.md`](docs/research.md) | Evidence and sources behind the decisions |
 | [`docs/research/`](docs/research/) | Raw research notes per topic |
 | [`docs/hw-test-log.md`](docs/hw-test-log.md) | Real-player test results |
