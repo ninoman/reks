@@ -31,6 +31,7 @@ reks-export-engine = { version = "0.1.0", path = "crates/reks-export-engine" }
 
 # Shared external dependencies (pin here, reference with `workspace = true`).
 anyhow = "1"
+blake3 = "1.8"
 hound = "3"
 imagesize = { version = "0.15", default-features = false, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
 lofty = "0.25"
@@ -43,6 +44,8 @@ symphonia = { version = "0.6", default-features = false, features = ["mp3", "aac
 tempfile = "3"
 thiserror = "2"
 tracing = "0.1"
+unicode-normalization = "0.1"
+walkdir = "2.5"
 
 # Lints shared by the library crates (`[lints] workspace = true`).
 # App and CLI crates opt out of the unwrap/expect bans (CLAUDE.md allows them there).
