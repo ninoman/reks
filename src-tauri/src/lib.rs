@@ -80,6 +80,9 @@ pub fn run() {
             commands::export_plan,
             commands::export_apply,
             commands::export_cancel,
+            commands::convert_plan,
+            commands::convert_apply,
+            commands::convert_cancel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

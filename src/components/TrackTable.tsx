@@ -5,7 +5,8 @@
  *
  * Rows drag (the whole selection) onto playlists in the tree. In a playlist
  * view sorted by position (ascending) they also drag to reorder, and Delete or
- * the context menu removes the selected entries. Double-click or Enter loads
+ * the context menu removes the selected entries. The context menu converts
+ * the selected tracks anywhere (`ConvertDialog`). Double-click or Enter loads
  * a row into the player and plays it; the loaded track's row is marked with
  * an accent bar and accent text, separate from the selection background.
  */
@@ -22,6 +23,7 @@ import {
 } from "react";
 
 import { hasType, readTracks, TRACKS_MIME, type TrackDrag, zoneAt } from "../lib/dnd";
+import { useConverter } from "../store/converter";
 import { rowAt, useLibrary } from "../store/library";
 import { usePlayer } from "../store/player";
 import { shownPlaylist, usePlaylists } from "../store/playlists";
@@ -204,14 +206,14 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
       .reorderEntries(view.id, drag.entryPositions, row.entryPosition + (after ? 1 : 0));
   }
 
-  /** Right-click selects the row first; the menu (playlists only) opens on the table. */
+  /** Right-click selects the row first; the menu opens on the table. */
   function onRowContextMenu(index: number) {
-    if (view !== null && !selection.selected.has(index)) select({ type: "click", index });
+    if (!selection.selected.has(index)) select({ type: "click", index });
   }
 
   return (
     <ContextMenu modal={false}>
-      <ContextMenuTrigger asChild disabled={view === null}>
+      <ContextMenuTrigger asChild>
         <div
           ref={scrollRef}
           className="group relative flex-1 overflow-auto outline-none [contain:strict]"
@@ -220,10 +222,6 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
           aria-multiselectable
           tabIndex={0}
           onKeyDown={onKeyDown}
-          onContextMenu={(e) => {
-            // No menu in the collection, and no browser menu either.
-            if (view === null) e.preventDefault();
-          }}
         >
           <div
             className="sticky top-0 z-(--z-sticky) flex border-b border-border bg-bg-subtle text-xs font-semibold text-fg-muted"
@@ -311,11 +309,16 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
           </div>
         </div>
       </ContextMenuTrigger>
-      {view !== null && (
-        <ContextMenuContent>
+      <ContextMenuContent>
+        <ContextMenuItem
+          onSelect={() => useConverter.getState().open(selectedRows().map((r) => r.id))}
+        >
+          Convert…
+        </ContextMenuItem>
+        {view !== null && (
           <ContextMenuItem onSelect={removeSelected}>Remove from {view.name}</ContextMenuItem>
-        </ContextMenuContent>
-      )}
+        )}
+      </ContextMenuContent>
     </ContextMenu>
   );
 }

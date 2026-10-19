@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use lofty::config::WriteOptions;
 use lofty::tag::{Tag, TagExt, TagType};
+use serde::{Deserialize, Serialize};
 
 use crate::dither::{to_float, Requantiser};
 use crate::error::{Error, Result};
@@ -27,7 +28,8 @@ use crate::write::{AiffWriter, FlacWriter, PcmSpec, PcmWriter, WavWriter, WriteE
 use crate::{NativeStream, StreamResampler};
 
 /// Output container.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Target {
     /// Plain PCM `fmt` tag 1, ID3v2 chunk for tags.
     Wav,
@@ -38,7 +40,8 @@ pub enum Target {
 }
 
 /// Output bit depth.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Depth {
     /// The source's depth: 16 for 16 bits or fewer, else 24 (32-bit and
     /// float sources become 24-bit).
@@ -50,7 +53,8 @@ pub enum Depth {
 }
 
 /// Output sample rate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Rate {
     Keep,
     Hz44100,
@@ -58,7 +62,8 @@ pub enum Rate {
 }
 
 /// What to convert to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConvertSpec {
     pub target: Target,
     pub depth: Depth,

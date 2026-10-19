@@ -9,6 +9,11 @@ import type { Channel } from "@tauri-apps/api/core";
 import { mockIPC } from "@tauri-apps/api/mocks";
 
 import type {
+  ConvertDryRun,
+  ConvertEvent,
+  ConvertOptions,
+  ConvertReportView,
+  ConvertSpec,
   Device,
   DeviceInfo,
   DeviceMatch,
@@ -706,6 +711,99 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
             },
           ]
         : [],
+    convertible: copies.length > 0 ? TRACKS.slice(0, 2).map((t) => t.id) : [],
+    convertText:
+      copies.length > 0
+        ? "2 tracks can be converted to a format older players load (AIFF, up to 24-bit / 48 kHz). The library track keeps its cues, grid and playlists."
+        : null,
+  };
+}
+
+let lastConvert: ConvertDryRun | null = null;
+let convertCancelled = false;
+
+/** Like `convert::plan_view`: every third track is an MP3 and is skipped. */
+function convertDryRun(tracks: number[], spec: ConvertSpec, opts: ConvertOptions): ConvertDryRun {
+  const rows = tracks.map((id) => TRACKS.find((t) => t.id === id)).filter((t) => t !== undefined);
+  const label = (t: TrackRow) => `${t.artist ?? ""} – ${t.title ?? ""}`;
+  const ext = spec.target;
+  const items = rows
+    .filter((t) => t.id % 3 !== 0)
+    .map((t) => ({
+      trackId: t.id,
+      label: label(t),
+      source: `/Users/dj/Music/${t.title}.flac`,
+      dest: `${typeof opts.destination === "string" ? "/Users/dj/Music" : opts.destination.folder}/${t.title}.${ext}`,
+      from: "FLAC · 24-bit · 96 kHz · stereo",
+      to: `${ext.toUpperCase()} · 24-bit · ${opts.capRate48k || spec.rate === "hz48000" ? "48 kHz" : spec.rate === "hz44100" ? "44.1 kHz" : "96 kHz"} · stereo`,
+      sizeText: "41.2 MB → 23.0 MB",
+    }));
+  lastConvert = {
+    planId: ++planId,
+    ready: items.length > 0,
+    status:
+      items.length > 0
+        ? `Ready to convert ${items.length} file${items.length === 1 ? "" : "s"}. Nothing has been written yet.`
+        : "Nothing to convert. Nothing has been written.",
+    facts: [
+      {
+        label: "Files",
+        value: `${items.length} to convert, ${rows.length - items.length} skipped`,
+      },
+      {
+        label: "Size",
+        value: `${(items.length * 41.2).toFixed(1)} MB → about ${(items.length * 23).toFixed(1)} MB`,
+      },
+    ],
+    items,
+    skipped: rows
+      .filter((t) => t.id % 3 === 0)
+      .map((t) => ({
+        trackId: t.id,
+        label: label(t),
+        reason: "MP3 or AAC: only lossless files convert",
+      })),
+    warnings: [],
+  };
+  return lastConvert;
+}
+
+async function convertApplyMock(onEvent: Channel<ConvertEvent>): Promise<ConvertReportView> {
+  const plan = lastConvert;
+  if (plan === null)
+    throw new Error("this dry run is out of date or was already converted; plan again");
+  lastConvert = null;
+  convertCancelled = false;
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const done: ConvertReportView["converted"] = [];
+  for (const [index, it] of plan.items.entries()) {
+    if (convertCancelled) break;
+    onEvent.onmessage({ type: "started", trackId: it.trackId, index, total: plan.items.length });
+    for (let f = 1; f <= 4; f++) {
+      await wait(250);
+      onEvent.onmessage({ type: "progress", trackId: it.trackId, fraction: f / 4 });
+    }
+    done.push({
+      trackId: it.trackId,
+      newTrackId: it.trackId,
+      label: it.label,
+      dest: it.dest,
+      original: `Original kept: ${it.source}`,
+    });
+  }
+  return {
+    outcome: convertCancelled ? "cancelled" : "success",
+    title: convertCancelled ? "Conversion cancelled" : "Conversion finished",
+    status: `Converted ${done.length} of ${plan.items.length} files.${convertCancelled ? " Files not started are unchanged." : ""}`,
+    facts: [
+      {
+        label: "Size",
+        value: `${(done.length * 41.2).toFixed(1)} MB → ${(done.length * 23).toFixed(1)} MB`,
+      },
+    ],
+    converted: done,
+    failed: [],
+    skipped: plan.skipped,
   };
 }
 
@@ -823,6 +921,25 @@ mockIPC((cmd, payload) => {
       return exportApply(args.onEvent as Channel<ExportProgress>);
     case "export_cancel":
       cancelled = true;
+      return null;
+    case "convert_plan":
+      return new Promise((resolve) =>
+        setTimeout(
+          () =>
+            resolve(
+              convertDryRun(
+                args.tracks as number[],
+                args.spec as ConvertSpec,
+                args.options as ConvertOptions,
+              ),
+            ),
+          300,
+        ),
+      );
+    case "convert_apply":
+      return convertApplyMock(args.onEvent as Channel<ConvertEvent>);
+    case "convert_cancel":
+      convertCancelled = true;
       return null;
     case "plugin:dialog|open":
       return "/Users/dj/Music/rekordbox/collection.xml";

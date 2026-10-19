@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use reks_core::convert::{self, ConvertEvent, ConvertOptions, ConvertSpec, PlanView};
 use reks_core::rbxml::{
     self, ImportEvent, ImportOptions, ImportPreview, ImportReport, PrefixRemap,
 };
@@ -250,9 +251,9 @@ pub async fn library_root_remove(state: State<'_, AppState>, id: i64) -> CmdResu
 #[tauri::command]
 pub async fn cache_dir_move(state: State<'_, AppState>, path: PathBuf) -> CmdResult<Settings> {
     let busy = |m: &std::sync::Mutex<Option<CancelToken>>| m.lock().map_or(true, |g| g.is_some());
-    if busy(&state.scan_cancel) || busy(&state.import_cancel) {
+    if busy(&state.scan_cancel) || busy(&state.import_cancel) || busy(&state.convert_cancel) {
         return Err(CmdError(
-            "wait for the scan or import to finish before moving the cache".into(),
+            "wait for the scan, import or conversion to finish before moving the cache".into(),
         ));
     }
     blocking(&state, move |lib| {
@@ -634,6 +635,112 @@ pub async fn export_apply(
 #[tauri::command]
 pub fn export_cancel(state: State<'_, AppState>) {
     if let Ok(running) = state.export_cancel.lock() {
+        if let Some(c) = running.as_ref() {
+            c.cancel();
+        }
+    }
+}
+
+/// A converter dry run and the id `convert_apply` takes to run exactly that plan.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannedConvert {
+    plan_id: u64,
+    #[serde(flatten)]
+    view: PlanView,
+}
+
+/// Dry run of converting `tracks` (phase 2.6 task 6): reads file headers,
+/// writes nothing. The plan is kept under the returned id (the newest call
+/// wins) for `convert_apply`.
+#[tauri::command]
+pub async fn convert_plan(
+    state: State<'_, AppState>,
+    tracks: Vec<TrackId>,
+    spec: ConvertSpec,
+    options: ConvertOptions,
+) -> CmdResult<PlannedConvert> {
+    let plan_id = {
+        let mut shown = state
+            .shown_convert
+            .lock()
+            .map_err(|_| "convert state poisoned")?;
+        shown.last_id += 1;
+        shown.last_id
+    };
+    let (plan, view) = blocking(&state, move |lib| {
+        convert::plan(lib, &tracks, &spec, &options).map(|plan| {
+            let view = convert::plan_view(lib, &plan);
+            (plan, view)
+        })
+    })
+    .await?;
+    let mut shown = state
+        .shown_convert
+        .lock()
+        .map_err(|_| "convert state poisoned")?;
+    if shown.last_id == plan_id {
+        shown.plan = Some((plan_id, plan));
+    }
+    Ok(PlannedConvert { plan_id, view })
+}
+
+/// Converts the plan the dry run `plan_id` showed, streaming progress to
+/// `on_event`. Refused when a newer dry run replaced it or it already ran.
+/// Per-file failures are in the report, not errors.
+#[tauri::command]
+pub async fn convert_apply(
+    state: State<'_, AppState>,
+    plan_id: u64,
+    on_event: Channel<ConvertEvent>,
+) -> CmdResult<convert::ReportView> {
+    let plan = {
+        let mut shown = state
+            .shown_convert
+            .lock()
+            .map_err(|_| "convert state poisoned")?;
+        match shown.plan.take() {
+            Some((id, plan)) if id == plan_id => plan,
+            other => {
+                shown.plan = other;
+                return Err(CmdError(
+                    "this dry run is out of date or was already converted; plan again".into(),
+                ));
+            }
+        }
+    };
+    let cancel = CancelToken::new();
+    {
+        let mut running = state
+            .convert_cancel
+            .lock()
+            .map_err(|_| "convert state poisoned")?;
+        if running.is_some() {
+            return Err(CmdError("a conversion is already running".into()));
+        }
+        *running = Some(cancel.clone());
+    }
+    let result = blocking(&state, move |lib| {
+        let events = |e: ConvertEvent| {
+            if let Err(err) = on_event.send(e) {
+                tracing::warn!(%err, "convert progress channel closed");
+            }
+        };
+        convert::apply(lib, &plan, &events, &cancel)
+            .map(|report| convert::report_view(lib, &plan, &report))
+    })
+    .await;
+    if let Ok(mut running) = state.convert_cancel.lock() {
+        *running = None;
+    }
+    result
+}
+
+/// Asks the running conversion, if any, to stop after cleaning up its
+/// current file.
+#[tauri::command]
+pub fn convert_cancel(state: State<'_, AppState>) {
+    if let Ok(running) = state.convert_cancel.lock() {
         if let Some(c) = running.as_ref() {
             c.cancel();
         }

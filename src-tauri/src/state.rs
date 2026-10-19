@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use reks_core::convert::ConvertPlan;
 use reks_core::{CancelToken, Library, TrackId};
 use reks_export_rb::devices::DeviceId;
 use reks_export_rb::plan::{ExportPlan, Selection};
@@ -22,6 +23,10 @@ pub struct AppState {
     pub export_cancel: Mutex<Option<CancelToken>>,
     /// The export plan the wizard's dry run shows; Export writes exactly it.
     pub shown_plan: Mutex<ShownPlan>,
+    /// Cancels the running file conversion, if any.
+    pub convert_cancel: Mutex<Option<CancelToken>>,
+    /// The conversion plan the converter's dry run shows; Convert runs exactly it.
+    pub shown_convert: Mutex<ShownConvert>,
     /// App data dir (D19): stick backups go under it.
     pub data_dir: PathBuf,
     pub player: Mutex<PlayerSlot>,
@@ -35,6 +40,15 @@ pub struct ShownPlan {
     /// `(id, plan, selection, stick profile)` of the newest plan that
     /// finished; taken by `export_apply`.
     pub plan: Option<(u64, ExportPlan, Selection, Option<DeviceId>)>,
+}
+
+/// The last conversion plan returned to the UI, under the id the UI sends back.
+#[derive(Debug, Default)]
+pub struct ShownConvert {
+    /// Id of the newest `convert_plan` call; ids only grow.
+    pub last_id: u64,
+    /// `(id, plan)` of the newest plan that finished; taken by `convert_apply`.
+    pub plan: Option<(u64, ConvertPlan)>,
 }
 
 /// The preview player and the track on it.
@@ -66,6 +80,8 @@ impl AppState {
             import_cancel: Mutex::new(None),
             export_cancel: Mutex::new(None),
             shown_plan: Mutex::new(ShownPlan::default()),
+            convert_cancel: Mutex::new(None),
+            shown_convert: Mutex::new(ShownConvert::default()),
             data_dir: data_dir.to_path_buf(),
             player: Mutex::new(PlayerSlot {
                 player: Player::new(settings.audio_device).with_volume(settings.ui.volume),

@@ -8,6 +8,7 @@
  */
 import { useEffect } from "react";
 import { AppHeader } from "./components/AppHeader";
+import { ConvertDialog } from "./components/ConvertDialog";
 import { DEFAULT_HIDDEN } from "./components/columns";
 import { DevicesDialog } from "./components/DevicesDialog";
 import { ExportWizard } from "./components/ExportWizard";
@@ -105,6 +106,7 @@ export default function App() {
       <SettingsDialog />
       <DevicesDialog />
       <ExportWizard />
+      <ConvertDialog />
     </div>
   );
 }

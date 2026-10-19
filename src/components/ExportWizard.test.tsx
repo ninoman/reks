@@ -34,6 +34,7 @@ const exportCancel = vi.mocked(ipc.exportCancel);
 const profileIdentify = vi.mocked(ipc.profileIdentify);
 const profileSelection = vi.mocked(ipc.profileSelection);
 const profileSetSelection = vi.mocked(ipc.profileSetSelection);
+const { useConverter } = await import("../store/converter");
 const { useExportWizard } = await import("../store/exportWizard");
 const { usePlaylists } = await import("../store/playlists");
 const { useProfiles } = await import("../store/profiles");
@@ -127,6 +128,8 @@ function dryRun(over: Partial<DryRun> = {}): DryRun {
     },
     problems: [],
     warnings: [],
+    convertible: [],
+    convertText: null,
     ...over,
   };
 }
@@ -326,6 +329,25 @@ describe("ExportWizard", () => {
 
     fireEvent.click(button("Back"));
     expect(screen.getByText("Step 3 of 6: Options")).toBeTruthy();
+  });
+
+  it("offers the converter for tracks it fixes", async () => {
+    exportPlan.mockResolvedValue(
+      dryRun({
+        convertible: [4, 9],
+        convertText: "2 tracks can be converted to a format older players load.",
+      }),
+    );
+    await toOptions();
+    fireEvent.click(button("Dry run"));
+    expect(await screen.findByText(/2 tracks can be converted/)).toBeTruthy();
+    useConverter.getState().set({ target: "wav" });
+    fireEvent.click(button("Convert…"));
+    const c = useConverter.getState();
+    expect(c.step).toBe("settings");
+    expect(c.trackIds).toEqual([4, 9]);
+    expect(c.settings).toMatchObject({ target: "aiff", rate: "keepMax48" });
+    c.close();
   });
 
   it("a blocked plan says why and can't proceed", async () => {

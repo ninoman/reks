@@ -5,11 +5,13 @@
  * "Scan folder…" adds the folder to the library folders (Settings) and scans
  * it. "Import rekordbox XML…" picks the file and opens the import wizard
  * (`ImportWizard`). "Export to USB…" opens the export wizard (`ExportWizard`)
- * with the playlist selected in the sidebar ticked.
+ * with the playlist selected in the sidebar ticked. While the converter's
+ * dialog is hidden, a button shows its progress and reopens it.
  */
 
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { useConverter } from "../store/converter";
 import { useDevices } from "../store/devices";
 import { openExportWizard } from "../store/exportWizard";
 import { useImportWizard } from "../store/importWizard";
@@ -24,6 +26,15 @@ export function AppHeader() {
   const status = useScan((s) => s.status);
   const scanning = useScan((s) => s.scanning);
   const importing = useImportWizard((s) => s.step !== "closed");
+  const converting = useConverter((s) =>
+    !s.hidden
+      ? null
+      : s.step === "report"
+        ? "Conversion done"
+        : s.progress === null
+          ? "Converting…"
+          : `Converting ${s.progress.index + 1} of ${s.progress.total}…`,
+  );
 
   async function scanFolder() {
     const dir = await open({ directory: true, title: "Scan music folder" });
@@ -45,6 +56,11 @@ export function AppHeader() {
     <header>
       <div className="flex h-(--toolbar-h) items-center gap-2 border-b border-border bg-bg-subtle px-3">
         <span className="flex-1 font-medium tracking-wide">reks</span>
+        {converting !== null && (
+          <Button size="sm" onClick={() => useConverter.getState().setHidden(false)}>
+            {converting}
+          </Button>
+        )}
         <Button size="sm" disabled={scanning || importing} onClick={() => void scanFolder()}>
           Scan folder…
         </Button>

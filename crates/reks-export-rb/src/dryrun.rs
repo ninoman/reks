@@ -78,6 +78,13 @@ pub struct DryRun {
     /// Everything else to know, grouped the same way. The history warning is
     /// in [`Self::history`] instead.
     pub warnings: Vec<NoticeGroup>,
+    /// Tracks whose audio warning or problem the converter's Older players
+    /// preset fixes ([`ExportPlan::convertible`]); the view offers "Convert…".
+    #[serde(default)]
+    pub convertible: Vec<TrackId>,
+    /// One sentence on them, `None` when there are none.
+    #[serde(default)]
+    pub convert_text: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -285,6 +292,14 @@ impl DryRun {
             history: history_view(plan),
             problems: problems.finish(problem_title),
             warnings: warnings.finish(warning_title),
+            convertible: plan.convertible.clone(),
+            convert_text: (!plan.convertible.is_empty()).then(|| {
+                format!(
+                    "{} can be converted to a format older players load (AIFF, up to \
+                     24-bit / 48 kHz). The library track keeps its cues, grid and playlists.",
+                    count(plan.convertible.len(), "track", "tracks")
+                )
+            }),
         }
     }
 }

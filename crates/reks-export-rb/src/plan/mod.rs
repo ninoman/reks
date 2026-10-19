@@ -182,6 +182,11 @@ pub struct ExportPlan {
     pub bytes_to_write: u64,
     /// Free space after the export: free now, minus writes, plus deletes.
     pub bytes_free_after: i64,
+    /// Tracks with an audio check the converter fixes
+    /// ([`Issue::converter_fixes`](crate::audiocheck::Issue::converter_fixes)),
+    /// in plan order: the dry run offers to convert them (Phase 2.6).
+    #[serde(default)]
+    pub convertible: Vec<TrackId>,
 }
 
 impl ExportPlan {
@@ -438,8 +443,9 @@ pub fn plan_sources(
 
     // Per-track checks; tracks that fail are left out (with a warning) or block.
     let mut ok: Vec<(SourceTrack, Probe, u64, std::time::SystemTime, AnlzSource)> = Vec::new();
+    let mut convertible = Vec::new();
     for t in sources.tracks {
-        match check_track(&t, target, opts, anlz, &mut warnings) {
+        match check_track(&t, target, opts, anlz, &mut warnings, &mut convertible) {
             Ok(Some((probe, size, mtime, anlz_source))) => {
                 ok.push((t, probe, size, mtime, anlz_source));
             }
@@ -589,6 +595,7 @@ pub fn plan_sources(
         errors,
         bytes_to_write,
         bytes_free_after,
+        convertible,
     })
 }
 
@@ -646,6 +653,7 @@ fn check_track(
     opts: &ExportOptions,
     anlz: &dyn AnlzLocator,
     warnings: &mut Vec<Warning>,
+    convertible: &mut Vec<TrackId>,
 ) -> Result<Option<(Probe, u64, std::time::SystemTime, AnlzSource)>, Problem> {
     let missing = || Problem::SourceMissing {
         track_id: t.track_id,
@@ -667,6 +675,9 @@ fn check_track(
     };
     let issues =
         audiocheck::check(&t.src, &probe, target).map_err(|e| unreadable(e.to_string()))?;
+    if issues.iter().any(|i| i.converter_fixes(probe.kind)) {
+        convertible.push(t.track_id);
+    }
     // Errors first so the reported blocker is the most serious one.
     if let Some(issue) = issues
         .iter()

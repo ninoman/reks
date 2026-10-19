@@ -1,6 +1,6 @@
 # Phase 2.6 — File converter (WAV, AIFF, FLAC)
 
-Status: tasks 1–5 done (2026-10-19/20, started ahead of the Phase 2 hardware
+Status: tasks 1–6 done (2026-10-19/20, started ahead of the Phase 2 hardware
 campaign with the maintainer's approval: pure `reks-audio` code). Depends on:
 Phase 1 (decode, tags, library) and Phase 2 (`audiocheck`, export, hardware
 campaign). Independent of Phase 2.5; either can
@@ -174,9 +174,25 @@ and grid copied.
    row, so a re-scan adds the original back. `CancelToken` is now the
    `reks_audio` one, re-exported. The Trash move itself has no automated
    test (it would fill the tester's Trash).
-6. **UI**: "Convert…" in the track context menu; dialog with the preset and the
+6. [x] **UI**: "Convert…" in the track context menu; dialog with the preset and the
    table above; dry-run list; background progress with cancel; report.
    `audiocheck` warnings link to it (Phase 2 dry-run view).
+   Done: [ConvertDialog.tsx](../../src/components/ConvertDialog.tsx) and
+   [store/converter.ts](../../src/store/converter.ts) over the commands
+   `convert_plan` / `convert_apply` / `convert_cancel`. As for exports, the
+   dry run's plan is kept under a `planId` and Convert runs exactly it. All
+   wording comes from [`convert::view`](../../crates/reks-core/src/convert/view.rs)
+   (`PlanView`, `ReportView`; the CLI prints the same text). The sample-rate
+   menu shows the Older players cap as its own choice, "Keep, max 48 kHz"
+   (`ConvertOptions::cap_rate_48k`). "Move to Trash" is off unless Replace.
+   The dialog can be hidden while it converts; the app header then shows
+   "Converting n of m…" and reopens it. The menu converts the selected rows
+   that are loaded (as drag and Remove do). Export link:
+   [`Issue::converter_fixes`](../../crates/reks-export-rb/src/audiocheck.rs)
+   (the issues above, on lossless files, rates only above 48 kHz) fills
+   `ExportPlan::convertible`; the dry run shows a "Convert for older players"
+   section that opens the dialog on those tracks with Older players. Plan the
+   export again after converting.
 7. **`reks-cli convert`** with the same plan/dry-run/apply flags.
 8. **Hardware session**: checklist below; log in `docs/hw-test-log.md`.
 
