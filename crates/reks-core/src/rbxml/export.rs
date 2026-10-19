@@ -228,7 +228,8 @@ impl Builder<'_> {
 
     fn entries(&self, playlist: PlaylistId) -> Result<Vec<TrackId>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT track_id FROM playlist_track WHERE playlist_id = ?1 ORDER BY position",
+            "SELECT track_id FROM playlist_track
+             WHERE playlist_id = ?1 AND item_kind = 'track' ORDER BY position",
         )?;
         let ids = stmt
             .query_map([playlist], |r| r.get(0))?

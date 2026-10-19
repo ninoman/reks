@@ -4,6 +4,9 @@
 //! Rules: `docs/phases/phase-1.md` (task 10 notes). Every op is validated
 //! before anything is written and runs in one transaction. Entry positions
 //! and sibling `sort_order`s stay dense (`0..n`).
+//!
+//! An entry is a track or a labelled divider (D22, `docs/phases/phase-2.5.md`).
+//! Remove and reorder treat both alike; dividers are never duplicates.
 
 use std::collections::{BTreeSet, HashSet};
 
@@ -101,7 +104,24 @@ pub enum PlaylistOp {
         positions: Vec<u32>,
         before: u32,
     },
+    /// A divider inserted before the entry at `position` (`None` = appended).
+    InsertDivider {
+        playlist_id: PlaylistId,
+        #[serde(default)]
+        position: Option<u32>,
+        label: String,
+    },
+    /// Relabels the divider at `position`.
+    RenameDivider {
+        playlist_id: PlaylistId,
+        position: u32,
+        label: String,
+    },
 }
+
+/// Longest divider label, in characters. The players' display limit is
+/// UNVERIFIED (DIV2).
+pub const MAX_DIVIDER_LABEL_CHARS: usize = 64;
 
 /// The result of an op. Duplicates are an outcome, not an error.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -189,6 +209,16 @@ impl Library {
                 positions,
                 before,
             } => reorder_entries(&tx, playlist_id, &positions, before, &now)?,
+            PlaylistOp::InsertDivider {
+                playlist_id,
+                position,
+                label,
+            } => insert_divider(&tx, playlist_id, position, &label, &now)?,
+            PlaylistOp::RenameDivider {
+                playlist_id,
+                position,
+                label,
+            } => rename_divider(&tx, playlist_id, position, &label, &now)?,
         };
         tx.commit()?;
         Ok(outcome)
@@ -298,7 +328,7 @@ fn add_tracks(
     }
 
     // A track is a duplicate if the playlist has it or the request named it earlier.
-    let mut seen: HashSet<TrackId> = current.iter().copied().collect();
+    let mut seen: HashSet<TrackId> = current.iter().filter_map(Entry::track).collect();
     let flagged: Vec<(TrackId, bool)> = track_ids.iter().map(|&t| (t, !seen.insert(t))).collect();
     let dup_count = flagged.iter().filter(|(_, dup)| *dup).count();
     if mode == DuplicateMode::Ask && dup_count > 0 {
@@ -321,7 +351,7 @@ fn add_tracks(
         .map(|&(t, _)| t)
         .collect();
     let mut new = current.clone();
-    new.splice(at..at, add.iter().copied());
+    new.splice(at..at, add.iter().map(|&t| Entry::Track(t)));
     write_entries(c, playlist, &current, &new, now)?;
     Ok(PlaylistOutcome::Done {
         created_id: None,
@@ -339,11 +369,11 @@ fn remove_entries(
     require_playlist(c, playlist)?;
     let current = entries(c, playlist)?;
     let drop = entry_set(positions, current.len())?;
-    let new: Vec<TrackId> = current
+    let new: Vec<Entry> = current
         .iter()
         .enumerate()
         .filter(|(i, _)| !drop.contains(i))
-        .map(|(_, &t)| t)
+        .map(|(_, e)| e.clone())
         .collect();
     write_entries(c, playlist, &current, &new, now)?;
     Ok(PlaylistOutcome::done())
@@ -360,17 +390,84 @@ fn reorder_entries(
     let current = entries(c, playlist)?;
     let moved = entry_set(positions, current.len())?;
     let before = index(before, current.len())?;
-    let block: Vec<TrackId> = moved.iter().map(|&i| current[i]).collect();
-    let mut new: Vec<TrackId> = current
+    let block: Vec<Entry> = moved.iter().map(|&i| current[i].clone()).collect();
+    let mut new: Vec<Entry> = current
         .iter()
         .enumerate()
         .filter(|(i, _)| !moved.contains(i))
-        .map(|(_, &t)| t)
+        .map(|(_, e)| e.clone())
         .collect();
     let at = before - moved.range(..before).count();
     new.splice(at..at, block);
     write_entries(c, playlist, &current, &new, now)?;
     Ok(PlaylistOutcome::done())
+}
+
+fn insert_divider(
+    c: &Connection,
+    playlist: PlaylistId,
+    position: Option<u32>,
+    label: &str,
+    now: &str,
+) -> Result<PlaylistOutcome> {
+    let label = valid_label(label)?;
+    require_playlist(c, playlist)?;
+    let current = entries(c, playlist)?;
+    let at = match position {
+        Some(p) => index(p, current.len())?,
+        None => current.len(),
+    };
+    let mut new = current.clone();
+    new.insert(at, Entry::Divider(label));
+    write_entries(c, playlist, &current, &new, now)?;
+    Ok(PlaylistOutcome::done())
+}
+
+fn rename_divider(
+    c: &Connection,
+    playlist: PlaylistId,
+    position: u32,
+    label: &str,
+    now: &str,
+) -> Result<PlaylistOutcome> {
+    let label = valid_label(label)?;
+    require_playlist(c, playlist)?;
+    let current = entries(c, playlist)?;
+    let at = entry_index(position, current.len())?;
+    if !matches!(current[at], Entry::Divider(_)) {
+        return Err(Error::NotADivider { playlist, position });
+    }
+    let mut new = current.clone();
+    new[at] = Entry::Divider(label);
+    write_entries(c, playlist, &current, &new, now)?;
+    Ok(PlaylistOutcome::done())
+}
+
+/// One `playlist_track` row: a track or a divider with its label.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Entry {
+    Track(TrackId),
+    Divider(String),
+}
+
+impl Entry {
+    pub(crate) fn track(&self) -> Option<TrackId> {
+        match self {
+            Self::Track(t) => Some(*t),
+            Self::Divider(_) => None,
+        }
+    }
+
+    pub(crate) fn from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        // The table's CHECK guarantees exactly one of the two is set.
+        match (
+            r.get::<_, Option<TrackId>>(0)?,
+            r.get::<_, Option<String>>(1)?,
+        ) {
+            (Some(t), _) => Ok(Self::Track(t)),
+            (None, label) => Ok(Self::Divider(label.unwrap_or_default())),
+        }
+    }
 }
 
 struct Node {
@@ -437,22 +534,23 @@ fn write_order(c: &Connection, ids: &[PlaylistId], now: &str) -> Result<()> {
     Ok(())
 }
 
-fn entries(c: &Connection, playlist: PlaylistId) -> Result<Vec<TrackId>> {
+/// The playlist's entries in order.
+pub(crate) fn entries(c: &Connection, playlist: PlaylistId) -> Result<Vec<Entry>> {
     Ok(c.prepare_cached(
-        "SELECT track_id FROM playlist_track WHERE playlist_id = ?1 ORDER BY position",
+        "SELECT track_id, label FROM playlist_track WHERE playlist_id = ?1 ORDER BY position",
     )?
-    .query_map([playlist], |r| r.get(0))?
+    .query_map([playlist], Entry::from_row)?
     .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Replaces `old` with `new`. Rows from the first difference on are deleted
 /// and re-inserted, so positions stay `0..n` and the `(playlist_id, position)`
 /// key never sees two rows at one position.
-fn write_entries(
+pub(crate) fn write_entries(
     c: &Connection,
     playlist: PlaylistId,
-    old: &[TrackId],
-    new: &[TrackId],
+    old: &[Entry],
+    new: &[Entry],
     now: &str,
 ) -> Result<()> {
     if old == new {
@@ -462,10 +560,15 @@ fn write_entries(
     c.prepare_cached("DELETE FROM playlist_track WHERE playlist_id = ?1 AND position >= ?2")?
         .execute(params![playlist, to_i64(k)])?;
     let mut insert = c.prepare_cached(
-        "INSERT INTO playlist_track (playlist_id, track_id, position) VALUES (?1, ?2, ?3)",
+        "INSERT INTO playlist_track (playlist_id, track_id, position, item_kind, label)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
     )?;
-    for (i, t) in new.iter().enumerate().skip(k) {
-        insert.execute(params![playlist, t, to_i64(i)])?;
+    for (i, e) in new.iter().enumerate().skip(k) {
+        let (track, kind, label) = match e {
+            Entry::Track(t) => (Some(*t), "track", None),
+            Entry::Divider(l) => (None, "divider", Some(l.as_str())),
+        };
+        insert.execute(params![playlist, track, to_i64(i), kind, label])?;
     }
     c.prepare_cached("UPDATE playlist SET updated_at = ?2 WHERE id = ?1")?
         .execute(params![playlist, now])?;
@@ -483,6 +586,27 @@ fn valid_name(name: &str) -> Result<String> {
     }
 }
 
+/// A divider label: the playlist-name rules, at most
+/// `MAX_DIVIDER_LABEL_CHARS` characters.
+fn valid_label(label: &str) -> Result<String> {
+    let label = match track::text("label", Some(label), false)? {
+        Value::Text(s) => s,
+        _ => {
+            return Err(Error::InvalidField {
+                field: "label",
+                reason: "must not be empty".into(),
+            })
+        }
+    };
+    if label.chars().count() > MAX_DIVIDER_LABEL_CHARS {
+        return Err(Error::InvalidField {
+            field: "label",
+            reason: format!("longer than {MAX_DIVIDER_LABEL_CHARS} characters"),
+        });
+    }
+    Ok(label)
+}
+
 /// An insertion index into a list of `len`: `0..=len`.
 fn index(i: u32, len: usize) -> Result<usize> {
     let at = usize::try_from(i).unwrap_or(usize::MAX);
@@ -495,18 +619,20 @@ fn index(i: u32, len: usize) -> Result<usize> {
     Ok(at)
 }
 
+/// An entry position: `0..len`.
+fn entry_index(p: u32, len: usize) -> Result<usize> {
+    match index(p, len)? {
+        at if at < len => Ok(at),
+        _ => Err(Error::IndexOutOfRange {
+            index: p,
+            len: to_u32(len),
+        }),
+    }
+}
+
 /// Entry positions, each `< len`; repeats collapse.
 fn entry_set(positions: &[u32], len: usize) -> Result<BTreeSet<usize>> {
-    positions
-        .iter()
-        .map(|&p| match index(p, len)? {
-            at if at < len => Ok(at),
-            _ => Err(Error::IndexOutOfRange {
-                index: p,
-                len: to_u32(len),
-            }),
-        })
-        .collect()
+    positions.iter().map(|&p| entry_index(p, len)).collect()
 }
 
 fn to_i64(n: usize) -> i64 {
