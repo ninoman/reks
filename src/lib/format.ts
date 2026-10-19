@@ -46,3 +46,15 @@ export function keyLabel(key: Key, notation: KeyNotation, keys: KeyInfo[] | unde
   if (k === undefined) return key;
   return notation === "camelot" ? k.camelot : k.openKey;
 }
+
+/** Size in decimal units, as Finder and Explorer's drive labels show it: "18.4 GB". */
+export function formatBytes(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = bytes;
+  let i = 0;
+  while (v >= 1000 && i < units.length - 1) {
+    v /= 1000;
+    i++;
+  }
+  return i === 0 ? `${v} B` : `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
+}

@@ -113,3 +113,27 @@ export function PauseIcon() {
     </svg>
   );
 }
+
+export function EjectIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path d="M8 3.5 3.5 9h9L8 3.5Z" fill="currentColor" />
+      <path d="M3.5 12h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function UsbIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="M5.5 1.5h5v5h-5zM4.5 6.5h7v6a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path d="M7 3.5v1M9 3.5v1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}

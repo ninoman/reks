@@ -1,6 +1,6 @@
 /**
  * App header: the top bar across the whole window for library-wide actions
- * (scan, import, settings), with the scan status line under it.
+ * (scan, import, USB devices, settings), with the scan status line under it.
  * "Scan folder…" adds the folder to the library folders (Settings) and scans
  * it. "Import rekordbox XML…" picks the file and opens the import wizard
  * (`ImportWizard`).
@@ -8,10 +8,11 @@
 
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { useDevices } from "../store/devices";
 import { useImportWizard } from "../store/importWizard";
 import { useScan } from "../store/scan";
 import { useSettings } from "../store/settings";
-import { GearIcon } from "./icons";
+import { GearIcon, UsbIcon } from "./icons";
 import { Button } from "./ui/Button";
 import { IconButton } from "./ui/IconButton";
 import { Tooltip } from "./ui/Tooltip";
@@ -52,6 +53,15 @@ export function AppHeader() {
         <Button size="sm" disabled={scanning || importing} onClick={() => void chooseXml()}>
           Import rekordbox XML…
         </Button>
+        <Tooltip content="USB devices">
+          <IconButton
+            size="sm"
+            aria-label="USB devices"
+            onClick={() => useDevices.getState().setDialogOpen(true)}
+          >
+            <UsbIcon />
+          </IconButton>
+        </Tooltip>
         <Tooltip content="Settings" shortcut="⌘ ,">
           <IconButton
             size="sm"

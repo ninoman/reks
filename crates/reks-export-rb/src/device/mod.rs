@@ -12,7 +12,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 /// File system family of a volume, as far as the export cares.
+/// JSON: `{"kind": "fat32"}`, `{"kind": "other", "name": "apfs"}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "name", rename_all = "camelCase")]
 pub enum FsKind {
     /// FAT family. macOS (`msdos`) and Linux (`vfat`) do not report the FAT
     /// width, so FAT12/16 volumes land here too.
@@ -26,6 +28,7 @@ pub enum FsKind {
 
 /// One mounted volume that an export could target.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceInfo {
     /// Where the volume is mounted; the export's device root.
     pub mount_point: PathBuf,
@@ -160,6 +163,17 @@ pub fn eject(device: &DeviceInfo) -> Result<(), DeviceError> {
     platform::eject(device)
 }
 
+/// Ejects the mounted volume whose mount point is exactly `mount_point`,
+/// looked up again in the OS list (the UI only names it). Same refusals as
+/// [`eject`]; a volume that is no longer mounted is [`DeviceError::NotFound`].
+pub fn eject_at(mount_point: &Path) -> Result<(), DeviceError> {
+    let device = list_devices()
+        .into_iter()
+        .find(|d| d.mount_point == mount_point)
+        .ok_or_else(|| DeviceError::NotFound(mount_point.to_path_buf()))?;
+    eject(&device)
+}
+
 /// The volume's serial or UUID, used to key stick backups and the export
 /// manifest (task 12, D23). `None` when the OS doesn't tell us.
 ///
@@ -232,6 +246,38 @@ mod tests {
     }
 
     #[test]
+    fn device_info_json_is_camel_case() -> Result<(), serde_json::Error> {
+        let dev = DeviceInfo {
+            mount_point: "/Volumes/REKS".into(),
+            fs: FsKind::Other("apfs".into()),
+            fs_name: "apfs".into(),
+            removable: true,
+            total_bytes: 2,
+            free_bytes: 1,
+            label: "REKS".into(),
+            os_name: "disk4s1".into(),
+        };
+        let json = serde_json::to_value(&dev)?;
+        assert_eq!(json["mountPoint"], "/Volumes/REKS");
+        assert_eq!(json["freeBytes"], 1);
+        assert_eq!(
+            json["fs"],
+            serde_json::json!({"kind": "other", "name": "apfs"})
+        );
+        assert_eq!(
+            serde_json::to_value(FsKind::ExFat)?,
+            serde_json::json!({"kind": "exFat"})
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn eject_at_an_unmounted_path_is_not_found() {
+        let path = Path::new("/no/such/reks/volume");
+        assert!(matches!(eject_at(path), Err(DeviceError::NotFound(p)) if p == path));
+    }
+
+    #[test]
     fn real_volume_list_contains_the_temp_dir() -> Result<(), DeviceError> {
         // A temp dir stands in for a stick: it must resolve to some mounted
         // volume with sane sizes.
@@ -263,7 +309,8 @@ mod tests {
             .any(|d| d.mount_point == dev.mount_point));
         assert_eq!(dev.fs, FsKind::Fat32);
         assert!(volume_serial(&dev).is_some());
-        eject(&dev)?;
+        // Through the path the app takes: the UI only sends the mount point.
+        eject_at(&dev.mount_point)?;
         assert!(!list_devices()
             .iter()
             .any(|d| d.mount_point == dev.mount_point));
