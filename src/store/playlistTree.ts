@@ -8,12 +8,15 @@ import type { DropZone } from "../lib/dnd";
 import type { PlaylistNode } from "../lib/ipc";
 
 export interface TreeState {
+  /** The "Playlists" root row is open. */
+  playlistsOpen: boolean;
   expanded: ReadonlySet<number>;
   selectedId: number | null;
   renaming: { id: number; draft: string } | null;
 }
 
 export type TreeAction =
+  | { type: "togglePlaylists" }
   | { type: "toggle"; id: number }
   | { type: "expand"; id: number }
   | { type: "collapse"; id: number }
@@ -24,10 +27,17 @@ export type TreeAction =
   /** A fresh tree: forget ids that are gone. */
   | { type: "treeLoaded"; nodes: PlaylistNode[] };
 
-export const initialTree: TreeState = { expanded: new Set(), selectedId: null, renaming: null };
+export const initialTree: TreeState = {
+  playlistsOpen: true,
+  expanded: new Set(),
+  selectedId: null,
+  renaming: null,
+};
 
 export function treeReducer(state: TreeState, action: TreeAction): TreeState {
   switch (action.type) {
+    case "togglePlaylists":
+      return { ...state, playlistsOpen: !state.playlistsOpen };
     case "toggle":
       return treeReducer(state, {
         type: state.expanded.has(action.id) ? "collapse" : "expand",
@@ -60,7 +70,7 @@ export function treeReducer(state: TreeState, action: TreeAction): TreeState {
         state.selectedId !== null && ids.has(state.selectedId) ? state.selectedId : null;
       const renaming =
         state.renaming !== null && ids.has(state.renaming.id) ? state.renaming : null;
-      return { expanded, selectedId, renaming };
+      return { ...state, expanded, selectedId, renaming };
     }
   }
 }

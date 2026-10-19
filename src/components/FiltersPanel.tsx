@@ -1,8 +1,12 @@
 /**
- * Filter sidebar. Options (genres, keys, colours) come from `library_facets`.
- * The playlist tree above it chooses the playlist; Clear leaves that alone.
+ * Filter panel on the right of the table; it collapses to a narrow strip that
+ * still shows how many filters are on. Options (genres, keys, colours) come
+ * from `library_facets`. The playlist tree chooses the playlist; Clear leaves
+ * that alone.
  */
-import { type FilterState, useLibrary } from "../store/library";
+import { useState } from "react";
+
+import { buildFilters, type FilterState, useLibrary } from "../store/library";
 
 function triState(v: boolean | null): string {
   return v === null ? "" : String(v);
@@ -17,9 +21,11 @@ function parseBpm(s: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-export function FiltersSidebar() {
+export function FiltersPanel() {
+  const [open, setOpen] = useState(true);
   const facets = useLibrary((s) => s.facets);
   const f = useLibrary((s) => s.filters);
+  const active = buildFilters({ ...f, playlistId: null }).length;
   const setFilters = useLibrary((s) => s.setFilters);
   const clearFilters = useLibrary((s) => s.clearFilters);
   const set = (patch: Partial<FilterState>) => setFilters(patch);
@@ -27,11 +33,39 @@ export function FiltersSidebar() {
   const toggleKey = (key: string) =>
     set({ keys: f.keys.includes(key) ? f.keys.filter((k) => k !== key) : [...f.keys, key] });
 
+  if (!open) {
+    return (
+      <aside className="filters-panel collapsed" aria-label="Filters">
+        <button
+          type="button"
+          className="filters-rail"
+          aria-expanded={false}
+          title="Show filters"
+          onClick={() => setOpen(true)}
+        >
+          <span className="filters-rail-label">Filters</span>
+          {active > 0 && <span className="filters-badge">{active}</span>}
+        </button>
+      </aside>
+    );
+  }
+
   return (
-    <section className="filters" aria-label="Filters">
-      <div className="sidebar-head">
+    <aside className="filters-panel" aria-label="Filters">
+      <div className="panel-head">
+        <button
+          type="button"
+          className="panel-collapse"
+          aria-expanded={true}
+          title="Hide filters"
+          onClick={() => setOpen(false)}
+        >
+          ▸
+        </button>
         <h2>Filters</h2>
-        <button type="button" onClick={clearFilters}>
+        {active > 0 && <span className="filters-badge">{active}</span>}
+        <span className="spacer" />
+        <button type="button" onClick={clearFilters} disabled={active === 0}>
           Clear
         </button>
       </div>
@@ -144,6 +178,6 @@ export function FiltersSidebar() {
           <option value="false">Analysed</option>
         </select>
       </label>
-    </section>
+    </aside>
   );
 }

@@ -384,8 +384,12 @@ Notes (task 10, [`playlist.rs`](../../crates/reks-core/src/playlist.rs), [`Playl
   dense. XML entry order wins; entries added in reks follow it, counted per track, so a second
   copy added in reks survives. A renamed or moved playlist no longer matches its XML node, so a
   re-import creates that one anew.
-- UI: the tree (Zustand store over a pure reducer: expanded folders, selection, rename) sits
-  above the filters. Selecting a playlist sets the `playlist` filter and sorts by
+- UI layout follows rekordbox: the left sidebar holds only the tree (Collection, then a
+  collapsible Playlists root with a `+` button; disclosure triangles, folder and playlist icons).
+  Filters moved to a panel on the right that collapses to a strip showing how many filters are
+  on (open by default; the state isn't saved yet, see task 13).
+- UI: the tree is a Zustand store over a pure reducer (Playlists root open, expanded folders,
+  selection, rename). Selecting a playlist sets the `playlist` filter and sorts by
   `playlistPosition`; a folder shows everything below it; Collection clears it. Clear (filters)
   keeps the selected playlist. Context menu and keys: F2 / Enter rename in place (Enter commits,
   Esc cancels, blur commits), Delete / Backspace asks, then deletes. The table drags its

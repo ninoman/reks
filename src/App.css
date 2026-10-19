@@ -57,43 +57,95 @@ select {
   display: flex;
 }
 
-/* Sidebar */
+/* Left sidebar: the playlist tree */
 .sidebar {
+  width: 240px;
+  flex: none;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+/* Right panel: filters, collapsible to a strip */
+.filters-panel {
   width: 220px;
   flex: none;
   overflow-y: auto;
-  padding: 10px 12px;
-  border-right: 1px solid var(--border);
+  padding: 8px 12px 12px;
+  border-left: 1px solid var(--border);
   background: var(--bg-alt);
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-.sidebar-head {
+.filters-panel.collapsed {
+  width: 26px;
+  padding: 0;
+  overflow: hidden;
+}
+.filters-rail {
+  height: 100%;
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  background: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0;
+  color: var(--muted);
+}
+.filters-rail:hover {
+  color: var(--fg);
+}
+.filters-rail-label {
+  writing-mode: vertical-rl;
+}
+.filters-badge {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+.panel-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
 }
-.sidebar h2 {
+.panel-head h2 {
   font-size: 13px;
   margin: 0;
 }
-.sidebar label {
+.panel-head .spacer {
+  flex: 1;
+}
+.panel-collapse {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  color: var(--muted);
+}
+.filters-panel label {
   display: flex;
   flex-direction: column;
   gap: 3px;
   color: var(--muted);
 }
-.sidebar select,
-.sidebar input {
+.filters-panel select,
+.filters-panel input {
   color: var(--fg);
 }
-.sidebar fieldset {
+.filters-panel fieldset {
   border: none;
   margin: 0;
   padding: 0;
 }
-.sidebar legend {
+.filters-panel legend {
   color: var(--muted);
   padding: 0;
   margin-bottom: 3px;
@@ -135,26 +187,14 @@ select {
   border-color: var(--fg);
 }
 
-/* Playlist tree */
-.playlists,
-.filters {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.filters {
-  gap: 10px;
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
-}
-.sidebar-head button {
-  padding: 0 6px;
-}
+/* Playlist tree (rekordbox-like: disclosure triangle, icon, name) */
 .tree {
   display: flex;
   flex-direction: column;
+  padding: 4px 0;
   outline: none;
-  margin: 0 -6px;
+  min-height: 100%;
+  box-sizing: border-box;
 }
 .tree:focus-visible {
   box-shadow: inset 0 0 0 1px var(--accent);
@@ -162,15 +202,25 @@ select {
 .tree-row {
   display: flex;
   align-items: center;
-  gap: 2px;
-  height: 22px;
-  padding: 0 6px 0 4px;
-  border-radius: 4px;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px 0 4px;
+  font-size: 14px;
+  color: var(--fg);
   cursor: default;
   white-space: nowrap;
 }
+.tree-row.root {
+  color: var(--muted);
+  font-size: 15px;
+}
 .tree-row.selected {
-  background: var(--selected);
+  background: var(--accent);
+  color: white;
+}
+.tree-row.selected .tree-icon,
+.tree-row.selected .tree-disclosure {
+  color: white;
 }
 .tree-row.drop-into {
   box-shadow: inset 0 0 0 2px var(--accent);
@@ -181,10 +231,15 @@ select {
 .tree-row.drop-after {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
-.tree-chevron {
-  width: 12px;
+.tree-disclosure {
+  width: 14px;
   flex: none;
-  text-align: center;
+  display: inline-flex;
+  justify-content: center;
+  color: var(--muted);
+}
+.tree-icon {
+  flex: none;
   color: var(--muted);
 }
 .tree-name {
@@ -192,15 +247,30 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tree-count {
+.tree-add {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+  background: none;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
+  line-height: 15px;
+}
+.tree-add:hover {
+  color: var(--fg);
+  border-color: var(--fg);
 }
 .tree-rename {
   flex: 1;
   min-width: 0;
   user-select: text;
   -webkit-user-select: text;
+}
+.playlists > .error {
+  margin: 6px 8px;
 }
 .tt-row.drop-before {
   box-shadow: inset 0 2px 0 var(--accent);

@@ -86,6 +86,14 @@ describe("PlaylistTree", () => {
     expect(useLibrary.getState().filters.playlistId).toBeNull();
   });
 
+  it("the Playlists root row opens and closes the whole tree", () => {
+    render(<PlaylistTree />);
+    fireEvent.click(item("Playlists"));
+    expect(screen.queryByRole("treeitem", { name: /Gigs/ })).toBeNull();
+    fireEvent.click(item("Playlists"));
+    expect(item("Gigs")).toBeTruthy();
+  });
+
   it("collapsing a folder hides its playlists", () => {
     render(<PlaylistTree />);
     fireEvent.click(item("Gigs"));

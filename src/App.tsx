@@ -1,11 +1,12 @@
 /**
- * Library window: sidebar (playlist tree and filters), toolbar, the track
- * table and the detail panel for the primary selected track. The player lands
+ * Library window: playlist tree on the left, toolbar and track table in the
+ * middle, then the detail panel for the primary selected track and the
+ * collapsible filter panel on the right. The player lands
  * in a later task (docs/phases/phase-1.md).
  */
 import { useEffect } from "react";
 import { DEFAULT_HIDDEN } from "./components/columns";
-import { FiltersSidebar } from "./components/FiltersSidebar";
+import { FiltersPanel } from "./components/FiltersPanel";
 import { LibraryToolbar } from "./components/LibraryToolbar";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
@@ -36,7 +37,6 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <PlaylistTree />
-        <FiltersSidebar />
       </aside>
       <main className="main">
         <LibraryToolbar table={table} />
@@ -48,6 +48,7 @@ export default function App() {
         <TrackTable columns={visibleColumns(table)} />
       </main>
       {primaryId !== null && <TrackDetailPanel key={primaryId} trackId={primaryId} />}
+      <FiltersPanel />
       <DuplicateDialog />
       <DeleteDialog />
     </div>

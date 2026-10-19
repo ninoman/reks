@@ -43,6 +43,13 @@ describe("treeReducer", () => {
     expect(s.expanded.size).toBe(0);
   });
 
+  it("opens and closes the Playlists root", () => {
+    expect(initialTree.playlistsOpen).toBe(true);
+    const closed = treeReducer(initialTree, { type: "togglePlaylists" });
+    expect(closed.playlistsOpen).toBe(false);
+    expect(treeReducer(closed, { type: "togglePlaylists" }).playlistsOpen).toBe(true);
+  });
+
   it("selects a node or the collection, ending a rename", () => {
     let s = treeReducer(initialTree, { type: "startRename", id: 2, name: "n2" });
     s = treeReducer(s, { type: "select", id: 5 });
@@ -64,6 +71,7 @@ describe("treeReducer", () => {
 
   it("forgets ids that are gone after a reload", () => {
     const s: TreeState = {
+      playlistsOpen: false,
       expanded: new Set([1, 3]),
       selectedId: 4,
       renaming: { id: 4, draft: "x" },
@@ -75,6 +83,7 @@ describe("treeReducer", () => {
     const kept = treeReducer(s, { type: "treeLoaded", nodes });
     expect(kept.selectedId).toBe(4);
     expect(kept.renaming).toEqual({ id: 4, draft: "x" });
+    expect(kept.playlistsOpen).toBe(false);
   });
 });
 
