@@ -1,7 +1,8 @@
 /**
- * Side panel for the primary selected track: artwork, editable metadata,
- * and read-only cue and beatgrid listings. Mount it with `key={trackId}` so
- * switching tracks starts from a fresh form (unsaved edits are dropped).
+ * Track info panel (right of the table) for the primary selected track:
+ * artwork, editable metadata, and read-only cue and beatgrid listings.
+ * `TrackDetailPanel` is mounted with `key={trackId}` so switching tracks
+ * starts from a fresh form (unsaved edits are dropped).
  */
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useState } from "react";
 
@@ -20,7 +21,9 @@ import {
   libraryUpdateTrack,
   type TrackDetail,
 } from "../lib/ipc";
-import { useLibrary } from "../store/library";
+import { rowAt, useLibrary } from "../store/library";
+import { usePanels } from "../store/panels";
+import { primaryIndex } from "../store/selection";
 import {
   buildPatch,
   type EditField,
@@ -31,6 +34,42 @@ import {
 } from "./trackDetailForm";
 
 const NO_COLOURS: string[] = [];
+
+function PanelHead() {
+  const toggleInfo = usePanels((s) => s.toggleInfo);
+  return (
+    <div className="panel-head">
+      <h2>Track info</h2>
+      <span className="spacer" />
+      <button
+        type="button"
+        className="panel-close"
+        aria-label="Close track info"
+        title="Close"
+        onClick={toggleInfo}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+/** The info panel for the primary selected track, or a hint when none is. */
+export function TrackInfoPanel() {
+  const primaryId = useLibrary((s) => {
+    const i = primaryIndex(s.selection);
+    return i === null ? null : (rowAt(s.pages, i)?.id ?? null);
+  });
+  if (primaryId === null) {
+    return (
+      <aside className="side-panel detail-panel" aria-label="Track details">
+        <PanelHead />
+        <p className="muted">Select a track to see and edit its details.</p>
+      </aside>
+    );
+  }
+  return <TrackDetailPanel key={primaryId} trackId={primaryId} />;
+}
 
 export function TrackDetailPanel({ trackId }: { trackId: number }) {
   const replaceRow = useLibrary((s) => s.replaceRow);
@@ -65,7 +104,8 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
 
   if (detail === null || initial === null || form === null) {
     return (
-      <aside className="detail-panel" aria-label="Track details">
+      <aside className="side-panel detail-panel" aria-label="Track details">
+        <PanelHead />
         {error !== null ? (
           <div className="error" role="alert">
             {error}
@@ -122,7 +162,8 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
   }
 
   return (
-    <aside className="detail-panel" aria-label="Track details">
+    <aside className="side-panel detail-panel" aria-label="Track details">
+      <PanelHead />
       <ArtworkView id={t.artwork?.id ?? null} mime={t.artwork?.mime ?? ""} />
       <div className="detail-facts">
         <div>

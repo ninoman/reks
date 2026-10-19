@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Track, TrackDetail } from "../lib/ipc";
 import { useLibrary } from "../store/library";
-import { TrackDetailPanel } from "./TrackDetailPanel";
+import { usePanels } from "../store/panels";
+import { emptySelection } from "../store/selection";
+import { TrackDetailPanel, TrackInfoPanel } from "./TrackDetailPanel";
 
 vi.mock("../lib/ipc", () => ({
   libraryTrack: vi.fn(),
@@ -150,5 +152,31 @@ describe("TrackDetailPanel", () => {
     fireEvent.keyDown(title, { key: "Escape" });
     expect(title).toHaveProperty("value", "Old Title");
     expect(libraryUpdateTrack).not.toHaveBeenCalled();
+  });
+});
+
+describe("TrackInfoPanel", () => {
+  it("starts closed: selecting a row doesn't open it", () => {
+    expect(usePanels.getState().infoOpen).toBe(false);
+  });
+
+  it("hints when nothing is selected, shows the selected track otherwise", async () => {
+    useLibrary.setState({ selection: emptySelection });
+    render(<TrackInfoPanel />);
+    expect(screen.getByText(/Select a track/)).toBeTruthy();
+    expect(libraryTrack).not.toHaveBeenCalled();
+
+    cleanup();
+    useLibrary.setState({ selection: { selected: new Set([0]), anchor: 0, focus: 0 } });
+    render(<TrackInfoPanel />);
+    await waitFor(() => expect(libraryTrack).toHaveBeenCalledWith(7));
+  });
+
+  it("its close button turns the toolbar toggle off", () => {
+    usePanels.setState({ infoOpen: true });
+    useLibrary.setState({ selection: emptySelection });
+    render(<TrackInfoPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Close track info" }));
+    expect(usePanels.getState().infoOpen).toBe(false);
   });
 });

@@ -87,6 +87,11 @@ export function buildFilters(f: FilterState): Filter[] {
   return out;
 }
 
+/** Filters set in the sidebar panel (the shown playlist doesn't count). */
+export function activeFilterCount(f: FilterState): number {
+  return buildFilters({ ...f, playlistId: null }).length;
+}
+
 /** The `TrackQuery` for page `page` of the current inputs. */
 export function buildQuery(inputs: QueryInputs, page: number): TrackQuery {
   const text = inputs.text.trim();

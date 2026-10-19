@@ -1,32 +1,33 @@
 /**
- * Library window: playlist tree on the left, toolbar and track table in the
- * middle, then the detail panel for the primary selected track and the
- * collapsible filter panel on the right; the transport bar along the bottom.
- * Space plays and pauses unless a text field has focus.
+ * Library window: the app header (library-wide actions) across the top; the
+ * playlist tree on the left; toolbar, filter bar and track table in the
+ * middle, with the track info panel sliding over the table's right edge when
+ * its toolbar button is on; the transport bar along the bottom. Space plays
+ * and pauses unless a text field has focus.
  */
 import { useEffect } from "react";
+import { AppHeader } from "./components/AppHeader";
 import { DEFAULT_HIDDEN } from "./components/columns";
-import { FiltersPanel } from "./components/FiltersPanel";
+import { FilterBar } from "./components/FilterBar";
 import { ImportWizard } from "./components/ImportWizard";
 import { LibraryToolbar } from "./components/LibraryToolbar";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
-import { TrackDetailPanel } from "./components/TrackDetailPanel";
+import { SlideOver } from "./components/SlideOver";
+import { TrackInfoPanel } from "./components/TrackDetailPanel";
 import { TrackTable } from "./components/TrackTable";
 import { TransportBar } from "./components/TransportBar";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
-import { rowAt, useLibrary } from "./store/library";
+import { useLibrary } from "./store/library";
+import { usePanels } from "./store/panels";
 import { usePlayer } from "./store/player";
 import { usePlaylists } from "./store/playlists";
-import { primaryIndex } from "./store/selection";
 
 export default function App() {
   const table = useTrackTable();
   const error = useLibrary((s) => s.error);
-  const primaryId = useLibrary((s) => {
-    const i = primaryIndex(s.selection);
-    return i === null ? null : (rowAt(s.pages, i)?.id ?? null);
-  });
+  const filterBarOpen = usePanels((s) => s.filterBarOpen);
+  const infoOpen = usePanels((s) => s.infoOpen);
 
   useEffect(() => {
     const s = useLibrary.getState();
@@ -48,26 +49,31 @@ export default function App() {
 
   return (
     <div className="shell">
+      <AppHeader />
       <div className="app">
         <aside className="sidebar">
           <PlaylistTree />
         </aside>
         <main className="main">
           <LibraryToolbar table={table} />
+          {filterBarOpen && <FilterBar />}
           {error !== null && (
             <div className="error" role="alert">
               {error}
             </div>
           )}
-          <TrackTable columns={visibleColumns(table)} />
+          <div className="table-area">
+            <TrackTable columns={visibleColumns(table)} />
+            <SlideOver open={infoOpen}>
+              <TrackInfoPanel />
+            </SlideOver>
+          </div>
         </main>
-        {primaryId !== null && <TrackDetailPanel key={primaryId} trackId={primaryId} />}
-        <FiltersPanel />
-        <DuplicateDialog />
-        <DeleteDialog />
-        <ImportWizard />
       </div>
       <TransportBar />
+      <DuplicateDialog />
+      <DeleteDialog />
+      <ImportWizard />
     </div>
   );
 }
