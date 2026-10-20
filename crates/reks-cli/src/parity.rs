@@ -2,7 +2,7 @@
 //! `docs/analysis-parity.md`).
 //!
 //! ```text
-//! reks parity run    [--xml <collection.xml>] [--out <dir>] [--jobs N] [--every N]
+//! reks parity run    [--xml <collection.xml>] [--out <dir>] [--jobs N] [--every N] [--retry-failed]
 //!                    [--limit N] [--only mp3,m4a,...] [--remap FROM=TO]... [--models <dir>]
 //! reks parity report [--xml <collection.xml>] [--out <dir>] [--md <file>] [--tracks <file.tsv>]
 //!                    [--min-coverage <0..1>] [--placement <name>] [--analyser N]
@@ -78,6 +78,8 @@ struct Flags {
     out: Option<PathBuf>,
     jobs: Option<usize>,
     every: usize,
+    /// `run`: analyse again tracks whose last result is an error.
+    retry_failed: bool,
     limit: Option<usize>,
     only: Option<Vec<String>>,
     remap: Vec<(PathBuf, PathBuf)>,
@@ -104,6 +106,7 @@ impl Flags {
                 "--xml" => f.xml = Some(value()?.into()),
                 "--out" => f.out = Some(value()?.into()),
                 "--jobs" => f.jobs = Some(value()?.parse().context("--jobs")?),
+                "--retry-failed" => f.retry_failed = true,
                 "--every" => f.every = value()?.parse::<usize>().context("--every")?.max(1),
                 "--limit" => f.limit = Some(value()?.parse().context("--limit")?),
                 "--only" => {
@@ -341,9 +344,12 @@ fn analyse(flags: &Flags) -> anyhow::Result<()> {
         let Some((size, mtime)) = file_stamp(&path) else {
             continue;
         };
-        let fresh = done
-            .get(&loc)
-            .is_some_and(|r| r.size == size && r.mtime == mtime && r.analyser == ANALYSER_VERSION);
+        let fresh = done.get(&loc).is_some_and(|r| {
+            r.size == size
+                && r.mtime == mtime
+                && r.analyser == ANALYSER_VERSION
+                && !(flags.retry_failed && r.error.is_some())
+        });
         if fresh {
             skipped += 1;
             continue;
@@ -1535,13 +1541,22 @@ mod tests {
 
     #[test]
     fn flags_parse() {
-        let args: Vec<String> = ["--xml", "a.xml", "--every", "0", "--only", "MP3,m4a"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let args: Vec<String> = [
+            "--xml",
+            "a.xml",
+            "--every",
+            "0",
+            "--only",
+            "MP3,m4a",
+            "--retry-failed",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
         let f = Flags::parse(&args).unwrap();
         assert_eq!(f.xml().unwrap(), PathBuf::from("a.xml"));
         assert_eq!(f.every, 1);
+        assert!(f.retry_failed);
         assert_eq!(f.only, Some(vec!["mp3".to_owned(), "m4a".to_owned()]));
         assert!(Flags::parse(&["--bogus".to_owned()]).is_err());
     }
