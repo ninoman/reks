@@ -223,6 +223,27 @@ describe("useExportWizard", () => {
     expect(w().device).toBeNull();
   });
 
+  it("the history guard's choice plans again and going back withdraws it", async () => {
+    const w = useExportWizard.getState;
+    exportPlan.mockResolvedValue({ planId: 1 } as DryRun);
+    await openOnStick([5]);
+    useExportWizard.setState({ step: "dryRun" });
+    await w().chooseHistory("import", NODES);
+    expect(exportPlan).toHaveBeenLastCalledWith(
+      "/Volumes/REKS",
+      { playlists: [5] },
+      expect.objectContaining({ history: "import", historyChosen: true }),
+      1,
+    );
+    w().back();
+    expect(w().step).toBe("options");
+    expect(w().options).toMatchObject({ history: "backUp", historyChosen: false });
+
+    w().setOptions({ historyChosen: true });
+    w().setOptions({ keepStale: true });
+    expect(w().options.historyChosen).toBe(false);
+  });
+
   it("leaving discard withdraws the confirmation", () => {
     const w = useExportWizard.getState;
     w().setOptions({ history: "discard", discardHistoryConfirmed: true });

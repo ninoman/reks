@@ -679,8 +679,11 @@ export function profileStatus(id: number, mountPoint: string | null): Promise<Pr
 /** Tracks without rekordbox analysis (`MissingAnalysis`). The writer refuses `exportWithout`. */
 export type MissingAnalysis = "skip" | "generate" | "exportWithout";
 
-/** What an export does with the stick's play history (`HistoryPolicy`, D23). */
-export type HistoryPolicy = "backUp" | "discard";
+/**
+ * What an export does with the stick's play history (`HistoryPolicy`, D23). `import` (the
+ * export guard's "Import now") imports the sessions the library lacks, then backs up.
+ */
+export type HistoryPolicy = "import" | "backUp" | "discard";
 
 /** `plan::ExportOptions`. */
 export interface ExportOptions {
@@ -692,6 +695,8 @@ export interface ExportOptions {
   history: HistoryPolicy;
   /** Required for `discard` on a stick that holds history. */
   discardHistoryConfirmed: boolean;
+  /** `history` was picked in the export guard; without it unimported sessions block the plan. */
+  historyChosen: boolean;
   /** The `export.dividers` flag: playlist dividers as silent tracks (UNVERIFIED, D22). */
   dividers: boolean;
 }
@@ -725,6 +730,18 @@ export interface NoticeGroup {
   kind: string;
   title: string;
   items: string[];
+}
+
+/** Stick sessions the library has not imported, and the choice the export needs. */
+export interface HistoryGuardView {
+  title: string;
+  text: string;
+  /** `HISTORY 001: 12 plays, imports as practice`. */
+  sessions: string[];
+  /** The user has chosen; `history.policy` is the choice. */
+  chosen: boolean;
+  /** "Import now" can run. */
+  canImport: boolean;
 }
 
 /** The dry-run view of an export plan (`dryrun::DryRun`); every string is final. */
@@ -762,6 +779,8 @@ export interface DryRun {
     text: string;
     actionText: string | null;
     backups: DryRunFileGroup;
+    /** The export guard (`dryrun::GuardView`): sessions not imported yet; null when none. */
+    guard: HistoryGuardView | null;
   };
   problems: NoticeGroup[];
   warnings: NoticeGroup[];
@@ -785,7 +804,14 @@ export function exportPlan(
 }
 
 /** Steps of an export (`apply::ApplyStage`), in order. */
-export type ApplyStage = "preflight" | "backup" | "write" | "sync" | "validate" | "manifest";
+export type ApplyStage =
+  | "preflight"
+  | "importHistory"
+  | "backup"
+  | "write"
+  | "sync"
+  | "validate"
+  | "manifest";
 
 /** Where a running export is (`report::ProgressView`); every string is final. */
 export interface ExportProgress {

@@ -2,7 +2,7 @@
 
 Status: started 2026-10-20 ahead of the Phase 2 hardware campaign with the
 maintainer's approval (software only; anything that needs a player stays
-UNVERIFIED); tasks 1–7 and 10 done. Depends on: Phase 2 done, including its hardware campaign,
+UNVERIFIED); tasks 1–8 and 10 done. Depends on: Phase 2 done, including its hardware campaign,
 history safeguard and `export_manifest` (tasks 12–14). Runs before Phase 3.
 Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
@@ -287,9 +287,34 @@ Divider rules
    (property test, 100-track toggle under 100 ms) and
    `reimport_keeps_the_play_baseline_frozen` in
    [rbxml_import.rs](../../crates/reks-core/tests/rbxml_import.rs).
-8. **Export guard**: "Import now" / "Back up and continue" / "Continue and
+8. [x] **Export guard**: "Import now" / "Back up and continue" / "Continue and
    discard" when `scan` finds sessions not yet imported; the planner refuses
    to apply without a choice. Tests on the fixture stick.
+   Done in [guard.rs](../../crates/reks-export-rb/src/plan/guard.rs):
+   `plan::plan` runs `guard_history` (callers of `plan_sources` call it
+   themselves). It reads the stick's sessions (HIST1 dates off: fingerprints
+   don't use them) and runs `history::scan`; New and Extend sessions fill
+   `ExportPlan::guard` and, while `ExportOptions::history_chosen` is false,
+   add `Problem::HistoryNotImported`, so `apply` refuses the plan. The
+   choices are `HistoryPolicy::Import` (new), `BackUp` and `Discard` (still
+   needs `discard_history_confirmed`). Import now is the new apply stage
+   `ImportHistory` before the backup: `history::import` of the dry run's
+   scan (`ExportPlan::history_import`, not serialised) with default choices,
+   so undated sessions import as practice; it backs up too. An import error
+   aborts before any stick write; a session imported meanwhile is skipped.
+   Only a stick whose `export.pdb` counts sessions is scanned: an unreadable
+   one keeps the Phase 2 backup; a count that the full reader then fails on
+   still needs a choice, without Import now (`HistoryImportUnavailable`).
+   Dry run: `HistoryView::guard` (title, one line per session, chosen,
+   `can_import`); report: "Play history imported and backed up". UI: the
+   dry-run step shows the three choices (Import now primary; Continue and
+   discard asks for its own confirmation), each plans again; going back
+   withdraws the choice. CLI: `reks rb plan|export --import-history |
+   --backup-history | --discard-history` (one of them). Tests:
+   `plan::guard::tests` (synthetic played stick: blocks, each choice end to
+   end, the backup scans as two new sessions, imported stick needs no
+   choice, stale import skipped, plan without its scan refused); the
+   fixture-stick test `played_stick_fixture_guard` is `#[ignore]`.
 9. **History UI**: Histories tree (year → month → session); session view in
    play order with unmatched entries greyed and "Locate…", dividers hidden by
    default; header with rename, venue, notes, Practice toggle, delete

@@ -4,9 +4,11 @@
  * wording and totals all come from Rust (`export_plan` → `DryRun`,
  * `export_apply` → `ExportProgress` / `ExportReportView`); this lays them
  * out. Audio issues the converter fixes link to it (`ConvertDialog`, Older
- * players preset).
+ * players preset). Play history sessions the library has not imported stop
+ * the dry run until the user picks Import now, Back up and continue or
+ * Continue and discard (the export guard, Phase 2.5 task 8).
  */
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { cn } from "../lib/cn";
 import type {
@@ -16,6 +18,8 @@ import type {
   ExportOutcome,
   ExportReportView,
   Fact,
+  HistoryGuardView,
+  HistoryPolicy,
   MissingAnalysis,
   NoticeGroup,
   PlaylistNode,
@@ -577,6 +581,10 @@ function DryRunView({ dryRun: d, nodes }: { dryRun: DryRun; nodes: PlaylistNode[
         <Facts facts={d.summary} />
       </Section>
 
+      {d.history.guard !== null && (
+        <HistoryGuard guard={d.history.guard} policy={d.history.policy} nodes={nodes} />
+      )}
+
       <Section title={d.history.title} tone={d.history.atRisk ? "warning" : undefined}>
         <p className="m-0 text-sm">{d.history.text}</p>
         {d.history.actionText !== null && <p className="m-0 text-sm">{d.history.actionText}</p>}
@@ -621,6 +629,100 @@ function DryRunView({ dryRun: d, nodes }: { dryRun: DryRun; nodes: PlaylistNode[
         </details>
       </Section>
     </div>
+  );
+}
+
+const GUARD_CHOICES: Record<HistoryPolicy, string> = {
+  import: "Import now",
+  backUp: "Back up and continue",
+  discard: "Continue and discard",
+};
+
+/** The export guard: what happens to the sessions the library has not imported. */
+function HistoryGuard({
+  guard: g,
+  policy,
+  nodes,
+}: {
+  guard: HistoryGuardView;
+  policy: HistoryPolicy;
+  nodes: PlaylistNode[];
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [understood, setUnderstood] = useState(false);
+  const choose = (p: HistoryPolicy) => {
+    setConfirming(false);
+    setUnderstood(false);
+    void useExportWizard.getState().chooseHistory(p, nodes);
+  };
+  return (
+    <Section title={g.title} tone={g.chosen ? undefined : "danger"}>
+      <p className="m-0 text-sm">{g.text}</p>
+      {g.sessions.length > 0 && (
+        <ul className="m-0 list-disc pl-5 text-xs">
+          {g.sessions.map((s) => (
+            <li key={s}>{s}</li>
+          ))}
+        </ul>
+      )}
+      {g.chosen && <p className="m-0 text-sm font-semibold">You chose: {GUARD_CHOICES[policy]}.</p>}
+      <div className="flex flex-wrap items-center gap-2">
+        {g.canImport && (
+          <Button
+            size="sm"
+            variant={g.chosen ? "secondary" : "primary"}
+            disabled={g.chosen && policy === "import"}
+            onClick={() => choose("import")}
+          >
+            {GUARD_CHOICES.import}
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant={!g.canImport && !g.chosen ? "primary" : "secondary"}
+          disabled={g.chosen && policy === "backUp"}
+          onClick={() => choose("backUp")}
+        >
+          {GUARD_CHOICES.backUp}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={confirming || (g.chosen && policy === "discard")}
+          onClick={() => setConfirming(true)}
+        >
+          {GUARD_CHOICES.discard}…
+        </Button>
+      </div>
+      {confirming && (
+        <div className="flex flex-col items-start gap-2">
+          <label className="flex items-start gap-2 text-sm text-warning">
+            <Checkbox
+              className="mt-0.5"
+              checked={understood}
+              onChange={(e) => setUnderstood(e.target.checked)}
+            />
+            <span>
+              I understand these sessions are erased from the stick without a backup and can't be
+              imported later.
+            </span>
+          </label>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={!understood}
+              onClick={() => choose("discard")}
+            >
+              Discard and continue
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </Section>
   );
 }
 

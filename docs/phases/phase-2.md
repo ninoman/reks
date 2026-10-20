@@ -392,7 +392,8 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
     - [x] `reks rb plan <stick> --library <db> --playlist <id|Folder/Name>...`
       (options as flags, `--anlz-root` overrides rekordbox's folders,
       `--discard-history` is the explicit confirmation, `--json`): prints the
-      dry run, exits non-zero when blocked.
+      dry run, exits non-zero when blocked. Phase 2.5 task 8 adds the export
+      guard's `--import-history` / `--backup-history`.
     - [x] `reks rb history <stick> [--json]`: sessions (`HISTORY 001`, ...) with
       entry counts via `history::read_sessions`, and `exportLibrary.db` presence.
     - [x] `reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]`:

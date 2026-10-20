@@ -172,6 +172,24 @@ pub struct HistoryView {
     pub action_text: Option<String>,
     /// Stick files copied to the app data dir before any write.
     pub backups: FileGroup,
+    /// The export guard (Phase 2.5): sessions the library has not imported.
+    /// `None` when there are none.
+    #[serde(default)]
+    pub guard: Option<GuardView>,
+}
+
+/// Sessions on the stick the library lacks, and the choice the export needs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuardView {
+    pub title: String,
+    pub text: String,
+    /// One line per session: `HISTORY 001: 12 plays, imports as practice`.
+    pub sessions: Vec<String>,
+    /// The user has chosen; [`HistoryView::policy`] is the choice.
+    pub chosen: bool,
+    /// "Import now" can run (the sessions could be read).
+    pub can_import: bool,
 }
 
 /// Notices of one kind: a title and, for per-track or per-playlist kinds, one
@@ -569,6 +587,7 @@ fn history_view(plan: &ExportPlan) -> HistoryView {
                 .to_owned(),
             action_text: None,
             backups,
+            guard: None,
         };
     }
     let mut found = Vec::new();
@@ -597,14 +616,23 @@ fn history_view(plan: &ExportPlan) -> HistoryView {
         capitalise(&found.join("; "))
     );
     let confirmed = plan.options.discard_history_confirmed;
+    let backup_text = format!(
+        "reks copies {} ({}) to its data folder and checks the copies; if the backup fails, \
+         nothing is written. The report after the export shows where the copies are.",
+        count(backups.count, "database file", "database files"),
+        human_bytes(backups.bytes)
+    );
+    let guard = &plan.guard;
     let action_text = match policy {
-        HistoryPolicy::BackUp => format!(
-            "Before writing anything, reks copies {} ({}) to its data folder and checks the \
-             copies; if the backup fails, nothing is written. The report after the export \
-             shows where the copies are.",
-            count(backups.count, "database file", "database files"),
-            human_bytes(backups.bytes)
+        HistoryPolicy::Import if guard.sessions.is_empty() => {
+            format!("Before writing anything, {backup_text}")
+        }
+        HistoryPolicy::Import => format!(
+            "Before writing anything, reks imports {} ({}) into your library, then {backup_text}",
+            count(guard.sessions.len(), "session", "sessions"),
+            count(guard.entries() as usize, "play", "plays")
         ),
+        HistoryPolicy::BackUp => format!("Before writing anything, {backup_text}"),
         HistoryPolicy::Discard if confirmed => {
             "You chose to discard it: it is erased without a backup.".to_owned()
         }
@@ -619,7 +647,79 @@ fn history_view(plan: &ExportPlan) -> HistoryView {
         text,
         action_text: Some(action_text),
         backups,
+        guard: guard_view(plan),
     }
+}
+
+fn guard_view(plan: &ExportPlan) -> Option<GuardView> {
+    let g = &plan.guard;
+    if !g.needs_choice() {
+        return None;
+    }
+    let n = if g.unreadable.is_some() {
+        plan.history.pdb_sessions as usize
+    } else {
+        g.sessions.len()
+    };
+    let title = format!(
+        "{} not in your library",
+        count(n, "session on this stick is", "sessions on this stick are")
+    );
+    let mut text = match &g.unreadable {
+        Some(message) => format!(
+            "reks can't read the stick's history sessions ({message}), so it can't tell \
+             whether they are imported, and can't import them now."
+        ),
+        None => "Exporting erases them from the stick. Import now adds them to your library's \
+                 history before writing; Back up and continue keeps a copy you can import \
+                 later; Continue and discard erases them."
+            .to_owned(),
+    };
+    let practice = g.sessions.iter().filter(|s| s.practice).count();
+    if practice > 0 {
+        let (who, verb, pron) = if practice == 1 {
+            ("One of them".to_owned(), "has", "it")
+        } else {
+            (format!("{practice} of them"), "have", "them")
+        };
+        text.push_str(&format!(
+            " {who} {verb} no date, or one on or before your rekordbox import, so {} as \
+             practice (not counted) until you include {pron} in History.",
+            if practice == 1 {
+                "it imports"
+            } else {
+                "they import"
+            },
+        ));
+    }
+    let sessions = g
+        .sessions
+        .iter()
+        .map(|s| {
+            let mut line = format!(
+                "{}: {}",
+                s.name,
+                count(
+                    s.entries as usize,
+                    if s.extends { "new play" } else { "play" },
+                    if s.extends { "new plays" } else { "plays" }
+                )
+            );
+            if s.extends {
+                line.push_str(", adds to the imported session");
+            } else if s.practice {
+                line.push_str(", imports as practice");
+            }
+            line
+        })
+        .collect();
+    Some(GuardView {
+        title,
+        text,
+        sessions,
+        chosen: plan.options.history_chosen,
+        can_import: g.unreadable.is_none(),
+    })
 }
 
 pub(crate) fn capitalise(s: &str) -> String {
@@ -756,6 +856,8 @@ fn problem_kind(p: &Problem) -> &'static str {
         Problem::BadPath { .. } => "badPath",
         Problem::NotEnoughSpace { .. } => "notEnoughSpace",
         Problem::DiscardNotConfirmed => "discardNotConfirmed",
+        Problem::HistoryNotImported { .. } => "historyNotImported",
+        Problem::HistoryImportUnavailable { .. } => "historyImportUnavailable",
     }
 }
 
@@ -784,6 +886,20 @@ fn problem_item(p: &Problem, track: &impl Fn(TrackId) -> String) -> String {
                                          confirmation: tick the box in the options, or back \
                                          it up instead."
             .to_owned(),
+        Problem::HistoryNotImported { sessions } => format!(
+            "The stick holds {} not imported into your library. Choose what happens to {} \
+             under the play history.",
+            count(
+                *sessions as usize,
+                "play history session",
+                "play history sessions"
+            ),
+            if *sessions == 1 { "it" } else { "them" }
+        ),
+        Problem::HistoryImportUnavailable { message } => format!(
+            "The stick's play history can't be imported ({message}). Back it up or discard it \
+             instead."
+        ),
         other => capitalise(&format!("{other}.")),
     }
 }

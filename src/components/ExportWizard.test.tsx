@@ -125,6 +125,7 @@ function dryRun(over: Partial<DryRun> = {}): DryRun {
       text: "Players have not logged any sessions here, so the export loses nothing.",
       actionText: null,
       backups: group,
+      guard: null,
     },
     problems: [],
     warnings: [],
@@ -296,6 +297,105 @@ describe("ExportWizard", () => {
     );
   });
 
+  it("stops on unimported play history until a choice, then plans again", async () => {
+    const guard = {
+      title: "2 sessions on this stick are not in your library",
+      text: "Exporting erases them from the stick.",
+      sessions: [
+        "HISTORY 001: 2 plays, imports as practice",
+        "HISTORY 002: 1 play, imports as practice",
+      ],
+      chosen: false,
+      canImport: true,
+    };
+    const blocked = dryRun({
+      ready: false,
+      status: "Blocked by 1 problem. Fix it or change the options; nothing has been written.",
+      history: {
+        atRisk: true,
+        policy: "backUp",
+        title: "This stick holds play history",
+        text: "The stick's export.pdb holds 2 history sessions with 3 played tracks.",
+        actionText: null,
+        backups: group,
+        guard,
+      },
+    });
+    exportPlan.mockResolvedValueOnce(blocked).mockResolvedValue(
+      dryRun({
+        history: {
+          ...blocked.history,
+          policy: "import",
+          actionText: "Before writing anything, reks imports 2 sessions (3 plays)…",
+          guard: { ...guard, chosen: true },
+        },
+      }),
+    );
+    await toOptions();
+    fireEvent.click(button("Dry run"));
+    const section = await screen.findByRole("region", { name: guard.title });
+    expect(within(section).getByText("HISTORY 001: 2 plays, imports as practice")).toBeTruthy();
+    expect(button("Export").disabled).toBe(true);
+
+    fireEvent.click(within(section).getByRole("button", { name: "Import now" }));
+    await screen.findByText("You chose: Import now.");
+    expect(exportPlan).toHaveBeenLastCalledWith(
+      "/Volumes/REKS",
+      { playlists: [3] },
+      expect.objectContaining({ history: "import", historyChosen: true }),
+      1,
+    );
+    expect(button("Export").disabled).toBe(false);
+  });
+
+  it("Continue and discard needs its own confirmation", async () => {
+    exportPlan.mockResolvedValue(
+      dryRun({
+        ready: false,
+        history: {
+          atRisk: true,
+          policy: "backUp",
+          title: "This stick holds play history",
+          text: "",
+          actionText: null,
+          backups: group,
+          guard: {
+            title: "1 session on this stick is not in your library",
+            text: "",
+            sessions: [],
+            chosen: false,
+            canImport: false,
+          },
+        },
+      }),
+    );
+    await toOptions();
+    fireEvent.click(button("Dry run"));
+    const section = await screen.findByRole("region", {
+      name: "1 session on this stick is not in your library",
+    });
+    expect(within(section).queryByRole("button", { name: "Import now" })).toBeNull();
+    fireEvent.click(within(section).getByRole("button", { name: "Continue and discard…" }));
+    const discard = within(section).getByRole("button", {
+      name: "Discard and continue",
+    }) as HTMLButtonElement;
+    expect(discard.disabled).toBe(true);
+    fireEvent.click(within(section).getByRole("checkbox", { name: /can't be imported later/ }));
+    fireEvent.click(discard);
+    await waitFor(() =>
+      expect(exportPlan).toHaveBeenLastCalledWith(
+        "/Volumes/REKS",
+        { playlists: [3] },
+        expect.objectContaining({
+          history: "discard",
+          historyChosen: true,
+          discardHistoryConfirmed: true,
+        }),
+        1,
+      ),
+    );
+  });
+
   it("playlist dividers are off by default and marked UNVERIFIED", async () => {
     exportPlan.mockResolvedValue(dryRun());
     await toOptions();
@@ -329,6 +429,7 @@ describe("ExportWizard", () => {
             totalText: "1 file, 4.1 KB",
             files: [{ path: "/PIONEER/rekordbox/export.pdb", from: null, sizeText: "4.1 KB" }],
           },
+          guard: null,
         },
         warnings: [{ kind: "skipped", title: "1 track left out", items: ["A – B: no analysis"] }],
       }),
