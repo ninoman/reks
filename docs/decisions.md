@@ -316,8 +316,22 @@ Date of decisions: 2026-10-18.
   direct spectral kernel, Sha'ath profiles × octave weights, whole-track
   mean); key type is `reks_core::Key`. Additions: an uncalibrated
   `confidence` (winner's margin over runner-up) and an error on NaN input.
-  Agreement with the C++ library is **UNVERIFIED** until
-  `.github/workflows/keyfinder-parity.yml` runs.
+  Agreement with the C++ library: verified 2026-10-21, identical keys on
+  the 26 synthetic fixtures and on all 2,644 decoded tracks of the
+  maintainer's library (`reks parity keyfinder`, libKeyFinder `main`
+  941e517 run as a separate program; docs/analysis-parity.md).
+- Mode (2026-10-21, phase 3 task 12a): reks keeps libKeyFinder's
+  major/minor decision (best cosine over all 24 profiles), no minor bias or
+  second-stage mode classifier. Rationale: against rekordbox on the
+  maintainer's library, the best rule (+0.01 on minor scores) gains 2.4
+  points exact (62.2% → 64.6%; holdout 65.1% → 67.3%) only by calling 97.6%
+  of tracks minor, which drops rekordbox-major tracks from 24% to 6% exact;
+  a classifier trained on rekordbox's labels collapses to "always minor".
+  That fits this library's 80% minor share, not music in general, and a
+  parallel-mode miss is three Camelot steps off. Rejected: minor bias,
+  parallel-switch threshold, segment voting, energy-weighted frames (all
+  measured in docs/analysis-parity.md). Revisit if tonic work (the larger
+  error, 15.6% wrong tonic) changes the chroma.
 
 ## D13. Waveforms (Phase 3): own Rust generator at 150 columns/s, calibrated against rekordbox output
 

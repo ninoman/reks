@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–11 and 13 done; 12 measured, tuning (12a) in progress: BPM and downbeat met, key next). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–11 and 13 done; 12 measured, tuning (12a) in progress: BPM and downbeat met; key port verified, mode kept, tonic next). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -216,8 +216,9 @@ rekordbox keys (D10, "Queue").
    confidence, similarity, chroma }`; any rate ≥ ~4.35 kHz. Notation and
    spelling come from `reks_core::Key`. All 24 synthetic progressions
    detected; noise/silence safe. C++ parity: ignored test + manual workflow
-   `keyfinder-parity.yml` with `fixtures/keyfinder/driver.cpp`, **UNVERIFIED**
-   (not run: no libkeyfinder here). `confidence` is our own, uncalibrated.
+   `keyfinder-parity.yml` with `fixtures/keyfinder/driver.cpp`; run locally
+   2026-10-21 (task 12a): 26/26 fixtures and 2,644/2,644 library tracks
+   identical to the C++ library. `confidence` is our own, uncalibrated.
 6. [x] **Waveform columns**: 3 band filters (start: 4th-order Bessel at 600 Hz
    and 4 kHz as in Mixxx) + per-column peak at 150 columns/s; mono height;
    streaming over PCM; tests on sine sweeps (band bytes track frequency).
@@ -356,7 +357,13 @@ rekordbox keys (D10, "Queue").
       0.3 for the first kick; phrase cues (kick re-entry, accent) measured,
       no gain. Version 4: downbeat 73.3% → 83.7% (met), BPM and grid phase
       unchanged.
-    - [ ] libKeyFinder C++ check, then the mode decision (key).
+    - [x] libKeyFinder C++ check, then the mode decision (key): our port
+      equals the C++ library on all 2,644 decoded tracks
+      (`reks parity keyfinder`); mode stays libKeyFinder's, since every
+      mode rule that scores higher does so by calling nearly everything
+      minor (D12). Key unchanged: 62.3% exact, 63.8% exact/relative.
+    - [ ] Key tonic: wrong-tonic misses (15.6%; semitone up in minor the
+      largest group) before the key bar can be met.
 13. [x] **Grid editor UI**: waveform view from our columns (zoomable, 150/s),
     beat markers, set-downbeat-here, nudge ±1 ms/±10 ms, tap tempo,
     double/halve, lock grid; edits write `beatgrid` rows with `source =

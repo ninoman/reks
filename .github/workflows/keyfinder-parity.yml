@@ -1,6 +1,8 @@
 # Compares reks key detection with the C++ libKeyFinder on generated
 # fixtures (phase 3 task 5, D12; target >= 95% agreement).
-# UNVERIFIED: never run yet. Manual trigger only so it cannot block CI.
+# Not run on CI yet; run locally 2026-10-21 (26/26 identical, and 2,644/2,644
+# library tracks via `reks parity keyfinder`). Manual trigger only so it
+# cannot block CI.
 name: keyfinder parity
 
 on:

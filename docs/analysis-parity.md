@@ -24,7 +24,10 @@ rekordbox grid has one anchor:
 | Key exact or relative | ≥ 85% | 63.8% | 63.8% | 63.8% | below |
 | Throughput per core (small model) | ≥ 5× real time | 25.0× | 24.2× | 24.2× | met |
 
-The bar is not lowered: the [tuning plan](#tuning-plan) continues with key. The reference is the maintainer's grids as
+The bar is not lowered: the [tuning plan](#tuning-plan) continues with key.
+Key is libKeyFinder's algorithm exactly (the port matches the C++ library on
+every track) and keeps its own major/minor decision; what is left is the
+tonic ([step 4](#tuning-plan)). The reference is the maintainer's grids as
 rekordbox holds them, many corrected by hand, so this measures distance from
 a checked grid, not just from rekordbox's own analysis. Grids with several
 anchors are the maintainer's edits of tempo changes and re-phased sections;
@@ -40,6 +43,8 @@ export REKS_PARITY_OUT=~/Library/Caches/reks-parity   # outside the repo: per-tr
 ./target/release/reks parity report --md report.md --tracks tracks.tsv
 # after a grid-only analyser bump: rebuild from the previous version's results
 ./target/release/reks parity report --analyser 3 --md report.md
+# key port vs the C++ libKeyFinder (driver: fixtures/keyfinder/driver.cpp)
+./target/release/reks parity keyfinder --driver target/keyfinder-driver
 ```
 
 `run` analyses every track whose file exists with the app's pipeline
@@ -54,6 +59,16 @@ redoes errors). `report` prints the aggregates below; `--tracks`
 writes per-track rows for inspecting failures locally. Neither file belongs
 in the repository: only aggregates of the maintainer's library are published. Code:
 [parity.rs](../crates/reks-cli/src/parity.rs).
+
+`keyfinder` decodes each track the same way and gives the same mono signal
+to our port and to libKeyFinder's C++ library, run as a separate program
+(the [driver](../fixtures/keyfinder/driver.cpp); libKeyFinder is
+GPL-3.0-or-later, nothing of it is linked or copied into reks). It appends
+to `keyfinder.jsonl` and prints both against rekordbox
+([keyfinder.rs](../crates/reks-cli/src/parity/keyfinder.rs)). The driver
+needs libKeyFinder and FFTW; where Homebrew cannot build them, compiling
+libKeyFinder's `src/*.cpp` with the driver against a static FFTW 3.3.10 works
+(done 2026-10-21, macOS 26.6, libKeyFinder `main` 941e517).
 
 ## Method
 
@@ -162,6 +177,9 @@ Grid phase, same tracks: our first downbeat within 30 ms of any rekordbox beat 9
 | neighbour (±1 Camelot) | 93 | 5.3% |
 | parallel | 270 | 15.3% |
 | other | 274 | 15.6% |
+
+C++ libKeyFinder (`parity keyfinder`, version 3 decode): the same key as
+reks on 2,644 of 2,644 decoded tracks, so its row is identical.
 
 ### Per genre
 
@@ -297,15 +315,40 @@ that touches audio), and the doc is updated with the new numbers.
    full Beat This! model (the bar is met without an 83 MB download).
    Left: beat 3 (5.9%, a half-bar rotation) and grids off the beat by
    > 30 ms (6.9%); the grid editor's set-downbeat covers them.
-4. **Key.** First check the port: run libKeyFinder (C++) on a sample of the
-   library and compare with our output (task 5's parity check is still
-   UNVERIFIED); a port bug would make every number here moot. Then the
-   errors in order of size: same tonic, wrong mode (15.3% of scored
-   tracks); a fourth apart, and a semitone apart in minor (Phrygian-sounding
-   psytrance). Swapping in other standard profiles (Krumhansl, Temperley,
-   a minor bias) on the stored chroma did not get near 70% (best ≈ 57% exact
-   in a first sample of 552 tracks), so the work is in the mode decision and
-   in segment-wise rather than whole-track chroma.
+4. **Key: port check and mode. Done (no analyser change).**
+   - *Port.* The C++ libKeyFinder gives the same key as our port on all
+     2,644 decoded tracks (and on the 26 synthetic fixtures of the ignored
+     test in `tests/key.rs`). The numbers above are libKeyFinder's own.
+   - *Mode.* Our tonic matches rekordbox's on 77.6% of scored tracks, so a
+     perfect mode decision would cap "exact" there; the 270 parallel misses
+     split 161 (rekordbox major, ours minor) and 109 the other way.
+     rekordbox calls 80% of this library minor. Measured from each track's
+     72-band frames with libKeyFinder's scoring (reproduces every stored
+     key), on the 1,755 scored tracks and the 880 hand-edited ones as a
+     holdout:
+
+     | Mode rule | Scored exact | Holdout exact | Exact on rekordbox-major (scored) |
+     | --- | --- | --- | --- |
+     | libKeyFinder (kept) | 62.2% | 65.1% | 24.2% |
+     | minor bias +0.01 on the minor cosine (best) | 64.6% | 67.3% | 5.8% |
+     | parallel → minor within 0.01 | 64.3% | 67.4% | – |
+     | segment vote (8–64 frames) | 61.7–62.7% | 62.6–64.2% | – |
+     | energy-weighted or energy-gated frames | 62.3–62.7% | 64.4–65.3% | – |
+
+     The best rule gains 2.4 points by calling 97.6% of tracks minor:
+     rekordbox's major keys become almost unreachable. On tracks whose
+     tonic matches, "always minor" is right 81.8% of the time against
+     libKeyFinder's 80.2%, and a logistic-regression mode classifier
+     trained on rekordbox's labels (scored set) learns exactly that: 81.8%
+     on its training set, 86.4% on the holdout, never major. Whole-track
+     and segment chroma carry no mode cue beyond this library's minor
+     share, so reks keeps libKeyFinder's decision (D12).
+   - *Next: the tonic.* "other" (15.6%) is a wrong tonic: a semitone up in
+     minor is the largest group (40 tracks, the Phrygian psytrance case),
+     then thirds and a whole tone; rekordbox's key is our second or third
+     choice on 81 of the 274. Mode tuning cannot reach 70% exact (cap
+     77.6% with this tonic); the next candidates work on the tonic, e.g.
+     bass-weighted or kick-synchronous chroma.
 
 Hardware is unaffected by this measurement; the phase's CDJ checklist still
 applies to whatever grid the tuning ends with.
