@@ -28,7 +28,7 @@ use crate::state::{AppState, PlayerSlot};
 
 /// Error returned to the UI: the message of the underlying error.
 #[derive(Debug, Serialize)]
-pub struct CmdError(String);
+pub struct CmdError(pub(crate) String);
 
 impl<E: std::fmt::Display> From<E> for CmdError {
     fn from(e: E) -> Self {
@@ -36,10 +36,10 @@ impl<E: std::fmt::Display> From<E> for CmdError {
     }
 }
 
-type CmdResult<T> = Result<T, CmdError>;
+pub(crate) type CmdResult<T> = Result<T, CmdError>;
 
 /// Runs `f` with the library on a blocking worker thread.
-async fn blocking<T, E, F>(state: &State<'_, AppState>, f: F) -> CmdResult<T>
+pub(crate) async fn blocking<T, E, F>(state: &State<'_, AppState>, f: F) -> CmdResult<T>
 where
     T: Send + 'static,
     E: std::fmt::Display + Send + 'static,

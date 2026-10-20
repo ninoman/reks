@@ -16,6 +16,7 @@ import {
   playlistsGet,
   playlistsMutate,
 } from "../lib/ipc";
+import { useHistory } from "./history";
 import { useLibrary } from "./library";
 import {
   ancestors,
@@ -61,7 +62,7 @@ export interface PlaylistsState {
   load(): Promise<void>;
   /** Sends `op`, then reloads. `null` when it failed (the error is in `error`). */
   mutate(op: PlaylistOp): Promise<PlaylistOutcome | null>;
-  /** Selects a node (or the collection) and shows it in the track table. */
+  /** Selects a node (or the collection) and shows it in the track table (closing a session). */
   select(id: number | null): void;
   /** New playlist or folder inside `near` (a folder) or next to it, then renames it. */
   create(kind: "playlist" | "folder", near: PlaylistNode | null): Promise<void>;
@@ -128,6 +129,7 @@ export const usePlaylists = create<PlaylistsState>()((set, get) => {
       }
     },
     select(id) {
+      useHistory.getState().close();
       get().dispatch({ type: "select", id });
       const node = byId(id);
       useLibrary.getState().showPlaylist(node?.id ?? null, node?.isFolder ?? true);

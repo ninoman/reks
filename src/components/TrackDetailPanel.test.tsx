@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Track, TrackDetail } from "../lib/ipc";
+import { useHistory } from "../store/history";
 import { useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
 import { emptySelection } from "../store/selection";
@@ -14,12 +15,15 @@ vi.mock("../lib/ipc", () => ({
   artworkGet: vi.fn(),
   libraryFacets: vi.fn(),
   libraryQuery: vi.fn(),
+  historyTrackSessions: vi.fn(),
+  historySession: vi.fn(),
 }));
 
 const ipc = await import("../lib/ipc");
 const libraryTrack = vi.mocked(ipc.libraryTrack);
 const libraryUpdateTrack = vi.mocked(ipc.libraryUpdateTrack);
 const libraryFacets = vi.mocked(ipc.libraryFacets);
+const historyTrackSessions = vi.mocked(ipc.historyTrackSessions);
 
 function track(patch: Partial<Track> = {}): Track {
   return {
@@ -80,6 +84,7 @@ function detail(t: Track): TrackDetail {
 
 beforeEach(() => {
   libraryTrack.mockResolvedValue(detail(track()));
+  historyTrackSessions.mockResolvedValue([]);
   libraryFacets.mockResolvedValue({
     genres: [],
     keys: [],
@@ -154,6 +159,33 @@ describe("TrackDetailPanel", () => {
     fireEvent.keyDown(title, { key: "Escape" });
     expect(title).toHaveProperty("value", "Old Title");
     expect(libraryUpdateTrack).not.toHaveBeenCalled();
+  });
+});
+
+describe("Played in", () => {
+  it("lists the sessions, practice ones marked, and opens one", async () => {
+    libraryTrack.mockResolvedValue(detail(track({ playCount: 4, lastPlayed: "2026-09-05" })));
+    historyTrackSessions.mockResolvedValue([
+      {
+        id: 4,
+        name: "Garage Noord",
+        playedOn: "2026-09-05",
+        venue: null,
+        excluded: false,
+        plays: 2,
+      },
+      { id: 3, name: "HISTORY 003", playedOn: "2026-06-27", venue: null, excluded: true, plays: 1 },
+    ]);
+    vi.mocked(ipc.historySession).mockReturnValue(new Promise(() => {}));
+    render(<TrackDetailPanel trackId={7} />);
+    const section = await screen.findByRole("region", { name: "Played in" });
+    await waitFor(() => expect(section.textContent).toContain("Garage Noord"));
+    expect(historyTrackSessions).toHaveBeenCalledWith(7);
+    expect(section.textContent).toContain("2026-09-05");
+    expect(section.textContent).toContain("×2");
+    expect(screen.getAllByText("Practice")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "HISTORY 003" }));
+    expect(useHistory.getState().openId).toBe(3);
   });
 });
 

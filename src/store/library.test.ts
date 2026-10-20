@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildFilters,
   buildQuery,
+  daysAgo,
   defaultSort,
   entryPosition,
   itemAt,
@@ -71,6 +72,9 @@ describe("buildFilters", () => {
         playlistId: 11,
         missing: false,
         needsAnalysis: true,
+        playsMin: null,
+        playsMax: null,
+        lastPlayed: null,
       }),
     ).toEqual([
       { type: "genre", genre: "House" },
@@ -96,6 +100,23 @@ describe("buildFilters", () => {
     expect(buildFilters({ ...noFilters, bpmMax: 90 })).toEqual([
       { type: "bpmRange", min: 0, max: 9000 },
     ]);
+  });
+
+  it("play filters", () => {
+    const now = new Date(2026, 9, 20);
+    expect(buildFilters({ ...noFilters, playsMin: 2 }, now)).toEqual([
+      { type: "playCountRange", min: 2, max: 1_000_000 },
+    ]);
+    expect(buildFilters({ ...noFilters, playsMax: 0 }, now)).toEqual([
+      { type: "playCountRange", min: 0, max: 0 },
+    ]);
+    expect(buildFilters({ ...noFilters, lastPlayed: "never" }, now)).toEqual([
+      { type: "neverPlayed" },
+    ]);
+    expect(buildFilters({ ...noFilters, lastPlayed: 30 }, now)).toEqual([
+      { type: "playedSince", date: "2026-09-20" },
+    ]);
+    expect(daysAgo(365, now)).toBe("2025-10-20");
   });
 });
 

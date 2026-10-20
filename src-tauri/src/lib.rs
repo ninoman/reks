@@ -2,6 +2,7 @@
 //! lives in `crates/*` (docs/decisions.md D2).
 
 mod commands;
+mod history;
 mod state;
 
 use tauri::Manager;
@@ -83,6 +84,14 @@ pub fn run() {
             commands::convert_plan,
             commands::convert_apply,
             commands::convert_cancel,
+            history::history_sessions,
+            history::history_session,
+            history::history_session_update,
+            history::history_session_delete,
+            history::history_link_entry,
+            history::history_track_sessions,
+            history::history_scan,
+            history::history_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

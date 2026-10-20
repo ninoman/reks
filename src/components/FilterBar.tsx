@@ -9,7 +9,12 @@
 import { type ReactNode, useState } from "react";
 
 import { cn } from "../lib/cn";
-import { activeFilterCount, type FilterState, useLibrary } from "../store/library";
+import {
+  activeFilterCount,
+  type FilterState,
+  type LastPlayedFilter,
+  useLibrary,
+} from "../store/library";
 import { useKeyLabel } from "../store/settings";
 import { ChevronDownIcon } from "./icons";
 import { Button } from "./ui/Button";
@@ -27,6 +32,15 @@ function triState(v: boolean | null): string {
 
 function parseTriState(s: string): boolean | null {
   return s === "" ? null : s === "true";
+}
+
+function parseCount(s: string): number | null {
+  const n = Number.parseInt(s, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function parseLastPlayed(s: string): LastPlayedFilter | null {
+  return s === "" ? null : s === "never" ? "never" : (Number(s) as LastPlayedFilter);
 }
 
 function parseBpm(s: string): number | null {
@@ -226,6 +240,45 @@ export function FilterBar() {
           <option value="">Any</option>
           <option value="true">Needs analysis</option>
           <option value="false">Analysed</option>
+        </Select>
+      </Field>
+
+      <Field label="Plays" set={f.playsMin !== null || f.playsMax !== null}>
+        <Input
+          size="sm"
+          type="number"
+          className="w-14"
+          aria-label="Minimum plays"
+          placeholder="min"
+          min={0}
+          value={f.playsMin ?? ""}
+          onChange={(e) => set({ playsMin: parseCount(e.target.value) })}
+        />
+        –
+        <Input
+          size="sm"
+          type="number"
+          className="w-14"
+          aria-label="Maximum plays"
+          placeholder="max"
+          min={0}
+          value={f.playsMax ?? ""}
+          onChange={(e) => set({ playsMax: parseCount(e.target.value) })}
+        />
+      </Field>
+
+      <Field label="Last played" set={f.lastPlayed !== null}>
+        <Select
+          size="sm"
+          aria-label="Last played"
+          value={f.lastPlayed ?? ""}
+          onChange={(e) => set({ lastPlayed: parseLastPlayed(e.target.value) })}
+        >
+          <option value="">Any</option>
+          <option value="never">Never played</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="365">Last year</option>
         </Select>
       </Field>
 

@@ -1,6 +1,7 @@
 /**
  * Library window: the app header (library-wide actions) across the top; the
- * playlist tree on the left; toolbar, filter bar and track table in the
+ * playlist and Histories trees on the left (an open history session replaces
+ * the toolbar, filters and table); toolbar, filter bar and track table in the
  * middle, with the track info panel sliding over the table's right edge when
  * its toolbar button is on; the transport bar along the bottom. Space plays
  * and pauses wherever focus is, except in text fields, dialogs and menus;
@@ -14,10 +15,13 @@ import { DEFAULT_HIDDEN } from "./components/columns";
 import { DevicesDialog } from "./components/DevicesDialog";
 import { ExportWizard } from "./components/ExportWizard";
 import { FilterBar } from "./components/FilterBar";
+import { HistoryImportDialog } from "./components/HistoryImportDialog";
+import { HistoryTree } from "./components/HistoryTree";
 import { ImportWizard } from "./components/ImportWizard";
 import { LibraryToolbar } from "./components/LibraryToolbar";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
+import { SessionView } from "./components/SessionView";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { TrackInfoPanel } from "./components/TrackDetailPanel";
 import { TrackTable } from "./components/TrackTable";
@@ -25,6 +29,7 @@ import { TransportBar } from "./components/TransportBar";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
 import { Sheet } from "./components/ui/Sheet";
 import { keepsSpace } from "./lib/keys";
+import { useHistory } from "./store/history";
 import { useLibrary } from "./store/library";
 import { usePanels } from "./store/panels";
 import { usePlayer } from "./store/player";
@@ -39,6 +44,7 @@ export default function App() {
   const error = useLibrary((s) => s.error);
   const filterBarOpen = usePanels((s) => s.filterBarOpen);
   const infoOpen = usePanels((s) => s.infoOpen);
+  const sessionOpen = useHistory((s) => s.openId !== null);
 
   useEffect(() => {
     // Defaults first so the table does not flash every column; settings may replace them.
@@ -57,6 +63,7 @@ export default function App() {
     s.refresh();
     void s.loadFacets();
     void usePlaylists.getState().load();
+    void useHistory.getState().load();
     return () => {
       live = false;
       stopSync?.();
@@ -90,24 +97,31 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-(--sidebar-w) shrink-0 flex-col border-r border-border bg-bg-subtle">
           <PlaylistTree />
+          <HistoryTree />
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
-          <LibraryToolbar table={table} />
-          {filterBarOpen && <FilterBar />}
-          {error !== null && (
-            <div
-              className="border-b border-border px-2.5 py-1 text-danger select-text"
-              role="alert"
-            >
-              {error}
-            </div>
+          {sessionOpen ? (
+            <SessionView />
+          ) : (
+            <>
+              <LibraryToolbar table={table} />
+              {filterBarOpen && <FilterBar />}
+              {error !== null && (
+                <div
+                  className="border-b border-border px-2.5 py-1 text-danger select-text"
+                  role="alert"
+                >
+                  {error}
+                </div>
+              )}
+              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+                <TrackTable columns={visibleColumns(table)} />
+                <Sheet open={infoOpen}>
+                  <TrackInfoPanel />
+                </Sheet>
+              </div>
+            </>
           )}
-          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-            <TrackTable columns={visibleColumns(table)} />
-            <Sheet open={infoOpen}>
-              <TrackInfoPanel />
-            </Sheet>
-          </div>
         </main>
       </div>
       <TransportBar />
@@ -118,6 +132,7 @@ export default function App() {
       <DevicesDialog />
       <ExportWizard />
       <ConvertDialog />
+      <HistoryImportDialog />
     </div>
   );
 }

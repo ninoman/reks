@@ -1,6 +1,7 @@
 /**
  * Track info panel (right of the table) for the primary selected track:
- * artwork, editable metadata, and read-only cue and beatgrid listings.
+ * artwork, editable metadata, "Played in" (play history), and read-only cue
+ * and beatgrid listings.
  * `TrackDetailPanel` is mounted with `key={trackId}` so switching tracks
  * starts from a fresh form (unsaved edits are dropped).
  */
@@ -33,6 +34,7 @@ import { rowAt, useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
 import { primaryIndex } from "../store/selection";
 import { useKeyLabel } from "../store/settings";
+import { PlayedIn } from "./PlayedIn";
 import {
   buildPatch,
   type EditField,
@@ -272,6 +274,8 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
           </Button>
         </div>
       </form>
+
+      <PlayedIn trackId={trackId} playCount={t.playCount} lastPlayed={t.lastPlayed} />
 
       <section>
         <h3 className={sectionTitle}>Beatgrid</h3>

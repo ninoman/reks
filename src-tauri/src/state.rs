@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use reks_core::convert::ConvertPlan;
+use reks_core::history::HistoryImportPlan;
 use reks_core::{CancelToken, Library, TrackId};
 use reks_export_rb::devices::DeviceId;
 use reks_export_rb::plan::{ExportPlan, Selection};
@@ -27,6 +28,9 @@ pub struct AppState {
     pub convert_cancel: Mutex<Option<CancelToken>>,
     /// The conversion plan the converter's dry run shows; Convert runs exactly it.
     pub shown_convert: Mutex<ShownConvert>,
+    /// The history import plan the import dialog's dry run shows; Import
+    /// applies exactly it.
+    pub shown_history: Mutex<ShownHistory>,
     /// App data dir (D19): stick backups go under it.
     pub data_dir: PathBuf,
     pub player: Mutex<PlayerSlot>,
@@ -49,6 +53,15 @@ pub struct ShownConvert {
     pub last_id: u64,
     /// `(id, plan)` of the newest plan that finished; taken by `convert_apply`.
     pub plan: Option<(u64, ConvertPlan)>,
+}
+
+/// The last history import plan returned to the UI, under the id the UI sends back.
+#[derive(Debug, Default)]
+pub struct ShownHistory {
+    /// Id of the newest `history_scan` call; ids only grow.
+    pub last_id: u64,
+    /// `(id, plan)` of the newest scan that finished; taken by `history_import`.
+    pub plan: Option<(u64, HistoryImportPlan)>,
 }
 
 /// The preview player and the track on it.
@@ -82,6 +95,7 @@ impl AppState {
             shown_plan: Mutex::new(ShownPlan::default()),
             convert_cancel: Mutex::new(None),
             shown_convert: Mutex::new(ShownConvert::default()),
+            shown_history: Mutex::new(ShownHistory::default()),
             data_dir: data_dir.to_path_buf(),
             player: Mutex::new(PlayerSlot {
                 player: Player::new(settings.audio_device).with_volume(settings.ui.volume),

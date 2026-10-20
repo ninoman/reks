@@ -15,9 +15,12 @@ import {
   zoneAt,
 } from "../lib/dnd";
 import type { PlaylistNode } from "../lib/ipc";
+import { useHistory } from "../store/history";
 import { usePlaylists } from "../store/playlists";
 import { visibleNodes } from "../store/playlistTree";
+import { Disclosure } from "./Disclosure";
 import { PlusIcon } from "./icons";
+import { DISCLOSURE, ICON, INDENT, NAME, PAD, ROW } from "./treeStyles";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -29,26 +32,12 @@ import { IconButton } from "./ui/IconButton";
 import { Input } from "./ui/Input";
 import { ScrollArea } from "./ui/ScrollArea";
 
-/** One tree row; state comes in as data attributes (cheap, no class building). */
-const ROW = [
-  "flex h-(--row-h) cursor-default items-center gap-1.5 whitespace-nowrap pr-2 pl-1 text-md text-fg",
-  "data-[root]:text-fg-muted data-[selected]:bg-selected data-[selected]:text-selected-fg",
-  "data-[drop=into]:shadow-[inset_0_0_0_2px_var(--color-accent)]",
-  "data-[drop=before]:shadow-[inset_0_2px_0_var(--color-accent)]",
-  "data-[drop=after]:shadow-[inset_0_-2px_0_var(--color-accent)]",
-].join(" ");
-const DISCLOSURE = "inline-flex w-3.5 flex-none justify-center text-fg-muted";
-const ICON = "flex-none text-fg-muted";
-const NAME = "flex-1 overflow-hidden text-ellipsis";
-
-/** Indent per level and the row's own left padding, in px (rekordbox-like spacing). */
-const INDENT = 18;
-const PAD = 4;
-
 export function PlaylistTree() {
   const nodes = usePlaylists((s) => s.nodes);
   const tree = usePlaylists((s) => s.tree);
   const error = usePlaylists((s) => s.error);
+  /** A history session in the main area: no playlist row is selected. */
+  const sessionOpen = useHistory((s) => s.openId !== null);
   const p = usePlaylists.getState;
   /** The node the context menu is for (`null`: the tree itself). */
   const [menuNode, setMenuNode] = useState<PlaylistNode | null>(null);
@@ -154,10 +143,10 @@ export function PlaylistTree() {
               <div
                 role="treeitem"
                 aria-level={1}
-                aria-selected={tree.selectedId === null}
+                aria-selected={tree.selectedId === null && !sessionOpen}
                 className={ROW}
                 data-root=""
-                data-selected={tree.selectedId === null || undefined}
+                data-selected={(tree.selectedId === null && !sessionOpen) || undefined}
                 onClick={() => p().select(null)}
               >
                 <span className={DISCLOSURE} />
@@ -214,7 +203,7 @@ export function PlaylistTree() {
                 <TreeRow
                   key={node.id}
                   node={node}
-                  selected={tree.selectedId === node.id}
+                  selected={tree.selectedId === node.id && !sessionOpen}
                   expanded={tree.expanded.has(node.id)}
                   draft={tree.renaming?.id === node.id ? tree.renaming.draft : null}
                   dropZone={drop?.id === node.id ? drop.zone : null}
@@ -259,16 +248,6 @@ export function PlaylistTree() {
 
 /** Drop-target id of the "Playlists" root row (ids from SQLite are positive). */
 const ROOT = -1;
-
-function Disclosure({ open }: { open: boolean }) {
-  return (
-    <span className={DISCLOSURE} aria-hidden="true">
-      <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true">
-        <path d={open ? "M1 2.5h8L5 8z" : "M2.5 1v8L8 5z"} fill="currentColor" />
-      </svg>
-    </span>
-  );
-}
 
 function CollectionIcon() {
   return (

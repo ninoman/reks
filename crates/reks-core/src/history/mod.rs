@@ -20,9 +20,11 @@
 //! whatever its date. [`ImportChoices`] marks one practice at import
 //! (`user`); Practice can also be set later ([`Library::session_update`]). [`import`] and
 //! [`Library::session_link_entry`] recompute the play stats of the tracks
-//! they touch (`stats`, task 7).
+//! they touch (`stats`, task 7). `sessions` reads them back for the UI
+//! (task 9).
 
 mod matcher;
+mod sessions;
 mod stats;
 #[cfg(test)]
 mod tests;
@@ -39,6 +41,7 @@ use crate::scan::TrackId;
 use crate::timefmt::now_utc;
 
 use matcher::Matcher;
+pub use sessions::{SessionDetail, SessionEntryRow, SessionQuery, SessionRef, SessionRow};
 pub(crate) use stats::recompute;
 pub use stats::{SessionPatch, TrackSet};
 
@@ -125,9 +128,14 @@ pub struct PlannedEntry {
     pub raw: SourceEntry,
 }
 
-/// Why a session is not imported.
+/// Why a session is not imported. JSON: `{"reason": "alreadyImported", "sessionId": 3}`
+/// inside the action (a `kind` tag here would clash with [`SessionAction`]'s).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase", tag = "kind")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "reason"
+)]
 pub enum SkipReason {
     /// The library holds a session with this fingerprint.
     AlreadyImported { session_id: SessionId },
@@ -137,7 +145,11 @@ pub enum SkipReason {
 
 /// What [`import`] does with a session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase", tag = "kind")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "kind"
+)]
 pub enum SessionAction {
     New,
     Skip(SkipReason),

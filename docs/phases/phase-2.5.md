@@ -2,7 +2,7 @@
 
 Status: started 2026-10-20 ahead of the Phase 2 hardware campaign with the
 maintainer's approval (software only; anything that needs a player stays
-UNVERIFIED); tasks 1–8 and 10 done. Depends on: Phase 2 done, including its hardware campaign,
+UNVERIFIED); tasks 1–10 done. Depends on: Phase 2 done, including its hardware campaign,
 history safeguard and `export_manifest` (tasks 12–14). Runs before Phase 3.
 Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
@@ -317,12 +317,39 @@ Divider rules
    end, the backup scans as two new sessions, imported stick needs no
    choice, stale import skipped, plan without its scan refused); the
    fixture-stick test `played_stick_fixture_guard` is `#[ignore]`.
-9. **History UI**: Histories tree (year → month → session); session view in
+9. [x] **History UI**: Histories tree (year → month → session); session view in
    play order with unmatched entries greyed and "Locate…", dividers hidden by
    default; header with rename, venue, notes, Practice toggle, delete
    (confirm); import dry-run dialog with a Practice checkbox per session;
    "Played in" on the track detail panel (practice sessions marked); Play
    count and Last played columns and filters.
+   Done: reks-core reads sessions back in
+   [sessions.rs](../../crates/reks-core/src/history/sessions.rs)
+   (`Library::sessions(&SessionQuery)`, newest first with undated last;
+   `session(id)` with entries in play order, library fields for matched
+   entries and the stick's `raw_*` for all; `track_sessions(id)`), and
+   `query.rs` gains `Filter::{NeverPlayed, PlayCountRange, PlayedSince}`,
+   `SortColumn::LastPlayed` and `TrackRow::last_played` (moved from `Track`).
+   Commands in [src-tauri/src/history.rs](../../src-tauri/src/history.rs):
+   `history_scan` reads a mounted stick (serial from the OS) or a folder (a
+   backup when it has `manifest.json`, else a stick copy with no serial), with
+   HIST1 dates off, and keeps the plan under an id that `history_import` takes,
+   like the export wizard's dry run. UI: [HistoryTree.tsx](../../src/components/HistoryTree.tsx)
+   under the playlists ("+" opens [HistoryImportDialog.tsx](../../src/components/HistoryImportDialog.tsx));
+   an open session replaces the toolbar and table with
+   [SessionView.tsx](../../src/components/SessionView.tsx) (fields save on
+   blur or Enter; [LocateDialog.tsx](../../src/components/LocateDialog.tsx)
+   searches the library from the stick's artist and title);
+   [PlayedIn.tsx](../../src/components/PlayedIn.tsx) on the track panel;
+   "Plays" and "Last played" columns (hidden by default) and filters (play
+   count range; never played or played in the last 30/90/365 days). Every edit
+   that can move counts reloads the table and "Played in"
+   ([store/history.ts](../../src/store/history.ts)). Fixed on the way: the
+   plan's `SessionAction` JSON repeated the `kind` key for skips and used
+   snake_case fields; a skip is now `{"kind": "skip", "reason":
+   "alreadyImported", "sessionId": 3}` (also in `reks history scan --json`).
+   The mock backend has sessions and a stick to import
+   ([mockHistory.ts](../../src/dev/mockHistory.ts)).
 10. [x] **`reks-cli history scan/import`** for headless runs.
     Done in [history.rs](../../crates/reks-cli/src/history.rs):
     `reks history scan <stick|backup> --library <db> [--hist1-dates] [--json]`
