@@ -1,6 +1,10 @@
 # Phase 4 — OneLibrary export (`exportLibrary.db`)
 
-Status: not started. Depends on: Phase 2 (legacy export, ANLZ layout, planner)
+Status: in progress (started 2026-10-20 ahead of the Phase 3 close, with the
+maintainer's approval: Phase 3's ANLZ builder and export integration are in
+main; its accuracy tuning (12a) and hardware checks continue in parallel; no
+players available, so player behaviour stays UNVERIFIED). Task 1 (reference
+capture) pending. Depends on: Phase 2 (legacy export, ANLZ layout, planner)
 and Phase 3 (own analysis, so every exported track has ANLZ files). Read
 `docs/decisions.md` §OneLibrary and `docs/research.md` §2 first.
 

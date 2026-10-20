@@ -10,3 +10,18 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# SQLCipher replaces the bundled SQLite for the whole build (feature
+# unification), library DB included; see docs/decisions.md D14. Apple builds
+# use CommonCrypto; elsewhere OpenSSL is built from source so no system
+# libcrypto (Linux) or OPENSSL_DIR (Windows) is needed.
+[target.'cfg(target_vendor = "apple")'.dependencies]
+rusqlite = { workspace = true, features = ["bundled-sqlcipher"] }
+
+[target.'cfg(not(target_vendor = "apple"))'.dependencies]
+rusqlite = { workspace = true, features = ["bundled-sqlcipher-vendored-openssl"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
