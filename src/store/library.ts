@@ -45,7 +45,15 @@ export interface FilterState {
   playlistId: number | null;
   missing: boolean | null;
   needsAnalysis: boolean | null;
+  /** Play count range (D23: baseline plus counted sessions). */
+  playsMin: number | null;
+  playsMax: number | null;
+  /** "never", or played within this many days. */
+  lastPlayed: LastPlayedFilter | null;
 }
+
+/** The "Last played" filter's choices. */
+export type LastPlayedFilter = "never" | 30 | 90 | 365;
 
 export const noFilters: FilterState = {
   genre: null,
@@ -57,6 +65,9 @@ export const noFilters: FilterState = {
   playlistId: null,
   missing: null,
   needsAnalysis: null,
+  playsMin: null,
+  playsMax: null,
+  lastPlayed: null,
 };
 
 export const defaultSort: Sort = { column: "title", descending: false };
@@ -73,8 +84,18 @@ export interface QueryInputs {
   sort: Sort;
 }
 
+/** Upper play count bound when only a minimum is set. */
+const PLAYS_MAX = 1_000_000;
+
+/** Local calendar date `days` days before `now`, as `YYYY-MM-DD`. */
+export function daysAgo(days: number, now: Date = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** Sidebar state → the `Filter` list `library_query` takes. */
-export function buildFilters(f: FilterState): Filter[] {
+export function buildFilters(f: FilterState, now: Date = new Date()): Filter[] {
   const out: Filter[] = [];
   if (f.genre !== null) out.push({ type: "genre", genre: f.genre });
   if (f.keys.length > 0) out.push({ type: "keyIn", keys: [...f.keys] });
@@ -90,6 +111,12 @@ export function buildFilters(f: FilterState): Filter[] {
   if (f.playlistId !== null) out.push({ type: "playlist", id: f.playlistId });
   if (f.missing !== null) out.push({ type: "missing", missing: f.missing });
   if (f.needsAnalysis !== null) out.push({ type: "needsAnalysis", needs: f.needsAnalysis });
+  if (f.playsMin !== null || f.playsMax !== null) {
+    out.push({ type: "playCountRange", min: f.playsMin ?? 0, max: f.playsMax ?? PLAYS_MAX });
+  }
+  if (f.lastPlayed === "never") out.push({ type: "neverPlayed" });
+  else if (f.lastPlayed !== null)
+    out.push({ type: "playedSince", date: daysAgo(f.lastPlayed, now) });
   return out;
 }
 

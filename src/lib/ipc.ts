@@ -17,7 +17,12 @@ export type Filter =
   | { type: "ratingMin"; rating: number }
   | { type: "playlist"; id: number }
   | { type: "missing"; missing: boolean }
-  | { type: "needsAnalysis"; needs: boolean };
+  | { type: "needsAnalysis"; needs: boolean }
+  /** Play count 0 and no last played (D23). */
+  | { type: "neverPlayed" }
+  | { type: "playCountRange"; min: number; max: number }
+  /** Last played on or after `date` (`YYYY-MM-DD`). */
+  | { type: "playedSince"; date: string };
 
 export type SortColumn =
   | "title"
@@ -33,6 +38,7 @@ export type SortColumn =
   | "year"
   | "dateAdded"
   | "playCount"
+  | "lastPlayed"
   | "kind"
   | "bitRate"
   | "playlistPosition";
@@ -68,7 +74,10 @@ export interface TrackRow {
   kind: string;
   bitRateKbps: number | null;
   dateAdded: string;
+  /** Baseline plus included history sessions (D23). */
   playCount: number;
+  /** `YYYY-MM-DD` (or a rekordbox date); derived like `playCount`. */
+  lastPlayed: string | null;
   missing: boolean;
   needsAnalysis: boolean;
   /** Position of this entry in a playlist view (one row per entry); null elsewhere. */
@@ -308,7 +317,6 @@ export interface Track extends TrackRow {
   channels: number | null;
   keySource: string | null;
   bpmSource: string | null;
-  lastPlayed: string | null;
   rbTrackId: number | null;
   createdAt: string;
   updatedAt: string;
@@ -946,4 +954,176 @@ export function convertApply(
 /** Asks the running conversion to stop after cleaning up its current file. */
 export function convertCancel(): Promise<void> {
   return invoke("convert_cancel");
+}
+
+/** `history_*` commands: imported play history (phase-2.5.md, D23). */
+export interface SessionQuery {
+  /** true: practice only; false: counted only; absent: all. */
+  excluded?: boolean;
+}
+
+/** One imported session; newest first, undated last. */
+export interface SessionRow {
+  id: number;
+  name: string;
+  /** As on the stick, e.g. `HISTORY 001`. */
+  sourceName: string;
+  /** `YYYY-MM-DD`; null until history dates are decoded (HIST1). */
+  playedOn: string | null;
+  venue: string | null;
+  /** Practice: left out of play counts. */
+  excluded: boolean;
+  excludedReason: "user" | "pre_baseline" | null;
+  /** Track entries (dividers not counted). */
+  tracks: number;
+  /** Track entries with no library track. */
+  unmatched: number;
+  importedAt: string;
+}
+
+export type EntryKind = "track" | "divider";
+
+export interface SessionEntryRow {
+  position: number;
+  kind: EntryKind;
+  /** null: unmatched (or a divider). */
+  trackId: number | null;
+  title: string | null;
+  artist: string | null;
+  durationMs: number | null;
+  bpmX100: number | null;
+  key: Key | null;
+  /** As the stick has them. */
+  rawTitle: string | null;
+  rawArtist: string | null;
+  rawPath: string | null;
+  rawDurationMs: number | null;
+}
+
+export interface SessionDetail {
+  session: SessionRow;
+  notes: string | null;
+  volumeSerial: string | null;
+  /** Play order. */
+  entries: SessionEntryRow[];
+}
+
+/** A session a track was played in. */
+export interface SessionRef {
+  id: number;
+  name: string;
+  playedOn: string | null;
+  venue: string | null;
+  excluded: boolean;
+  plays: number;
+}
+
+/** A session edit: absent fields are unchanged; `null` venue/notes clear them. */
+export interface SessionPatch {
+  name?: string;
+  venue?: string | null;
+  notes?: string | null;
+  /** Practice. */
+  excluded?: boolean;
+}
+
+export type MatchKind = "manifest" | "pathSuffix" | "metadata";
+
+export interface PlannedEntry {
+  position: number;
+  kind: EntryKind;
+  trackId: number | null;
+  matchedBy: MatchKind | null;
+  raw: {
+    stickPath: string | null;
+    title: string | null;
+    artist: string | null;
+    durationMs: number | null;
+  };
+}
+
+export type SessionAction =
+  | { kind: "new" }
+  | { kind: "skip"; reason: "alreadyImported"; sessionId: number }
+  | { kind: "skip"; reason: "duplicateInSource" }
+  | { kind: "extend"; sessionId: number; existingEntries: number };
+
+export interface PlannedSession {
+  sourceName: string;
+  playedOn: string | null;
+  /** Key of `ImportChoices.excluded`. */
+  fingerprint: string;
+  action: SessionAction;
+  /** Why a new session is preselected as Practice. */
+  defaultExclusion: "preBaseline" | "unknownDate" | null;
+  entries: PlannedEntry[];
+}
+
+export interface HistoryImportPlan {
+  source: string;
+  volumeSerial: string | null;
+  baselineDate: string | null;
+  sessions: PlannedSession[];
+}
+
+export type HistorySource = { kind: "stick"; path: string } | { kind: "backup"; path: string };
+
+/** A mounted stick, or a folder (a Phase 2 backup or a stick copy). */
+export type ScanSource = { kind: "stick"; device: DeviceInfo } | { kind: "folder"; path: string };
+
+export interface HistoryScan {
+  planId: number;
+  source: HistorySource;
+  plan: HistoryImportPlan;
+}
+
+export interface ImportChoices {
+  /** Fingerprint → Practice. Absent: the plan's default. */
+  excluded: Record<string, boolean>;
+}
+
+export interface HistoryImportReport {
+  created: number[];
+  extended: number[];
+  skipped: number;
+  entries: number;
+  unmatched: number;
+}
+
+export function historySessions(query: SessionQuery = {}): Promise<SessionRow[]> {
+  return invoke("history_sessions", { query });
+}
+
+export function historySession(id: number): Promise<SessionDetail> {
+  return invoke("history_session", { id });
+}
+
+export function historySessionUpdate(id: number, patch: SessionPatch): Promise<void> {
+  return invoke("history_session_update", { id, patch });
+}
+
+export function historySessionDelete(id: number): Promise<void> {
+  return invoke("history_session_delete", { id });
+}
+
+/** "Locate…": links entry `position` of `session` to library track `track`. */
+export function historyLinkEntry(session: number, position: number, track: number): Promise<void> {
+  return invoke("history_link_entry", { session, position, track });
+}
+
+export function historyTrackSessions(id: number): Promise<SessionRef[]> {
+  return invoke("history_track_sessions", { id });
+}
+
+/** Read-only dry run of importing a stick's or backup's history. */
+export function historyScan(source: ScanSource): Promise<HistoryScan> {
+  return invoke("history_scan", { source });
+}
+
+/** Imports the dry run `planId` showed, with the Practice choices. */
+export function historyImport(
+  planId: number,
+  choices: ImportChoices,
+): Promise<HistoryImportReport> {
+  return invoke("history_import", { planId, choices });
 }

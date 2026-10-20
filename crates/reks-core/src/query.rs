@@ -71,6 +71,12 @@ pub enum Filter {
     Missing { missing: bool },
     /// No beatgrid (or has one).
     NeedsAnalysis { needs: bool },
+    /// Play count 0 and no last played (D23: baseline plus included sessions).
+    NeverPlayed,
+    /// Play count within `min..=max`.
+    PlayCountRange { min: u32, max: u32 },
+    /// Last played on or after `date` (`YYYY-MM-DD`).
+    PlayedSince { date: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -98,6 +104,8 @@ pub enum SortColumn {
     Year,
     DateAdded,
     PlayCount,
+    /// Never-played tracks sort last in both directions.
+    LastPlayed,
     Kind,
     BitRate,
     /// Position in the playlist of the first `Filter::Playlist`; id order
@@ -128,6 +136,8 @@ pub struct TrackRow {
     pub bit_rate_kbps: Option<i64>,
     pub date_added: String,
     pub play_count: i64,
+    /// `YYYY-MM-DD` (or a rekordbox date), derived like `play_count` (D23).
+    pub last_played: Option<String>,
     pub missing: bool,
     pub needs_analysis: bool,
     /// The entry's position in a playlist view (one row per entry, so a
@@ -204,7 +214,7 @@ pub(crate) const ROW_COLUMNS: &str =
     "t.id, t.title, t.artist, t.album, t.genre, t.label, t.remixer, \
      t.comment, t.key, t.bpm_x100, t.rating, t.color, t.duration_ms, t.year, t.kind, \
      t.bit_rate_kbps, t.date_added, t.play_count, t.missing, \
-     NOT EXISTS (SELECT 1 FROM beatgrid b WHERE b.track_id = t.id)";
+     NOT EXISTS (SELECT 1 FROM beatgrid b WHERE b.track_id = t.id), t.last_played";
 
 impl Library {
     /// One page of tracks matching `q`, and the total match count.
@@ -241,7 +251,7 @@ impl Library {
         let rows = stmt
             .query_map(params_from_iter(&params), |r| {
                 let mut row = track_row(r)?;
-                row.entry_position = r.get(20)?;
+                row.entry_position = r.get(21)?;
                 Ok(row)
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -323,6 +333,7 @@ pub(crate) fn track_row(r: &Row<'_>) -> rusqlite::Result<TrackRow> {
         play_count: r.get(17)?,
         missing: r.get(18)?,
         needs_analysis: r.get(19)?,
+        last_played: r.get(20)?,
         entry_position: None,
     })
 }
@@ -429,6 +440,18 @@ fn where_clause(q: &TrackQuery, view: Option<PlaylistId>) -> Where {
                     "{not}EXISTS (SELECT 1 FROM beatgrid b WHERE b.track_id = t.id)"
                 ));
             }
+            Filter::NeverPlayed => {
+                conds.push("(t.play_count = 0 AND t.last_played IS NULL)".into());
+            }
+            Filter::PlayCountRange { min, max } => {
+                conds.push("t.play_count BETWEEN ? AND ?".into());
+                params.push(Value::Integer(i64::from(*min)));
+                params.push(Value::Integer(i64::from(*max)));
+            }
+            Filter::PlayedSince { date } => {
+                conds.push("t.last_played >= ?".into());
+                params.push(Value::Text(date.clone()));
+            }
         }
     }
 
@@ -462,6 +485,7 @@ fn order_by(q: &TrackQuery, view: Option<PlaylistId>) -> (String, Vec<Value>) {
         SortColumn::Year => num("t.year"),
         SortColumn::DateAdded => text("t.date_added"),
         SortColumn::PlayCount => num("t.play_count"),
+        SortColumn::LastPlayed => text("t.last_played"),
         SortColumn::BitRate => num("t.bit_rate_kbps"),
         SortColumn::PlaylistPosition if view.is_some() => num("pe.position"),
         SortColumn::PlaylistPosition => {

@@ -71,9 +71,9 @@
       }
     },
     {
-      // The playlist tree follows the WAI-ARIA tree pattern the same way: the
-      // role="tree" container holds focus and handles the keys for its rows.
-      "includes": ["src/components/PlaylistTree.tsx"],
+      // The playlist and history trees follow the WAI-ARIA tree pattern the same
+      // way: the role="tree" container holds focus and handles the keys for its rows.
+      "includes": ["src/components/PlaylistTree.tsx", "src/components/HistoryTree.tsx"],
       "linter": {
         "rules": {
           "a11y": {

@@ -42,7 +42,6 @@ pub struct Track {
     pub channels: Option<i64>,
     pub key_source: Option<String>,
     pub bpm_source: Option<String>,
-    pub last_played: Option<String>,
     pub rb_track_id: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
@@ -197,7 +196,7 @@ fn detail(conn: &Connection, id: TrackId) -> Result<TrackDetail> {
             &format!(
                 "SELECT {ROW_COLUMNS}, t.path, t.file_size, t.file_mtime, t.album_artist,
                         t.composer, t.mix, t.grouping, t.track_no, t.disc_no, t.sample_rate,
-                        t.bit_depth, t.channels, t.key_source, t.bpm_source, t.last_played,
+                        t.bit_depth, t.channels, t.key_source, t.bpm_source,
                         t.rb_track_id, t.created_at, t.updated_at,
                         a.id, a.mime, a.width, a.height
                  FROM track t LEFT JOIN artwork a ON a.id = t.artwork_id
@@ -205,7 +204,7 @@ fn detail(conn: &Connection, id: TrackId) -> Result<TrackDetail> {
             ),
             [id],
             |r| {
-                // Columns 0..=19 are `ROW_COLUMNS`.
+                // Columns 0..=20 are `ROW_COLUMNS`.
                 let artwork_id: Option<ArtworkId> = r.get(38)?;
                 let artwork = match artwork_id {
                     Some(id) => Some(ArtworkInfo {
@@ -218,21 +217,20 @@ fn detail(conn: &Connection, id: TrackId) -> Result<TrackDetail> {
                 };
                 Ok(Track {
                     row: track_row(r)?,
-                    path: r.get(20)?,
-                    file_size: r.get(21)?,
-                    file_mtime: r.get(22)?,
-                    album_artist: r.get(23)?,
-                    composer: r.get(24)?,
-                    mix: r.get(25)?,
-                    grouping: r.get(26)?,
-                    track_no: r.get(27)?,
-                    disc_no: r.get(28)?,
-                    sample_rate: r.get(29)?,
-                    bit_depth: r.get(30)?,
-                    channels: r.get(31)?,
-                    key_source: r.get(32)?,
-                    bpm_source: r.get(33)?,
-                    last_played: r.get(34)?,
+                    path: r.get(21)?,
+                    file_size: r.get(22)?,
+                    file_mtime: r.get(23)?,
+                    album_artist: r.get(24)?,
+                    composer: r.get(25)?,
+                    mix: r.get(26)?,
+                    grouping: r.get(27)?,
+                    track_no: r.get(28)?,
+                    disc_no: r.get(29)?,
+                    sample_rate: r.get(30)?,
+                    bit_depth: r.get(31)?,
+                    channels: r.get(32)?,
+                    key_source: r.get(33)?,
+                    bpm_source: r.get(34)?,
                     rb_track_id: r.get(35)?,
                     created_at: r.get(36)?,
                     updated_at: r.get(37)?,

@@ -994,3 +994,143 @@ mod counts_property {
         }
     }
 }
+
+// ---- Reading sessions back, play filters (task 9) ----
+
+#[test]
+fn sessions_list_detail_and_track_sessions() {
+    let lib = lib();
+    set_baseline_date(&lib, "2026-06-01");
+    let a = track(&lib, "/m/a.mp3", "A", "Alpha", 200_000);
+    let b = track(&lib, "/m/b.mp3", "B", "Beta", 200_000);
+    let ea = entry("/Contents/x/a.mp3", "A", "Alpha", 200);
+    let eb = entry("/Contents/x/b.mp3", "B", "Beta", 200);
+    let h = stick(
+        Some(SERIAL),
+        vec![
+            dated(
+                "HISTORY 001",
+                Some("2026-07-01"),
+                vec![
+                    ea.clone(),
+                    entry("/Contents/u/u.mp3", "U", "Unknown", 9),
+                    ea.clone(),
+                ],
+            ),
+            dated("HISTORY 002", Some("2026-08-01"), vec![eb.clone()]),
+            dated("HISTORY 003", None, vec![ea.clone(), eb.clone()]),
+        ],
+    );
+    let plan = scan(&h, &lib).unwrap();
+    let ids = import(&plan, &ImportChoices::default(), &lib)
+        .unwrap()
+        .created;
+
+    // Newest first, undated last.
+    let all = lib.sessions(&SessionQuery::default()).unwrap();
+    let order: Vec<_> = all.iter().map(|s| s.source_name.as_str()).collect();
+    assert_eq!(order, ["HISTORY 002", "HISTORY 001", "HISTORY 003"]);
+    let first = &all[1];
+    assert_eq!(
+        (first.tracks, first.unmatched, first.excluded),
+        (3, 1, false)
+    );
+    assert!(all[2].excluded);
+    assert_eq!(all[2].excluded_reason.as_deref(), Some("pre_baseline"));
+    let practice = lib
+        .sessions(&SessionQuery {
+            excluded: Some(true),
+        })
+        .unwrap();
+    assert_eq!(practice.len(), 1);
+
+    let d = lib.session(ids[0]).unwrap();
+    assert_eq!(d.entries.len(), 3);
+    assert_eq!(d.entries[0].track_id, Some(a));
+    assert_eq!(d.entries[0].title.as_deref(), Some("Alpha"));
+    assert_eq!(d.entries[1].track_id, None);
+    assert_eq!(d.entries[1].title, None);
+    assert_eq!(d.entries[1].raw_title.as_deref(), Some("Unknown"));
+    assert_eq!(d.volume_serial.as_deref(), Some(SERIAL));
+    assert!(matches!(
+        lib.session(9999),
+        Err(Error::SessionNotFound(9999))
+    ));
+
+    let played = lib.track_sessions(a).unwrap();
+    let got: Vec<_> = played
+        .iter()
+        .map(|r| (r.name.as_str(), r.plays, r.excluded))
+        .collect();
+    assert_eq!(got, [("HISTORY 001", 2, false), ("HISTORY 003", 1, true)]);
+    assert_eq!(lib.track_sessions(b).unwrap().len(), 2);
+}
+
+#[test]
+fn play_filters_and_last_played_sort() {
+    use crate::query::{Filter, Sort, SortColumn, TrackQuery};
+    let lib = lib();
+    let a = track(&lib, "/m/a.mp3", "A", "Alpha", 200_000);
+    let b = track(&lib, "/m/b.mp3", "B", "Beta", 200_000);
+    let c = track(&lib, "/m/c.mp3", "C", "Gamma", 200_000);
+    set_baseline(&lib, a, 3, Some("2026-05-01"));
+    set_baseline(&lib, b, 1, Some("2026-09-01"));
+    set_baseline(&lib, c, 0, None);
+    let ids = |filters: Vec<Filter>, sort: Sort| -> Vec<TrackId> {
+        lib.tracks(&TrackQuery {
+            filters,
+            sort,
+            ..TrackQuery::default()
+        })
+        .unwrap()
+        .rows
+        .iter()
+        .map(|r| r.id)
+        .collect()
+    };
+    let by_title = Sort::default();
+    assert_eq!(ids(vec![Filter::NeverPlayed], by_title), [c]);
+    assert_eq!(
+        ids(vec![Filter::PlayCountRange { min: 1, max: 2 }], by_title),
+        [b]
+    );
+    assert_eq!(
+        ids(
+            vec![Filter::PlayedSince {
+                date: "2026-06-01".into()
+            }],
+            by_title
+        ),
+        [b]
+    );
+    let last = |descending| Sort {
+        column: SortColumn::LastPlayed,
+        descending,
+    };
+    assert_eq!(ids(vec![], last(false)), [a, b, c]);
+    assert_eq!(ids(vec![], last(true)), [b, a, c]);
+    let rows = lib.tracks(&TrackQuery::default()).unwrap().rows;
+    assert_eq!(rows[0].last_played.as_deref(), Some("2026-05-01"));
+}
+
+#[test]
+fn action_json_shapes() {
+    let json = |a: SessionAction| serde_json::to_value(a).unwrap();
+    assert_eq!(
+        json(SessionAction::Skip(SkipReason::AlreadyImported {
+            session_id: 3
+        })),
+        serde_json::json!({"kind": "skip", "reason": "alreadyImported", "sessionId": 3})
+    );
+    assert_eq!(
+        json(SessionAction::Skip(SkipReason::DuplicateInSource)),
+        serde_json::json!({"kind": "skip", "reason": "duplicateInSource"})
+    );
+    assert_eq!(
+        json(SessionAction::Extend {
+            session_id: 2,
+            existing_entries: 5
+        }),
+        serde_json::json!({"kind": "extend", "sessionId": 2, "existingEntries": 5})
+    );
+}

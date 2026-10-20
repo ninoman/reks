@@ -7,7 +7,6 @@
 
 import type { Channel } from "@tauri-apps/api/core";
 import { mockIPC } from "@tauri-apps/api/mocks";
-
 import type {
   ConvertDryRun,
   ConvertEvent,
@@ -37,6 +36,7 @@ import type {
   TrackQuery,
   TrackRow,
 } from "../lib/ipc";
+import { mockHistory } from "./mockHistory";
 
 const CAMELOT: [string, string][] = [
   ["Am", "8A"],
@@ -125,11 +125,20 @@ const TRACKS: TrackRow[] = Array.from({ length: 3000 }, (_, i) => ({
   kind: pick(["mp3", "flac", "aiff", "m4a"]),
   bitRateKbps: 320,
   dateAdded: `2026-0${1 + Math.floor(rand() * 9)}-1${Math.floor(rand() * 9)}T10:00:00Z`,
-  playCount: Math.floor(rand() * 40),
+  playCount: 0,
+  lastPlayed: null,
   missing: rand() < 0.02,
   needsAnalysis: rand() < 0.08,
   entryPosition: null,
 }));
+
+// Baseline play counts (as from rekordbox XML), before the mock sessions add theirs.
+for (const t of TRACKS) {
+  if (rand() < 0.35) continue;
+  t.playCount = 1 + Math.floor(rand() * 30);
+  t.lastPlayed = `2025-${String(1 + Math.floor(rand() * 12)).padStart(2, "0")}-1${Math.floor(rand() * 9)}`;
+}
+const history = mockHistory(TRACKS);
 
 const NODES: PlaylistNode[] = [
   { id: 1, parentId: null, name: "Gigs", isFolder: true, depth: 0, position: 0, entries: 0 },
@@ -238,6 +247,7 @@ const SORT: Partial<Record<SortColumn, keyof TrackRow>> = {
   year: "year",
   dateAdded: "dateAdded",
   playCount: "playCount",
+  lastPlayed: "lastPlayed",
   kind: "kind",
   bitRate: "bitRateKbps",
   playlistPosition: "entryPosition",
@@ -277,6 +287,12 @@ function query(q: TrackQuery) {
       rows = rows.filter((r) => r.bpmX100 !== null && r.bpmX100 >= f.min && r.bpmX100 <= f.max);
     if (f.type === "missing") rows = rows.filter((r) => r.missing === f.missing);
     if (f.type === "needsAnalysis") rows = rows.filter((r) => r.needsAnalysis === f.needs);
+    if (f.type === "neverPlayed")
+      rows = rows.filter((r) => r.playCount === 0 && r.lastPlayed === null);
+    if (f.type === "playCountRange")
+      rows = rows.filter((r) => r.playCount >= f.min && r.playCount <= f.max);
+    if (f.type === "playedSince")
+      rows = rows.filter((r) => r.lastPlayed !== null && r.lastPlayed >= f.date);
   }
   const col = SORT[q.sort.column] ?? "title";
   const dir = q.sort.descending ? -1 : 1;
@@ -312,7 +328,6 @@ function detail(id: number): TrackDetail {
       channels: 2,
       keySource: null,
       bpmSource: null,
-      lastPlayed: null,
       rbTrackId: null,
       createdAt: row.dateAdded,
       updatedAt: row.dateAdded,
@@ -1021,6 +1036,6 @@ mockIPC((cmd, payload) => {
     case "plugin:dialog|open":
       return "/Users/dj/Music/rekordbox/collection.xml";
     default:
-      return null;
+      return history(cmd, args) ?? null;
   }
 });

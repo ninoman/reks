@@ -121,6 +121,13 @@ export const COLUMNS: ColumnSpec[] = [
     align: "right",
     cell: (r) => r.playCount,
   },
+  {
+    id: "lastPlayed",
+    header: "Last played",
+    width: 96,
+    sort: "lastPlayed",
+    cell: (r) => text(r.lastPlayed?.slice(0, 10) ?? null),
+  },
   { id: "comment", header: "Comment", width: 200, sort: null, cell: (r) => text(r.comment) },
 ];
 
@@ -135,5 +142,6 @@ export const DEFAULT_HIDDEN = [
   "kind",
   "bitRate",
   "playCount",
+  "lastPlayed",
   "comment",
 ];
