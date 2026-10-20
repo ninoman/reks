@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-use reks_core::{AnalysisRecord, GridAnchor};
+use reks_core::{AnalysisAnchor, AnalysisRecord};
 
 use crate::beats::{BeatError, BeatList, BeatTracker};
 use crate::grid::{self, build_grid, Grid, GridError, GridOptions, TrackedBeat};
@@ -118,19 +118,19 @@ fn bpm_x100(beat_len_samples: f64) -> i64 {
 /// `beatgrid` rows for `grid`: one for a constant grid; for a dynamic grid a
 /// new anchor wherever the beats leave the current anchor's tempo by more
 /// than [`ANCHOR_TOLERANCE_MS`].
-pub fn grid_anchors(grid: &Grid) -> Vec<GridAnchor> {
+pub fn grid_anchors(grid: &Grid) -> Vec<AnalysisAnchor> {
     match grid {
         Grid::Constant {
             bpm,
             first_beat,
             first_beat_in_bar,
-        } => vec![GridAnchor {
+        } => vec![AnalysisAnchor {
             position_ms: ms(*first_beat as f64),
             bpm_x100: (bpm * 100.0).round() as i64,
             beat_in_bar: *first_beat_in_bar,
         }],
         Grid::Dynamic { beats } => {
-            let mut out: Vec<GridAnchor> = Vec::new();
+            let mut out: Vec<AnalysisAnchor> = Vec::new();
             // (index of the anchor beat, its position, beat length from its rounded tempo)
             let mut anchor: Option<(usize, i64, f64)> = None;
             for (i, b) in beats.iter().enumerate() {
@@ -153,7 +153,7 @@ pub fn grid_anchors(grid: &Grid) -> Vec<GridAnchor> {
                     continue;
                 }
                 let x100 = bpm_x100(gap as f64);
-                out.push(GridAnchor {
+                out.push(AnalysisAnchor {
                     position_ms: ms(b.position as f64),
                     bpm_x100: x100,
                     beat_in_bar: b.beat_in_bar,
@@ -200,7 +200,7 @@ mod tests {
         };
         assert_eq!(
             grid_anchors(&g),
-            [GridAnchor {
+            [AnalysisAnchor {
                 position_ms: 10.0,
                 bpm_x100: 12800,
                 beat_in_bar: 3

@@ -290,9 +290,10 @@ rekordbox keys (D10, "Queue").
     without moving beats; double/halve keep downbeats (halve keeps every
     other one); a constant grid's tempo becomes the track's BPM
     (`bpm_source = manual`). Only nudge and lock apply to dynamic grids.
-    Lock = `track.grid_locked` (migration 0006). Re-analysis (task 11) must
-    skip a track when `Library::grid_is_user_owned` is true (locked or any
-    `manual` row). Columns: [columns.rs](../../crates/reks-analysis/src/columns.rs)
+    Lock = `track.grid_locked` (migration 0006). Re-analysis (task 11)
+    keeps the grid and BPM when the track is locked or has any non-analysis
+    row (`reks_core::analysis::store`; same rule as
+    `Library::grid_is_user_owned`). Columns: [columns.rs](../../crates/reks-analysis/src/columns.rs)
     computes them on demand and caches `analysis/<track_id>/columns.bin`
     (keyed by path/size/mtime + format version); `reks-cli columns <audio>
     <out.bin>` writes the same payload. UI:

@@ -162,7 +162,7 @@ Date of decisions: 2026-10-18.
   rekordcrate API break (pin version); 0.3.0 can't represent cue type 1
   (point cues, see D8), so cue lists need a newer rekordcrate or our own
   encoding.
-- Finding (2026-10-20, Phase 3 task 7; status: proposed): rekordcrate
+- Finding (2026-10-20, Phase 3 task 7; status: accepted 2026-10-20 by the maintainer): rekordcrate
   0.3.0 can't serialise our waveforms. Its waveform section structs keep the
   `unknown` header words private (not constructible outside the crate), it
   has no PWV6/PWV7/PWVC types (they parse as `Unknown`), and its PWV2 and
@@ -173,8 +173,8 @@ Date of decisions: 2026-10-18.
   the independent parser: every section must parse and write back
   byte-identical. Proposed: do the same for the remaining sections in task 9
   unless a newer rekordcrate fixes this.
-- Finding (2026-10-20, Phase 3 task 9; status: proposed, follows the task 7
-  finding): 0.3.0 is still the latest rekordcrate (crates.io, 2026-10-20) and
+- Finding (2026-10-20, Phase 3 task 9; status: accepted 2026-10-20 by the
+  maintainer, follows the task 7 finding): 0.3.0 is still the latest rekordcrate (crates.io, 2026-10-20) and
   it can't write the other sections either: `Cue`/`ExtendedCue`/`BeatGrid`/
   `CueList` keep fields private, `CueType` has no point cue (1), and there is
   no PQT2 type. Its parser also can't read a `PCO2` with cues from rekordbox

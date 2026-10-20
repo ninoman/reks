@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f748209c38db5913daa0ed2827f68f57b8f00bc6a503b67d94039bee5e45211d # shrinks to (duration, grid, cues, seed, frames, path) = (28632, Constant { bpm: 144.04259082050402, first_beat: 0, first_beat_in_bar: 1 }, [Cue { id: 0, slot: None, kind: 4, start_ms: 0.0, end_ms: Some(5406.722410149474), name: None, color_rgb: None }], 0, None, "/Contents/-.mp3")

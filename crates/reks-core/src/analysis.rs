@@ -7,8 +7,9 @@
 //!
 //! Precedence rules (docs/phases/phase-3.md, task 11):
 //! - `beatgrid` rows are replaced only when the track has no rows or all of
-//!   them have `source = 'analysis'`. Manual grids (the grid editor) and
-//!   rekordbox grids stay; reks's own grid is still in the on-disk cache.
+//!   them have `source = 'analysis'`, and the grid is not locked
+//!   (`grid_locked`, migration 0006). Manual, locked and rekordbox grids
+//!   stay; reks's own grid is still in the on-disk cache.
 //! - `bpm_x100` follows the grid: set (`bpm_source = 'analysis'`) when the
 //!   grid was written, unless `bpm_source = 'manual'`.
 //! - `key` is set only when it is empty or came from analysis; manual, tag
@@ -45,7 +46,7 @@ pub struct AnalysisJob {
 
 /// One tempo anchor of an analysed grid (a `beatgrid` row).
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct GridAnchor {
+pub struct AnalysisAnchor {
     /// First beat at or after the anchor, in ms from the first decoded sample.
     pub position_ms: f64,
     /// Tempo from this anchor on, BPM × 100.
@@ -62,7 +63,7 @@ pub struct AnalysisRecord {
     /// [`file_content_hash`] of the file that was analysed.
     pub content_hash: String,
     /// Empty when no grid could be built (silence, too few beats).
-    pub grid: Vec<GridAnchor>,
+    pub grid: Vec<AnalysisAnchor>,
     /// Display BPM × 100 (the first anchor's for a constant grid).
     pub bpm_x100: Option<i64>,
     /// `None` = silence.
@@ -166,11 +167,11 @@ impl Library {
 }
 
 fn store(conn: &Connection, id: TrackId, rec: &AnalysisRecord) -> Result<StoreOutcome> {
-    let (key_source, bpm_source): (Option<String>, Option<String>) = conn
+    let (key_source, bpm_source, grid_locked): (Option<String>, Option<String>, bool) = conn
         .query_row(
-            "SELECT key_source, bpm_source FROM track WHERE id = ?1",
+            "SELECT key_source, bpm_source, grid_locked FROM track WHERE id = ?1",
             [id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .optional()?
         .ok_or(Error::TrackNotFound(id))?;
@@ -181,7 +182,7 @@ fn store(conn: &Connection, id: TrackId, rec: &AnalysisRecord) -> Result<StoreOu
         params![id, SOURCE_ANALYSIS],
         |r| r.get(0),
     )?;
-    if foreign_rows == 0 {
+    if foreign_rows == 0 && !grid_locked {
         conn.execute("DELETE FROM beatgrid WHERE track_id = ?1", [id])?;
         let mut insert = conn.prepare_cached(
             "INSERT INTO beatgrid (track_id, position_ms, bpm_x100, beat_in_bar, source)
@@ -268,7 +269,7 @@ mod tests {
         AnalysisRecord {
             version: 1,
             content_hash: hash.into(),
-            grid: vec![GridAnchor {
+            grid: vec![AnalysisAnchor {
                 position_ms: 12.5,
                 bpm_x100: 12800,
                 beat_in_bar: 1,
@@ -436,6 +437,26 @@ mod tests {
         let out = lib.store_analysis(a, &record("h1")).unwrap();
         assert!(out.grid && !out.bpm);
         assert_eq!(key_bpm(&lib, a).2, Some(6400));
+    }
+
+    #[test]
+    fn locked_analysis_grid_survives() {
+        let (_d, lib) = lib();
+        let a = insert(&lib, "/m/a.wav");
+        {
+            let c = lib.conn().unwrap();
+            c.execute(
+                "INSERT INTO beatgrid (track_id, position_ms, bpm_x100, source)
+                 VALUES (?1, 75.0, 12600, 'analysis')",
+                [a],
+            )
+            .unwrap();
+            c.execute("UPDATE track SET grid_locked = 1 WHERE id = ?1", [a])
+                .unwrap();
+        }
+        let out = lib.store_analysis(a, &record("h1")).unwrap();
+        assert!(!out.grid && !out.bpm);
+        assert_eq!(grid(&lib, a), [(75.0, 12600, "analysis".into())]);
     }
 
     #[test]

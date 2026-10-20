@@ -24,7 +24,7 @@ pub mod settings;
 pub mod timefmt;
 pub mod track;
 
-pub use analysis::{AnalysisJob, AnalysisRecord, GridAnchor, StoreOutcome};
+pub use analysis::{AnalysisAnchor, AnalysisJob, AnalysisRecord, StoreOutcome};
 pub use artwork::ArtworkId;
 pub use beatgrid::{BeatMark, Beatgrid, GridAnchor, GridEdit};
 pub use db::Library;

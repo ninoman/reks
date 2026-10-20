@@ -117,8 +117,14 @@ pub fn entry(cue: &Cue, beats: &[PqtzBeat]) -> CueEntry {
         loop_end_ms: loop_end.map(ms),
         // rekordbox's XML carries no memory cue colour.
         color_id: 0,
+        // From the stored whole-ms times, so reading the file back and
+        // rebuilding gives the same fraction.
         loop_fraction: loop_end.map_or((0, 0), |end| {
-            loop_fraction(cue.start_ms, end, bpm_at(beats, time_ms))
+            loop_fraction(
+                f64::from(time_ms),
+                f64::from(ms(end)),
+                bpm_at(beats, time_ms),
+            )
         }),
         comment: cue.name.clone().unwrap_or_default(),
         hot_color: if hot_cue > 0 {
