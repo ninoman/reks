@@ -211,9 +211,9 @@ fn print_event(e: ApplyEvent) {
 
 /// The stick a command works on.
 #[derive(Debug)]
-struct Stick {
-    dev: DeviceInfo,
-    serial: Option<String>,
+pub(crate) struct Stick {
+    pub(crate) dev: DeviceInfo,
+    pub(crate) serial: Option<String>,
     /// [`StickCheck::Directory`] for a folder standing in for a stick.
     check: StickCheck,
 }
@@ -221,7 +221,7 @@ struct Stick {
 /// The device for `path`, and its volume serial. A directory that is not a
 /// mount point becomes the root of a stand-in device (with the containing
 /// volume's file system and free space) and gets no serial.
-fn stick(path: &Path) -> anyhow::Result<Stick> {
+pub(crate) fn stick(path: &Path) -> anyhow::Result<Stick> {
     let root = std::fs::canonicalize(path).with_context(|| format!("{}", path.display()))?;
     if !root.is_dir() {
         bail!("{} is not a directory", root.display());
