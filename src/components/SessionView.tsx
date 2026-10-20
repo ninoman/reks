@@ -142,6 +142,7 @@ function SessionHeader({ detail }: { detail: SessionDetail }) {
       <div className="flex items-center gap-2 text-xs text-fg-muted">
         <span>
           From {s.sourceName}
+          {s.library === "oneLibrary" && " (OneLibrary)"}
           {detail.volumeSerial !== null && ` on stick ${detail.volumeSerial}`}, imported{" "}
           {s.importedAt.slice(0, 10)}
         </span>

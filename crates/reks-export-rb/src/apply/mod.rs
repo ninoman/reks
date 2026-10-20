@@ -11,10 +11,13 @@
 //!    running rekordbox is only a warning ([`ApplyWarning::RekordboxRunning`]).
 //! 2. **History import** (Phase 2.5 export guard, [`crate::plan::guard_history`]):
 //!    under [`HistoryPolicy::Import`], the sessions the dry run listed as not
-//!    imported go into the library ([`reks_core::history::import`], default
-//!    choices). Any error aborts with the stick untouched.
+//!    imported, from `export.pdb` and from `exportLibrary.db` (Phase 4 task
+//!    11), go into the library in one transaction
+//!    ([`reks_core::history::import`], default choices). Any error aborts
+//!    with the stick untouched.
 //! 3. **History backup** (D23, task 12): [`history::run_backups`] on
-//!    [`ExportPlan::backup_plan`]. Any error aborts with the stick untouched.
+//!    [`ExportPlan::backup_plan`], which holds `exportLibrary.db` and its
+//!    `-wal`/`-shm` when present. Any error aborts with the stick untouched.
 //! 4. **Write** through the [`RekordboxWriter`], which gets the cancel token.
 //!    baken removes rekordbox's OneLibrary files once the new `export.pdb`
 //!    is in place.
@@ -47,7 +50,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use reks_core::history::{self as library_history, ImportChoices, ImportReport};
+use reks_core::history::{self as library_history, HistoryImportPlan, ImportChoices, ImportReport};
 use reks_core::{CancelToken, Library, OneLibraryKey};
 use serde::Serialize;
 
@@ -301,6 +304,24 @@ pub enum ApplyError {
     NoOneLibraryPlan,
 }
 
+/// The guard's scans of both stick libraries as one import plan; each one
+/// that has sessions to import must be there.
+fn history_to_import(plan: &ExportPlan) -> Result<HistoryImportPlan, ApplyError> {
+    let pdb = (!plan.guard.sessions.is_empty()).then_some(&plan.history_import);
+    let ol =
+        (!plan.guard.onelibrary_sessions.is_empty()).then_some(&plan.onelibrary_history_import);
+    let mut scans = Vec::new();
+    for scan in [pdb, ol].into_iter().flatten() {
+        scans.push(scan.as_ref().ok_or(ApplyError::NoHistoryScan)?);
+    }
+    let first = scans.first().ok_or(ApplyError::NoHistoryScan)?;
+    Ok(HistoryImportPlan {
+        volume_serial: first.volume_serial.clone(),
+        baseline_date: first.baseline_date.clone(),
+        sessions: scans.iter().flat_map(|s| s.sessions.clone()).collect(),
+    })
+}
+
 /// Runs `plan` on its stick (module docs). `progress` gets [`ApplyEvent`]s,
 /// from the writer's thread too; `cancel` is passed to the writer.
 pub fn apply(
@@ -326,13 +347,12 @@ pub fn apply(
         return Ok(report);
     }
 
-    if plan.options.history == HistoryPolicy::Import && !plan.guard.sessions.is_empty() {
+    if plan.options.history == HistoryPolicy::Import
+        && (!plan.guard.sessions.is_empty() || !plan.guard.onelibrary_sessions.is_empty())
+    {
         stage(ApplyStage::ImportHistory);
-        let scanned = plan
-            .history_import
-            .as_ref()
-            .ok_or(ApplyError::NoHistoryScan)?;
-        let imported = library_history::import(scanned, &ImportChoices::default(), env.library)
+        let scanned = history_to_import(plan)?;
+        let imported = library_history::import(&scanned, &ImportChoices::default(), env.library)
             .map_err(ApplyError::HistoryImport)?;
         tracing::info!(
             created = imported.created.len(),

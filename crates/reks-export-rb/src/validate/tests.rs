@@ -151,6 +151,7 @@ fn stick() -> Stick {
         backups: vec![],
         guard: Default::default(),
         history_import: None,
+        onelibrary_history_import: None,
         warnings: vec![],
         errors: vec![],
         bytes_to_write: 0,

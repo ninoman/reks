@@ -7,7 +7,11 @@
 //!
 //! The stick is read elsewhere: reks-core can't depend on `reks-export-rb`,
 //! which owns the PDB reader, so the caller converts its `PlayHistory` into a
-//! [`SourceHistory`] (`PlayHistory::to_source_history`).
+//! [`SourceHistory`] (`PlayHistory::to_source_history`). A stick has two
+//! libraries a player may log to: `export.pdb` (H1) and OneLibrary's
+//! `exportLibrary.db` (H2, read by `reks-export-onelibrary`). Each session
+//! says which one it came from ([`HistoryLibrary`]); one [`SourceHistory`]
+//! can hold both, and the same plays logged in both import as two sessions.
 //!
 //! Fingerprint: SHA-256 over source, volume serial, source name and the
 //! ordered entry stick paths, each length-prefixed. Same fingerprint: skip.
@@ -31,6 +35,7 @@ mod tests;
 
 use std::collections::{HashMap, HashSet};
 
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -45,8 +50,39 @@ pub use sessions::{SessionDetail, SessionEntryRow, SessionQuery, SessionRef, Ses
 pub(crate) use stats::recompute;
 pub use stats::{SessionPatch, TrackSet};
 
-/// `play_session.source` for legacy `export.pdb` history (H1).
-pub const SOURCE_DEVICE_LIBRARY: &str = "device_library";
+/// The stick library a session was logged in; `play_session.source`.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum HistoryLibrary {
+    /// Legacy `export.pdb` history playlists (H1).
+    #[default]
+    DeviceLibrary,
+    /// OneLibrary `exportLibrary.db` `history` rows (H2, Phase 4 task 11).
+    OneLibrary,
+}
+
+impl HistoryLibrary {
+    pub fn as_sql(self) -> &'static str {
+        match self {
+            Self::DeviceLibrary => "device_library",
+            Self::OneLibrary => "onelibrary",
+        }
+    }
+}
+
+impl FromSql for HistoryLibrary {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value.as_str()? {
+            "device_library" => Ok(Self::DeviceLibrary),
+            "onelibrary" => Ok(Self::OneLibrary),
+            other => Err(FromSqlError::Other(
+                format!("unknown play_session.source {other:?}").into(),
+            )),
+        }
+    }
+}
 
 /// `play_session.id`.
 pub type SessionId = i64;
@@ -65,6 +101,8 @@ pub struct SourceHistory {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceSession {
+    #[serde(default)]
+    pub library: HistoryLibrary,
     /// As on the stick, e.g. `HISTORY 001`.
     pub source_name: String,
     /// `YYYY-MM-DD`, `None` while HIST1 is undecoded.
@@ -198,6 +236,7 @@ pub enum SessionAction {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlannedSession {
+    pub library: HistoryLibrary,
     pub source_name: String,
     pub played_on: Option<String>,
     /// Hex SHA-256; the key of [`ImportChoices::excluded`].
@@ -228,7 +267,6 @@ impl PlannedSession {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryImportPlan {
-    pub source: String,
     pub volume_serial: Option<String>,
     /// `history.baseline_date` when the plan was made.
     pub baseline_date: Option<String>,
@@ -266,7 +304,7 @@ pub fn scan(history: &SourceHistory, lib: &Library) -> Result<HistoryImportPlan>
     let mut seen = HashSet::new();
     let mut sessions = Vec::with_capacity(history.sessions.len());
     for s in &history.sessions {
-        let fingerprint = fingerprint(SOURCE_DEVICE_LIBRARY, serial, s);
+        let fingerprint = fingerprint(s.library, serial, s);
         let action = if !seen.insert(fingerprint.clone()) {
             SessionAction::Skip(SkipReason::DuplicateInSource)
         } else if let Some(id) = session_by_fingerprint(&conn, &fingerprint)? {
@@ -296,6 +334,7 @@ pub fn scan(history: &SourceHistory, lib: &Library) -> Result<HistoryImportPlan>
             out
         };
         sessions.push(PlannedSession {
+            library: s.library,
             source_name: s.source_name.clone(),
             played_on: s.played_on.clone(),
             fingerprint,
@@ -304,7 +343,6 @@ pub fn scan(history: &SourceHistory, lib: &Library) -> Result<HistoryImportPlan>
         });
     }
     Ok(HistoryImportPlan {
-        source: SOURCE_DEVICE_LIBRARY.into(),
         volume_serial: serial.map(str::to_owned),
         baseline_date,
         sessions,
@@ -344,7 +382,7 @@ pub fn import(
                          name, played_on, excluded, excluded_reason, imported_at, updated_at)
                      VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6, ?7, ?8, ?8)",
                     params![
-                        plan.source,
+                        s.library.as_sql(),
                         s.fingerprint,
                         plan.volume_serial,
                         s.source_name,
@@ -474,7 +512,7 @@ fn insert_entries(
 
 /// Hex SHA-256 of source, serial, name and the ordered stick paths, each
 /// length-prefixed (a missing path hashes differently from an empty one).
-fn fingerprint(source: &str, serial: Option<&str>, s: &SourceSession) -> String {
+fn fingerprint(library: HistoryLibrary, serial: Option<&str>, s: &SourceSession) -> String {
     let mut h = Sha256::new();
     let mut field = |v: Option<&str>| match v {
         None => h.update([0u8]),
@@ -484,7 +522,7 @@ fn fingerprint(source: &str, serial: Option<&str>, s: &SourceSession) -> String 
             h.update(v.as_bytes());
         }
     };
-    field(Some(source));
+    field(Some(library.as_sql()));
     field(serial);
     field(Some(&s.source_name));
     for e in &s.entries {
@@ -515,7 +553,7 @@ fn extendable(
             "SELECT id FROM play_session
              WHERE source = ?1 AND volume_serial IS ?2 AND source_name = ?3 ORDER BY id",
         )?
-        .query_map(params![SOURCE_DEVICE_LIBRARY, serial, s.source_name], |r| {
+        .query_map(params![s.library.as_sql(), serial, s.source_name], |r| {
             r.get(0)
         })?
         .collect::<rusqlite::Result<_>>()?;

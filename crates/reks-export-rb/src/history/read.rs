@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use binrw::{BinRead, BinWrite};
 use rekordcrate::pdb::string::DeviceSQLString;
 use rekordcrate::pdb::{Page, PageType, Row};
-use reks_core::history::{SourceEntry, SourceHistory, SourceSession};
+use reks_core::history::{HistoryLibrary, SourceEntry, SourceHistory, SourceSession};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -129,6 +129,7 @@ impl PlayHistory {
                 .sessions
                 .iter()
                 .map(|s| SourceSession {
+                    library: HistoryLibrary::DeviceLibrary,
                     source_name: s
                         .name
                         .clone()
@@ -164,9 +165,7 @@ pub fn read_play_history(
     let (root, volume_serial, manifest) = match src {
         HistorySource::Stick(root) => (root, opts.stick_serial.clone(), None),
         HistorySource::Backup(dir) => {
-            let path = dir.join(BACKUP_MANIFEST);
-            let bytes = fs::read(&path).map_err(io_err(&path))?;
-            let report: BackupReport = serde_json::from_slice(&bytes)?;
+            let report = read_backup_manifest(dir)?;
             (dir, report.volume_serial.clone(), Some(report))
         }
     };
@@ -242,24 +241,32 @@ pub fn read_stick_tracks(device_root: &Path) -> Result<HashMap<u32, PdbTrack>, H
         .collect())
 }
 
-/// The backup's `export.pdb` must be listed in its manifest and hash the same.
-fn check_backup_copy(
+/// The `manifest.json` of the backup folder `dir`.
+pub fn read_backup_manifest(dir: &Path) -> Result<BackupReport, HistoryError> {
+    let path = dir.join(BACKUP_MANIFEST);
+    let bytes = fs::read(&path).map_err(io_err(&path))?;
+    Ok(serde_json::from_slice(&bytes)?)
+}
+
+/// `path`, a file in the backup folder `root` read as `bytes`, must be
+/// listed in the backup's manifest and hash the same.
+pub fn check_backup_copy(
     report: &BackupReport,
     root: &Path,
-    pdb: &Path,
+    path: &Path,
     bytes: &[u8],
 ) -> Result<(), HistoryError> {
-    let rel = rel_of(root, pdb);
+    let rel = rel_of(root, path);
     let Some(entry) = report.files.iter().find(|f| f.rel_path == rel) else {
         return Err(HistoryError::Unreadable {
-            path: pdb.to_path_buf(),
+            path: path.to_path_buf(),
             message: "not listed in the backup manifest".into(),
         });
     };
     let actual = blake3::hash(bytes).to_hex().to_string();
     if actual != entry.blake3 {
         return Err(HistoryError::HashMismatch {
-            path: pdb.to_path_buf(),
+            path: path.to_path_buf(),
             expected: entry.blake3.clone(),
             actual,
         });

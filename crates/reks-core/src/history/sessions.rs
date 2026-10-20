@@ -5,7 +5,7 @@
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
-use super::{EntryKind, SessionId};
+use super::{EntryKind, HistoryLibrary, SessionId};
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::scan::TrackId;
@@ -27,6 +27,8 @@ pub struct SessionRow {
     pub name: String,
     /// As on the stick, e.g. `HISTORY 001`.
     pub source_name: String,
+    /// The stick library it was logged in.
+    pub library: HistoryLibrary,
     /// `YYYY-MM-DD`; `None` until HIST1 is decoded.
     pub played_on: Option<String>,
     pub venue: Option<String>,
@@ -90,7 +92,7 @@ SELECT s.id, s.name, s.source_name, s.played_on, s.venue, s.excluded, s.excluded
          WHERE e.session_id = s.id AND e.item_kind = 'track'),
        (SELECT count(*) FROM play_session_entry e
          WHERE e.session_id = s.id AND e.item_kind = 'track' AND e.track_id IS NULL),
-       s.imported_at, s.notes, s.volume_serial
+       s.imported_at, s.notes, s.volume_serial, s.source
 FROM play_session s";
 
 const ORDER_SQL: &str =
@@ -108,6 +110,7 @@ fn session_row(r: &Row<'_>) -> rusqlite::Result<SessionRow> {
         tracks: r.get(7)?,
         unmatched: r.get(8)?,
         imported_at: r.get(9)?,
+        library: r.get(12)?,
     })
 }
 

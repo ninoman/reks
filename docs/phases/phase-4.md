@@ -4,7 +4,7 @@ Status: in progress (started 2026-10-20 ahead of the Phase 3 close, with the
 maintainer's approval: Phase 3's ANLZ builder and export integration are in
 main; its accuracy tuning (12a) and hardware checks continue in parallel; no
 players available, so player behaviour stays UNVERIFIED). Tasks 1–8 and 10
-done (2026-10-20); 9 (hardware) and 11 (history import) open. Depends on:
+done (2026-10-20), 11 (history import) 2026-10-21; 9 (hardware) open. Depends on:
 Phase 2 (legacy export, ANLZ layout, planner) and Phase 3 (own analysis, so
 every exported track has ANLZ files). Read `docs/decisions.md` §OneLibrary
 and `docs/research.md` §2 first.
@@ -84,7 +84,7 @@ As built (tasks 2–7, 10); code in
 
 - `OneLibraryWriter { version: RbVersion }` implements the planner's
   `OneLibraryExport` (task 8): `plan` estimates the file, lists the auxiliary
-  files and reads the existing database's history counts with the key;
+  files and reads the existing database's history sessions with the key;
   `write(plan, key, device_root)` builds and replaces the file (task 6).
 - `build::from_pdb(&PdbLibrary, created_date) -> OneLibrary`: pure mapping
   from the `export.pdb` baken just wrote (read by
@@ -97,6 +97,10 @@ As built (tasks 2–7, 10); code in
   `dump`, `history_counts`.
 - `validate::validate(device_root, key)`, and `diff::diff(ours, theirs,
   DiffOptions)` over `dump::Dump` (the fixtures' `dump.json` format).
+- `history` (task 11): `OneLibraryReader::play_history() ->
+  Vec<SourceSession>`, `read_play_history(&HistorySource, key, serial)`
+  (stick or Phase 2 backup) and `read_both` (`export.pdb` and
+  `exportLibrary.db` for one import, with a `OneLibraryStatus`).
 
 Mapping (verified against the reference, where rekordbox's `content` values
 equal its `export.pdb` track rows): ids are the PDB row ids; `path`,
@@ -215,7 +219,7 @@ empty in the reference, so their rows are UNVERIFIED (mapped like baken).
     iteration after hardware failures. Done: `reks onelibrary diff <ours>
     <theirs> [--strict]` (databases or `dump.json`; ids, master ids and dates
     ignored unless `--strict`) and `reks onelibrary dump`.
-11. **History (H2, D23)**: read `history` / `history_content` from an existing
+11. [x] **History (H2, D23)**: read `history` / `history_content` from an existing
     `exportLibrary.db` (key supplied at runtime, as above) into Phase 2.5
     sessions with `source = 'onelibrary'`, from a stick or a Phase 2 backup.
     A stick can hold different histories in each library, so both are
@@ -223,6 +227,43 @@ empty in the reference, so their rows are UNVERIFIED (mapped like baken).
     task 6 replaces it. Columns from the task 2 reference (UNVERIFIED until
     then). Test: a reference DB with history imports with entries in order;
     re-import adds nothing.
+    Done (2026-10-21) in
+    [history.rs](../../crates/reks-export-onelibrary/src/history.rs). The
+    reference's columns are `history(history_id, sequenceNo, name,
+    attribute, history_id_parent)` and `history_content(history_id,
+    content_id, sequenceNo)`; its history is empty, so how players fill
+    them is **UNVERIFIED** and the reader assumes the `playlist` layout:
+    entries in `sequenceNo` order joined to `content` (path, title,
+    `length` seconds, `artist_id_artist`); a row without entries that is a
+    folder (`attribute` 1 or a parent) is skipped, any row with entries is a
+    session; sessions in `history_id` order; no date column, so all are
+    undated. Model: each `SourceSession`/`PlannedSession` carries a
+    `HistoryLibrary` (`deviceLibrary` | `oneLibrary`), stored as
+    `play_session.source` and in the fingerprint, so one plan holds both
+    libraries and each library's session extends only its own (legacy
+    fingerprints unchanged); `SessionRow.library` reads it back. A backup
+    is read only when `exportLibrary.db` and its `-wal`/`-shm` hash as its
+    manifest records. Export guard: the writer's `plan` returns the
+    sessions in `ExistingLibrary::Read`; `plan_onelibrary` (now given the
+    library) scans them into `ExportPlan::onelibrary_history_import`, and
+    only sessions not imported fill `HistoryGuard::onelibrary_sessions` and
+    block. Import now imports both libraries' scans in one transaction
+    before the backup; the backup (`exportLibrary.db`, `-wal`, `-shm`) runs
+    before baken removes the file and the writer replaces it. Dry run:
+    OneLibrary sessions are listed as `HISTORY 001 (OneLibrary): 3 plays`.
+    App: History → import reads both libraries with the stored key (the
+    dialog badges OneLibrary sessions and says when the database was not
+    read). CLI: `reks history scan|import` reads both (`--practice
+    "HISTORY 001 (OneLibrary)"`). Tests: `history::tests` (reference rows
+    plus history left in `-wal`, read in order, import and re-import adds
+    nothing, backup hash checks), `plan::onelibrary::tests` (both libraries
+    through Import now), [tests/apply.rs](../../crates/reks-export-onelibrary/tests/apply.rs)
+    (a player's session in a reks-written database: blocked, imported in
+    play order through the manifest, backed up, then a backup re-import
+    skips), `reks_core::history::tests::each_stick_library_imports_its_own_sessions`
+    and the CLI. Open (UNVERIFIED): whether a player that reads both
+    libraries logs the same plays in both (they would import as two
+    sessions; the dry run says to mark one practice).
 
 ## Acceptance criteria
 

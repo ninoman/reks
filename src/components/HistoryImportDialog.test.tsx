@@ -30,8 +30,13 @@ const stick: DeviceInfo = {
   osName: "disk4s1",
 };
 
-function planned(name: string, action: PlannedSession["action"]): PlannedSession {
+function planned(
+  name: string,
+  action: PlannedSession["action"],
+  library: PlannedSession["library"] = "deviceLibrary",
+): PlannedSession {
   return {
+    library,
     sourceName: name,
     playedOn: "2026-10-11",
     fingerprint: `fp-${name}`,
@@ -54,8 +59,8 @@ function planned(name: string, action: PlannedSession["action"]): PlannedSession
 const scan: HistoryScan = {
   planId: 7,
   source: { kind: "stick", path: "/Volumes/REKS" },
+  onelibrary: { status: "absent" },
   plan: {
-    source: "device_library",
     volumeSerial: "1234-ABCD",
     baselineDate: "2026-03-01",
     sessions: [
@@ -108,6 +113,26 @@ describe("HistoryImportDialog", () => {
     expect(await screen.findByText(/Imported 2 new sessions/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(useHistory.getState().importOpen).toBe(false);
+  });
+
+  it("marks OneLibrary sessions and says when the OneLibrary database was not read", async () => {
+    vi.mocked(ipc.historyScan).mockResolvedValue({
+      ...scan,
+      onelibrary: { status: "notRead", reason: "no OneLibrary key" },
+      plan: {
+        ...scan.plan,
+        sessions: [
+          planned("HISTORY 001", { kind: "new" }),
+          planned("HISTORY 001", { kind: "new" }, "oneLibrary"),
+        ].map((p) => ({ ...p, fingerprint: `${p.fingerprint}-${p.library}` })),
+      },
+    });
+    render(<HistoryImportDialog />);
+    fireEvent.click(await screen.findByRole("button", { name: "Read history" }));
+    expect(await screen.findByLabelText("Practice: HISTORY 001 (OneLibrary)")).toBeTruthy();
+    expect(screen.getByLabelText("Practice: HISTORY 001")).toBeTruthy();
+    expect(screen.getAllByText("OneLibrary")).toHaveLength(1);
+    expect(screen.getByRole("status").textContent).toContain("no OneLibrary key");
   });
 
   it("a failed scan shows the error and stays on the source step", async () => {

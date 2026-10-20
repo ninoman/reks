@@ -199,7 +199,8 @@ fn sync_dir(path: &Path) -> Result<(), OneLibraryWriteError> {
     Ok(())
 }
 
-/// What the stick's current `exportLibrary.db` holds, opened with `key`.
+/// What the stick's current `exportLibrary.db` holds, opened with `key`:
+/// its play history sessions ([`crate::history`]).
 pub fn existing(device_root: &Path, key: &str) -> Result<ExistingLibrary, PlanError> {
     let Some(path) = locate(device_root, DB_PATH).map_err(|source| PlanError::Stick {
         path: device_root.to_owned(),
@@ -209,10 +210,12 @@ pub fn existing(device_root: &Path, key: &str) -> Result<ExistingLibrary, PlanEr
         return Ok(ExistingLibrary::Absent);
     };
     Ok(
-        match OneLibraryReader::open(&path, key).and_then(|r| r.history_counts()) {
-            Ok(h) => ExistingLibrary::Read {
-                sessions: h.sessions,
-                entries: h.entries,
+        match OneLibraryReader::open(&path, key).and_then(|r| r.play_history()) {
+            Ok(history) => ExistingLibrary::Read {
+                sessions: u32::try_from(history.len()).unwrap_or(u32::MAX),
+                entries: u32::try_from(history.iter().map(|s| s.entries.len()).sum::<usize>())
+                    .unwrap_or(u32::MAX),
+                history,
             },
             Err(Error::NotDecrypted { .. }) => ExistingLibrary::NotRead {
                 reason: "the OneLibrary key does not open it".into(),

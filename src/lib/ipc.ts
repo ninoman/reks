@@ -1126,11 +1126,15 @@ export interface SessionQuery {
 }
 
 /** One imported session; newest first, undated last. */
+/** The stick library a session was logged in: `export.pdb` or OneLibrary's `exportLibrary.db`. */
+export type HistoryLibrary = "deviceLibrary" | "oneLibrary";
+
 export interface SessionRow {
   id: number;
   name: string;
   /** As on the stick, e.g. `HISTORY 001`. */
   sourceName: string;
+  library: HistoryLibrary;
   /** `YYYY-MM-DD`; null until history dates are decoded (HIST1). */
   playedOn: string | null;
   venue: string | null;
@@ -1212,6 +1216,7 @@ export type SessionAction =
   | { kind: "extend"; sessionId: number; existingEntries: number };
 
 export interface PlannedSession {
+  library: HistoryLibrary;
   sourceName: string;
   playedOn: string | null;
   /** Key of `ImportChoices.excluded`. */
@@ -1221,7 +1226,6 @@ export interface PlannedSession {
 }
 
 export interface HistoryImportPlan {
-  source: string;
   volumeSerial: string | null;
   baselineDate: string | null;
   sessions: PlannedSession[];
@@ -1232,9 +1236,16 @@ export type HistorySource = { kind: "stick"; path: string } | { kind: "backup"; 
 /** A mounted stick, or a folder (a Phase 2 backup or a stick copy). */
 export type ScanSource = { kind: "stick"; device: DeviceInfo } | { kind: "folder"; path: string };
 
+/** What became of the source's `exportLibrary.db` (read with the OneLibrary key). */
+export type OneLibraryStatus =
+  | { status: "absent" }
+  | { status: "read"; sessions: number }
+  | { status: "notRead"; reason: string };
+
 export interface HistoryScan {
   planId: number;
   source: HistorySource;
+  onelibrary: OneLibraryStatus;
   plan: HistoryImportPlan;
 }
 

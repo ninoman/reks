@@ -59,7 +59,7 @@ pub fn plan_at(
     let mut plan = plan::plan(lib, sel, &dev, opts, &locator)?;
     if opts.onelibrary {
         let key = one::resolve_key(lib)?;
-        plan::plan_onelibrary(&mut plan, onelibrary, key.as_ref())?;
+        plan::plan_onelibrary(&mut plan, onelibrary, key.as_ref(), lib)?;
     }
     Ok(plan)
 }
@@ -722,7 +722,7 @@ fn guard_view(plan: &ExportPlan) -> Option<GuardView> {
     } else {
         g.sessions.len()
     };
-    let n = pdb + g.onelibrary_sessions as usize;
+    let n = pdb + g.onelibrary_sessions.len();
     let title = format!(
         "{} not in your library",
         count(n, "session on this stick is", "sessions on this stick are")
@@ -743,18 +743,19 @@ fn guard_view(plan: &ExportPlan) -> Option<GuardView> {
              History later.",
         );
     }
-    if g.onelibrary_sessions > 0 {
+    if !g.sessions.is_empty() && !g.onelibrary_sessions.is_empty() {
         text.push_str(
-            " Sessions in the stick's exportLibrary.db can't be imported yet: Import now and \
-             Back up and continue keep them in the backup.",
+            " The stick's two libraries import as separate sessions: if a player logged the \
+             same plays in both, mark one as practice.",
         );
     }
-    let mut sessions: Vec<String> = g
-        .sessions
-        .iter()
-        .map(|s| {
+    let pdb_lines = g.sessions.iter().map(|s| (s, ""));
+    let ol_lines = g.onelibrary_sessions.iter().map(|s| (s, " (OneLibrary)"));
+    let sessions: Vec<String> = pdb_lines
+        .chain(ol_lines)
+        .map(|(s, library)| {
             let mut line = format!(
-                "{}: {}",
+                "{}{library}: {}",
                 s.name,
                 count(
                     s.entries as usize,
@@ -768,12 +769,6 @@ fn guard_view(plan: &ExportPlan) -> Option<GuardView> {
             line
         })
         .collect();
-    if g.onelibrary_sessions > 0 {
-        sessions.push(format!(
-            "exportLibrary.db: {}",
-            count(g.onelibrary_sessions as usize, "session", "sessions")
-        ));
-    }
     Some(GuardView {
         title,
         text,

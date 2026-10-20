@@ -6,6 +6,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
 
+use reks_core::history::{HistoryLibrary, SessionQuery, SourceEntry, SourceSession};
 use reks_core::{CancelToken, OneLibraryKey};
 
 use super::*;
@@ -155,7 +156,13 @@ fn off_by_default_and_off_adds_nothing() {
     let w = World::new();
     let mut p = planned(&w, &options(false));
     let before = p.clone();
-    plan_onelibrary(&mut p, &Fake::new(ExistingLibrary::Absent), Some(&key())).unwrap();
+    plan_onelibrary(
+        &mut p,
+        &Fake::new(ExistingLibrary::Absent),
+        Some(&key()),
+        &w.lib,
+    )
+    .unwrap();
     assert_eq!(p, before);
     assert!(p.onelibrary.is_none());
 }
@@ -164,7 +171,7 @@ fn off_by_default_and_off_adds_nothing() {
 fn on_without_a_key_blocks_and_says_where_the_key_goes() {
     let w = World::new();
     let mut p = planned(&w, &options(true));
-    plan_onelibrary(&mut p, &Fake::new(ExistingLibrary::Absent), None).unwrap();
+    plan_onelibrary(&mut p, &Fake::new(ExistingLibrary::Absent), None, &w.lib).unwrap();
     assert!(p.onelibrary.is_none());
     assert!(p.warnings.contains(&Warning::OneLibraryExperimental));
     assert_eq!(p.errors, [Problem::OneLibraryKeyMissing]);
@@ -178,7 +185,13 @@ fn on_with_a_key_lists_the_database_and_the_files_it_removes() {
     let w = World::new();
     put_rekordbox_onelibrary(&w);
     let mut p = planned(&w, &options(true));
-    plan_onelibrary(&mut p, &Fake::new(ExistingLibrary::Absent), Some(&key())).unwrap();
+    plan_onelibrary(
+        &mut p,
+        &Fake::new(ExistingLibrary::Absent),
+        Some(&key()),
+        &w.lib,
+    )
+    .unwrap();
 
     assert!(!p.is_blocked(), "{:?}", p.errors);
     let ol = p.onelibrary.as_ref().unwrap();
@@ -212,7 +225,13 @@ fn on_with_a_key_lists_the_database_and_the_files_it_removes() {
 
     // Planning again replaces, not adds.
     let once = p.clone();
-    plan_onelibrary(&mut p, &Fake::new(ExistingLibrary::Absent), Some(&key())).unwrap();
+    plan_onelibrary(
+        &mut p,
+        &Fake::new(ExistingLibrary::Absent),
+        Some(&key()),
+        &w.lib,
+    )
+    .unwrap();
     assert_eq!(p, once);
 }
 
@@ -221,13 +240,13 @@ fn the_stub_plans_the_file_but_blocks() {
     let w = World::new();
     put_rekordbox_onelibrary(&w);
     let mut p = planned(&w, &options(true));
-    plan_onelibrary(&mut p, &NoWriter, Some(&key())).unwrap();
+    plan_onelibrary(&mut p, &NoWriter, Some(&key()), &w.lib).unwrap();
     assert_eq!(p.errors, [Problem::OneLibraryUnavailable]);
     let ol = p.onelibrary.as_ref().unwrap();
     assert_eq!(ol.write.dst_rel, DB_PATH);
     assert!(matches!(ol.existing, ExistingLibrary::NotRead { .. }));
     // Not read: the Phase 2 safeguard backs the database up, no guard choice.
-    assert_eq!(p.guard.onelibrary_sessions, 0);
+    assert!(p.guard.onelibrary_sessions.is_empty());
     assert!(p
         .backups
         .iter()
@@ -235,38 +254,70 @@ fn the_stub_plans_the_file_but_blocks() {
 
     // Turned off again, everything the step added goes.
     p.options.onelibrary = false;
-    plan_onelibrary(&mut p, &NoWriter, Some(&key())).unwrap();
+    plan_onelibrary(&mut p, &NoWriter, Some(&key()), &w.lib).unwrap();
     assert!(p.onelibrary.is_none());
     assert!(!p.errors.iter().any(is_onelibrary));
     assert!(!p.warnings.contains(&Warning::OneLibraryExperimental));
+}
+
+/// Two sessions in the stick's `exportLibrary.db` (Phase 4 task 11): the
+/// first plays the played PDB's track 5 twice, the second an unknown file.
+fn onelibrary_history() -> ExistingLibrary {
+    let entry = |path: &str| SourceEntry {
+        stick_path: Some(path.into()),
+        title: Some("T".into()),
+        artist: None,
+        duration_ms: Some(30_000),
+    };
+    let session = |name: &str, entries| SourceSession {
+        library: HistoryLibrary::OneLibrary,
+        source_name: name.into(),
+        played_on: None,
+        entries,
+    };
+    ExistingLibrary::Read {
+        sessions: 2,
+        entries: 3,
+        history: vec![
+            session(
+                "HISTORY 001",
+                vec![entry("/Contents/a.mp3"), entry("/Contents/a.mp3")],
+            ),
+            session("HISTORY 002", vec![entry("/Contents/other.mp3")]),
+        ],
+    }
 }
 
 #[test]
 fn history_in_the_existing_database_needs_a_choice() {
     let w = World::new();
     put_rekordbox_onelibrary(&w);
-    let read = Fake::new(ExistingLibrary::Read {
-        sessions: 2,
-        entries: 5,
-    });
+    let read = Fake::new(onelibrary_history());
 
     let mut p = planned(&w, &options(true));
-    plan_onelibrary(&mut p, &read, Some(&key())).unwrap();
+    plan_onelibrary(&mut p, &read, Some(&key()), &w.lib).unwrap();
     assert_eq!(
         p.errors,
         [Problem::OneLibraryHistoryNotImported { sessions: 2 }]
     );
-    assert_eq!(p.guard.onelibrary_sessions, 2);
+    assert_eq!(p.guard.onelibrary_sessions.len(), 2);
+    assert!(p.onelibrary_history_import.is_some());
     assert!(p.guard.needs_choice());
     let g = DryRun::new(&p, &TrackLabels::new()).history.guard.unwrap();
     assert_eq!(g.title, "2 sessions on this stick are not in your library");
-    assert_eq!(g.sessions, ["exportLibrary.db: 2 sessions"]);
-    assert!(g.text.contains("can't be imported yet"), "{}", g.text);
+    assert_eq!(
+        g.sessions,
+        [
+            "HISTORY 001 (OneLibrary): 2 plays",
+            "HISTORY 002 (OneLibrary): 1 play"
+        ]
+    );
+    assert!(g.can_import);
 
-    // The export guard running again keeps the count and adds no
+    // The export guard running again keeps the sessions and adds no
     // export.pdb problem (that stick has no export.pdb sessions).
     guard_history(&mut p, &w.lib).unwrap();
-    assert_eq!(p.guard.onelibrary_sessions, 2);
+    assert_eq!(p.guard.onelibrary_sessions.len(), 2);
     assert_eq!(
         p.errors,
         [Problem::OneLibraryHistoryNotImported { sessions: 2 }]
@@ -285,7 +336,7 @@ fn history_in_the_existing_database_needs_a_choice() {
         ..options(true)
     };
     let mut p = planned(&w, &opts);
-    plan_onelibrary(&mut p, &read, Some(&key())).unwrap();
+    plan_onelibrary(&mut p, &read, Some(&key()), &w.lib).unwrap();
     assert!(!p.is_blocked(), "{:?}", p.errors);
     assert!(p
         .backups
@@ -293,12 +344,113 @@ fn history_in_the_existing_database_needs_a_choice() {
         .any(|b| b.dst_rel == "/PIONEER/rekordbox/exportLibrary.db"));
 }
 
+/// Import now with history in both stick libraries: one import before the
+/// backup, sessions tagged by library, and the stick's `exportLibrary.db`
+/// backed up before the writer replaces it. Planning again needs no choice.
+#[test]
+fn import_now_imports_both_libraries_then_backs_up_and_writes() {
+    let w = World::new();
+    w.put_played_pdb();
+    put_rekordbox_onelibrary(&w);
+    let fake = Fake::new(onelibrary_history());
+    let opts = ExportOptions {
+        history: HistoryPolicy::Import,
+        history_chosen: true,
+        ..options(true)
+    };
+    let mut p = planned(&w, &opts);
+    plan_onelibrary(&mut p, &fake, Some(&key()), &w.lib).unwrap();
+    assert!(!p.is_blocked(), "{:?}", p.errors);
+    assert_eq!(
+        (p.guard.sessions.len(), p.guard.onelibrary_sessions.len()),
+        (2, 2)
+    );
+    let g = DryRun::new(&p, &TrackLabels::new()).history.guard.unwrap();
+    assert_eq!(g.title, "4 sessions on this stick are not in your library");
+    assert!(
+        g.text.contains("two libraries import as separate"),
+        "{}",
+        g.text
+    );
+
+    let (result, stages) = apply_onelibrary(&w, &p, Some(&fake));
+    let report = result.unwrap();
+    assert_eq!(report.status, ExportStatus::Success, "{:?}", report.errors);
+    let at = |s| stages.iter().position(|x| *x == s).unwrap();
+    assert!(at(ApplyStage::ImportHistory) < at(ApplyStage::Backup));
+    assert!(at(ApplyStage::Backup) < at(ApplyStage::Write));
+    let imported = report.history_import.as_ref().unwrap();
+    assert_eq!((imported.created.len(), imported.entries), (4, 6));
+    let mut sessions: Vec<(HistoryLibrary, String)> = w
+        .lib
+        .sessions(&SessionQuery::default())
+        .unwrap()
+        .into_iter()
+        .map(|s| (s.library, s.source_name))
+        .collect();
+    sessions.sort();
+    let want = |library, name: &str| (library, name.to_owned());
+    assert_eq!(
+        sessions,
+        [
+            want(HistoryLibrary::DeviceLibrary, "HISTORY 001"),
+            want(HistoryLibrary::DeviceLibrary, "HISTORY 002"),
+            want(HistoryLibrary::OneLibrary, "HISTORY 001"),
+            want(HistoryLibrary::OneLibrary, "HISTORY 002"),
+        ]
+    );
+    let backup = report.backup_dir.as_ref().unwrap();
+    assert_eq!(
+        fs::read(backup.join("PIONEER/rekordbox/exportLibrary.db")).unwrap(),
+        b"exportLibrary.db"
+    );
+    assert!(backup
+        .join("PIONEER/rekordbox/exportLibrary.db-wal")
+        .exists());
+
+    // The same history again is all imported: no choice needed.
+    let mut again = planned(&w, &options(true));
+    plan_onelibrary(&mut again, &fake, Some(&key()), &w.lib).unwrap();
+    assert!(again.guard.onelibrary_sessions.is_empty());
+    assert!(
+        !again.errors.iter().any(is_onelibrary),
+        "{:?}",
+        again.errors
+    );
+}
+
+/// Import now with a plan that lost its OneLibrary scan (read back from
+/// JSON) is refused before anything is written.
+#[test]
+fn import_now_without_the_onelibrary_scan_is_refused() {
+    let w = World::new();
+    put_rekordbox_onelibrary(&w);
+    let fake = Fake::new(onelibrary_history());
+    let opts = ExportOptions {
+        history: HistoryPolicy::Import,
+        history_chosen: true,
+        ..options(true)
+    };
+    let mut p = planned(&w, &opts);
+    plan_onelibrary(&mut p, &fake, Some(&key()), &w.lib).unwrap();
+    p.onelibrary_history_import = None;
+    let (result, _) = apply_onelibrary(&w, &p, Some(&fake));
+    assert!(
+        matches!(result, Err(ApplyError::NoHistoryScan)),
+        "{result:?}"
+    );
+    assert_eq!(
+        fs::read(w.stick.join("PIONEER/rekordbox/exportLibrary.db")).unwrap(),
+        b"exportLibrary.db"
+    );
+}
+
 /// A plan with the option on and the key, on a stick that has rekordbox's
 /// `exportLibrary.db`, its `-wal` and `exportExt.pdb`.
 fn onelibrary_plan(w: &World, fake: &Fake) -> ExportPlan {
     put_rekordbox_onelibrary(w);
     let mut p = planned(w, &options(true));
-    plan_onelibrary(&mut p, fake, Some(&key())).unwrap();
+    plan_onelibrary(&mut p, fake, Some(&key()), &w.lib).unwrap();
     assert!(!p.is_blocked(), "{:?}", p.errors);
     p
 }

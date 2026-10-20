@@ -41,6 +41,7 @@ const session: SessionDetail = {
     id: 2,
     name: "HISTORY 002",
     sourceName: "HISTORY 002",
+    library: "deviceLibrary",
     playedOn: "2026-06-20",
     venue: null,
     excluded: false,

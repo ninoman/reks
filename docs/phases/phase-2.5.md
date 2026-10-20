@@ -59,7 +59,7 @@ Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
 CREATE TABLE play_session (
   id              INTEGER PRIMARY KEY,
-  source          TEXT NOT NULL,          -- 'device_library' (H2/H3 add 'onelibrary', 'engine')
+  source          TEXT NOT NULL,          -- 'device_library' | 'onelibrary' (H2, Phase 4 task 11); H3 adds 'engine'
   fingerprint     TEXT NOT NULL UNIQUE,   -- see Matching
   volume_serial   TEXT,
   source_name     TEXT NOT NULL,          -- as on the stick, e.g. 'HISTORY 001'

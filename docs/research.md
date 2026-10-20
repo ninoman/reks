@@ -531,6 +531,10 @@ hardware run, and the result recorded in `docs/decisions.md` or
     whether reformatting changes it; Engine players writing `hm.db` on the
     stick; minimum divider length, visible title length, shared divider
     files and baken's handling of a silent file with empty artist/album.
+    OneLibrary (added 2026-10-21, Phase 4 task 11): how players fill
+    `history` / `history_content` (entry order, folders, names, dates; the
+    7.2.19 reference's are empty) and whether a player logs one session in
+    both libraries.
 
 ---
 
