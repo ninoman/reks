@@ -270,6 +270,16 @@ Date of decisions: 2026-10-18.
   Rationale: every consumer is whole ms (PQTZ `u32` ms; XML `Inizio` has 3
   decimals), and rounding one anchor costs ≤ 0.5 ms without accumulating;
   the sample-accurate grid stays in the analysis cache.
+- Grid tuning (2026-10-20, phase 3 task 12a, analyser version 3): the
+  constant tempo is a whole-track search (`fit_tempo`, 0.01 BPM steps
+  around Mixxx's estimate, most beats within 15 ms); Mixxx's region pass
+  still gives the phase and the downbeat anchor. A grid is dynamic only
+  when under 30% of beats fit a constant one or a ≥ 32-beat region holds
+  another tempo. Beats stay on the broadband onset; a low-band kick curve
+  chooses the grid's phase among clusters of beats (`kick_phase`).
+  Rationale: measured on the maintainer's library, BPM 85.1% → 96.7%,
+  downbeat 70.9% → 73.3%; placing beats on the kick lowered both
+  (docs/analysis-parity.md).
 
 ## D11. rekordbox XML reader/writer: own implementation on `quick-xml`
 

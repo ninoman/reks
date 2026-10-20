@@ -14,8 +14,11 @@
 //! - [`make_const_bpm`] also reports the span of the merged region, so
 //!   [`build_grid`] can anchor beat 1 on a downbeat inside it.
 //!
-//! [`build_grid`] adds what Mixxx does elsewhere or not at all: the downbeat
-//! anchor, the fallback to a dynamic grid and the half/double tempo rule.
+//! [`build_grid`] adds what Mixxx does elsewhere or not at all: the
+//! whole-track tempo search ([`fit_tempo`], Mixxx's tempo is one estimate),
+//! the downbeat anchor, the fallback to a dynamic grid only on a tempo change
+//! ([`tempo_change`]), the half/double tempo rule, and the choice of phase by
+//! the kick ([`kick_phase`], task 12a).
 
 use crate::onset::KickPulse;
 
@@ -33,6 +36,9 @@ pub const FIT_TOLERANCE_S: f64 = 0.015;
 const FIT_SPAN: f64 = 0.03;
 /// [`fit_tempo`] histogram bin, seconds.
 const FIT_BIN_S: f64 = 0.001;
+/// [`fit_tempo`] ignores estimates outside this range (BPM): a broken
+/// beat list must not make it search thousands of tempos.
+const FIT_ESTIMATES: std::ops::RangeInclusive<f64> = 20.0..=720.0;
 
 /// One beat from the tracker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -321,9 +327,25 @@ pub fn round_bpm_within_range(min: f64, center: f64, max: f64) -> f64 {
 /// Shifts `first_beat` by the mean phase error of the beats within
 /// [`MAX_PHASE_ERROR_S`] of a grid at `bpm` through it.
 pub fn adjust_phase(first_beat: f64, bpm: f64, sample_rate: u32, beats: &[i64]) -> f64 {
+    adjust_phase_within(
+        first_beat,
+        bpm,
+        sample_rate,
+        beats,
+        MAX_PHASE_ERROR_S * f64::from(sample_rate),
+    )
+}
+
+/// [`adjust_phase`] over the beats within `max_err` samples of the grid.
+fn adjust_phase_within(
+    first_beat: f64,
+    bpm: f64,
+    sample_rate: u32,
+    beats: &[i64],
+    max_err: f64,
+) -> f64 {
     let sr = f64::from(sample_rate);
     let beat_len = 60.0 * sr / bpm;
-    let max_err = MAX_PHASE_ERROR_S * sr;
     let origin = first_beat.rem_euclid(beat_len);
     let (mut sum, mut count) = (0.0, 0usize);
     for &beat in beats {
@@ -355,7 +377,7 @@ pub struct TempoFit {
 }
 
 /// Whole-track tempo search: of the tempos in 0.01 BPM steps within
-/// ±3% of each of `estimates` (BPM), the one whose grid, at its best phase,
+/// ±3% of each of `estimates` (BPM, 20–720), the one whose grid, at its best phase,
 /// has the most beats within [`FIT_TOLERANCE_S`]; ties go to the roundest
 /// tempo (1, 0.5, 0.1, then 0.01 BPM), then to the one nearest an estimate.
 ///
@@ -368,7 +390,7 @@ pub fn fit_tempo(beats: &[i64], sample_rate: u32, estimates: &[f64]) -> Option<T
     let sr = f64::from(sample_rate);
     let mut candidates: Vec<i64> = estimates
         .iter()
-        .filter(|e| e.is_finite() && **e > 0.0)
+        .filter(|e| FIT_ESTIMATES.contains(*e))
         .flat_map(|&e| {
             let lo = (e * (1.0 - FIT_SPAN) * 100.0).ceil() as i64;
             let hi = (e * (1.0 + FIT_SPAN) * 100.0).floor() as i64;
@@ -461,15 +483,82 @@ fn best_phase(beats: &[i64], beat_len: f64, sr: f64) -> (f64, usize) {
     (phase, best.1)
 }
 
-/// Smallest move [`kick_phase`] makes: below it the placed beats already
-/// sit on the attack; above it the grid was on another cluster of beats
-/// (hi-hats, bass notes).
-const KICK_PHASE_MIN_MS: i64 = 15;
+/// Two clusters of beats closer than this are one ([`beat_clusters`]).
+const CLUSTER_MS: f64 = 15.0;
+/// A cluster needs this share of the beats to be a candidate phase.
+const CLUSTER_MIN_SHARE: f64 = 0.05;
+/// [`kick_phase`] scores a phase by the best kick attack within this many
+/// ms of it: a pulse frame is 5 ms, and the attack sits a few ms from the
+/// beat rekordbox marks.
+const KICK_SLACK_MS: i64 = 5;
 
-/// Moves a constant grid (`origin`, `bpm`) by [`KICK_PHASE_MIN_MS`] to
-/// `radius_ms` either way when its lines, over the whole track, then sit
-/// on at least `gain` times as much kick attack ([`KickPulse::at`]); then
-/// [`adjust_phase`] centres it on the beats there. Unchanged otherwise.
+/// Clusters of beats around a grid of `beat_len` samples: (phase, beats),
+/// the phase being the mean of the beats within half [`CLUSTER_MS`] of the
+/// densest point; clusters are at least [`CLUSTER_MS`] apart and hold at
+/// least [`CLUSTER_MIN_SHARE`] of the beats.
+fn beat_clusters(beats: &[i64], beat_len: f64, sr: f64) -> Vec<(f64, usize)> {
+    let bin = FIT_BIN_S * sr;
+    let bins = (beat_len / bin).ceil().max(1.0) as usize;
+    let mut hist = vec![0usize; bins];
+    for &b in beats {
+        let k = ((b as f64).rem_euclid(beat_len) / bin) as usize;
+        hist[k.min(bins - 1)] += 1;
+    }
+    let half = ((CLUSTER_MS / 2.0 / 1000.0 / FIT_BIN_S) as usize).min((bins - 1) / 2);
+    let window: Vec<usize> = (0..bins)
+        .map(|c| {
+            (0..=2 * half)
+                .map(|i| hist[(c + bins - half + i) % bins])
+                .sum()
+        })
+        .collect();
+    let min_count = ((beats.len() as f64 * CLUSTER_MIN_SHARE).ceil() as usize).max(2);
+    let mut peaks: Vec<(usize, usize)> = Vec::new();
+    for c in 0..bins {
+        let w = window[c];
+        if w < min_count {
+            continue;
+        }
+        // A peak: no neighbour within the cluster distance is higher, and
+        // of equal ones the first.
+        let reach = 2 * half;
+        let is_peak = (1..=reach.min(bins / 2)).all(|d| {
+            let (l, r) = (window[(c + bins - d) % bins], window[(c + d) % bins]);
+            w > l && w >= r
+        });
+        if is_peak {
+            peaks.push((c, w));
+        }
+    }
+    peaks
+        .into_iter()
+        .map(|(c, count)| {
+            let centre = (c as f64 + 0.5) * bin;
+            let reach = (half as f64 + 0.5) * bin;
+            let (mut sum, mut n) = (0.0, 0usize);
+            for &b in beats {
+                let mut off = (b as f64 - centre).rem_euclid(beat_len);
+                if off > beat_len / 2.0 {
+                    off -= beat_len;
+                }
+                if off.abs() <= reach {
+                    sum += off;
+                    n += 1;
+                }
+            }
+            let phase = centre + if n > 0 { sum / n as f64 } else { 0.0 };
+            (phase.rem_euclid(beat_len), count)
+        })
+        .collect()
+}
+
+/// Picks the grid's phase among the clusters of beats ([`beat_clusters`])
+/// by the kick: a constant grid (`origin`, `bpm`) moves to another cluster
+/// within `radius_ms` when that cluster's lines, over the whole track, sit
+/// on at least `gain` times as much kick attack ([`KickPulse::at`]) as the
+/// cluster the grid is on. The phase always comes from the beats; the kick
+/// only chooses (a hi-hat or bass note the tracker took for the beat, or an
+/// average of two clusters a few ms apart). Unchanged otherwise.
 pub fn kick_phase(
     origin: f64,
     bpm: f64,
@@ -481,8 +570,9 @@ pub fn kick_phase(
 ) -> f64 {
     let sr = f64::from(sample_rate);
     let beat_len = 60.0 * sr / bpm;
+    let ms = sr / 1000.0;
     let end = pulse.len_samples();
-    let score = |o: f64| -> f64 {
+    let line_sum = |o: f64| -> f64 {
         let mut line = o.rem_euclid(beat_len);
         let mut sum = 0.0;
         while line < end {
@@ -491,23 +581,41 @@ pub fn kick_phase(
         }
         sum
     };
-    let ms = sr / 1000.0;
-    let radius = i64::from(radius_ms);
-    // The current phase, allowing for the pulse's 5 ms frames.
-    let here = (-KICK_PHASE_MIN_MS + 1..KICK_PHASE_MIN_MS)
-        .map(|shift| score(origin + shift as f64 * ms))
-        .fold(0.0, f64::max);
-    let (mut best_shift, mut best) = (0i64, here * gain);
-    for shift in (-radius..=-KICK_PHASE_MIN_MS).chain(KICK_PHASE_MIN_MS..=radius) {
-        let s = score(origin + shift as f64 * ms);
-        if s > best || (s == best && best_shift != 0 && shift.abs() < best_shift.abs()) {
-            (best_shift, best) = (shift, s);
+    let score = |o: f64| {
+        (-KICK_SLACK_MS..=KICK_SLACK_MS)
+            .map(|d| line_sum(o + d as f64 * ms))
+            .fold(0.0, f64::max)
+    };
+    // Signed distance from the grid to `phase`, samples.
+    let from_origin = |phase: f64| {
+        let d = (phase - origin).rem_euclid(beat_len);
+        if d > beat_len / 2.0 {
+            d - beat_len
+        } else {
+            d
         }
+    };
+    let clusters: Vec<(f64, f64)> = beat_clusters(beats, beat_len, sr)
+        .into_iter()
+        .map(|(phase, _)| (from_origin(phase), phase))
+        .filter(|(d, _)| d.abs() <= f64::from(radius_ms) * ms)
+        .collect();
+    // The cluster the grid is on: the nearest within the cluster distance.
+    let current = clusters
+        .iter()
+        .filter(|(d, _)| d.abs() < CLUSTER_MS * ms)
+        .min_by(|a, b| a.0.abs().total_cmp(&b.0.abs()));
+    let here = current.map_or_else(|| score(origin), |&(_, p)| score(p));
+    let best = clusters
+        .iter()
+        .filter(|(d, _)| current.is_none_or(|c| (d - c.0).abs() >= CLUSTER_MS * ms))
+        .map(|&(d, p)| (d, p, score(p)))
+        .filter(|&(_, _, s)| s > 0.0 && s >= here * gain)
+        .max_by(|a, b| a.2.total_cmp(&b.2).then(b.0.abs().total_cmp(&a.0.abs())));
+    match best {
+        Some((d, _, _)) => origin + d,
+        None => origin,
     }
-    if best_shift == 0 || best <= 0.0 {
-        return origin;
-    }
-    adjust_phase(origin + best_shift as f64 * ms, bpm, sample_rate, beats)
 }
 
 /// Tempo of the median gap between beats, BPM.
@@ -528,9 +636,9 @@ fn median_gap_bpm(beats: &[i64], sample_rate: u32) -> Option<f64> {
 /// `opts.min_coverage` of all beats within [`MAX_PHASE_ERROR_S`] of a grid
 /// line and the beats show no tempo change ([`tempo_change`]); beat 1 is
 /// then the flagged downbeat nearest the start of [`make_const_bpm`]'s
-/// merged constant region (its first beat when no downbeat is flagged). Otherwise
-/// dynamic, numbered from the downbeat flags. Either way a tempo outside
-/// `opts.min_bpm..=opts.max_bpm` is doubled or halved into it.
+/// merged constant region (its first beat when no downbeat is flagged).
+/// Otherwise dynamic, numbered from the downbeat flags. Either way a tempo
+/// outside `opts.min_bpm..=opts.max_bpm` is doubled or halved into it.
 pub fn build_grid(input: &BeatList, opts: &GridOptions) -> Result<Grid, GridError> {
     build_grid_with_pulse(input, None, opts)
 }
@@ -1229,10 +1337,9 @@ mod tests {
 
     #[test]
     fn kick_phase_moves_the_grid_onto_the_kicks() {
-        // 140 BPM; the tracker took a hi-hat 45 ms after the kick for 60% of
-        // the beats (in runs of 24), so the grid lands on the hats.
+        // 140 BPM; the tracker took a hi-hat `hat_ms` after the kick for 60%
+        // of the beats (in runs of 24), so the grid lands on the hats.
         let kicks = synth(&one(140.0, 0.5, 300.0), 0.0, 4, 0);
-        let input = displace(kicks.clone(), 45.0, |i| i % 40 < 24);
         let first_line = |g: &Grid| match g {
             Grid::Constant {
                 bpm, first_beat, ..
@@ -1245,11 +1352,6 @@ mod tests {
             let d = d.rem_euclid(len);
             d.min(len - d) / f64::from(SR) * 1000.0
         };
-        let opts = GridOptions::default();
-        let (bpm, first) = first_line(&build_grid(&input, &opts).unwrap());
-        assert_eq!(bpm, 140.0);
-        assert!((off_kick(first) - 45.0).abs() < 2.0, "{}", off_kick(first));
-
         // A rise curve with a 12 dB attack at every kick (5 ms frames).
         let frames = (300.5 * f64::from(PULSE_RATE)) as usize;
         let mut q = vec![0u8; frames];
@@ -1260,17 +1362,28 @@ mod tests {
             }
         }
         let pulse = KickPulse::from_quarter_db(q);
-        let grid = build_grid_with_pulse(&input, Some(&pulse), &opts).unwrap();
-        let (bpm, first) = first_line(&grid);
-        assert_eq!(bpm, 140.0);
-        assert!(off_kick(first) < 2.0, "{}", off_kick(first));
-        // Off: unchanged.
+        let opts = GridOptions::default();
         let off = GridOptions {
             kick_phase_ms: 0,
             ..opts
         };
-        let (_, first) = first_line(&build_grid_with_pulse(&input, Some(&pulse), &off).unwrap());
-        assert!((off_kick(first) - 45.0).abs() < 2.0);
+        for hat_ms in [45.0, 20.0] {
+            let input = displace(kicks.clone(), hat_ms, |i| i % 40 < 24);
+            // Without the kicks the grid is on the hats (45 ms) or between
+            // them and the kicks (20 ms, averaged).
+            let (bpm, first) = first_line(&build_grid(&input, &opts).unwrap());
+            assert_eq!(bpm, 140.0);
+            assert!(off_kick(first) > 10.0, "{hat_ms}: {}", off_kick(first));
+            let grid = build_grid_with_pulse(&input, Some(&pulse), &opts).unwrap();
+            let (bpm, first) = first_line(&grid);
+            assert_eq!(bpm, 140.0);
+            assert!(off_kick(first) < 2.0, "{hat_ms}: {}", off_kick(first));
+            // Off: as without a pulse.
+            let (_, plain) =
+                first_line(&build_grid_with_pulse(&input, Some(&pulse), &off).unwrap());
+            let (_, none) = first_line(&build_grid(&input, &opts).unwrap());
+            assert_eq!(plain, none);
+        }
     }
 
     #[test]

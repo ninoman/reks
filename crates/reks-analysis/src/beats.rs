@@ -276,10 +276,10 @@ pub enum BeatPlacement {
 impl BeatPlacement {
     /// What [`BeatTracker::track`] uses.
     ///
-    /// The broadband onset: on the parity library the kick placements put
-    /// more beats on rekordbox's grid (76% vs 74% within 10 ms) but fewer
-    /// grids in phase with it (91% vs 94% within 30 ms) (task 12a). The kick
-    /// is used for the grid's phase instead ([`crate::grid::kick_phase`]).
+    /// The broadband onset: on the parity library the kick attack put more
+    /// single beats near rekordbox's grid but fewer grids in phase with it
+    /// (92.5% vs 93.3% within 30 ms; task 12a, docs/analysis-parity.md). The
+    /// kick chooses the grid's phase instead ([`crate::grid::kick_phase`]).
     pub const DEFAULT: Self = Self::Onset;
 
     pub const ALL: [Self; 6] = [

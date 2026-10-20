@@ -2,7 +2,7 @@
 //! `docs/analysis-parity.md`).
 //!
 //! ```text
-//! reks parity run    [--xml <collection.xml>] [--out <dir>] [--jobs N] [--every N]
+//! reks parity run    [--xml <collection.xml>] [--out <dir>] [--jobs N] [--every N] [--retry-failed]
 //!                    [--limit N] [--only mp3,m4a,...] [--remap FROM=TO]... [--models <dir>]
 //! reks parity report [--xml <collection.xml>] [--out <dir>] [--md <file>] [--tracks <file.tsv>]
 //!                    [--min-coverage <0..1>] [--placement <name>] [--analyser N]
@@ -78,6 +78,8 @@ struct Flags {
     out: Option<PathBuf>,
     jobs: Option<usize>,
     every: usize,
+    /// `run`: analyse again tracks whose last result is an error.
+    retry_failed: bool,
     limit: Option<usize>,
     only: Option<Vec<String>>,
     remap: Vec<(PathBuf, PathBuf)>,
@@ -104,6 +106,7 @@ impl Flags {
                 "--xml" => f.xml = Some(value()?.into()),
                 "--out" => f.out = Some(value()?.into()),
                 "--jobs" => f.jobs = Some(value()?.parse().context("--jobs")?),
+                "--retry-failed" => f.retry_failed = true,
                 "--every" => f.every = value()?.parse::<usize>().context("--every")?.max(1),
                 "--limit" => f.limit = Some(value()?.parse().context("--limit")?),
                 "--only" => {
@@ -341,9 +344,12 @@ fn analyse(flags: &Flags) -> anyhow::Result<()> {
         let Some((size, mtime)) = file_stamp(&path) else {
             continue;
         };
-        let fresh = done
-            .get(&loc)
-            .is_some_and(|r| r.size == size && r.mtime == mtime && r.analyser == ANALYSER_VERSION);
+        let fresh = done.get(&loc).is_some_and(|r| {
+            r.size == size
+                && r.mtime == mtime
+                && r.analyser == ANALYSER_VERSION
+                && !(flags.retry_failed && r.error.is_some())
+        });
         if fresh {
             skipped += 1;
             continue;
@@ -1045,6 +1051,7 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
         "location\tgenre\tcodec\trb_bpm\tours_bpm\tgrid\tbpm\tdownbeat_ms\tbeat_ms\tbeat_no\tkey\traw_offset_ms\n",
     );
     let (mut analysed, mut failed, mut no_grid_rb, mut stale) = (0, 0, 0, 0);
+    let mut no_kick_curve = 0usize;
     let mut seen = HashSet::new();
     for t in &collection.tracks {
         let Some(loc) = t.location.as_deref() else {
@@ -1065,10 +1072,17 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
             failed += 1;
             continue;
         }
-        let pulse = (flags.grid.kick_phase_ms > 0)
-            .then(|| fs::read(kick_file(&out, loc)).ok())
-            .flatten()
-            .map(KickPulse::from_quarter_db);
+        // The curve `run` stored with this record's candidates (older
+        // results have neither): the grid then matches the pipeline's.
+        let pulse = if flags.grid.kick_phase_ms > 0 && !rec.model_beats.is_empty() {
+            let p = fs::read(kick_file(&out, loc)).ok();
+            if p.is_none() {
+                no_kick_curve += 1;
+            }
+            p.map(KickPulse::from_quarter_db)
+        } else {
+            None
+        };
         let Some(row) = compare(t, rec, pulse.as_ref(), &flags.grid, flags.placement) else {
             no_grid_rb += 1;
             continue;
@@ -1090,6 +1104,13 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
             f(row.raw_offset_ms),
         );
         rows.push(row);
+    }
+    if no_kick_curve > 0 {
+        eprintln!(
+            "{no_kick_curve} tracks without a kick curve in {}: their grids skip the kick \
+             phase (re-run them)",
+            out.join(KICK_DIR).display()
+        );
     }
     if let Some(path) = &flags.tracks {
         fs::write(path, &tsv).with_context(|| format!("writing {}", path.display()))?;
@@ -1292,6 +1313,21 @@ fn downbeat_table(md: &mut String, rows: &[Row]) {
         "Among tracks whose BPM matches: {} of {} within 30 ms.\n",
         pct(ok, matched.len()),
         matched.len()
+    );
+    // Grid phase, whatever the bar: how far our grid lines sit from
+    // rekordbox's (the first downbeat stands for all of a constant grid).
+    let near = |ms: f64| {
+        matched
+            .iter()
+            .filter(|r| r.beat_ms.is_some_and(|(d, _)| d.abs() <= ms))
+            .count()
+    };
+    let _ = writeln!(
+        md,
+        "Grid phase, same tracks: our first downbeat within 30 ms of any rekordbox \
+         beat {}, within 10 ms {}.\n",
+        pct(near(DOWNBEAT_TOLERANCE_MS), matched.len()),
+        pct(near(10.0), matched.len())
     );
 }
 
@@ -1535,13 +1571,22 @@ mod tests {
 
     #[test]
     fn flags_parse() {
-        let args: Vec<String> = ["--xml", "a.xml", "--every", "0", "--only", "MP3,m4a"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let args: Vec<String> = [
+            "--xml",
+            "a.xml",
+            "--every",
+            "0",
+            "--only",
+            "MP3,m4a",
+            "--retry-failed",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
         let f = Flags::parse(&args).unwrap();
         assert_eq!(f.xml().unwrap(), PathBuf::from("a.xml"));
         assert_eq!(f.every, 1);
+        assert!(f.retry_failed);
         assert_eq!(f.only, Some(vec!["mp3".to_owned(), "m4a".to_owned()]));
         assert!(Flags::parse(&["--bogus".to_owned()]).is_err());
     }
