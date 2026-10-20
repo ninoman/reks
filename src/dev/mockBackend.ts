@@ -659,6 +659,14 @@ async function exportApply(onEvent: Channel<ExportProgress>): Promise<ExportRepo
       problems: [],
     };
   }
+  if (plan.opts.onelibrary) {
+    send({
+      stage: "oneLibrary",
+      title: "Writing exportLibrary.db (experimental)",
+      cancellable: false,
+    });
+    await wait(400);
+  }
   for (const [stage, title] of [
     ["sync", "Flushing the written files to the stick"],
     ["validate", "Reading the stick back to check it"],
@@ -677,6 +685,14 @@ async function exportApply(onEvent: Channel<ExportProgress>): Promise<ExportRepo
       { label: "Tracks", value: "12 in the stick's database" },
       { label: "Audio", value: "12 copied, 0 already on the stick" },
       { label: "Analysis", value: "36 files written, 0 unchanged" },
+      ...(plan.opts.onelibrary
+        ? [
+            {
+              label: "OneLibrary (experimental)",
+              value: "exportLibrary.db written: 12 tracks, 122.0 KB",
+            },
+          ]
+        : []),
       { label: "Read back", value: "12 tracks and 2 playlists and folders, as planned" },
       { label: "Library record", value: "12 tracks recorded as on this stick" },
     ],
@@ -719,23 +735,14 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
       items: [],
     });
   }
-  // The OneLibrary step as the app's stub plans it (phase 4 task 8).
-  if (opts.onelibrary) {
-    problems.push(
-      settings.onelibraryKeySet
-        ? {
-            kind: "oneLibraryUnavailable",
-            title:
-              "This build of reks cannot write exportLibrary.db yet; turn the OneLibrary export off.",
-            items: [],
-          }
-        : {
-            kind: "oneLibraryKeyMissing",
-            title:
-              "The OneLibrary export needs its key: paste it in Settings → Experimental or set REKS_ONELIBRARY_KEY.",
-            items: [],
-          },
-    );
+  // The OneLibrary step (phase 4 task 8): blocked only without the key.
+  if (opts.onelibrary && !settings.onelibraryKeySet) {
+    problems.push({
+      kind: "oneLibraryKeyMissing",
+      title:
+        "The OneLibrary export needs its key: paste it in Settings → Experimental or set REKS_ONELIBRARY_KEY.",
+      items: [],
+    });
   }
   const none = { count: 0, bytes: 0, totalText: "None", files: [] };
   const write = copies.length * 9_400_000;
