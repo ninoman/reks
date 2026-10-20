@@ -111,6 +111,11 @@ fn ms(samples: f64) -> f64 {
     samples * 1000.0 / f64::from(ANALYSIS_RATE)
 }
 
+/// Beatgrid positions are stored as whole ms (D10).
+fn whole_ms(samples: f64) -> i64 {
+    ms(samples).round() as i64
+}
+
 fn bpm_x100(beat_len_samples: f64) -> i64 {
     (60.0 * f64::from(ANALYSIS_RATE) / beat_len_samples * 100.0).round() as i64
 }
@@ -125,7 +130,7 @@ pub fn grid_anchors(grid: &Grid) -> Vec<AnalysisAnchor> {
             first_beat,
             first_beat_in_bar,
         } => vec![AnalysisAnchor {
-            position_ms: ms(*first_beat as f64),
+            position_ms: whole_ms(*first_beat as f64),
             bpm_x100: (bpm * 100.0).round() as i64,
             beat_in_bar: *first_beat_in_bar,
         }],
@@ -154,7 +159,7 @@ pub fn grid_anchors(grid: &Grid) -> Vec<AnalysisAnchor> {
                 }
                 let x100 = bpm_x100(gap as f64);
                 out.push(AnalysisAnchor {
-                    position_ms: ms(b.position as f64),
+                    position_ms: whole_ms(b.position as f64),
                     bpm_x100: x100,
                     beat_in_bar: b.beat_in_bar,
                 });
@@ -201,7 +206,7 @@ mod tests {
         assert_eq!(
             grid_anchors(&g),
             [AnalysisAnchor {
-                position_ms: 10.0,
+                position_ms: 10,
                 bpm_x100: 12800,
                 beat_in_bar: 3
             }]
@@ -229,7 +234,10 @@ mod tests {
         assert_eq!(anchors[0].bpm_x100, 12000);
         assert_eq!(anchors[1].bpm_x100, 12500);
         // Beat 16 is the first one off the 120 BPM line.
-        assert!((anchors[1].position_ms - beats[16].position as f64 / 44.1).abs() < 1e-9);
+        assert_eq!(
+            anchors[1].position_ms,
+            (beats[16].position as f64 / 44.1).round() as i64
+        );
         assert_eq!(anchors[1].beat_in_bar, 1);
         assert_eq!(display_bpm_x100(&Grid::Dynamic { beats }), Some(12500));
         assert!(grid_anchors(&Grid::Dynamic { beats: vec![] }).is_empty());

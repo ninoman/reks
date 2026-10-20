@@ -792,7 +792,8 @@ impl Import<'_> {
                 );
             }
             rows.push(vec![
-                Value::Real(row.position_ms),
+                // REAL column: compared with the stored value on re-import.
+                Value::Real(row.position_ms as f64),
                 Value::Integer(row.bpm_x100),
                 Value::Integer(i64::from(row.meter_num)),
                 Value::Integer(i64::from(row.meter_den)),
@@ -1209,7 +1210,8 @@ fn cue_slot(num: i32) -> Option<Option<u8>> {
 }
 
 struct GridRow {
-    position_ms: f64,
+    /// Whole ms, like every beatgrid position (D10).
+    position_ms: i64,
     bpm_x100: i64,
     meter_num: u8,
     meter_den: u8,
@@ -1218,10 +1220,11 @@ struct GridRow {
 }
 
 fn grid_row(t: &Tempo) -> Option<GridRow> {
-    let position_ms = t.inizio * 1000.0;
-    if !position_ms.is_finite() || position_ms < 0.0 {
+    let position_ms = (t.inizio * 1000.0).round();
+    if !position_ms.is_finite() || position_ms < 0.0 || position_ms > i64::MAX as f64 {
         return None;
     }
+    let position_ms = position_ms as i64;
     let bpm_x100 = bpm_x100(t.bpm)?;
     let meter = t.metro.as_deref().map(parse_metro);
     let (meter_num, meter_den) = meter.flatten().unwrap_or((4, 4));
@@ -1306,7 +1309,13 @@ mod tests {
             extra: Default::default(),
         };
         let g = grid_row(&tempo(Some("7/8"), Some(3))).unwrap();
-        assert!((g.position_ms - 25.0).abs() < 1e-9);
+        assert_eq!(g.position_ms, 25);
+        // Sub-ms XML values round to whole ms (D10).
+        let odd = Tempo {
+            inizio: 0.0256,
+            ..tempo(None, None)
+        };
+        assert_eq!(grid_row(&odd).unwrap().position_ms, 26);
         assert_eq!(
             (g.bpm_x100, g.meter_num, g.meter_den, g.beat_in_bar),
             (12800, 7, 8, 3)

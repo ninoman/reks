@@ -47,8 +47,9 @@ pub struct AnalysisJob {
 /// One tempo anchor of an analysed grid (a `beatgrid` row).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AnalysisAnchor {
-    /// First beat at or after the anchor, in ms from the first decoded sample.
-    pub position_ms: f64,
+    /// First beat at or after the anchor, in whole ms from the first decoded
+    /// sample (beatgrid positions are always whole ms, see D10).
+    pub position_ms: i64,
     /// Tempo from this anchor on, BPM × 100.
     pub bpm_x100: i64,
     /// 1–4: position of the beat at `position_ms` in its bar.
@@ -270,7 +271,7 @@ mod tests {
             version: 1,
             content_hash: hash.into(),
             grid: vec![AnalysisAnchor {
-                position_ms: 12.5,
+                position_ms: 13,
                 bpm_x100: 12800,
                 beat_in_bar: 1,
             }],
@@ -353,13 +354,13 @@ mod tests {
                 key: true
             }
         );
-        assert_eq!(grid(&lib, a), [(12.5, 12800, "analysis".into())]);
+        assert_eq!(grid(&lib, a), [(13.0, 12800, "analysis".into())]);
         let mut again = record("h1");
         again.grid[0].bpm_x100 = 12900;
         again.bpm_x100 = Some(12900);
         again.key = None;
         lib.store_analysis(a, &again).unwrap();
-        assert_eq!(grid(&lib, a), [(12.5, 12900, "analysis".into())]);
+        assert_eq!(grid(&lib, a), [(13.0, 12900, "analysis".into())]);
         assert_eq!(
             key_bpm(&lib, a),
             (None, None, Some(12900), Some("analysis".into()))

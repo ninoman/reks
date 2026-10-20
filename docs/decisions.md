@@ -224,7 +224,14 @@ Date of decisions: 2026-10-18.
   analysis (manual, tag and rekordbox keys stay). reks's own result is
   always in the analysis cache, so task 10 and the parity report (task 12)
   can use it without touching the library. Rationale: unmeasured analysis
-  must not silently replace grids a DJ has played with.
+  must not silently replace grids a DJ has played with. A locked grid
+  (`track.grid_locked`, task 13) stays too.
+- Grid positions (2026-10-20): every `beatgrid.position_ms` is written as
+  whole ms (XML import, analysis, grid editor), so the Rust types are `i64`.
+  The column stays `REAL` (no migration; whole numbers are exact in it).
+  Rationale: every consumer is whole ms (PQTZ `u32` ms; XML `Inizio` has 3
+  decimals), and rounding one anchor costs ≤ 0.5 ms without accumulating;
+  the sample-accurate grid stays in the analysis cache.
 
 ## D11. rekordbox XML reader/writer: own implementation on `quick-xml`
 
