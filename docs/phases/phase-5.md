@@ -119,11 +119,13 @@ pub enum Control {
    silence out (no NaN or denormals). Done: `reks-mix::taper` and
    `dsp::eq::ChannelEq`, standalone (not yet in the graph); laws and
    tolerances in [`../mixer-dsp.md`](../mixer-dsp.md).
-5. **Filters**: two state-variable filters (trapezoidal SVF from the
+5. [x] **Filters**: two state-variable filters (trapezoidal SVF from the
    published papers, our own code), mode combinations, resonance taper,
    VCF TO XFADER, LINK. Tests: −3 dB at the set
    cutoff for LP and HP at minimum resonance; stable at maximum resonance across
-   30 Hz–20 kHz at 44.1, 48 and 96 kHz.
+   30 Hz–20 kHz at 44.1, 48 and 96 kHz. Done: `dsp::filter` (`Filter`, `FilterPanel`
+   for VCF TO XFADER and LINK), standalone; MILD is Butterworth, not the
+   hardware's likely overdamped setting ([`../mixer-dsp.md`](../mixer-dsp.md)).
 6. **Channels, crossfader, master**: trim, fader taper, X/off/Y assign,
    crossfader curve law, master level, meters, limiter. Tests: crossfader gain
    at 0, 0.5 and 1 for both curve extremes (−4 dB at centre on progressive);

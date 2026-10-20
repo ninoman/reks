@@ -54,3 +54,42 @@ Tests (sine measurement at 44.1, 48 and 96 kHz; `dsp::eq` tests):
 | mid full cut | −30 ±1 dB | centre |
 | HI / LO kill slope | 12 ±1 dB/oct | HI 5→10 kHz; LO 125→62.5 and 62.5→31.25 Hz |
 | silence | exact zeros, no NaN or subnormals | 10 s after a full-scale burst |
+
+## Filters (task 5)
+
+`dsp::filter::Filter`, one per unit (X, Y), stereo. A trapezoidal
+(zero-delay-feedback) state-variable filter from A. Simper's Cytomic papers
+("Solving the continuous SVF equations using trapezoidal integration and
+equivalent currents", 2013, https://cytomic.com/technical-papers), our own
+code: `g = tan(π·fc/fs)`, `k = 1/Q`, outputs `low`, `band`, `high` with
+`low + k·band + high = x`. It stays stable and click-free while cutoff and Q
+change every sample. 2-pole; the hardware slope is **UNVERIFIED** (R§9.1).
+
+| Control | Law |
+|---|---|
+| FREQ | `30·(20000/30)^v` Hz, the −3 dB point (R§9.1) |
+| RESONANCE | `Q = 0.707·(20/0.707)^v`: MILD is Butterworth, WILD a +26 dB peak (Q 20 **UNVERIFIED**) |
+
+- Modes: `y = lp·low + bp·k·band + hp·high + none·x`, each weight smoothed.
+  HP+LP is a notch at the cutoff; all three give back the input (the guide's
+  "all-pass effect"); BP alone has unity peak gain. No mode selected passes the
+  signal rather than muting it (our choice).
+- ON crossfades between dry and filtered; the SVF keeps running while off.
+- `FilterPanel::effective_freq` (pure): VCF TO XFADER makes a unit's FREQ the
+  crossfader position; LINK makes Y follow X's effective FREQ and wins over
+  Y's own VCF TO XFADER. Whether the hardware stops crossfading in VCF TO
+  XFADER mode is **UNVERIFIED**; that is graph wiring.
+- Deviation: the guide says resonance is "flattest at about two o'clock",
+  so on the hardware MILD is probably overdamped. We make MILD the flat
+  (Butterworth) setting so the set cutoff is the −3 dB point at minimum
+  resonance, as task 5's test requires.
+
+Tests (`dsp::filter` tests):
+
+| Check | Tolerance |
+|---|---|
+| LP and HP at minimum resonance, at the set cutoff (30 Hz–15 kHz) | −3.01 ±0.1 dB at 44.1, 48, 96 kHz |
+| maximum resonance at the cutoff | +26.0 ±0.2 dB |
+| LP+BP+HP, and no mode | 0 ±0.01 dB; HP+LP notch below −40 dB |
+| maximum resonance, LP/HP/BP, 30 Hz–20 kHz in 1/3 octaves and while FREQ sweeps end to end | finite, below 200 on full-scale noise, rings down; at 44.1, 48, 96 kHz |
+| mode switch plus ON → off on a 50 Hz tone | no sample step above 0.01 |
