@@ -163,8 +163,17 @@ pub enum Control {
    1.5 ms (`Graph::latency()`). A flat strip passes a deck bit for bit.
    Render tests in `crates/reks-mix/tests/mixer.rs`
    ([`../mixer-dsp.md`](../mixer-dsp.md)).
-7. **Cue system**: cue bus, pre/post EQ, cue/mix balance, split cue, routing.
+7. [x] **Cue system**: cue bus, pre/post EQ, cue/mix balance, split cue, routing.
    Test: each routing mode puts the expected signal on each output channel.
+   Done 2026-10-21 (`cue.rs`, `routing.rs`): per-channel CUE (pre-fader),
+   pre-EQ by default, POST EQ taps before the fader; CUE MIX is equal power;
+   split cue puts cue (mono) left and master (mono) right; CUE LEVEL, then
+   its own safety limiter, aligned with the master's. `CueRouting::Outputs`
+   puts master and cue on the named outputs, `SplitMono` sends the split
+   phones signal to outputs 1/2, `Off` master only; `Engine::start` refuses
+   a routing the device has no outputs for. `Graph::render_outputs` renders
+   master and phones. Tests: routing modes on the engine callback, cue render
+   tests in `crates/reks-mix/tests/cue.rs`.
 8. **Tauri commands and IPC**: thin `mix_*` commands, typed wrappers in
    `src/lib/ipc.ts`, engine state on a `Channel`, waveform columns as `ArrayBuffer`.
 9. **UI**: mixer panel, 2/4-deck layout, scrolling waveforms with beat markers

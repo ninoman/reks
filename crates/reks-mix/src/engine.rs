@@ -16,6 +16,7 @@ use rtrb::{Consumer, Producer, PushError, RingBuffer};
 use crate::control::{Control, CueRouting};
 use crate::error::{Error, Result};
 use crate::graph::{DeckSource, EngineState, Graph};
+use crate::routing;
 
 /// Frames rendered per graph call; bounds the scratch buffer.
 const BLOCK: usize = 256;
@@ -44,7 +45,7 @@ pub struct EngineConfig {
     /// Frames per device buffer. `None`: the device's default. A size outside
     /// the device's range is an error.
     pub buffer_frames: Option<u32>,
-    /// Headphone cue routing (phase 5 task 7; only `Off` so far).
+    /// Headphone cue routing. One the device has no outputs for is an error.
     pub cue: CueRouting,
 }
 
@@ -189,6 +190,7 @@ impl Engine {
     fn start_at(cfg: &EngineConfig, rate: Option<u32>) -> Result<Self> {
         let device = cfg.device.clone();
         let buffer_frames = cfg.buffer_frames;
+        let cue = cfg.cue;
         let (ctl_tx, ctl_rx) = RingBuffer::new(QUEUE);
         let (state_tx, state_rx) = RingBuffer::new(QUEUE);
         let (retire_tx, retire_rx) = RingBuffer::new(QUEUE);
@@ -205,7 +207,7 @@ impl Engine {
                     states: state_tx,
                     retired: retire_tx,
                 };
-                match open_stream(device, rate, buffer_frames, queues, thread_health) {
+                match open_stream(device, rate, buffer_frames, cue, queues, thread_health) {
                     Ok((stream, info)) => {
                         let _ = ready_tx.send(Ok(info));
                         // Parks until the engine is dropped.
@@ -291,6 +293,7 @@ fn open_stream(
     device: Option<String>,
     rate: Option<u32>,
     buffer_frames: Option<u32>,
+    cue: CueRouting,
     queues: Queues,
     health: Arc<Health>,
 ) -> Result<(cpal::Stream, StreamInfo)> {
@@ -315,7 +318,13 @@ fn open_stream(
         channels: config.channels,
         buffer_frames,
     };
-    let processor = Processor::new(Graph::new(config.sample_rate)?, queues, config.sample_rate);
+    routing::check(cue, config.channels)?;
+    let processor = Processor::new(
+        Graph::new(config.sample_rate)?,
+        queues,
+        config.sample_rate,
+        cue,
+    );
 
     let stream = match supported.sample_format() {
         SampleFormat::F32 => build::<f32>(&dev, &config, processor, health)?,
@@ -362,24 +371,34 @@ where
 pub(crate) struct Processor {
     graph: Graph,
     queues: Queues,
+    routing: CueRouting,
     scratch: Box<[f32]>,
+    phones: Box<[f32]>,
     state_every: u32,
     since_state: u32,
 }
 
 impl Processor {
-    pub(crate) fn new(graph: Graph, queues: Queues, sample_rate: u32) -> Self {
+    pub(crate) fn new(
+        mut graph: Graph,
+        queues: Queues,
+        sample_rate: u32,
+        routing: CueRouting,
+    ) -> Self {
+        graph.set_cue_routing(routing);
         Self {
             graph,
             queues,
+            routing,
             scratch: vec![0.0; BLOCK * 2].into_boxed_slice(),
+            phones: vec![0.0; BLOCK * 2].into_boxed_slice(),
             state_every: (sample_rate / STATE_HZ).max(1),
             since_state: 0,
         }
     }
 
-    /// Fills one device buffer. `out` is interleaved with `channels` per frame:
-    /// L/R on the first two, silence on the rest; mono gets (L + R) / 2.
+    /// Fills one device buffer. `out` is interleaved with `channels` per
+    /// frame, laid out by the cue routing ([`routing::route`]).
     pub(crate) fn process<T: Sample + FromSample<f32>>(&mut self, out: &mut [T], channels: usize) {
         while let Ok(c) = self.queues.controls.pop() {
             if let Some(old) = self.graph.apply(c) {
@@ -392,22 +411,18 @@ impl Processor {
         let mut frames_total = 0;
         for chunk in out.chunks_mut(BLOCK * channels) {
             let frames = chunk.len() / channels;
-            let scratch = &mut self.scratch[..frames * 2];
+            let master = &mut self.scratch[..frames * 2];
+            let phones = &mut self.phones[..frames * 2];
             let retired = &mut self.queues.retired;
-            self.graph.render_with(scratch, |s| retire(retired, s));
-            for (dst, src) in chunk
+            let cue = (self.routing != CueRouting::Off).then_some(&mut *phones);
+            self.graph
+                .render_outputs(master, cue, |s| retire(retired, s));
+            for ((dst, m), p) in chunk
                 .chunks_exact_mut(channels)
-                .zip(scratch.as_chunks::<2>().0)
+                .zip(master.as_chunks::<2>().0)
+                .zip(phones.as_chunks::<2>().0)
             {
-                if channels == 1 {
-                    dst[0] = T::from_sample((src[0] + src[1]) * 0.5);
-                } else {
-                    dst[0] = T::from_sample(src[0]);
-                    dst[1] = T::from_sample(src[1]);
-                    for d in &mut dst[2..] {
-                        *d = T::EQUILIBRIUM;
-                    }
-                }
+                routing::route(self.routing, *m, *p, dst);
             }
             frames_total += frames as u32;
         }
@@ -474,6 +489,10 @@ mod tests {
     }
 
     fn rig() -> Rig {
+        rig_with(CueRouting::Off)
+    }
+
+    fn rig_with(routing: CueRouting) -> Rig {
         let (controls, ctl_rx) = RingBuffer::new(QUEUE);
         let (state_tx, states) = RingBuffer::new(QUEUE);
         let (retire_tx, retired) = RingBuffer::new(QUEUE);
@@ -483,7 +502,7 @@ mod tests {
             retired: retire_tx,
         };
         Rig {
-            p: Processor::new(Graph::new(RATE).unwrap(), queues, RATE),
+            p: Processor::new(Graph::new(RATE).unwrap(), queues, RATE, routing),
             controls,
             states,
             retired,
@@ -505,7 +524,11 @@ mod tests {
 
     #[test]
     fn callback_never_allocates_or_frees() {
-        let mut r = rig();
+        // Master on 1/2, cue on 3/4, so the cue bus runs too.
+        let mut r = rig_with(CueRouting::Outputs {
+            master: [0, 1],
+            cue: [2, 3],
+        });
         let first = source(RATE as usize, 1000);
         let second = source(RATE as usize, 2000);
         let mut out_f32 = vec![0.0f32; 512 * 2];
@@ -537,7 +560,7 @@ mod tests {
         });
         assert_eq!(n, 0, "seek, volume, formats");
 
-        // Every mixer control (50 a step, inside the queue), with both
+        // Every mixer control (58 a step, inside the queue), with both
         // filter units in use and assigns moving.
         use crate::control::{ChannelParam as C, FilterParam as F, FilterUnit, MasterParam};
         for step in 0..6u8 {
@@ -552,6 +575,7 @@ mod tests {
                     C::Fader,
                     C::FilterAssign,
                     C::XfadeAssign,
+                    C::Cue,
                 ] {
                     let value = if ch % 2 == 0 { v } else { 1.0 - v };
                     r.controls
@@ -582,20 +606,38 @@ mod tests {
             r.controls
                 .push(Control::Crossfader { pos: v, curve: v })
                 .unwrap();
-            r.controls
-                .push(Control::Master {
-                    param: MasterParam::Level,
-                    value: 1.0 - v,
-                })
-                .unwrap();
+            for param in [
+                MasterParam::Level,
+                MasterParam::CueLevel,
+                MasterParam::CueMix,
+                MasterParam::SplitCue,
+                MasterParam::CuePostEq,
+            ] {
+                r.controls
+                    .push(Control::Master {
+                        param,
+                        value: 1.0 - v,
+                    })
+                    .unwrap();
+            }
             let n = realtime(|| {
                 for _ in 0..4 {
                     r.p.process(&mut out_f32, 2);
                 }
+                r.p.process(&mut out_i16, 4);
                 let _ = r.p.graph.state();
             });
             assert_eq!(n, 0, "mixer controls, step {step}");
         }
+        // Split mono on the same callback path.
+        r.p.routing = CueRouting::SplitMono;
+        r.p.graph.set_cue_routing(CueRouting::SplitMono);
+        let n = realtime(|| {
+            for _ in 0..4 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "split mono");
 
         // Varispeed, nudge, cue, hot cue and quantised jumps.
         let gridded = Arc::new(
@@ -737,6 +779,68 @@ mod tests {
         let mut mono = vec![0.0f32; 16];
         r.p.process(&mut mono, 1);
         assert_eq!(mono[15], 0.5);
+    }
+
+    /// Deck 0 (0.25 left, 0.125 right) plays to the master uncued; deck 1
+    /// (0.0625) is cued with its fader shut, so it is only in the phones.
+    fn cue_rig(routing: CueRouting) -> Rig {
+        let mut r = rig_with(routing);
+        let dc = |l: i16, r: i16| Arc::new(DeckSource::new([l, r].repeat(RATE as usize), RATE));
+        for c in [
+            Control::Load {
+                deck: 0,
+                src: dc(8_192, 4_096),
+            },
+            Control::Load {
+                deck: 1,
+                src: dc(2_048, 2_048),
+            },
+            Control::Channel {
+                ch: 1,
+                param: crate::ChannelParam::Fader,
+                value: 0.0,
+            },
+            Control::Channel {
+                ch: 1,
+                param: crate::ChannelParam::Cue,
+                value: 1.0,
+            },
+            Control::Play { deck: 0 },
+            Control::Play { deck: 1 },
+        ] {
+            r.controls.push(c).unwrap();
+        }
+        r
+    }
+
+    /// The last frame after 50 ms, with every output channel.
+    fn settled_frame(routing: CueRouting, channels: usize) -> Vec<f32> {
+        let mut r = cue_rig(routing);
+        let mut out = vec![9.0f32; 2_400 * channels];
+        r.p.process(&mut out, channels);
+        out[out.len() - channels..].to_vec()
+    }
+
+    #[test]
+    fn each_cue_routing_puts_master_and_cue_on_the_expected_outputs() {
+        let (m, c) = ([0.25, 0.125], 0.0625);
+        assert_eq!(settled_frame(CueRouting::Off, 4), [m[0], m[1], 0.0, 0.0]);
+        let four = CueRouting::Outputs {
+            master: [0, 1],
+            cue: [2, 3],
+        };
+        assert_eq!(settled_frame(four, 4), [m[0], m[1], c, c]);
+        let six = CueRouting::Outputs {
+            master: [4, 5],
+            cue: [0, 1],
+        };
+        assert_eq!(settled_frame(six, 6), [c, c, 0.0, 0.0, m[0], m[1]]);
+        // Split mono: cue (mono) left, master (mono) right.
+        let split = settled_frame(CueRouting::SplitMono, 2);
+        assert_eq!(split, [c, (m[0] + m[1]) / 2.0]);
+        assert_eq!(settled_frame(CueRouting::SplitMono, 3)[2], 0.0);
+        // A mono device gets the master.
+        assert_eq!(settled_frame(four, 1), [(m[0] + m[1]) / 2.0]);
     }
 
     #[test]

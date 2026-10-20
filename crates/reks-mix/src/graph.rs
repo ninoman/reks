@@ -288,10 +288,27 @@ impl Graph {
         }
     }
 
-    /// Renders interleaved stereo into `out`, calling `retire` with every
-    /// source a deck lets go of.
-    pub fn render_with(&mut self, out: &mut [f32], mut retire: impl FnMut(Arc<DeckSource>)) {
-        for block in out.chunks_mut(BLOCK * 2) {
+    /// Renders the master as interleaved stereo into `out`, calling
+    /// `retire` with every source a deck lets go of.
+    pub fn render_with(&mut self, out: &mut [f32], retire: impl FnMut(Arc<DeckSource>)) {
+        self.render_outputs(out, None, retire);
+    }
+
+    /// Tells the cue bus how the device carries it: split mono forces split
+    /// cue (cue left, master right) on the headphone output.
+    pub fn set_cue_routing(&mut self, routing: crate::CueRouting) {
+        self.mixer.set_cue_routing(routing);
+    }
+
+    /// Renders the master into `master` and, when given, the headphone cue
+    /// into `phones` (the same length), both interleaved stereo.
+    pub fn render_outputs(
+        &mut self,
+        master: &mut [f32],
+        mut phones: Option<&mut [f32]>,
+        mut retire: impl FnMut(Arc<DeckSource>),
+    ) {
+        for (i, block) in master.chunks_mut(BLOCK * 2).enumerate() {
             self.plan();
             let n = block.len();
             for (deck, input) in self.decks.iter_mut().zip(&mut self.inputs) {
@@ -304,7 +321,9 @@ impl Graph {
                     *frame = [l, r];
                 }
             }
-            self.mixer.process(&mut self.inputs, block);
+            let at = i * BLOCK * 2;
+            let phones = phones.as_deref_mut().map(|p| &mut p[at..at + n]);
+            self.mixer.process(&mut self.inputs, block, phones);
         }
     }
 }

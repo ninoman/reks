@@ -35,6 +35,13 @@ pub enum Error {
     #[error("could not set up the varispeed resampler")]
     Resampler,
 
+    /// The cue routing names outputs the device does not have.
+    #[error("cue routing {routing:?} needs more than the device's {channels} outputs")]
+    CueRouting {
+        routing: crate::CueRouting,
+        channels: u16,
+    },
+
     /// The engine thread exited before reporting.
     #[error("audio engine thread failed to start")]
     ThreadFailed,

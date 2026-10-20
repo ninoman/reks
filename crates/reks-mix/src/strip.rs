@@ -1,12 +1,14 @@
 //! One mixer channel strip (Xone:92 music channel, R§9.1): trim → EQ →
-//! filter assign → channel fader → crossfader assign. Works on one block of
-//! interleaved stereo at a time and never allocates.
+//! filter assign → channel fader → crossfader assign, with the CUE taps
+//! after the trim (pre-EQ) and before the fader (post-EQ). Works on one
+//! block of interleaved stereo at a time and never allocates.
 
 use crate::control::{ChannelParam, FilterUnit};
 use crate::dsp::eq::{ChannelEq, EqBand};
 use crate::dsp::filter::Filter;
 use crate::dsp::level::ChannelLevel;
 use crate::dsp::meter::PeakMeter;
+use crate::dsp::smooth::Smoother;
 use crate::dsp::xfader::{Assign, AssignSwitch, XfadeGains};
 
 /// Frames per mixer block.
@@ -24,6 +26,12 @@ pub(crate) fn assign_of(value: f32) -> Assign {
     }
 }
 
+/// The cue bus at its two taps, one block each; strips add to them.
+pub(crate) struct CueTaps<'a> {
+    pub(crate) pre: &'a mut [f32],
+    pub(crate) post: &'a mut [f32],
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Strip {
     level: ChannelLevel,
@@ -39,8 +47,11 @@ pub(crate) struct Strip {
     warm: [bool; 2],
     xfade_assign: AssignSwitch,
     meter: PeakMeter,
+    /// CUE button, smoothed so pressing it does not click in the phones.
+    cue: Smoother,
     wet: [Block; 2],
     fader: [f32; BLOCK],
+    cue_gain: [f32; BLOCK],
 }
 
 impl Strip {
@@ -54,8 +65,10 @@ impl Strip {
             warm: [false; 2],
             xfade_assign: AssignSwitch::new(Assign::Off, sample_rate),
             meter: PeakMeter::new(sample_rate),
+            cue: Smoother::new(0.0, sample_rate),
             wet: [[0.0; BLOCK * 2]; 2],
             fader: [0.0; BLOCK],
+            cue_gain: [0.0; BLOCK],
         }
     }
 
@@ -69,7 +82,7 @@ impl Strip {
             ChannelParam::Fader => self.level.set_fader(value),
             ChannelParam::FilterAssign => self.filter_assign.set(assign_of(value)),
             ChannelParam::XfadeAssign => self.xfade_assign.set(assign_of(value)),
-            ChannelParam::Cue => {}
+            ChannelParam::Cue => self.cue.set(if value >= 0.5 { 1.0 } else { 0.0 }),
         }
     }
 
@@ -88,17 +101,36 @@ impl Strip {
     /// Runs `buf` through the strip in place up to the fader (the channel
     /// meter reads it there), then adds it, faded and assigned, to `mix`.
     /// `xgains` holds the crossfader gains for each frame of the block.
-    pub(crate) fn process(&mut self, buf: &mut [f32], xgains: &[XfadeGains], mix: &mut [f32]) {
+    /// A cued channel also adds itself to both cue taps.
+    pub(crate) fn process(
+        &mut self,
+        buf: &mut [f32],
+        xgains: &[XfadeGains],
+        mix: &mut [f32],
+        taps: &mut CueTaps<'_>,
+    ) {
         let frames = buf.as_chunks_mut::<2>().0;
-        for (frame, fader) in frames.iter_mut().zip(&mut self.fader) {
+        for ((frame, fader), cue) in frames
+            .iter_mut()
+            .zip(&mut self.fader)
+            .zip(&mut self.cue_gain)
+        {
             let g = self.level.tick();
             frame[0] *= g.trim;
             frame[1] *= g.trim;
             *fader = g.fader;
+            *cue = self.cue.tick();
+        }
+        let cued = self.cue.value() > 0.0 || self.cue.target() > 0.0 || self.cue_gain[0] > 0.0;
+        if cued {
+            add_weighted(taps.pre, buf, &self.cue_gain);
         }
         self.eq.process(buf);
         self.filter(buf);
         self.meter.process(buf);
+        if cued {
+            add_weighted(taps.post, buf, &self.cue_gain);
+        }
         let frames = buf.as_chunks::<2>().0;
         let out = mix.as_chunks_mut::<2>().0;
         for (((frame, out), fader), &gains) in frames.iter().zip(out).zip(&self.fader).zip(xgains) {
@@ -107,7 +139,18 @@ impl Strip {
             out[1] += g * frame[1];
         }
     }
+}
 
+/// `dst += gain · src`, with one gain per frame.
+fn add_weighted(dst: &mut [f32], src: &[f32], gain: &[f32]) {
+    let dst = dst.as_chunks_mut::<2>().0;
+    for ((d, s), g) in dst.iter_mut().zip(src.as_chunks::<2>().0).zip(gain) {
+        d[0] += g * s[0];
+        d[1] += g * s[1];
+    }
+}
+
+impl Strip {
     /// FILTER assign: the dry signal and the two unit copies, mixed by the
     /// switch's smoothed weights. Only copies that are heard run.
     fn filter(&mut self, buf: &mut [f32]) {

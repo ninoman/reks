@@ -131,6 +131,44 @@ sum → master level × preview volume → [master meter] → safety limiter →
   so it shows what the limiter catches. `EngineState` carries both; each
   snapshot clears the clip latches.
 
+## Headphone cue (task 7)
+
+`cue.rs`, `routing.rs`.
+
+```
+strip: trim ─┬─ EQ → filter ─┬─ fader …
+             └ pre tap       └ post tap      (× CUE button, smoothed)
+pre/post (POST EQ switch) → CUE MIX with the master (after its level, before its limiter)
+  or split (cue mono L, master mono R) → CUE LEVEL → safety limiter → phones
+```
+
+| Control | Law |
+|---|---|
+| CUE (per channel) | on/off, smoothed; pre-fader |
+| POST EQ | crossfades the pre-EQ tap (after the trim) to the post-EQ tap (after EQ and filter, before the fader; that the filter is included is **UNVERIFIED**) |
+| CUE MIX | equal power: cue `cos(π/2·v)`, master `sin(π/2·v)`; −3 dB each at noon (**UNVERIFIED**) |
+| SPLIT CUE | crossfades to cue (mono) left, master (mono) right; CUE MIX is not used while split |
+| CUE LEVEL | fader law `v³`, at most 0 dB |
+
+The phones limiter has the master's look-ahead, so phones and master stay
+aligned. Start state: pre-EQ, cue only, level up, not split; nothing cued
+means silent phones.
+
+Routing (`EngineConfig::cue`): `Outputs { master, cue }` puts each on the
+named 0-based outputs, `SplitMono` sends the phones signal with split forced
+on to outputs 1/2 (one stereo output, e.g. a laptop), `Off` master only.
+Other outputs are silent; a mono device gets the master summed. The engine
+refuses a routing whose outputs the device lacks. When the routing is
+`Off`, the cue bus does not run.
+
+Tests: `routing.rs` per mode; the engine callback renders each mode
+(master, cue and silent channels, 4 and 6 outputs, split, mono);
+`tests/cue.rs` through the graph: pre-fader, pre/post EQ around a LO kill,
+CUE MIX ends, split sides, CUE LEVEL, phones limiter with a maximum-
+resonance sweep, and no clicks from any cue switch. The engine's allocation
+guard runs every cue control with master on 1/2 and cue on 3/4, then split
+mono.
+
 ## Channels, crossfader, master (task 6)
 
 | Block | Law |

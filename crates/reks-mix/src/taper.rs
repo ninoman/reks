@@ -71,6 +71,19 @@ pub fn master_gain(value: f32) -> f32 {
     fader_gain(value)
 }
 
+/// CUE LEVEL amplitude: the fader law, at most 0 dB; the cue limiter
+/// protects the headphones.
+pub fn cue_level_gain(value: f32) -> f32 {
+    fader_gain(value)
+}
+
+/// CUE MIX as `(cue, master)` gains: equal power, cue only at 0, master only
+/// at 1, both at −3 dB at noon. The guide gives no law: UNVERIFIED.
+pub fn cue_mix_gains(value: f32) -> (f32, f32) {
+    let a = std::f32::consts::FRAC_PI_2 * unit(value, 0.0);
+    (a.cos(), a.sin())
+}
+
 /// Filter FREQ range in Hz (R§9.1).
 pub const FILTER_MIN_HZ: f32 = 30.0;
 pub const FILTER_MAX_HZ: f32 = 20_000.0;
@@ -166,6 +179,18 @@ mod tests {
             assert!(master_gain(i as f32 / 100.0) <= 1.0);
         }
         assert_eq!(master_gain(1.0), 1.0);
+    }
+
+    #[test]
+    fn cue_level_and_mix_tapers() {
+        assert_eq!(cue_level_gain(1.0), 1.0);
+        assert_eq!(cue_level_gain(0.0), 0.0);
+        assert_eq!(cue_mix_gains(0.0), (1.0, 0.0));
+        let (c, m) = cue_mix_gains(1.0);
+        assert!(c.abs() < 1e-6 && m == 1.0);
+        let (c, m) = cue_mix_gains(0.5);
+        assert!(close(c, m, 1e-6) && close(20.0 * c.log10(), -3.01, 0.01));
+        assert_eq!(cue_mix_gains(f32::NAN), (1.0, 0.0));
     }
 
     #[test]

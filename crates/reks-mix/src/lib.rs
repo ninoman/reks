@@ -6,6 +6,7 @@
 
 pub mod beatmap;
 pub mod control;
+mod cue;
 mod deck;
 pub mod dsp;
 pub mod engine;
@@ -13,6 +14,7 @@ pub mod error;
 pub mod graph;
 mod mixer;
 pub mod player;
+mod routing;
 mod source;
 mod strip;
 mod sync;
