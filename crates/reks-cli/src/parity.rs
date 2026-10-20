@@ -1051,6 +1051,7 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
         "location\tgenre\tcodec\trb_bpm\tours_bpm\tgrid\tbpm\tdownbeat_ms\tbeat_ms\tbeat_no\tkey\traw_offset_ms\n",
     );
     let (mut analysed, mut failed, mut no_grid_rb, mut stale) = (0, 0, 0, 0);
+    let mut no_kick_curve = 0usize;
     let mut seen = HashSet::new();
     for t in &collection.tracks {
         let Some(loc) = t.location.as_deref() else {
@@ -1071,10 +1072,17 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
             failed += 1;
             continue;
         }
-        let pulse = (flags.grid.kick_phase_ms > 0)
-            .then(|| fs::read(kick_file(&out, loc)).ok())
-            .flatten()
-            .map(KickPulse::from_quarter_db);
+        // The curve `run` stored with this record's candidates (older
+        // results have neither): the grid then matches the pipeline's.
+        let pulse = if flags.grid.kick_phase_ms > 0 && !rec.model_beats.is_empty() {
+            let p = fs::read(kick_file(&out, loc)).ok();
+            if p.is_none() {
+                no_kick_curve += 1;
+            }
+            p.map(KickPulse::from_quarter_db)
+        } else {
+            None
+        };
         let Some(row) = compare(t, rec, pulse.as_ref(), &flags.grid, flags.placement) else {
             no_grid_rb += 1;
             continue;
@@ -1096,6 +1104,13 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
             f(row.raw_offset_ms),
         );
         rows.push(row);
+    }
+    if no_kick_curve > 0 {
+        eprintln!(
+            "{no_kick_curve} tracks without a kick curve in {}: their grids skip the kick \
+             phase (re-run them)",
+            out.join(KICK_DIR).display()
+        );
     }
     if let Some(path) = &flags.tracks {
         fs::write(path, &tsv).with_context(|| format!("writing {}", path.display()))?;
