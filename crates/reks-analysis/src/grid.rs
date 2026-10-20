@@ -16,10 +16,11 @@
 //!
 //! [`build_grid`] adds what Mixxx does elsewhere or not at all: the
 //! whole-track tempo search ([`fit_tempo`], Mixxx's tempo is one estimate),
-//! the downbeat anchor, the fallback to a dynamic grid only on a tempo change
-//! ([`tempo_change`]), the half/double tempo rule, and the choice of phase by
-//! the kick ([`kick_phase`], task 12a).
+//! the bar ([`crate::bar`]), the fallback to a dynamic grid only on a tempo
+//! change ([`tempo_change`]), the half/double tempo rule, and the choice of
+//! phase by the kick ([`kick_phase`], task 12a).
 
+use crate::bar::{downbeat_line, BarRule, Lines};
 use crate::onset::KickPulse;
 
 /// Phase error inaudible in a mix; also the snapping tolerance (Mixxx: 25 ms).
@@ -97,6 +98,8 @@ pub struct GridOptions {
     pub kick_phase_ms: u32,
     /// [`kick_phase`] moves the grid only for this much more kick attack.
     pub kick_phase_gain: f64,
+    /// How a constant grid's beat 1 is chosen ([`downbeat_line`]).
+    pub bar: BarRule,
     /// Preferred tempo range; tempos outside it are doubled or halved.
     pub min_bpm: f64,
     pub max_bpm: f64,
@@ -110,6 +113,7 @@ impl Default for GridOptions {
             change_ratio: 0.005,
             kick_phase_ms: 60,
             kick_phase_gain: 1.5,
+            bar: BarRule::VoteKick,
             min_bpm: 70.0,
             max_bpm: 180.0,
         }
@@ -635,8 +639,9 @@ fn median_gap_bpm(beats: &[i64], sample_rate: u32) -> Option<f64> {
 /// and the median beat gap. The grid is constant when it puts at least
 /// `opts.min_coverage` of all beats within [`MAX_PHASE_ERROR_S`] of a grid
 /// line and the beats show no tempo change ([`tempo_change`]); beat 1 is
-/// then the flagged downbeat nearest the start of [`make_const_bpm`]'s
-/// merged constant region (its first beat when no downbeat is flagged).
+/// then chosen by `opts.bar` ([`downbeat_line`]), falling back to the
+/// flagged downbeat nearest the start of [`make_const_bpm`]'s merged
+/// constant region (its first beat when no downbeat is flagged).
 /// Otherwise dynamic, numbered from the downbeat flags. Either way a tempo
 /// outside `opts.min_bpm..=opts.max_bpm` is doubled or halved into it.
 pub fn build_grid(input: &BeatList, opts: &GridOptions) -> Result<Grid, GridError> {
@@ -644,7 +649,8 @@ pub fn build_grid(input: &BeatList, opts: &GridOptions) -> Result<Grid, GridErro
 }
 
 /// [`build_grid`], then a constant grid's phase is lined up with the kicks
-/// ([`kick_phase`]) when `pulse` is given and `opts.kick_phase_ms > 0`.
+/// ([`kick_phase`]) when `pulse` is given and `opts.kick_phase_ms > 0`; the
+/// pulse also places the bar ([`BarRule::VoteKick`]).
 pub fn build_grid_with_pulse(
     input: &BeatList,
     pulse: Option<&KickPulse>,
@@ -706,9 +712,21 @@ pub fn build_grid_with_pulse(
         let change = tempo_change(&regions, beat_len, input.sample_rate, opts);
         tracing::debug!(bpm = tempo.bpm, coverage, change, "constant grid candidate");
         if coverage >= opts.min_coverage && !change {
-            let anchor_beat = nearest_downbeat(&input.beats, tempo.region_start, tempo.region_end)
+            let fallback = nearest_downbeat(&input.beats, tempo.region_start, tempo.region_end)
                 .unwrap_or(tempo.region_start);
-            let anchor = origin + ((anchor_beat as f64 - origin) / beat_len).round() * beat_len;
+            let downbeats: Vec<i64> = input
+                .beats
+                .iter()
+                .filter(|b| b.downbeat)
+                .map(|b| b.position)
+                .collect();
+            let anchor = downbeat_line(
+                Lines { origin, beat_len },
+                &downbeats,
+                pulse,
+                fallback as f64,
+                opts.bar,
+            );
 
             let bpm = tempo.bpm * octave_factor(tempo.bpm, opts);
             let beat_len = 60.0 * sr / bpm;

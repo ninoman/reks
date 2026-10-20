@@ -147,8 +147,10 @@ fn queue_analyses_everything_and_caches_it() {
         assert_eq!(d.track.bpm_source.as_deref(), Some("analysis"));
         let grid = d.beatgrid.unwrap();
         assert_eq!((grid.markers, grid.bpm_min_x100), (1, 12_800));
-        // The first click is at sample 0.
-        assert!(grid.first_beat_ms.abs() < 10.0, "{}", grid.first_beat_ms);
+        // On a click (every 468.75 ms from sample 0); the clicks have no
+        // accents, so which one starts the grid depends on the bar.
+        let off = grid.first_beat_ms.rem_euclid(468.75);
+        assert!(off.min(468.75 - off) < 10.0, "{}", grid.first_beat_ms);
         assert!(!d.track.row.needs_analysis);
         let entry = cache::entry_dir(&fx.lib.cache_dir(), id);
         assert!(entry.join("analysis.json").is_file());

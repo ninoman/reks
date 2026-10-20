@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–11 and 13 done; 12 measured, tuning (12a) in progress: BPM met). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–11 and 13 done; 12 measured, tuning (12a) in progress: BPM and downbeat met, key next). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -351,8 +351,11 @@ rekordbox keys (D10, "Queue").
       `reks parity run` stores every beat placement and the kick curve.
       Version 3 on the 1,762 one-anchor tracks: BPM 85.1% → 96.7% (met),
       downbeat 70.9% → 73.3% (below).
-    - [ ] Phrase/kick-based bar placement (downbeat: 20% of BPM-matched
-      grids have the bar rotated).
+    - [x] Bar placement ([bar.rs](../../crates/reks-analysis/src/bar.rs)):
+      each bar position scores its share of the tracker's downbeats plus
+      0.3 for the first kick; phrase cues (kick re-entry, accent) measured,
+      no gain. Version 4: downbeat 73.3% → 83.7% (met), BPM and grid phase
+      unchanged.
     - [ ] libKeyFinder C++ check, then the mode decision (key).
 13. [x] **Grid editor UI**: waveform view from our columns (zoomable, 150/s),
     beat markers, set-downbeat-here, nudge ±1 ms/±10 ms, tap tempo,
