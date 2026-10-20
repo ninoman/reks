@@ -140,6 +140,7 @@ pub async fn scan_start(
     if let Ok(mut running) = state.scan_cancel.lock() {
         *running = None;
     }
+    state.analysis.queue_pending();
     result
 }
 
@@ -206,6 +207,7 @@ pub async fn rbxml_import_start(
     if let Ok(mut running) = state.import_cancel.lock() {
         *running = None;
     }
+    state.analysis.queue_pending();
     result
 }
 
@@ -247,13 +249,19 @@ pub async fn library_root_remove(state: State<'_, AppState>, id: i64) -> CmdResu
     blocking(&state, move |lib| lib.remove_library_root(id)).await
 }
 
-/// Moves the cache to `path`. Refused while a scan or import writes to it.
+/// Moves the cache to `path`. Refused while a scan, import, conversion or
+/// analysis writes to it.
 #[tauri::command]
 pub async fn cache_dir_move(state: State<'_, AppState>, path: PathBuf) -> CmdResult<Settings> {
     let busy = |m: &std::sync::Mutex<Option<CancelToken>>| m.lock().map_or(true, |g| g.is_some());
-    if busy(&state.scan_cancel) || busy(&state.import_cancel) || busy(&state.convert_cancel) {
+    if busy(&state.scan_cancel)
+        || busy(&state.import_cancel)
+        || busy(&state.convert_cancel)
+        || state.analysis.busy()
+    {
         return Err(CmdError(
-            "wait for the scan, import or conversion to finish before moving the cache".into(),
+            "wait for the scan, import, conversion or analysis to finish (or cancel it) before moving the cache"
+                .into(),
         ));
     }
     blocking(&state, move |lib| {
@@ -733,6 +741,7 @@ pub async fn convert_apply(
     if let Ok(mut running) = state.convert_cancel.lock() {
         *running = None;
     }
+    state.analysis.queue_pending();
     result
 }
 

@@ -11,6 +11,8 @@ use reks_export_rb::devices::DeviceId;
 use reks_export_rb::plan::{ExportPlan, Selection};
 use reks_mix::Player;
 
+use crate::analysis::Analysis;
+
 /// File name of the library database (docs/decisions.md D19).
 const DB_FILE: &str = "reks.sqlite";
 
@@ -37,6 +39,8 @@ pub struct AppState {
     /// App data dir (D19): stick backups go under it.
     pub data_dir: PathBuf,
     pub player: Mutex<PlayerSlot>,
+    /// Background analysis queue (Phase 3 task 11).
+    pub analysis: Analysis,
 }
 
 /// The last export plan returned to the UI, under the id the UI sends back.
@@ -88,8 +92,9 @@ pub struct PlayerSlot {
 
 impl AppState {
     /// Opens (creating and migrating) the library in `data_dir`, with
-    /// derived files under `cache_dir`.
-    pub fn open(data_dir: &Path, cache_dir: &Path) -> reks_core::Result<Self> {
+    /// derived files under `cache_dir`, and starts the analysis queue with
+    /// the beat model in `model_dir`.
+    pub fn open(data_dir: &Path, cache_dir: &Path, model_dir: &Path) -> reks_core::Result<Self> {
         let library = Library::open(&data_dir.join(DB_FILE), cache_dir)?;
         tracing::info!(db = %data_dir.join(DB_FILE).display(), "library opened");
         // A chosen cache dir that cannot be created (an unplugged drive):
@@ -99,8 +104,10 @@ impl AppState {
             Err(err) => tracing::warn!(%err, "stored cache dir unusable, using the default"),
         }
         let settings = library.settings()?;
+        let library = Arc::new(library);
+        let analysis = Analysis::start(&library, model_dir);
         Ok(Self {
-            library: Arc::new(library),
+            library,
             scan_cancel: Mutex::new(None),
             import_cancel: Mutex::new(None),
             export_cancel: Mutex::new(None),
@@ -115,6 +122,7 @@ impl AppState {
                 track: None,
                 generation: 0,
             }),
+            analysis,
         })
     }
 }

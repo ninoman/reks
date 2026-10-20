@@ -3623,10 +3623,15 @@ name = "reks-analysis"
 version = "0.1.0"
 dependencies = [
  "beat-this",
+ "hound",
+ "rayon",
  "reks-audio",
  "reks-core",
  "reks-fixtures-gen",
+ "rusqlite",
  "rustfft",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
@@ -3649,6 +3654,7 @@ dependencies = [
 name = "reks-app"
 version = "0.1.0"
 dependencies = [
+ "reks-analysis",
  "reks-core",
  "reks-export-rb",
  "reks-mix",

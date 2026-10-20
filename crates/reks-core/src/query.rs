@@ -69,8 +69,6 @@ pub enum Filter {
     Playlist { id: PlaylistId },
     /// File missing at the last check (or not).
     Missing { missing: bool },
-    /// No beatgrid (or has one).
-    NeedsAnalysis { needs: bool },
     /// Play count 0 and no last played (D23: baseline plus included sessions).
     NeverPlayed,
     /// Play count within `min..=max`.
@@ -433,12 +431,6 @@ fn where_clause(q: &TrackQuery, view: Option<PlaylistId>) -> Where {
             Filter::Missing { missing } => {
                 conds.push("t.missing = ?".into());
                 params.push(Value::Integer(i64::from(*missing)));
-            }
-            Filter::NeedsAnalysis { needs } => {
-                let not = if *needs { "NOT " } else { "" };
-                conds.push(format!(
-                    "{not}EXISTS (SELECT 1 FROM beatgrid b WHERE b.track_id = t.id)"
-                ));
             }
             Filter::NeverPlayed => {
                 conds.push("(t.play_count = 0 AND t.last_played IS NULL)".into());

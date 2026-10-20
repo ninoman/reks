@@ -3,6 +3,7 @@
 //! See `docs/phases/` for what lands here and when.
 
 pub mod adopt;
+pub mod analysis;
 pub mod artwork;
 pub mod convert;
 pub mod db;
@@ -22,6 +23,7 @@ pub mod settings;
 pub mod timefmt;
 pub mod track;
 
+pub use analysis::{AnalysisJob, AnalysisRecord, GridAnchor, StoreOutcome};
 pub use artwork::ArtworkId;
 pub use db::Library;
 pub use device::{Device, DeviceId, NewDevice, SyncedPlaylist, SyncedRecord};

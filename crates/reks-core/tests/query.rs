@@ -289,14 +289,12 @@ fn filters() {
     assert_eq!(m(Filter::Playlist { id: 999 }), Vec::<i64>::new());
     assert_eq!(m(Filter::Missing { missing: true }), [2]);
     assert_eq!(m(Filter::Missing { missing: false }), [1, 3, 4, 5]);
-    assert_eq!(m(Filter::NeedsAnalysis { needs: true }), [2, 5]);
-    assert_eq!(m(Filter::NeedsAnalysis { needs: false }), [1, 3, 4]);
 
     let combined = vec![
         Filter::Genre {
             genre: "house".into(),
         },
-        Filter::NeedsAnalysis { needs: false },
+        Filter::Missing { missing: false },
         Filter::RatingMin { rating: 1 },
     ];
     assert_eq!(env.matching(None, combined), [1]);
@@ -459,7 +457,6 @@ fn serde_shapes() {
             {"type": "ratingMin", "rating": 3},
             {"type": "playlist", "id": 11},
             {"type": "missing", "missing": false},
-            {"type": "needsAnalysis", "needs": true},
             {"type": "neverPlayed"},
             {"type": "playCountRange", "min": 1, "max": 5},
             {"type": "playedSince", "date": "2026-01-01"}
@@ -469,8 +466,8 @@ fn serde_shapes() {
         "limit": 200
     }"#;
     let q: TrackQuery = serde_json::from_str(json).unwrap();
-    assert_eq!(q.filters.len(), 11);
-    assert_eq!(q.filters[8], Filter::NeverPlayed);
+    assert_eq!(q.filters.len(), 10);
+    assert_eq!(q.filters[7], Filter::NeverPlayed);
     assert_eq!(
         q.filters[1],
         Filter::KeyIn {
@@ -629,13 +626,13 @@ fn ten_thousand_tracks() {
         },
     );
     time(
-        "genre + needs analysis, by key",
+        "genre + present, by key",
         TrackQuery {
             filters: vec![
                 Filter::Genre {
                     genre: "techno".into(),
                 },
-                Filter::NeedsAnalysis { needs: true },
+                Filter::Missing { missing: false },
             ],
             sort: Sort {
                 column: SortColumn::Key,

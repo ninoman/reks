@@ -1,12 +1,13 @@
 /**
  * List toolbar above the track table: search, the Filters button (shows the
  * filter bar; badge = filters set) with the on/off switch while any is set,
- * track count, column chooser, and the Track info button. Library-wide
- * actions (scan, import) live in the app header.
+ * track count, background analysis progress, column chooser, and the Track
+ * info button. Library-wide actions (scan, import) live in the app header.
  */
 
 import { activeFilterCount, useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
+import { AnalysisIndicator } from "./AnalysisIndicator";
 import { ColumnChooser } from "./ColumnChooser";
 import { FiltersSwitch } from "./FilterBar";
 import { FilterIcon, InfoIcon } from "./icons";
@@ -44,6 +45,7 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
         {selected > 0 ? ` · ${selected.toLocaleString()} selected` : ""}
       </span>
       <span className="flex-1" />
+      <AnalysisIndicator />
       <ColumnChooser table={table} />
       <Separator orientation="vertical" className="my-2.5" />
       <Tooltip content={infoOpen ? "Hide track info" : "Show track info"}>

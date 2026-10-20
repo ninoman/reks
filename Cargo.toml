@@ -54,6 +54,8 @@ lofty = "0.25"
 proptest = "1"
 percent-encoding = "2.3"
 quick-xml = "0.42"
+# Analysis queue worker pool (phase 3 task 11). MIT/Apache-2.0; already in the tree via rten.
+rayon = "1.12"
 # PDB/ANLZ reader for history and read-back validation (MPL-2.0, D7). Pinned: young crate.
 rekordcrate = { version = "=0.3.0", default-features = false }
 # FFT for key detection (D12). MIT/Apache-2.0.

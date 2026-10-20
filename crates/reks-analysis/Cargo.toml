@@ -11,12 +11,17 @@ workspace = true
 
 [dependencies]
 beat-this = { workspace = true }
+rayon = { workspace = true }
 reks-audio = { workspace = true }
 reks-core = { workspace = true }
 rustfft = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+hound = { workspace = true }
+rusqlite = { workspace = true }
 reks-fixtures-gen = { workspace = true }
 tempfile = { workspace = true }

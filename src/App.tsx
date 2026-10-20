@@ -30,6 +30,7 @@ import { TransportBar } from "./components/TransportBar";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
 import { Sheet } from "./components/ui/Sheet";
 import { keepsSpace } from "./lib/keys";
+import { useAnalysis } from "./store/analysis";
 import { useHistory } from "./store/history";
 import { useLibrary } from "./store/library";
 import { usePanels } from "./store/panels";
@@ -65,6 +66,7 @@ export default function App() {
     void s.loadFacets();
     void usePlaylists.getState().load();
     void useHistory.getState().load();
+    void useAnalysis.getState().subscribe();
     return () => {
       live = false;
       stopSync?.();

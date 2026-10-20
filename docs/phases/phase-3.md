@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–3, 5–7 and 9 done). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–3, 5–7, 9 and 11 done). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -130,10 +130,16 @@ Encoding rules (from research §3; big-endian)
   and (145, 249, 500); we write the first until the meaning is known.
 - `.2EX` written only for `AnlzTarget::Cdj3000`-capable exports (harmless elsewhere).
 
-Analysis cache: `app_cache_dir/analysis/<track_id>/{analysis.json, columns.bin}`;
-invalidated when `content_hash` or analyser version changes. The library DB
-stores the grid, key, confidence and `analysis_version` on the track row
-(migration 0002).
+Analysis cache: `<cache_dir>/analysis/<track_id>/{analysis.json, bands.bin}`
+([cache.rs](../../crates/reks-analysis/src/cache.rs): raw beats, grid, key,
+confidences as JSON; waveform columns as raw bytes; the grid editor's
+`columns.bin` sits next to it, to be unified). Valid only for the same
+`ANALYSER_VERSION` and file content hash. The library DB keeps the grid in
+`beatgrid` (`source = 'analysis'`), key/BPM on the track row, and
+`analysis_version`, `analysis_hash`, `analysed_at`, `analysis_error`,
+`beat_confidence`, `key_confidence` on the track row (migration 0007).
+Analysis never overwrites manual or rekordbox grids, or manual, tag or
+rekordbox keys (D10, "Queue").
 
 ## Tasks
 
@@ -245,9 +251,29 @@ stores the grid, key, confidence and `analysis_version` on the track row
 10. **Phase 2 integration**: `AnlzSource::Reks` in the planner; prefer reks
     analysis when present, rekordbox cache otherwise (user setting);
     `reks-cli analyse <path>` and `reks-cli anlz build`.
-11. **Background queue**: analyse on import/scan with N parallel workers
+11. [x] **Background queue**: analyse on import/scan with N parallel workers
     (rayon, N = cores − 1), progress channel, pause/cancel, re-analyse
     selection; store results; "needs analysis" filter goes away.
+    Done: pipeline glue in
+    [pipeline.rs](../../crates/reks-analysis/src/pipeline.rs) (`analyse_file`
+    → `TrackAnalysis`; dynamic grids become one `beatgrid` anchor per tempo
+    change, 2 ms tolerance), cache in
+    [cache.rs](../../crates/reks-analysis/src/cache.rs), queue in
+    [queue.rs](../../crates/reks-analysis/src/queue.rs) (`AnalysisQueue`:
+    dedicated rayon pool, one `BeatTracker` per worker, events through a
+    sink), library side in
+    [analysis.rs](../../crates/reks-core/src/analysis.rs) (pending list,
+    precedence rules). The app queues pending tracks at start and after
+    every scan, XML import and conversion; the list toolbar shows
+    "Analysing n/N" with pause/resume/cancel, and the track menu has
+    Re-analyse (ignores the cache). Cancel drops queued tracks and discards
+    running ones (decode/inference can't be interrupted). Unreadable files
+    are retried next time; undecodable ones are recorded in
+    `analysis_error` and wait for a file or analyser change. The filter is
+    gone; the "no grid" badge stays for tracks analysis could not grid.
+    Tests: [tests/queue.rs](../../crates/reks-analysis/tests/queue.rs)
+    (completion, pause, cancel, cache reuse and invalidation, manual data,
+    failures). Throughput on real tracks is unmeasured (task 12).
 12. **Parity measurement**: run the whole imported library through reks;
     report BPM agreement (|Δ| ≤ 0.05), downbeat agreement (first beat within
     30 ms modulo bar), key agreement (exact, relative, neighbour), with

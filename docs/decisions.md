@@ -216,6 +216,15 @@ Date of decisions: 2026-10-18.
   live in [`reks-analysis/src/grid.rs`](../crates/reks-analysis/src/grid.rs)
   with the attribution in its module doc; tests reimplement the behaviour of
   Mixxx's `beatutils_test.cpp`, no code copied. Deviations are listed there.
+- Queue (2026-10-20, phase 3 task 11): every track is analysed in the
+  background (cores − 1 workers), but analysis only fills in. `beatgrid`
+  rows are replaced only when all are `source = 'analysis'` (manual and
+  rekordbox grids stay); `bpm_x100` follows a written grid unless
+  `bpm_source = 'manual'`; `key` is written only when empty or from
+  analysis (manual, tag and rekordbox keys stay). reks's own result is
+  always in the analysis cache, so task 10 and the parity report (task 12)
+  can use it without touching the library. Rationale: unmeasured analysis
+  must not silently replace grids a DJ has played with.
 
 ## D11. rekordbox XML reader/writer: own implementation on `quick-xml`
 
