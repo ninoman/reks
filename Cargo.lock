@@ -3815,8 +3815,12 @@ name = "reks-mix"
 version = "0.1.0"
 dependencies = [
  "cpal",
+ "reks-audio",
+ "reks-fixtures-gen",
  "rtrb",
+ "rubato 5.0.1",
  "serde",
+ "tempfile",
  "thiserror 2.0.21",
  "tracing",
 ]

@@ -542,6 +542,15 @@ Date of decisions: 2026-10-18.
   UNVERIFIED; headphone cue needs a 4-output interface, otherwise split cue;
   Windows ASIO needs Steinberg's SDK, so WASAPI only. "Xone" and "Allen &
   Heath" are trademarks: docs name them as the reference, UI strings do not.
+- Varispeed (2026-10-21, phase 5 task 2): `rubato` 5 `Async` sinc resampler
+  per deck (128 taps, Blackman-Harris, linear sub-sample interpolation,
+  32-frame output chunks), built once per deck slot when the graph is built,
+  so loading allocates nothing on the audio thread. At exactly unit step
+  (speed 1.0, source at the engine rate) the deck copies frames instead, so
+  untouched playback stays bit-exact. The filter is designed for ratio 1, so a
+  source far from the engine rate played fast aliases a little: the app keeps
+  resampling to the engine rate at load (D5) and `DeckSource` takes any rate
+  only as a fallback.
 
 ## D22. Playlist dividers: playlist entries in the library, silent WAV tracks on the stick
 

@@ -13,8 +13,9 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, SizedSample};
 use rtrb::{Consumer, Producer, PushError, RingBuffer};
 
+use crate::control::{Control, CueRouting};
 use crate::error::{Error, Result};
-use crate::graph::{Control, DeckSource, EngineState, Graph};
+use crate::graph::{DeckSource, EngineState, Graph};
 
 /// Frames rendered per graph call; bounds the scratch buffer.
 const BLOCK: usize = 256;
@@ -29,11 +30,77 @@ const STATE_HZ: u32 = 60;
 /// (e.g. WASAPI shared mode), the device's default rate is used.
 pub const PREFERRED_RATE: u32 = 44_100;
 
+/// Sample rates offered for selection, when the device supports them.
+pub const COMMON_RATES: [u32; 4] = [44_100, 48_000, 88_200, 96_000];
+
 /// How to open the output.
 #[derive(Debug, Clone, Default)]
 pub struct EngineConfig {
     /// Output device name from [`output_devices`]; `None` for the system default.
     pub device: Option<String>,
+    /// Output rate. `None`: [`PREFERRED_RATE`] when the device offers it, else
+    /// the device's default. A rate the device does not offer is an error.
+    pub sample_rate: Option<u32>,
+    /// Frames per device buffer. `None`: the device's default. A size outside
+    /// the device's range is an error.
+    pub buffer_frames: Option<u32>,
+    /// Headphone cue routing (phase 5 task 7; only `Off` so far).
+    pub cue: CueRouting,
+}
+
+/// What a device can be opened with, for the settings UI.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceOptions {
+    /// The [`COMMON_RATES`] the device offers.
+    pub rates: Vec<u32>,
+    pub default_rate: u32,
+    /// Smallest and largest buffer in frames, when the platform reports them.
+    pub buffer_frames: Option<(u32, u32)>,
+}
+
+/// Rates and buffer sizes `device` (`None`: system default) offers.
+pub fn device_options(device: Option<&str>) -> Result<DeviceOptions> {
+    let dev = find_device(device)?;
+    let default = dev.default_output_config()?;
+    let ranges: Vec<_> = dev
+        .supported_output_configs()?
+        .filter(|c| {
+            c.channels() == default.channels() && c.sample_format() == default.sample_format()
+        })
+        .collect();
+    let rates = COMMON_RATES
+        .into_iter()
+        .filter(|&r| {
+            ranges
+                .iter()
+                .any(|c| (c.min_sample_rate()..=c.max_sample_rate()).contains(&r))
+        })
+        .collect();
+    let buffer_frames = match default.buffer_size() {
+        cpal::SupportedBufferSize::Range { min, max } => Some((*min, *max)),
+        cpal::SupportedBufferSize::Unknown => None,
+    };
+    Ok(DeviceOptions {
+        rates,
+        default_rate: default.sample_rate(),
+        buffer_frames,
+    })
+}
+
+/// The buffer setting for a request, checked against what the device reports.
+fn buffer_size(
+    requested: Option<u32>,
+    supported: &cpal::SupportedBufferSize,
+    device: &str,
+) -> Result<cpal::BufferSize> {
+    match (requested, supported) {
+        (None, _) => Ok(cpal::BufferSize::Default),
+        (Some(n), cpal::SupportedBufferSize::Range { min, max }) if !(*min..=*max).contains(&n) => {
+            Err(Error::BufferUnsupported(n, device.to_owned()))
+        }
+        // An unknown range: cpal rejects a bad size when the stream opens.
+        (Some(n), _) => Ok(cpal::BufferSize::Fixed(n)),
+    }
 }
 
 /// Output devices by name; the system default first when there is one.
@@ -56,6 +123,17 @@ fn device_name(d: &cpal::Device) -> Option<String> {
     d.description().ok().map(|desc| desc.name().to_owned())
 }
 
+fn find_device(device: Option<&str>) -> Result<cpal::Device> {
+    let host = cpal::default_host();
+    match device {
+        None => host.default_output_device(),
+        Some(name) => host
+            .output_devices()?
+            .find(|d| device_name(d).as_deref() == Some(name)),
+    }
+    .ok_or_else(|| Error::NoDevice(device.map(str::to_owned)))
+}
+
 /// A running output stream. Dropping it stops the stream.
 #[derive(Debug)]
 pub struct Engine {
@@ -75,6 +153,8 @@ pub struct StreamInfo {
     pub device: String,
     pub sample_rate: u32,
     pub channels: u16,
+    /// The fixed buffer size asked for; `None` when the device chose.
+    pub buffer_frames: Option<u32>,
 }
 
 /// Written by cpal's error callback.
@@ -85,9 +165,13 @@ struct Health {
 }
 
 impl Engine {
-    /// Opens the device and starts the stream (silent until a deck plays),
-    /// at [`PREFERRED_RATE`] when the device takes it, else at its default.
+    /// Opens the device and starts the stream (silent until a deck plays)
+    /// at the configured rate, or with none configured at
+    /// [`PREFERRED_RATE`] when the device takes it, else at its default.
     pub fn start(cfg: EngineConfig) -> Result<Self> {
+        if let Some(rate) = cfg.sample_rate {
+            return Self::start_at(&cfg, Some(rate));
+        }
         match Self::start_at(&cfg, Some(PREFERRED_RATE)) {
             Ok(e) => Ok(e),
             Err(e @ Error::RateUnsupported(..)) => {
@@ -104,6 +188,7 @@ impl Engine {
     /// `rate`: `None` for the device's default.
     fn start_at(cfg: &EngineConfig, rate: Option<u32>) -> Result<Self> {
         let device = cfg.device.clone();
+        let buffer_frames = cfg.buffer_frames;
         let (ctl_tx, ctl_rx) = RingBuffer::new(QUEUE);
         let (state_tx, state_rx) = RingBuffer::new(QUEUE);
         let (retire_tx, retire_rx) = RingBuffer::new(QUEUE);
@@ -120,7 +205,7 @@ impl Engine {
                     states: state_tx,
                     retired: retire_tx,
                 };
-                match open_stream(device, rate, queues, thread_health) {
+                match open_stream(device, rate, buffer_frames, queues, thread_health) {
                     Ok((stream, info)) => {
                         let _ = ready_tx.send(Ok(info));
                         // Parks until the engine is dropped.
@@ -205,17 +290,11 @@ pub(crate) struct Queues {
 fn open_stream(
     device: Option<String>,
     rate: Option<u32>,
+    buffer_frames: Option<u32>,
     queues: Queues,
     health: Arc<Health>,
 ) -> Result<(cpal::Stream, StreamInfo)> {
-    let host = cpal::default_host();
-    let dev = match &device {
-        None => host.default_output_device(),
-        Some(name) => host
-            .output_devices()?
-            .find(|d| device_name(d).as_deref() == Some(name.as_str())),
-    }
-    .ok_or_else(|| Error::NoDevice(device.clone()))?;
+    let dev = find_device(device.as_deref())?;
     let name = device_name(&dev).unwrap_or_else(|| "unknown".into());
     let default = dev.default_output_config()?;
     let supported = match rate {
@@ -228,13 +307,15 @@ fn open_stream(
             .ok_or_else(|| Error::RateUnsupported(r, name.clone()))?,
         _ => default,
     };
-    let config = supported.config();
+    let mut config = supported.config();
+    config.buffer_size = buffer_size(buffer_frames, supported.buffer_size(), &name)?;
     let info = StreamInfo {
         device: name.clone(),
         sample_rate: config.sample_rate,
         channels: config.channels,
+        buffer_frames,
     };
-    let processor = Processor::new(Graph::new(config.sample_rate), queues, config.sample_rate);
+    let processor = Processor::new(Graph::new(config.sample_rate)?, queues, config.sample_rate);
 
     let stream = match supported.sample_format() {
         SampleFormat::F32 => build::<f32>(&dev, &config, processor, health)?,
@@ -402,7 +483,7 @@ mod tests {
             retired: retire_tx,
         };
         Rig {
-            p: Processor::new(Graph::new(RATE), queues, RATE),
+            p: Processor::new(Graph::new(RATE).unwrap(), queues, RATE),
             controls,
             states,
             retired,
@@ -410,7 +491,7 @@ mod tests {
     }
 
     fn source(frames: usize, value: i16) -> Arc<DeckSource> {
-        Arc::new(DeckSource::new(vec![value; frames * 2]))
+        Arc::new(DeckSource::new(vec![value; frames * 2], RATE))
     }
 
     /// Runs `f` with allocation counting on; returns the count.
@@ -456,6 +537,105 @@ mod tests {
         });
         assert_eq!(n, 0, "seek, volume, formats");
 
+        // Varispeed, nudge, cue, hot cue and quantised jumps.
+        let gridded = Arc::new(
+            DeckSource::new(vec![500; RATE as usize * 4], 44_100)
+                .with_grid(&[crate::GridAnchor {
+                    frame: 0,
+                    bpm: 128.0,
+                    beat_in_bar: 1,
+                    beats_per_bar: 4,
+                }])
+                .with_hot_cues(vec![(1, 30_000)]),
+        );
+        for c in [
+            Control::Load {
+                deck: 1,
+                src: Arc::clone(&gridded),
+            },
+            Control::Tempo {
+                deck: 1,
+                ratio: 1.06,
+            },
+            Control::Quantise { deck: 1, on: true },
+            Control::Play { deck: 1 },
+        ] {
+            r.controls.push(c).unwrap();
+        }
+        let n = realtime(|| {
+            for _ in 0..4 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "varispeed");
+        for c in [
+            Control::Nudge {
+                deck: 1,
+                ratio: 0.97,
+            },
+            Control::HotCue { deck: 1, slot: 1 },
+            Control::Seek {
+                deck: 1,
+                frame: 50_000,
+            },
+            Control::Tempo {
+                deck: 1,
+                ratio: 1.0,
+            },
+            Control::Cue { deck: 1 },
+        ] {
+            r.controls.push(c).unwrap();
+        }
+        let n = realtime(|| {
+            for _ in 0..8 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "nudge, hot cue, quantised seek, cue");
+        assert!(!r.p.graph.state().decks[1].playing, "cue paused the deck");
+
+        // Sync: deck 2 leads (it starts first), deck 1 follows with bar
+        // sync (a phase jump, then bending), then a chosen leader.
+        let other = Arc::new(
+            DeckSource::new(vec![700; RATE as usize * 4], RATE).with_grid(&[crate::GridAnchor {
+                frame: 3_000,
+                bpm: 124.0,
+                beat_in_bar: 1,
+                beats_per_bar: 4,
+            }]),
+        );
+        for c in [
+            Control::Load {
+                deck: 2,
+                src: Arc::clone(&other),
+            },
+            Control::Play { deck: 2 },
+            Control::Play { deck: 1 },
+            Control::Sync {
+                deck: 1,
+                on: true,
+                bar: true,
+            },
+        ] {
+            r.controls.push(c).unwrap();
+        }
+        let n = realtime(|| {
+            for _ in 0..8 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "sync");
+        let st = r.p.graph.state();
+        assert_eq!(st.leader, Some(2));
+        assert!(st.decks[1].locked);
+        r.controls.push(Control::Leader { deck: Some(1) }).unwrap();
+        let n = realtime(|| {
+            for _ in 0..4 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "chosen leader");
+
         // Loading over a playing deck retires `first` through the queue.
         r.controls
             .push(Control::Load {
@@ -497,6 +677,27 @@ mod tests {
         let mut mono = vec![0.0f32; 16];
         r.p.process(&mut mono, 1);
         assert_eq!(mono[15], 0.5);
+    }
+
+    #[test]
+    fn buffer_size_is_checked_against_the_device_range() {
+        let range = cpal::SupportedBufferSize::Range { min: 64, max: 4096 };
+        assert_eq!(
+            buffer_size(None, &range, "d").unwrap(),
+            cpal::BufferSize::Default
+        );
+        assert_eq!(
+            buffer_size(Some(256), &range, "d").unwrap(),
+            cpal::BufferSize::Fixed(256)
+        );
+        assert!(matches!(
+            buffer_size(Some(32), &range, "d"),
+            Err(Error::BufferUnsupported(32, _))
+        ));
+        assert_eq!(
+            buffer_size(Some(32), &cpal::SupportedBufferSize::Unknown, "d").unwrap(),
+            cpal::BufferSize::Fixed(32)
+        );
     }
 
     #[test]

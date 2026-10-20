@@ -64,12 +64,10 @@ pub struct EngineConfig { pub device: Option<String>, pub sample_rate: u32, pub 
                           pub cue: CueRouting }
 pub enum CueRouting { Outputs { master: [u16; 2], cue: [u16; 2] }, SplitMono, Off }
 
-pub struct DeckSource {            // built off the audio thread by the app layer
-    pub pcm: Arc<[i16]>,           // interleaved stereo at the file's rate, ~10 MB per minute
-    pub sample_rate: u32,
-    pub grid: Vec<GridAnchor>,     // from `beatgrid` rows, positions in source samples
-    pub hot_cues: Vec<(u8, i64)>,  // slot, source sample
-}
+pub struct DeckSource { .. }      // built off the audio thread by the app layer:
+// DeckSource::new(pcm: Vec<i16>, sample_rate)   interleaved stereo, ~10 MB per minute
+//     .with_grid(&[GridAnchor { frame, bpm, beat_in_bar, beats_per_bar }])  // `beatgrid` rows, source frames
+//     .with_hot_cues(vec![(slot, frame)])
 
 impl Engine {
     pub fn start(cfg: EngineConfig) -> Result<Engine>;
@@ -102,17 +100,44 @@ pub enum Control {
 
 ## Tasks
 
-1. **Engine skeleton**: done in Phase 1 task 11 (D5): `reks-mix` crate, cpal
+1. [x] **Engine skeleton**: done in Phase 1 task 11 (D5): `reks-mix` crate, cpal
    stream with device selection, `rtrb` control/state queues, `render()`,
    allocation guard, one deck. Left for this phase: rate and buffer-size
    selection, more than one deck, and the `Control`/`EngineState` variants below.
-2. **Deck**: `DeckSource` loading, play/pause/cue/seek/hot cue, varispeed with
+   Done 2026-10-21: `EngineConfig { sample_rate, buffer_frames, cue }` (an
+   explicit rate or buffer the device lacks is an error; `device_options()`
+   lists what it offers), 4 deck slots summed until the channel strips land,
+   `Control` in `control.rs` with every variant above plus `Quantise`;
+   `Leader` takes `Option<u8>` (`None` = automatic) and `Seek` keeps its
+   `frame` field. Mixer variants are accepted and ignored until tasks 4–7.
+2. [x] **Deck**: `DeckSource` loading, play/pause/cue/seek/hot cue, varispeed with
    `rubato`, nudge, quantise. Tests: at ratio 1.0 the render equals the decode
    sample for sample; at 1.05 click spacing is 1/1.05 of the original within 1 sample.
-3. **Sync**: leader, tempo match, beat and bar phase, continuous phase
+   Done 2026-10-21 (`deck.rs`, `varispeed.rs`, `beatmap.rs`, `source.rs`;
+   render tests in `crates/reks-mix/tests/deck.rs`). At exactly unit step the
+   deck copies frames (bit-exact); otherwise it reads through rubato's async
+   sinc resampler (128 taps, 32-frame chunks) with its own source-time clock,
+   so the reported position matches what is heard to under half a frame. CUE:
+   playing → back to the cue point and pause; paused → set the cue point.
+   HOT CUE jumps and plays. Quantise: cue points and paused seeks snap to the
+   nearest beat; jumps while playing keep the beat phase. Dynamic grids run
+   linearly between anchors, so beats land on the anchors.
+3. [x] **Sync**: leader, tempo match, beat and bar phase, continuous phase
    correction on dynamic grids. Tests: 128 and 125 BPM click fixtures synced
    keep onsets within 1 ms for 64 bars; a tempo-change fixture stays within 2 ms
-   across the change.
+   across the change. Done 2026-10-21 (`sync.rs`; render tests in
+   `crates/reks-mix/tests/sync.rs`, click fixtures generated in
+   `tests/common`). Leader: the chosen deck, else the loaded deck with a grid
+   that has been playing longest (kept while all are stopped); it plays at its
+   own tempo × nudge. Every 32-frame block a follower's speed is set from both
+   local grid tempos (so dynamic grids are followed beat by beat), and its
+   beat (bar sync: place in the bar) is compared with the leader's: an error
+   over 1/32 beat jumps into phase (seek crossfade, never before the track's
+   start), a smaller one bends the speed by at most 1% (time constant 0.5 s).
+   While nudged, a follower matches tempo only and re-locks on release. A
+   stopped leader passes on its tempo, not its phase. Measured worst gaps:
+   128/125 over 64 bars 0.0005 ms; tempo change in the follower 0.043 ms, in
+   the leader 0.025 ms.
 4. **EQ**: 4-band asymmetric EQ with tapers. Sine-sweep tests: knobs at noon
    flat within ±0.1 dB; full boost +6 dB ±0.5 dB; mids full cut −30 dB ±1 dB;
    HI/LO full cut fall at 12 dB/oct ±1 dB past the turning point; silence in,
@@ -143,7 +168,9 @@ pub enum Control {
   underruns in a 60-minute soak on the maintainer's laptop; the callback uses
   under 25% of the buffer period (measured and logged).
 - Two synced constant-grid tracks stay within 2 ms of each other for
-  10 minutes (render test).
+  10 minutes (render test). Met 2026-10-21: 128/126 BPM, both decks
+  resampling, worst gap 0.022 ms
+  (`two_synced_constant_grids_stay_within_2_ms_for_10_minutes`).
 - EQ, filter and crossfader responses meet the tolerances in tasks 4–6.
 - All of the above except the soak test runs in `cargo test --workspace` with
   no audio device (CI has none).

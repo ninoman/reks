@@ -6,9 +6,10 @@
 
 use std::sync::Arc;
 
+use crate::control::Control;
 use crate::engine::{Engine, EngineConfig};
 use crate::error::{Error, Result};
-use crate::graph::{Control, DeckSource, DeckState};
+use crate::graph::{DeckSource, DeckState};
 
 const DECK: u8 = 0;
 
@@ -111,7 +112,7 @@ impl Player {
                 device: rate,
             });
         }
-        let src = Arc::new(DeckSource::new(samples));
+        let src = Arc::new(DeckSource::new(samples, sample_rate));
         self.engine()?.send(Control::Load {
             deck: DECK,
             src: Arc::clone(&src),
@@ -231,7 +232,12 @@ impl Player {
         match &mut self.engine {
             Some(e) => Ok(e),
             slot @ None => {
-                let start = |device| Engine::start(EngineConfig { device });
+                let start = |device| {
+                    Engine::start(EngineConfig {
+                        device,
+                        ..EngineConfig::default()
+                    })
+                };
                 let mut e = match start(self.device.clone()) {
                     // A chosen device that is not connected: play on the
                     // system default, keep the choice for when it is back.

@@ -11,6 +11,10 @@ pub enum Error {
     #[error("{1} does not support {0} Hz")]
     RateUnsupported(u32, String),
 
+    /// The device does not take that buffer size, in frames.
+    #[error("{1} does not support {0}-frame buffers")]
+    BufferUnsupported(u32, String),
+
     /// The device's sample format is one we do not write.
     #[error("unsupported sample format {0} on {1}")]
     SampleFormat(String, String),
@@ -26,6 +30,10 @@ pub enum Error {
     /// The track was decoded for another output rate.
     #[error("track is at {track} Hz but the output runs at {device} Hz")]
     RateMismatch { track: u32, device: u32 },
+
+    /// The varispeed resampler refused its fixed setup.
+    #[error("could not set up the varispeed resampler")]
+    Resampler,
 
     /// The engine thread exited before reporting.
     #[error("audio engine thread failed to start")]
