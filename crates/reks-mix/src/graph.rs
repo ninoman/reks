@@ -2,12 +2,20 @@
 //!
 //! Everything here runs on the audio thread: no allocation, locks or I/O.
 //! [`render`] runs the same graph without a device, for tests (D21).
+//! Until the mixer's channel strips are wired in, the decks are summed.
 
 use std::f32::consts::FRAC_PI_2;
 use std::sync::Arc;
 
-/// Decks in the graph. Phase 5 raises this to 4.
-pub const DECKS: usize = 1;
+use crate::control::Control;
+
+/// Deck slots in the graph. The UI shows 2 or 4; idle decks cost nothing.
+pub const DECKS: usize = 4;
+
+/// Slowest tempo fader setting (−50%, the widest CDJ range).
+pub const TEMPO_MIN: f64 = 0.5;
+/// Fastest tempo fader setting (+50%).
+pub const TEMPO_MAX: f64 = 1.5;
 
 /// Length of every gain ramp: play, pause, load, volume (phase-5.md: ≥ 5 ms).
 pub const RAMP_MS: u32 = 5;
@@ -46,38 +54,8 @@ impl std::fmt::Debug for DeckSource {
     }
 }
 
-/// A command for the graph. Positions are frames at the engine's rate.
-#[derive(Debug, Clone)]
-pub enum Control {
-    /// Replaces the deck's track and stops it at the start.
-    Load {
-        deck: u8,
-        src: Arc<DeckSource>,
-    },
-    Unload {
-        deck: u8,
-    },
-    Play {
-        deck: u8,
-    },
-    Pause {
-        deck: u8,
-    },
-    /// Clamped to the track. The new position plays from the next frame;
-    /// while playing, the old one fades out under it over [`SEEK_XFADE_MS`],
-    /// so the jump is instant without a gap or a click.
-    Seek {
-        deck: u8,
-        frame: i64,
-    },
-    /// Master volume, 0..=1 like a knob; see [`volume_gain`].
-    Volume {
-        value: f32,
-    },
-}
-
 /// One deck as the UI sees it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DeckState {
     pub loaded: bool,
     pub playing: bool,
@@ -89,13 +67,51 @@ pub struct DeckState {
     pub seeks: u32,
     /// Play and pause controls taken so far (wrapping), for the same reason.
     pub transports: u32,
+    /// Tempo fader, as a speed ratio.
+    pub tempo: f64,
+    /// Pitch bend held on top of the tempo; 1.0 when released.
+    pub nudge: f64,
+    /// Sync is on (it may not be locked: see the sync fields below).
+    pub sync: bool,
+    /// Sync matches the downbeat too.
+    pub sync_bar: bool,
+    pub quantise: bool,
+}
+
+impl Default for DeckState {
+    fn default() -> Self {
+        Self {
+            loaded: false,
+            playing: false,
+            position: 0,
+            frames: 0,
+            seeks: 0,
+            transports: 0,
+            tempo: 1.0,
+            nudge: 1.0,
+            sync: false,
+            sync_bar: false,
+            quantise: false,
+        }
+    }
 }
 
 /// Graph snapshot, sent to the control side about 60 times a second.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct EngineState {
     pub decks: [DeckState; DECKS],
+    /// The sync leader, if any deck qualifies.
+    pub leader: Option<u8>,
     pub volume: f32,
+}
+
+/// Clamps a ratio control to `min..=max`; non-finite values give 1.0.
+fn ratio(value: f64, min: f64, max: f64) -> f64 {
+    if value.is_finite() {
+        value.clamp(min, max)
+    } else {
+        1.0
+    }
 }
 
 /// Knob position to gain: squared, so the top of the travel is finer.
@@ -183,6 +199,11 @@ struct Deck {
     tail: Option<Tail>,
     /// [`SEEK_XFADE_MS`] in frames.
     xfade: u32,
+    tempo: f64,
+    nudge: f64,
+    sync: bool,
+    sync_bar: bool,
+    quantise: bool,
 }
 
 impl Deck {
@@ -197,6 +218,11 @@ impl Deck {
             transports: 0,
             tail: None,
             xfade: (sample_rate * SEEK_XFADE_MS / 1000).max(1),
+            tempo: 1.0,
+            nudge: 1.0,
+            sync: false,
+            sync_bar: false,
+            quantise: false,
         }
     }
 
@@ -257,7 +283,33 @@ impl Deck {
                 }
                 None
             }
-            Control::Volume { .. } => None,
+            Control::Tempo { ratio: r, .. } => {
+                self.tempo = ratio(r, TEMPO_MIN, TEMPO_MAX);
+                None
+            }
+            Control::Nudge { ratio: r, .. } => {
+                self.nudge = ratio(r, TEMPO_MIN, TEMPO_MAX);
+                None
+            }
+            Control::Sync { on, bar, .. } => {
+                self.sync = on;
+                self.sync_bar = bar;
+                None
+            }
+            Control::Quantise { on, .. } => {
+                self.quantise = on;
+                None
+            }
+            // Cue points, hot cues and the mixer come with the deck and
+            // mixer tasks.
+            Control::Cue { .. }
+            | Control::HotCue { .. }
+            | Control::Leader { .. }
+            | Control::Channel { .. }
+            | Control::Filter { .. }
+            | Control::Crossfader { .. }
+            | Control::Master { .. }
+            | Control::Volume { .. } => None,
         }
     }
 
@@ -356,6 +408,11 @@ impl Deck {
             frames: self.frames(),
             seeks: self.seeks,
             transports: self.transports,
+            tempo: self.tempo,
+            nudge: self.nudge,
+            sync: self.sync,
+            sync_bar: self.sync_bar,
+            quantise: self.quantise,
         }
     }
 }
@@ -364,6 +421,8 @@ impl Deck {
 #[derive(Debug)]
 pub struct Graph {
     decks: [Deck; DECKS],
+    /// Chosen leader; `None` for automatic.
+    leader: Option<usize>,
     master: Ramp,
     volume: f32,
 }
@@ -372,6 +431,7 @@ impl Graph {
     pub fn new(sample_rate: u32) -> Self {
         Self {
             decks: std::array::from_fn(|_| Deck::new(sample_rate)),
+            leader: None,
             master: Ramp::new(volume_gain(1.0), sample_rate),
             volume: 1.0,
         }
@@ -380,19 +440,20 @@ impl Graph {
     /// Applies one control. A replaced source comes back so the caller can
     /// drop it off the audio thread. Out-of-range decks are ignored.
     pub fn apply(&mut self, c: Control) -> Option<Arc<DeckSource>> {
-        let deck = match &c {
+        match &c {
             Control::Volume { value } => {
                 self.volume = value.clamp(0.0, 1.0);
                 self.master.target = volume_gain(*value);
                 return None;
             }
-            Control::Load { deck, .. }
-            | Control::Unload { deck }
-            | Control::Play { deck }
-            | Control::Pause { deck }
-            | Control::Seek { deck, .. } => usize::from(*deck),
-        };
-        match self.decks.get_mut(deck) {
+            Control::Leader { deck } => {
+                self.leader = deck.map(usize::from).filter(|&d| d < DECKS);
+                return None;
+            }
+            _ => {}
+        }
+        let deck = c.deck()?;
+        match self.decks.get_mut(usize::from(deck)) {
             Some(d) => d.apply(c),
             None => match c {
                 Control::Load { src, .. } => Some(src),
@@ -404,6 +465,7 @@ impl Graph {
     pub fn state(&self) -> EngineState {
         EngineState {
             decks: std::array::from_fn(|i| self.decks[i].state()),
+            leader: self.leader.map(|d| d as u8),
             volume: self.volume,
         }
     }
@@ -717,6 +779,59 @@ mod tests {
         assert_eq!(volume_gain(0.5), 0.25);
         assert_eq!(volume_gain(2.0), 1.0);
         assert_eq!(volume_gain(f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn decks_play_independently_and_are_summed() {
+        let mut g = Graph::new(RATE);
+        for (deck, value) in [(0, 1_000), (3, 200)] {
+            g.apply(Control::Load {
+                deck,
+                src: Arc::new(DeckSource::new(vec![value; 20_000])),
+            });
+            g.apply(Control::Play { deck });
+        }
+        let out = render_frames(&mut g, 1_000);
+        assert_eq!(sample(out[2 * 999]), 1_200);
+        g.apply(Control::Pause { deck: 0 });
+        let out = render_frames(&mut g, 1_000);
+        assert_eq!(sample(out[2 * 999]), 200);
+        let st = g.state();
+        assert!(!st.decks[0].playing && st.decks[3].playing);
+        assert!(!st.decks[1].loaded && !st.decks[2].loaded);
+        assert_eq!(st.decks[3].position, 2_000);
+    }
+
+    #[test]
+    fn deck_settings_are_kept_and_reported() {
+        let mut g = Graph::new(RATE);
+        g.apply(Control::Tempo {
+            deck: 1,
+            ratio: 1.08,
+        });
+        g.apply(Control::Tempo {
+            deck: 2,
+            ratio: 9.0,
+        });
+        g.apply(Control::Nudge {
+            deck: 1,
+            ratio: f64::NAN,
+        });
+        g.apply(Control::Sync {
+            deck: 1,
+            on: true,
+            bar: true,
+        });
+        g.apply(Control::Quantise { deck: 1, on: true });
+        g.apply(Control::Leader { deck: Some(2) });
+        let st = g.state();
+        let d = st.decks[1];
+        assert_eq!((d.tempo, d.nudge), (1.08, 1.0));
+        assert!(d.sync && d.sync_bar && d.quantise);
+        assert_eq!(st.decks[2].tempo, TEMPO_MAX);
+        assert_eq!(st.leader, Some(2));
+        g.apply(Control::Leader { deck: Some(7) });
+        assert_eq!(g.state().leader, None);
     }
 
     #[test]

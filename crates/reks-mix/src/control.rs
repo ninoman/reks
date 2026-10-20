@@ -1,0 +1,187 @@
+//! Commands from the control side to the graph (`docs/phases/phase-5.md`).
+//!
+//! Knob-like values are 0..=1; tempo and nudge are speed ratios (1.0 = as
+//! recorded). Positions are frames of the deck's source.
+
+use std::sync::Arc;
+
+use crate::graph::DeckSource;
+
+/// A command for the graph.
+#[derive(Debug, Clone)]
+pub enum Control {
+    /// Replaces the deck's track and stops it at the start. Tempo, sync and
+    /// quantise stay as they were.
+    Load {
+        deck: u8,
+        src: Arc<DeckSource>,
+    },
+    Unload {
+        deck: u8,
+    },
+    Play {
+        deck: u8,
+    },
+    Pause {
+        deck: u8,
+    },
+    /// CDJ cue: while playing, return to the cue point and pause; while
+    /// paused, set the cue point here.
+    Cue {
+        deck: u8,
+    },
+    /// Clamped to the track. The new position plays from the next frame;
+    /// while playing, the old one fades out under it over
+    /// [`crate::graph::SEEK_XFADE_MS`], so the jump is instant without a gap
+    /// or a click.
+    Seek {
+        deck: u8,
+        frame: i64,
+    },
+    /// Jumps to hot cue `slot` and plays. Ignored when the slot is empty.
+    HotCue {
+        deck: u8,
+        slot: u8,
+    },
+    /// Tempo fader as a speed ratio, clamped to [`crate::graph::TEMPO_MIN`]..=
+    /// [`crate::graph::TEMPO_MAX`]. Pitch follows tempo.
+    Tempo {
+        deck: u8,
+        ratio: f64,
+    },
+    /// Pitch bend on top of the tempo while held; 1.0 releases it.
+    Nudge {
+        deck: u8,
+        ratio: f64,
+    },
+    /// Beat sync to the leader; `bar` also matches the downbeat.
+    Sync {
+        deck: u8,
+        on: bool,
+        bar: bool,
+    },
+    /// Makes `deck` the sync leader; `None` returns to automatic (the deck
+    /// that has been playing longest).
+    Leader {
+        deck: Option<u8>,
+    },
+    /// Quantise: cue points snap to the beat, jumps keep the beat phase.
+    Quantise {
+        deck: u8,
+        on: bool,
+    },
+    /// Mixer channel strip. Declared for the mixer tasks; no effect yet.
+    Channel {
+        ch: u8,
+        param: ChannelParam,
+        value: f32,
+    },
+    /// Filter unit X or Y. Declared for the mixer tasks; no effect yet.
+    Filter {
+        unit: FilterUnit,
+        param: FilterParam,
+        value: f32,
+    },
+    /// Crossfader position and curve. Declared for the mixer tasks; no effect yet.
+    Crossfader {
+        pos: f32,
+        curve: f32,
+    },
+    /// Master section. Declared for the mixer tasks; no effect yet.
+    Master {
+        param: MasterParam,
+        value: f32,
+    },
+    /// Preview player volume, 0..=1 like a knob; see [`crate::volume_gain`].
+    Volume {
+        value: f32,
+    },
+}
+
+impl Control {
+    /// The deck this control addresses, for deck controls.
+    pub fn deck(&self) -> Option<u8> {
+        match self {
+            Self::Load { deck, .. }
+            | Self::Unload { deck }
+            | Self::Play { deck }
+            | Self::Pause { deck }
+            | Self::Cue { deck }
+            | Self::Seek { deck, .. }
+            | Self::HotCue { deck, .. }
+            | Self::Tempo { deck, .. }
+            | Self::Nudge { deck, .. }
+            | Self::Sync { deck, .. }
+            | Self::Quantise { deck, .. } => Some(*deck),
+            Self::Leader { .. }
+            | Self::Channel { .. }
+            | Self::Filter { .. }
+            | Self::Crossfader { .. }
+            | Self::Master { .. }
+            | Self::Volume { .. } => None,
+        }
+    }
+}
+
+/// A channel strip control (R§9.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChannelParam {
+    Trim,
+    EqHi,
+    EqMid1,
+    EqMid2,
+    EqLo,
+    Fader,
+    /// 0 = X, 0.5 = off, 1 = Y.
+    FilterAssign,
+    /// 0 = X, 0.5 = off (direct), 1 = Y.
+    XfadeAssign,
+    /// 0 = off, 1 = on.
+    Cue,
+}
+
+/// One of the two filter units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilterUnit {
+    X,
+    Y,
+}
+
+/// A filter unit control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilterParam {
+    Freq,
+    Resonance,
+    /// Switches: 0 = off, 1 = on.
+    HighPass,
+    BandPass,
+    LowPass,
+    On,
+    VcfToXfader,
+    /// Y follows X's FREQ (unit Y only).
+    Link,
+}
+
+/// A master section control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MasterParam {
+    Level,
+    CueLevel,
+    /// 0 = cue only, 1 = master only.
+    CueMix,
+    /// 0 = off, 1 = on.
+    SplitCue,
+    /// 0 = pre-EQ, 1 = post-EQ.
+    CuePostEq,
+}
+
+/// Where the headphone cue goes (task 7). Only `Off` is implemented.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CueRouting {
+    /// Master on outputs `master`, cue on outputs `cue` (0-based).
+    Outputs { master: [u16; 2], cue: [u16; 2] },
+    /// Cue in the left ear, master (mono) in the right.
+    SplitMono,
+    #[default]
+    Off,
+}

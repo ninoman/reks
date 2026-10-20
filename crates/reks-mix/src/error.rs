@@ -11,6 +11,10 @@ pub enum Error {
     #[error("{1} does not support {0} Hz")]
     RateUnsupported(u32, String),
 
+    /// The device does not take that buffer size, in frames.
+    #[error("{1} does not support {0}-frame buffers")]
+    BufferUnsupported(u32, String),
+
     /// The device's sample format is one we do not write.
     #[error("unsupported sample format {0} on {1}")]
     SampleFormat(String, String),

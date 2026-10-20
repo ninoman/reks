@@ -102,10 +102,16 @@ pub enum Control {
 
 ## Tasks
 
-1. **Engine skeleton**: done in Phase 1 task 11 (D5): `reks-mix` crate, cpal
+1. [x] **Engine skeleton**: done in Phase 1 task 11 (D5): `reks-mix` crate, cpal
    stream with device selection, `rtrb` control/state queues, `render()`,
    allocation guard, one deck. Left for this phase: rate and buffer-size
    selection, more than one deck, and the `Control`/`EngineState` variants below.
+   Done 2026-10-21: `EngineConfig { sample_rate, buffer_frames, cue }` (an
+   explicit rate or buffer the device lacks is an error; `device_options()`
+   lists what it offers), 4 deck slots summed until the channel strips land,
+   `Control` in `control.rs` with every variant above plus `Quantise`;
+   `Leader` takes `Option<u8>` (`None` = automatic) and `Seek` keeps its
+   `frame` field. Mixer variants are accepted and ignored until tasks 4–7.
 2. **Deck**: `DeckSource` loading, play/pause/cue/seek/hot cue, varispeed with
    `rubato`, nudge, quantise. Tests: at ratio 1.0 the render equals the decode
    sample for sample; at 1.05 click spacing is 1/1.05 of the original within 1 sample.
