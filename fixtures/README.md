@@ -1,7 +1,9 @@
 # Fixtures
 
-Test inputs for the reks crates. Everything here is generated or synthetic:
-never commit commercial audio or a real user's library (CLAUDE.md "Testing rules").
+Test inputs for the reks crates. Everything here is generated or synthetic,
+except `rekordbox/ref-rb6-demo/` (rekordbox's analysis of its own demo tracks,
+from rekordcrate's MPL-2.0 test data; no audio). Never commit commercial audio
+or a real user's library (CLAUDE.md "Testing rules").
 
 ## `audio/` — sine + click test signal
 
@@ -101,6 +103,13 @@ rekordbox 7.0.0) for parser and import tests:
   on track 1.
 - Playlists: `ROOT` → folder `reks fixtures` → `All fixtures` (tracks 1–3) and
   `Lossless` (track 2).
+
+## `rekordbox/ref-rb6-demo/` — rekordbox 6 ANLZ reference files
+
+rekordbox 6's `USBANLZ` for its two demo tracks, unchanged from rekordcrate
+0.3.0's test data (MPL-2.0). Golden reference for the ANLZ builder
+(`crates/reks-anlz/tests/golden.rs`); provenance and contents in its
+[README](rekordbox/ref-rb6-demo/README.md).
 
 ## `device/diskutil-info-fat32.plist`
 

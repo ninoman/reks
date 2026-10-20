@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–3 and 5–7 done). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–3, 5–7 and 9 done). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -81,20 +81,41 @@ pub mod grid {   // Mixxx BeatUtils port (GPL-2.0-or-later origin, attributed); 
     pub fn round_bpm_within_range(min: f64, center: f64, max: f64) -> f64;   // integer → 0.5 → 0.1 → 0.01
 }
 
-// reks-anlz
+// reks-anlz (built, task 9; see crates/reks-anlz/src/build.rs)
+pub struct AnlzInput<'a> { pub contents_path: &'a str /* /Contents/... */, pub duration_ms: u64,
+                           pub beats: &'a [PqtzBeat] /* grid::pqtz_beats(&Grid, rate, duration_ms) */,
+                           pub cues: &'a [reks_core::track::Cue], pub waveforms: &'a Waveforms,
+                           pub mp3_audio_frames: Option<u32> /* PVBR */ }
+pub enum AnlzTarget { Standard /* .DAT + .EXT */, Cdj3000 /* + .2EX */ }
 pub struct AnlzSet { pub dat: Vec<u8>, pub ext: Vec<u8>, pub ex2: Option<Vec<u8>> }
-pub fn build(track: &TrackDetail, analysis: &Analysis, contents_path: &str /* /Contents/... */, target: AnlzTarget) -> Result<AnlzSet>;
-pub fn parse(bytes: &[u8]) -> Result<rekordcrate::anlz::ANLZ>;
+pub fn build(input: &AnlzInput, target: AnlzTarget) -> Result<AnlzSet, BuildError>;   // validates its output
+pub fn validate_set(dat: &[u8], ext: &[u8], ex2: Option<&[u8]>, expect: Expect) -> Vec<Issue>;
+// read: sections/path/pqtz_beats/cue_list (own reader; rekordcrate stays a test-only parser, D9)
 ```
 
 Encoding rules (from research §3; big-endian)
-- PPTH first after PMAI; UTF-16BE path with NUL.
-- PQTZ: one 8-byte entry per beat for the whole track: `beat_number` 1–4,
-  `tempo` = round(bpm×100), `time` = round(ms). Constant grid → identical
-  tempo in every entry. Beats before the first anchor are extrapolated
-  backwards to 0 only if rekordbox does so (check reference; UNVERIFIED).
-- PCOB type 0 (memory) and type 1 (hot) in `.DAT`; PCO2 same in `.EXT`
-  with `color_id`, comment, loop numerator/denominator (quantised loops only).
+- PPTH first after PMAI in all three files; UTF-16BE path with NUL.
+- Section order (rekordbox's): `.DAT` PPTH, PVBR, PQTZ, PWAV, PWV2, PCOB hot,
+  PCOB memory; `.EXT` PPTH, PWV3, PCOB hot, PCOB memory, PCO2 hot, PCO2
+  memory, PQT2, PWV5, PWV4 (rekordbox adds PSSI); `.2EX` PPTH, PWV7, PWV6, PWVC.
+- PVBR: 400 zero entries; for MP3 the trailer is audio frames × 1152 (as in
+  both reference tracks), else zero. No real VBR seek table (UNVERIFIED).
+- PQTZ: one 8-byte entry per beat from the grid's first beat while the beat
+  is before the end of the track: `beat_number` 1–4, `tempo` = round(bpm×100),
+  `time` = round(ms). Constant grid → identical tempo in every entry; dynamic
+  grid → tempo from the gap to the next beat. Both reference grids start
+  within one beat of 0; whether rekordbox ever emits beats before the first
+  detected one is UNVERIFIED. rekordbox's own times are not exactly linear
+  in its tempo (±1 ms on ~3% of beats), so the golden test allows 1 ms.
+- PCOB/PCO2 (layouts from baken-export, pinned against rekordbox 7 exports):
+  `.DAT` PCOB hot holds hot cues A–C, `.EXT` PCOB hot D–H, `.DAT` PCOB memory
+  all memory cues/loops, `.EXT` PCOB memory stays empty; PCO2 hot and memory
+  list every cue with comment, hot cue colour (16-colour palette) and loop
+  numerator/denominator (whole-beat loops only). Hot cues in descending slot,
+  memory in descending time (rekordbox's order in every export seen). No
+  active-loop flag yet (the library has none).
+- PQT2: the empty 56-byte form rekordbox writes without an extended grid;
+  whether NXS2 features need a full PQT2 is UNVERIFIED.
 - PWAV 400 columns / PWV2 100 columns: resample the mono column stream;
   height 5-bit (PWV2 4-bit); whiteness 3-bit from high-band ratio (initial
   heuristic; calibrate).
@@ -199,10 +220,28 @@ stores the grid, key, confidence and `analysis_version` on the track row
    rekordbox's `.EXT/.2EX` from the local cache, fit per-band gain/gamma and
    the whiteness heuristic to minimise column error; store constants in
    `reks-analysis::calib`; produce side-by-side PNGs in `docs/analysis-parity/`.
-9. **ANLZ builder** (`reks-anlz`): assemble `.DAT/.EXT/.2EX` with
+9. [x] **ANLZ builder** (`reks-anlz`): assemble `.DAT/.EXT/.2EX` with
    rekordcrate types; validator; golden test: build ANLZ for a reference
    track and compare section lists, lengths and PQTZ/PCOB contents with
    rekordbox's files (waveform bytes compared by error metric, not equality).
+   Done: [build.rs](../../crates/reks-anlz/src/build.rs) (`build`,
+   `AnlzInput`, `AnlzTarget`; `.2EX` only for `Cdj3000`),
+   [grid.rs](../../crates/reks-anlz/src/grid.rs) (`pqtz_beats`),
+   [cue.rs](../../crates/reks-anlz/src/cue.rs),
+   [validate.rs](../../crates/reks-anlz/src/validate.rs) (run on every
+   build), [compare.rs](../../crates/reks-anlz/src/compare.rs) (layout +
+   waveform error metric for tasks 8/12), section writers in
+   [write.rs](../../crates/reks-anlz/src/write.rs). Not rekordcrate types:
+   they can't be constructed (D9 task 9 finding, proposed); rekordcrate
+   round-trips every file without point cues byte-identically, our reader
+   round-trips the rest (property test). Golden reference:
+   [`fixtures/rekordbox/ref-rb6-demo`](../../fixtures/rekordbox/ref-rb6-demo/README.md)
+   (rekordbox 6, no audio): same section lists and lengths, identical
+   PPTH/PVBR/PCOB/PCO2 bytes, PQTZ beat numbers and tempo exact and times
+   within 1 ms (360/368, 248/257 exact). The audio-driven comparison
+   (`tests/golden.rs`, ignored) needs a reference set with audio in
+   `REKS_ANLZ_REF`. Task 10 maps `TargetProfile` to `AnlzTarget` and gets
+   `mp3_audio_frames` from the probe.
 10. **Phase 2 integration**: `AnlzSource::Reks` in the planner; prefer reks
     analysis when present, rekordbox cache otherwise (user setting);
     `reks-cli analyse <path>` and `reks-cli anlz build`.

@@ -3637,8 +3637,11 @@ name = "reks-anlz"
 version = "0.1.0"
 dependencies = [
  "binrw",
+ "proptest",
  "rekordcrate",
  "reks-analysis",
+ "reks-audio",
+ "reks-core",
  "thiserror 2.0.21",
 ]
 
