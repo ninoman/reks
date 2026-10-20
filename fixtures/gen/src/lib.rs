@@ -14,6 +14,8 @@
 
 use std::io::{Seek, Write};
 
+pub mod bars;
+
 /// Samples per second.
 pub const SAMPLE_RATE: u32 = 44_100;
 /// Tempo of the click track.

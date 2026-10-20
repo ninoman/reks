@@ -15,3 +15,4 @@
 *.DAT binary
 *.EXT binary
 *.2EX binary
+*.onnx binary

@@ -69,6 +69,15 @@ and the 128 BPM click (8 beats) on both channels. Both are written by `hound`,
 which uses the EXTENSIBLE header above 16 bits: the form older CDJs reject
 (docs/research.md §4). That is why the converter has its own writers.
 
+## 4/4 drum pattern for downbeat tests (generated, not checked in)
+
+[`gen/src/bars.rs`](gen/src/bars.rs) `render_bars(rate, bars)`: 128 BPM, mono
+`f64`. Kick with a 2 ms beater click on every beat (louder on beat 1), noise
+snare on beats 2 and 4, hi-hat on the off-beats, and a bass note that changes
+on every downbeat (110, 87, 98, 82 Hz). Beat `n` starts at
+`beat_onset_at(rate, n)`; beats 0, 4, 8, … are downbeats. 16 bars are 30 s.
+Used by `crates/reks-analysis/tests/beats.rs`.
+
 ## `rekordbox/collection-small.xml`
 
 A hand-written rekordbox `collection.xml` (rekordbox XML format, `PRODUCT`

@@ -10,3 +10,11 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+beat-this = { workspace = true }
+reks-audio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+reks-fixtures-gen = { workspace = true }
+tempfile = { workspace = true }

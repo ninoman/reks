@@ -4,6 +4,9 @@
 //! ([`embedded_artwork`]), whole-track decode for playback ([`decode_stereo`])
 //! and the overview waveform ([`overview`]). See `docs/phases/phase-1.md`.
 //!
+//! Phase 3: whole-track `f32` decode for analysis ([`decode_f32`]), with the
+//! encoder delay and padding the container reports.
+//!
 //! Phase 2.6 converter building blocks: streaming decode at the source's
 //! precision ([`NativeStream`]), streaming resampling ([`resample`]),
 //! bit-depth conversion with TPDF dither ([`dither`]) and the WAV, AIFF and
@@ -14,6 +17,7 @@ pub mod convert;
 pub mod decode;
 pub mod dither;
 pub mod error;
+pub mod float;
 pub mod native;
 pub mod overview;
 pub mod probe;
@@ -25,6 +29,7 @@ pub use convert::{convert, pcm_hash, CancelToken, ConvertSpec, Depth, Output, Ra
 pub use decode::{decode_stereo, Decoded, StereoPcm, MAX_DECODE_MS};
 pub use dither::Requantiser;
 pub use error::{Error, Result};
+pub use float::{decode_f32, FloatPcm, Layout};
 pub use native::{NativeFormat, NativeStream};
 pub use probe::{probe, Kind, Probe};
 pub use resample::StreamResampler;
