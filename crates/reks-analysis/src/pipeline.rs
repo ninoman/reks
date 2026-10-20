@@ -24,7 +24,9 @@ use crate::waveform::{columns_from_interleaved, WaveformColumns, WaveformError};
 /// 2: MP3 positions on rekordbox's timeline (`reks_audio::timing`, task 4).
 /// 3: whole-track tempo fit, dynamic grids only on a tempo change, grid
 ///    phase from the kicks (task 12a).
-pub const ANALYSER_VERSION: u32 = 3;
+/// 4: bar placement by the tracker's downbeat vote and the first kick
+///    (`crate::bar`, task 12a).
+pub const ANALYSER_VERSION: u32 = 4;
 
 /// A dynamic grid's beats are merged into one tempo anchor while each stays
 /// within this distance of where the anchor's rounded tempo puts it.

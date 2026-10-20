@@ -33,7 +33,7 @@
 //! Keys are [`reks_core::Key`], which already provides canonical spelling,
 //! Camelot, Open Key and parsing. The rekordbox PDB stores key *names* in its
 //! keys table (no numeric enum is documented in research §2/§3), so export
-//! uses the canonical name; Engine DJ's 0–23 enum is Phase 5 (`engine_key`).
+//! uses the canonical name; Engine DJ's 0–23 enum is Phase 6 (`engine_key`).
 //! [`to_keyfinder_index`] / [`from_keyfinder_index`] map to libKeyFinder's
 //! `key_t` for comparisons against the C++ library.
 

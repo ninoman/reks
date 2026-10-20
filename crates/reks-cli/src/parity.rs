@@ -7,7 +7,7 @@
 //! reks parity report [--xml <collection.xml>] [--out <dir>] [--md <file>] [--tracks <file.tsv>]
 //!                    [--min-coverage <0..1>] [--placement <name>] [--analyser N]
 //!                    [--change-beats N] [--change-ratio x] [--kick-phase <ms>]
-//!                    [--kick-gain x]
+//!                    [--kick-gain x] [--bar region|vote|vote-kick]
 //! reks parity keyfinder --driver <bin> [run's flags]   (see `parity/keyfinder.rs`)
 //! ```
 //!
@@ -44,6 +44,7 @@ use std::sync::Mutex;
 use std::time::{Instant, UNIX_EPOCH};
 
 use anyhow::{bail, Context};
+use reks_analysis::bar::BarRule;
 use reks_analysis::grid::{self, build_grid_with_pulse, Grid, GridOptions, TrackedBeat};
 use reks_analysis::onset::{KickOnsets, KickPulse, PULSE_RATE};
 use reks_analysis::{
@@ -155,6 +156,11 @@ impl Flags {
                 }
                 "--kick-gain" => {
                     f.grid.kick_phase_gain = value()?.parse().context("--kick-gain")?
+                }
+                "--bar" => {
+                    let name = value()?;
+                    f.grid.bar =
+                        BarRule::parse(name).with_context(|| format!("unknown bar rule {name}"))?
                 }
                 "--analyser" => f.analyser = Some(value()?.parse().context("--analyser")?),
                 "--driver" => f.driver = Some(value()?.into()),
@@ -1083,7 +1089,8 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
         }
         // The curve `run` stored with this record's candidates (older
         // results have neither): the grid then matches the pipeline's.
-        let pulse = if flags.grid.kick_phase_ms > 0 && !rec.model_beats.is_empty() {
+        let uses_pulse = flags.grid.kick_phase_ms > 0 || flags.grid.bar == BarRule::VoteKick;
+        let pulse = if uses_pulse && !rec.model_beats.is_empty() {
             let p = fs::read(kick_file(&out, loc)).ok();
             if p.is_none() {
                 no_kick_curve += 1;
@@ -1128,6 +1135,13 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
     let mut md = String::new();
     if let Some(p) = flags.placement {
         let _ = writeln!(md, "What-if beat placement: {}.\n", p.name());
+    }
+    if version != ANALYSER_VERSION {
+        let _ = writeln!(
+            md,
+            "Stored results of analyser version {version}; grids rebuilt with version \
+             {ANALYSER_VERSION}'s grid builder.\n"
+        );
     }
     if flags.grid != GridOptions::default() {
         let _ = writeln!(md, "What-if grid options: {:?}.\n", flags.grid);
@@ -1588,6 +1602,8 @@ mod tests {
             "--only",
             "MP3,m4a",
             "--retry-failed",
+            "--bar",
+            "vote",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -1597,6 +1613,8 @@ mod tests {
         assert_eq!(f.every, 1);
         assert!(f.retry_failed);
         assert_eq!(f.only, Some(vec!["mp3".to_owned(), "m4a".to_owned()]));
+        assert_eq!(f.grid.bar, BarRule::Vote);
         assert!(Flags::parse(&["--bogus".to_owned()]).is_err());
+        assert!(Flags::parse(&["--bar".to_owned(), "x".to_owned()]).is_err());
     }
 }

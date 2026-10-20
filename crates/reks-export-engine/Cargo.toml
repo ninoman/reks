@@ -1,6 +1,6 @@
 [package]
 name = "reks-export-engine"
-description = "reks Denon Engine DJ export (Phase 5)"
+description = "reks Denon Engine DJ export (Phase 6)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -2,6 +2,7 @@
 //!
 //! See `docs/phases/phase-3.md`.
 
+pub mod bar;
 pub mod beats;
 pub mod cache;
 pub mod calib;

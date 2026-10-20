@@ -5,25 +5,26 @@ analysis (D10 beats/grid, D12 key) compares with rekordbox's analysis of the
 same files. Measured before any tuning (version 2), then after each tuning
 step; re-run after every analyser change (`ANALYSER_VERSION`).
 
-Measured 2026-10-20: analyser version 3 (Beat This! small, libKeyFinder
-port, task 4 timing, tuning steps 1–2 of task 12a), rekordbox 6.8.6
+Measured 2026-10-21: analyser version 4 (Beat This! small, libKeyFinder
+port, task 4 timing, tuning steps 1–3 of task 12a), rekordbox 6.8.6
 `collection.xml` of the maintainer's library (3,062 tracks, 2,646 files
 present: 2,361 FLAC, 133 MP3, 147 WAV/AIFF, 5 MP4), Apple M4 Pro
-(14 cores), macOS 26.6.
+(14 cores), macOS 26.6. Version 4 changed only the grid builder (bar
+placement), so its grids are rebuilt from version 3's stored beats and kick
+curves (`report --analyser 3`); beats, key and timing are version 3's run.
 
 **Against the acceptance criteria** (phase 3), on the 1,762 tracks whose
 rekordbox grid has one anchor:
 
-| Criterion | Target | Version 2 | Version 3 | |
-| --- | --- | --- | --- | --- |
-| BPM \|Δ\| ≤ 0.05 | ≥ 90% | 85.1% | 96.7% | met |
-| Downbeat within 30 ms (mod bar) | ≥ 80% | 70.9% | 73.3% | below |
-| Key exact | ≥ 70% | 62.3% | 62.3% | below |
-| Key exact or relative | ≥ 85% | 63.8% | 63.8% | below |
-| Throughput per core (small model) | ≥ 5× real time | 25.0× | 24.2× | met |
+| Criterion | Target | Version 2 | Version 3 | Version 4 | |
+| --- | --- | --- | --- | --- | --- |
+| BPM \|Δ\| ≤ 0.05 | ≥ 90% | 85.1% | 96.7% | 96.7% | met |
+| Downbeat within 30 ms (mod bar) | ≥ 80% | 70.9% | 73.3% | 83.7% | met |
+| Key exact | ≥ 70% | 62.3% | 62.3% | 62.3% | below |
+| Key exact or relative | ≥ 85% | 63.8% | 63.8% | 63.8% | below |
+| Throughput per core (small model) | ≥ 5× real time | 25.0× | 24.2× | 24.2× | met |
 
-The bar is not lowered: the [tuning plan](#tuning-plan) continues with bar
-placement (downbeat) and key. The reference is the maintainer's grids as
+The bar is not lowered: the [tuning plan](#tuning-plan) continues with key. The reference is the maintainer's grids as
 rekordbox holds them, many corrected by hand, so this measures distance from
 a checked grid, not just from rekordbox's own analysis. Grids with several
 anchors are the maintainer's edits of tempo changes and re-phased sections;
@@ -37,6 +38,8 @@ export REKS_PARITY_XML=~/path/to/collection.xml   # rekordbox: File > Export Col
 export REKS_PARITY_OUT=~/Library/Caches/reks-parity   # outside the repo: per-track data
 ./target/release/reks parity run       # resumable; --jobs N, --only mp3,flac, --every N, --remap FROM=TO, --retry-failed
 ./target/release/reks parity report --md report.md --tracks tracks.tsv
+# after a grid-only analyser bump: rebuild from the previous version's results
+./target/release/reks parity report --analyser 3 --md report.md
 ```
 
 `run` analyses every track whose file exists with the app's pipeline
@@ -64,7 +67,9 @@ in the repository: only aggregates of the maintainer's library are published. Co
   options, which is what the pipeline does. What-ifs without decoding:
   `--placement` (beat placement, `BeatPlacement`), `--min-coverage`,
   `--change-beats`, `--change-ratio`, `--kick-phase` (0 = off),
-  `--kick-gain`, and `--analyser N` for an older version's stored beats.
+  `--kick-gain`, `--bar` (`region`, `vote`, `vote-kick`: how beat 1 is
+  chosen, [bar.rs](../crates/reks-analysis/src/bar.rs)), and `--analyser N`
+  for an older version's stored beats.
 - **BPM** agrees when |ours − rekordbox| ≤ 0.05. rekordbox's BPM is the
   anchors' tempo, or `AverageBpm` when anchors differ. Ours is the constant
   tempo, or the median beat gap of a dynamic grid. Misses are classed as
@@ -97,7 +102,9 @@ in the repository: only aggregates of the maintainer's library are published. Co
 
 ## Results
 
-Output of `reks parity report` (aggregates only).
+Output of `reks parity report --analyser 3` (aggregates only).
+
+Stored results of analyser version 3; grids rebuilt with version 4's grid builder.
 
 Analyser version 3; 3062 tracks in the XML, 2646 analysed (2 failed to decode or analyse), 2644 compared (0 without a rekordbox grid).
 
@@ -106,14 +113,14 @@ Scored: the 1762 tracks whose rekordbox grid has one anchor; the 882 with severa
 | Criterion | Target | Measured | n |
 | --- | --- | --- | --- |
 | BPM \|Δ\| ≤ 0.05 | ≥ 90% | 96.7% | 1762 |
-| Downbeat within 30 ms (mod bar) | ≥ 80% | 73.3% | 1762 |
+| Downbeat within 30 ms (mod bar) | ≥ 80% | 83.7% | 1762 |
 | Key exact | ≥ 70% | 62.3% | 1760 |
 | Key exact or relative | ≥ 85% | 63.8% | 1760 |
 
 | rekordbox grid | Tracks | BPM | Downbeat | Key exact |
 | --- | --- | --- | --- | --- |
-| one anchor | 1762 | 96.7% | 73.3% | 62.3% |
-| several anchors (edited) | 882 | 93.9% | 70.2% | 65.2% |
+| one anchor | 1762 | 96.7% | 83.7% | 62.3% |
+| several anchors (edited) | 882 | 93.9% | 80.6% | 65.2% |
 
 ### BPM
 
@@ -128,21 +135,21 @@ Scored: the 1762 tracks whose rekordbox grid has one anchor; the 882 with severa
 
 | reks grid | Tracks | BPM match | Downbeat |
 | --- | --- | --- | --- |
-| constant | 1734 | 98.2% | 74.1% |
+| constant | 1734 | 98.2% | 84.7% |
 | dynamic (fallback) | 26 | 3.8% | 23.1% |
 
 ### Downbeat (first downbeat, modulo bar)
 
 | reks's first downbeat | Tracks | Share |
 | --- | --- | --- |
-| within 30 ms of a rekordbox downbeat | 1291 | 73.3% |
-| on beat 2 of rekordbox's bar | 116 | 6.6% |
-| on beat 3 of rekordbox's bar | 145 | 8.2% |
-| on beat 4 of rekordbox's bar | 87 | 4.9% |
+| within 30 ms of a rekordbox downbeat | 1475 | 83.7% |
+| on beat 2 of rekordbox's bar | 38 | 2.2% |
+| on beat 3 of rekordbox's bar | 104 | 5.9% |
+| on beat 4 of rekordbox's bar | 22 | 1.2% |
 | more than 30 ms from any rekordbox beat | 121 | 6.9% |
 | no grid | 2 | 0.1% |
 
-Among tracks whose BPM matches: 74.9% of 1704 within 30 ms.
+Among tracks whose BPM matches: 85.6% of 1704 within 30 ms.
 
 Grid phase, same tracks: our first downbeat within 30 ms of any rekordbox beat 95.0%, within 10 ms 84.2%.
 
@@ -160,16 +167,16 @@ Grid phase, same tracks: our first downbeat within 30 ms of any rekordbox beat 9
 
 | Genre (tag bucket) | Tracks | BPM | Downbeat | Key exact | Key exact/relative |
 | --- | --- | --- | --- | --- | --- |
-| (no genre tag) | 1159 | 96.5% | 75.9% | 60.2% | 62.0% |
-| Psytrance / Goa | 145 | 99.3% | 62.8% | 66.2% | 66.9% |
-| Electro | 109 | 92.7% | 67.9% | 67.9% | 69.7% |
-| Electronic | 89 | 95.5% | 66.3% | 64.0% | 64.0% |
-| Trance | 82 | 98.8% | 69.5% | 70.7% | 70.7% |
-| House | 65 | 98.5% | 80.0% | 63.1% | 64.6% |
-| Dance | 41 | 100.0% | 75.6% | 68.3% | 70.7% |
-| Other | 34 | 94.1% | 58.8% | 67.6% | 67.6% |
-| Techno | 30 | 96.7% | 80.0% | 58.6% | 58.6% |
-| Ambient / Downtempo | 8 | 100.0% | 37.5% | 62.5% | 75.0% |
+| (no genre tag) | 1159 | 96.5% | 83.3% | 60.2% | 62.0% |
+| Psytrance / Goa | 145 | 99.3% | 81.4% | 66.2% | 66.9% |
+| Electro | 109 | 92.7% | 89.9% | 67.9% | 69.7% |
+| Electronic | 89 | 95.5% | 78.7% | 64.0% | 64.0% |
+| Trance | 82 | 98.8% | 86.6% | 70.7% | 70.7% |
+| House | 65 | 98.5% | 90.8% | 63.1% | 64.6% |
+| Dance | 41 | 100.0% | 87.8% | 68.3% | 70.7% |
+| Other | 34 | 94.1% | 79.4% | 67.6% | 67.6% |
+| Techno | 30 | 96.7% | 86.7% | 58.6% | 58.6% |
+| Ambient / Downtempo | 8 | 100.0% | 50.0% | 62.5% | 75.0% |
 
 ### Timing offset per codec (task 4)
 
@@ -193,7 +200,7 @@ Per core: 24.2× real time (312.5 h of audio over 12.9 CPU hours, decode, beats,
 
 ## Tuning plan
 
-The baseline is below the bar on BPM, downbeat and key, so the phase
+The baseline was below the bar on BPM, downbeat and key, so the phase
 continues with tuning, in the maintainer's order of priority: BPM, then
 downbeat, then key. The bar stays as it is. Each step is re-measured with
 `reks parity report` (grid changes, from stored beats) or `run` (anything
@@ -244,18 +251,52 @@ that touches audio), and the doc is updated with the new numbers.
    *tempo* was not needed: BPM is above the bar, and the remaining misses
    (1.6% "other", 0.5% double/half) are tracks where the tracker followed
    another pulse.
-3. **Bar placement (downbeat).** Next. With a matching constant grid
-   (version 3), 74.9% of first downbeats agree (1,275 of 1,703); the misses
-   are the bar rotated by 1–3 beats (20.1%) and 5.0% off the beat by
-   > 30 ms. The anchor is the single
-   tracker downbeat nearest the start of the constant region, usually in the
-   intro. A majority vote over all tracker downbeats did **not** help
-   (292 vs 295 of 349 BPM-matched constant grids in a first sample): the
-   model's bar phase itself differs from the one rekordbox and the
-   maintainer use. Candidates, in order: anchor beat 1 on phrase structure
-   (kick re-entry after a breakdown, 16/32-beat phrase boundaries from the
-   low-band envelope); the full Beat This! model (better downbeats, larger
-   download); otherwise leave it to the grid editor's set-downbeat.
+3. **Bar placement (downbeat). Done (version 4).** In version 3, with a
+   matching constant grid, 74.9% of first downbeats agreed (1,275 of
+   1,703); the misses were the bar rotated by 1–3 beats (20.1%) and 5.0% off
+   the beat by > 30 ms. Beat 1 was the single tracker downbeat nearest the
+   start of Mixxx's merged constant region, usually in the intro, so any
+   change to the beats could rotate the bar.
+
+   Signals were first scored offline against rekordbox's own grid (bar
+   position each one predicts, on the 1,617 BPM-matched constant grids
+   whose phase is within 30 ms; version 3's rule got 78.8% of them):
+
+   | Bar from | Right bar |
+   | --- | --- |
+   | downbeat nearest the region start (version 3) | 78.8% |
+   | first grid line with a low-band rise ≥ 10 dB (first kick) | 83.7% |
+   | majority of all tracker downbeats (bar position = line mod 4) | 84.9% |
+   | strongest mean kick rise per bar position (accent) | 50.8% |
+   | majority vote + 0.3 for the first kick's position | 91.7% |
+   | … + kick re-entries after ≥ 16 kickless beats, or + accent | ≤ 91.9% |
+
+   The vote is reliable when it is clear (98% right when ≥ 90% of the
+   downbeats agree) and poor when split (57–64% under 50%), where the
+   first kick does better (≈ 79%): tracks start their kick on beat 1. So
+   each bar position scores its share of the downbeats plus 0.3 if the
+   first kick is on it (`bar::downbeat_line`, [bar.rs](../crates/reks-analysis/src/bar.rs));
+   the first kick decides unless the vote leads by more than 0.3. The
+   weight is flat between 0.25 and 0.45 (90.4–91.7%) and holds on both
+   halves of the set; first-kick thresholds of 10–15 dB score within
+   0.5 points of each other.
+   The old rule only breaks ties and stands without evidence.
+
+   Measured in `report` (`--bar`), scored set: downbeat 73.3% (`region`)
+   → 78.8% (`vote`) → 83.7% (`vote-kick`); BPM and grid phase unchanged
+   (only the choice among the grid's own lines changes). Every genre
+   bucket improved; the unscored hand-edited grids went 70.2% → 80.6%.
+   Over all compared tracks, 405 bars were fixed and 129 broken.
+
+   Did not help: phrase structure from the kick curve. Kick re-entries
+   after a breakdown land on rekordbox's beat 1 (40–51%) or beat 2
+   (27–45%), not reliably on the bar; adding them, or a per-position kick
+   accent, moved the offline score by ≤ 0.2 points. The earlier first
+   sample in which a plain vote did not help (292 vs 295 of 349) did not
+   hold on the full set: the vote alone adds 5.5 points. Not tried: the
+   full Beat This! model (the bar is met without an 83 MB download).
+   Left: beat 3 (5.9%, a half-bar rotation) and grids off the beat by
+   > 30 ms (6.9%); the grid editor's set-downbeat covers them.
 4. **Key.** First check the port: run libKeyFinder (C++) on a sample of the
    library and compare with our output (task 5's parity check is still
    UNVERIFIED); a port bug would make every number here moot. Then the

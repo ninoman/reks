@@ -494,7 +494,7 @@ pub fn embedded_artwork(path: &Path) -> Result<Option<Picture>>;
 
 pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded>; // stereo i16 + overview
 
-// reks-mix (D5): one deck of the Phase 6 engine
+// reks-mix (D5): one deck of the Phase 5 engine
 pub struct Player { /* opens the cpal output on first use */ }
 impl Player {
     pub fn new(device: Option<String>) -> Self;
@@ -616,7 +616,7 @@ Response(bytes)`, `settings_get`, `settings_set(patch)`, `library_roots`, `libra
    grid listing (read-only), artwork display via `artwork_get`.
 10. [x] **Playlists UI**: tree, create/rename/delete folder/playlist, drag tracks,
     reorder, context menu; backed by `playlists_mutate` ops.
-11. [x] **Player**: one-deck slice of the Phase 6 engine (`reks-mix`, D5) with
+11. [x] **Player**: one-deck slice of the Phase 5 engine (`reks-mix`, D5) with
     Symphonia decoding in `reks-audio`, output device list, seek; Tauri commands; transport bar with position slider and
     a simple overview waveform (min/max per 1,000 samples, computed on first
     load, cached as `.f32` in cache dir, sent as bytes).

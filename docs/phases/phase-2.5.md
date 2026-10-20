@@ -40,12 +40,12 @@ Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 - Dividers in rekordbox XML export (omitted); detecting hand-made silent
   "divider tracks" in an imported `collection.xml` (they stay normal tracks);
   colours or icons for dividers.
-- Counting reks preview or Phase 6 mixer playback as plays (never).
+- Counting reks preview or Phase 5 mixer playback as plays (never).
 - Writing history or play counts to sticks (player-owned data).
 - Manual sessions; rekordbox's own past histories (not in XML, `master.db` is
   out of scope; workaround: export them as playlists in rekordbox first);
   automatic practice detection; Pro DJ Link capture; ratings, charts, sharing.
-- OneLibrary history (H2, Phase 4 task 11) and Engine history (H3, Phase 5
+- OneLibrary history (H2, Phase 4 task 11) and Engine history (H3, Phase 6
   task 11).
 
 ## Data model (`reks-core`, migration [0005](../../crates/reks-core/migrations/0005_dividers_history.sql))
