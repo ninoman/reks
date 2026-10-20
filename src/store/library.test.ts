@@ -4,10 +4,14 @@ import {
   buildFilters,
   buildQuery,
   defaultSort,
+  entryPosition,
+  itemAt,
   noFilters,
   PAGE_SIZE,
   type QueryInputs,
   rowAt,
+  trackIndex,
+  viewCount,
 } from "./library";
 
 const inputs = (patch: Partial<QueryInputs> = {}): QueryInputs => ({
@@ -99,7 +103,49 @@ describe("rowAt", () => {
   it("finds rows across pages", () => {
     const row = (id: number) => ({ id }) as never;
     const pages = new Map([[1, [row(PAGE_SIZE), row(PAGE_SIZE + 1)]]]);
-    expect(rowAt(pages, PAGE_SIZE + 1)).toEqual({ id: PAGE_SIZE + 1 });
-    expect(rowAt(pages, 0)).toBeUndefined();
+    const v = { pages, total: PAGE_SIZE + 2, dividers: [] };
+    expect(rowAt(v, PAGE_SIZE + 1)).toEqual({ id: PAGE_SIZE + 1 });
+    expect(rowAt(v, 0)).toBeUndefined();
+  });
+});
+
+describe("table rows with dividers", () => {
+  // Entries: D0 t0 t1 D3 t2 D5 (dividers at 0, 3 and the end).
+  const row = (id: number) => ({ id, entryPosition: null }) as never;
+  const div = (position: number, label: string) => ({ position, label, ascii: true });
+  const v = {
+    pages: new Map([[0, [row(10), row(11), row(12)]]]),
+    total: 3,
+    dividers: [div(0, "OPEN"), div(3, "PEAK"), div(5, "END")],
+  };
+
+  it("counts tracks and dividers", () => {
+    expect(viewCount(v)).toBe(6);
+  });
+
+  it("maps each table row to its divider or track", () => {
+    const kinds = Array.from({ length: 6 }, (_, i) => {
+      const item = itemAt(v, i);
+      return item?.kind === "divider" ? item.divider.label : item?.row.id;
+    });
+    expect(kinds).toEqual(["OPEN", 10, 11, "PEAK", 12, "END"]);
+    expect(rowAt(v, 0)).toBeUndefined();
+    expect(rowAt(v, 4)).toEqual(row(12));
+  });
+
+  it("a divider row's track index is the track after it", () => {
+    expect([0, 1, 2, 3, 4, 5].map((i) => trackIndex(v, i))).toEqual([0, 0, 1, 2, 2, 3]);
+  });
+
+  it("entry positions of tracks and dividers", () => {
+    expect(entryPosition({ kind: "divider", divider: div(3, "PEAK") })).toBe(3);
+    expect(entryPosition({ kind: "track", row: { entryPosition: 4 } as never })).toBe(4);
+  });
+
+  it("without dividers rows are tracks", () => {
+    const plain = { ...v, dividers: [] };
+    expect(viewCount(plain)).toBe(3);
+    expect(itemAt(plain, 2)).toEqual({ kind: "track", row: row(12) });
+    expect(trackIndex(plain, 2)).toBe(2);
   });
 });

@@ -27,7 +27,12 @@ function notation(keyNotation: "classical" | "camelot" | "openKey") {
 }
 
 beforeEach(() => {
-  vi.mocked(ipc.libraryQuery).mockResolvedValue({ rows: [], total: 0 });
+  vi.mocked(ipc.libraryQuery).mockResolvedValue({
+    rows: [],
+    total: 0,
+    dividers: [],
+    dividerView: false,
+  });
   vi.mocked(ipc.libraryQuery).mockClear();
   useLibrary.setState({
     filters: { ...noFilters, playlistId: 4, genre: "House", ratingMin: 3 },

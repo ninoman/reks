@@ -146,6 +146,9 @@ pub struct TrackPage {
     /// every page, in order. Empty elsewhere. A divider at `position` sits
     /// between the track rows whose `entry_position`s surround it.
     pub dividers: Vec<DividerRow>,
+    /// Whether this is such a view (dividers shown, even if there are none):
+    /// the only view where dividers can be inserted.
+    pub divider_view: bool,
 }
 
 /// A divider entry in a playlist (D22).
@@ -155,6 +158,9 @@ pub struct DividerRow {
     /// Entry position, the same numbering as `TrackRow::entry_position`.
     pub position: i64,
     pub label: String,
+    /// Plain ASCII. Other characters are allowed but flagged until the
+    /// hardware session shows how players render them (UNVERIFIED, DIV2).
+    pub ascii: bool,
 }
 
 /// Option lists for the filter sidebar.
@@ -240,16 +246,19 @@ impl Library {
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
+        let divider_view = view.is_some_and(|id| q.shows_dividers(id));
         let dividers = match view {
-            Some(id) if q.shows_dividers(id) => conn
+            Some(id) if divider_view => conn
                 .prepare_cached(
                     "SELECT position, label FROM playlist_track
                      WHERE playlist_id = ?1 AND item_kind = 'divider' ORDER BY position",
                 )?
                 .query_map([id], |r| {
+                    let label: String = r.get(1)?;
                     Ok(DividerRow {
                         position: r.get(0)?,
-                        label: r.get(1)?,
+                        ascii: label.is_ascii(),
+                        label,
                     })
                 })?
                 .collect::<rusqlite::Result<Vec<_>>>()?,
@@ -260,6 +269,7 @@ impl Library {
             rows,
             total: u64::try_from(total).unwrap_or(0),
             dividers,
+            divider_view,
         })
     }
 

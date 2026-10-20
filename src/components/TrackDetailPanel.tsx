@@ -75,7 +75,7 @@ const NO_COLOURS: string[] = [];
 export function TrackInfoPanel() {
   const primaryId = useLibrary((s) => {
     const i = primaryIndex(s.selection);
-    return i === null ? null : (rowAt(s.pages, i)?.id ?? null);
+    return i === null ? null : (rowAt(s, i)?.id ?? null);
   });
   if (primaryId === null) {
     return (

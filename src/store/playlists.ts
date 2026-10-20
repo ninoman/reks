@@ -29,6 +29,18 @@ import {
 type AddTracksOp = Extract<PlaylistOp, { type: "addTracks" }>;
 type DuplicatesOutcome = Extract<PlaylistOutcome, { type: "duplicates" }>;
 
+/** Label a new divider starts with, before the user renames it in place. */
+export const NEW_DIVIDER_LABEL = "New divider";
+
+/** A divider being renamed in place in the track table. */
+export interface DividerRename {
+  playlistId: number;
+  position: number;
+  /** The label before the edit. */
+  label: string;
+  draft: string;
+}
+
 /** An "add tracks" that found duplicates and waits for the user's choice. */
 export interface PendingDuplicates {
   op: AddTracksOp;
@@ -42,6 +54,7 @@ export interface PlaylistsState {
   pendingDuplicates: PendingDuplicates | null;
   /** Node waiting for the delete confirmation. */
   confirmDelete: PlaylistNode | null;
+  dividerRename: DividerRename | null;
   error: string | null;
 
   dispatch(action: TreeAction): void;
@@ -62,6 +75,12 @@ export interface PlaylistsState {
   resolveDuplicates(mode: Exclude<DuplicateMode, "ask"> | null): Promise<void>;
   removeEntries(playlistId: number, positions: number[]): Promise<void>;
   reorderEntries(playlistId: number, positions: number[], before: number): Promise<void>;
+  /** Inserts a divider before entry `position`, then renames it in place. */
+  insertDivider(playlistId: number, position: number): Promise<void>;
+  startDividerRename(playlistId: number, position: number, label: string): void;
+  editDividerDraft(draft: string): void;
+  commitDividerRename(): Promise<void>;
+  cancelDividerRename(): void;
 }
 
 export const usePlaylists = create<PlaylistsState>()((set, get) => {
@@ -75,7 +94,7 @@ export const usePlaylists = create<PlaylistsState>()((set, get) => {
     void lib.loadFacets();
     const shown = lib.filters.playlistId;
     if (shown !== null && byId(shown) === undefined) lib.showPlaylist(null, true);
-    else lib.refresh();
+    else lib.refresh(true);
   }
 
   return {
@@ -83,6 +102,7 @@ export const usePlaylists = create<PlaylistsState>()((set, get) => {
     tree: initialTree,
     pendingDuplicates: null,
     confirmDelete: null,
+    dividerRename: null,
     error: null,
 
     dispatch(action) {
@@ -153,6 +173,8 @@ export const usePlaylists = create<PlaylistsState>()((set, get) => {
       await get().mutate({ type: "move", id, parentId, position });
     },
     async addTracks(playlistId, trackIds, before = null) {
+      // A drag of dividers only carries no tracks.
+      if (trackIds.length === 0) return;
       const op: AddTracksOp = {
         type: "addTracks",
         playlistId,
@@ -180,6 +202,37 @@ export const usePlaylists = create<PlaylistsState>()((set, get) => {
     async reorderEntries(playlistId, positions, before) {
       if (positions.length === 0) return;
       await get().mutate({ type: "reorderEntries", playlistId, positions, before });
+    },
+    async insertDivider(playlistId, position) {
+      const label = NEW_DIVIDER_LABEL;
+      const outcome = await get().mutate({ type: "insertDivider", playlistId, position, label });
+      if (outcome?.type !== "done") return;
+      // The reloaded table puts the new divider at table row `position`.
+      useLibrary.getState().select({ type: "click", index: position });
+      get().startDividerRename(playlistId, position, label);
+    },
+    startDividerRename(playlistId, position, label) {
+      set({ dividerRename: { playlistId, position, label, draft: label } });
+    },
+    editDividerDraft(draft) {
+      set((s) =>
+        s.dividerRename === null ? {} : { dividerRename: { ...s.dividerRename, draft } },
+      );
+    },
+    async commitDividerRename() {
+      const r = get().dividerRename;
+      if (r === null) return;
+      set({ dividerRename: null });
+      if (r.draft === r.label) return;
+      await get().mutate({
+        type: "renameDivider",
+        playlistId: r.playlistId,
+        position: r.position,
+        label: r.draft,
+      });
+    },
+    cancelDividerRename() {
+      set({ dividerRename: null });
     },
   };
 });

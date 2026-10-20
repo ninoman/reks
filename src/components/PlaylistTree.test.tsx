@@ -61,7 +61,12 @@ beforeEach(() => {
     colours: [],
     playlists: [],
   });
-  vi.mocked(ipc.libraryQuery).mockResolvedValue({ rows: [], total: 0 });
+  vi.mocked(ipc.libraryQuery).mockResolvedValue({
+    rows: [],
+    total: 0,
+    dividers: [],
+    dividerView: false,
+  });
   playlistsMutate.mockResolvedValue(done);
   usePlaylists.setState({
     nodes: [folder, set],

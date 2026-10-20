@@ -75,9 +75,22 @@ export interface TrackRow {
   entryPosition: number | null;
 }
 
+/** A divider entry in a playlist (D22); `position` numbers entries like `entryPosition`. */
+export interface DividerRow {
+  position: number;
+  label: string;
+  /** Plain ASCII; other labels are flagged until players are tested (DIV2). */
+  ascii: boolean;
+}
+
 export interface TrackPage {
   rows: TrackRow[];
+  /** Tracks over all pages; dividers are not counted. */
   total: number;
+  /** Every divider of the playlist, on every page, when `dividerView`; else empty. */
+  dividers: DividerRow[];
+  /** A playlist in playlist order with no search or other filter: dividers show here. */
+  dividerView: boolean;
 }
 
 export interface KeyInfo {
@@ -124,7 +137,10 @@ export type PlaylistOp =
       duplicates: DuplicateMode;
     }
   | { type: "removeEntries"; playlistId: number; positions: number[] }
-  | { type: "reorderEntries"; playlistId: number; positions: number[]; before: number };
+  | { type: "reorderEntries"; playlistId: number; positions: number[]; before: number }
+  /** Before the entry at `position`; absent or null = appended. Label rules in reks-core. */
+  | { type: "insertDivider"; playlistId: number; position?: number | null; label: string }
+  | { type: "renameDivider"; playlistId: number; position: number; label: string };
 
 export type PlaylistOutcome =
   | { type: "done"; createdId: number | null; added: number; skipped: number }

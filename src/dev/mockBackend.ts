@@ -28,6 +28,7 @@ import type {
   KeyInfo,
   PlayerStatus,
   PlaylistNode,
+  PlaylistOp,
   PlaylistStatus,
   ProfileStatus,
   Settings,
@@ -145,12 +146,60 @@ const NODES: PlaylistNode[] = [
   },
   { id: 5, parentId: null, name: "Closing", isFolder: false, depth: 0, position: 2, entries: 25 },
 ];
-const PLAYLISTS: Record<number, number[]> = Object.fromEntries(
+/** A playlist entry: a track id or a divider. */
+type MockEntry = number | { label: string };
+const PLAYLISTS: Record<number, MockEntry[]> = Object.fromEntries(
   NODES.filter((n) => !n.isFolder).map((n) => [
     n.id,
     Array.from({ length: n.entries }, (_, i) => ((i * 37 + n.id * 11) % TRACKS.length) + 1),
   ]),
 );
+PLAYLISTS[3]?.splice(0, 0, { label: "---- OPEN ----" });
+PLAYLISTS[3]?.splice(20, 0, { label: "──── Peak ────" });
+
+function tracksIn(id: number): number[] {
+  return (PLAYLISTS[id] ?? []).filter((e): e is number => typeof e === "number");
+}
+
+/** The playlist edits the UI can try out against the mock. */
+function mutate(op: PlaylistOp) {
+  const done = { type: "done", createdId: null, added: 0, skipped: 0 } as const;
+  if (!("playlistId" in op)) return done;
+  const list = PLAYLISTS[op.playlistId] ?? [];
+  switch (op.type) {
+    case "insertDivider": {
+      const label = op.label.trim();
+      if (label === "") throw new Error("invalid divider label: must not be empty");
+      list.splice(op.position ?? list.length, 0, { label });
+      break;
+    }
+    case "renameDivider": {
+      const label = op.label.trim();
+      if (label === "") throw new Error("invalid divider label: must not be empty");
+      if (typeof list[op.position] === "number") throw new Error("not a divider");
+      list[op.position] = { label };
+      break;
+    }
+    case "removeEntries": {
+      const drop = new Set(op.positions);
+      PLAYLISTS[op.playlistId] = list.filter((_, i) => !drop.has(i));
+      break;
+    }
+    case "reorderEntries": {
+      const moved = new Set(op.positions);
+      const block = list.filter((_, i) => moved.has(i));
+      const before = list.slice(0, op.before).filter((_, i) => !moved.has(i)).length;
+      const rest = list.filter((_, i) => !moved.has(i));
+      rest.splice(before, 0, ...block);
+      PLAYLISTS[op.playlistId] = rest;
+      break;
+    }
+    case "addTracks":
+      list.splice(op.before ?? list.length, 0, ...op.trackIds);
+      return { ...done, added: op.trackIds.length };
+  }
+  return done;
+}
 
 let settings: Settings = {
   audioDevice: null,
@@ -196,13 +245,27 @@ const SORT: Partial<Record<SortColumn, keyof TrackRow>> = {
 
 function query(q: TrackQuery) {
   const playlist = q.filters.find((f) => f.type === "playlist");
+  const entries = playlist === undefined ? [] : (PLAYLISTS[playlist.id] ?? []);
   let rows: TrackRow[] =
     playlist === undefined
       ? TRACKS
-      : (PLAYLISTS[playlist.id] ?? []).map((id, i) => ({
-          ...(TRACKS[id - 1] as TrackRow),
-          entryPosition: i,
-        }));
+      : entries.flatMap((e, i) =>
+          typeof e === "number" ? [{ ...(TRACKS[e - 1] as TrackRow), entryPosition: i }] : [],
+        );
+  const dividerView =
+    playlist !== undefined &&
+    PLAYLISTS[playlist.id] !== undefined &&
+    q.sort.column === "playlistPosition" &&
+    !q.sort.descending &&
+    !q.text &&
+    q.filters.length === 1;
+  const dividers = dividerView
+    ? entries.flatMap((e, position) =>
+        typeof e === "number"
+          ? []
+          : [{ position, label: e.label, ascii: /^[ -~]*$/.test(e.label) }],
+      )
+    : [];
   const text = q.text?.toLowerCase();
   if (text) rows = rows.filter((r) => `${r.title} ${r.artist}`.toLowerCase().includes(text));
   for (const f of q.filters) {
@@ -222,7 +285,12 @@ function query(q: TrackQuery) {
     const y = b[col] ?? "";
     return (x < y ? -1 : x > y ? 1 : 0) * dir;
   });
-  return { rows: rows.slice(q.offset, q.offset + q.limit), total: rows.length };
+  return {
+    rows: rows.slice(q.offset, q.offset + q.limit),
+    total: rows.length,
+    dividers,
+    dividerView,
+  };
 }
 
 function detail(id: number): TrackDetail {
@@ -436,7 +504,7 @@ function profileStatus(id: number, mountPoint: string | null): ProfileStatus {
       text: "Removed from the stick at the next sync",
     });
   }
-  const tracksOf = (n: PlaylistNode) => new Set(under(n).flatMap((c) => PLAYLISTS[c.id] ?? []));
+  const tracksOf = (n: PlaylistNode) => new Set(under(n).flatMap((c) => tracksIn(c.id)));
   const all = new Set(ticked.flatMap((n) => [...tracksOf(n)]));
   const entries = ticked.map((n) => {
     const others = new Set(ticked.filter((o) => o !== n).flatMap((o) => [...tracksOf(o)]));
@@ -822,7 +890,7 @@ mockIPC((cmd, payload) => {
     case "playlists_get":
       return { nodes: NODES };
     case "playlists_mutate":
-      return { type: "done", createdId: null, added: 0, skipped: 0 };
+      return mutate(args.op as PlaylistOp);
     case "settings_get":
       return settings;
     case "settings_set":
