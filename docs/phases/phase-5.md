@@ -168,6 +168,77 @@ pub enum Control {
 10. **Key lock evaluation**: listen to `timestretch`, `signalsmith-stretch` and
     `rubberband` at ±6% on three techno tracks and one vocal track; record the
     choice in D21; add it as a per-deck toggle, or record why not.
+    Partial (2026-10-21): research and render tool done, listening pending.
+    Licences, builds and maintenance: [R§9.3](../research.md). All three are
+    GPLv3-compatible (timestretch and Signalsmith MIT, Rubber Band
+    GPL-2.0-or-later). `reks keylock-render` ([`keylock/`](../../crates/reks-cli/src/keylock/mod.rs))
+    decodes an excerpt and renders it through each engine at each ratio, plus
+    plain varispeed for reference, aligned by each engine's latency so the
+    files can be switched in sync. timestretch is in the default build; the
+    C++ engines are opt-in features (`keylock-signalsmith`,
+    `keylock-rubberband`, or `keylock-all`; need a C++ compiler and libclang).
+
+    Cost on one deck (M4 Pro, release, 256-frame blocks = 5.8 ms at 44.1 kHz,
+    60 s synthetic 128 BPM loop; CPU ms per second of audio at 0.94 / 1.00 /
+    1.06, worst block as % of the block period, latency reported/measured on
+    a tone burst):
+
+    | Engine | CPU ms/s | Worst block | Latency | Rust heap events in process |
+    |---|---|---|---|---|
+    | varispeed (reference) | 1.5 / 1.4 / 1.4 | 1% | 1.5 ms | 0 |
+    | timestretch-keylock | 12.9 / 12.3 / 15.3 | 4% | 12.7 ms / 5.7–14.7 | 0 |
+    | timestretch-wide | 28.9 / 26.0 / 34.5 | 19% | 0 ms / ±1.5 | 15–27 |
+    | signalsmith (default preset) | 5.4 / 4.6 / 5.3 | 5% | 60 ms / 60 | 0 (C++ heap not visible) |
+    | rubberband-r3 (finer) | 40.2 / 36.6 / 41.3 | 10% | 46.4 ms / 46–47 | ~41k: the binding's `Vec` per call |
+    | rubberband-r2 (faster) | 11.4 / 7.2 / 9.9 | 3% | 23.2 ms / 23–24 | ~21–44k: same |
+
+    Four decks at the worst case (rubberband-r3) is about 17% of one core.
+    Per-block cost for Rubber Band is uneven (it runs in its own hops behind a
+    FIFO); the worst block above is the peak seen.
+
+    Listening (maintainer, own tracks; never commit them or the renders):
+
+    ```sh
+    cargo build --release -p reks-cli --features keylock-all
+    # one run per track; out-dir outside the repo
+    target/release/reks keylock-render ~/Music/techno-1.flac --out-dir ~/keylock/techno-1
+    target/release/reks keylock-render ~/Music/vocal-1.flac --out-dir ~/keylock/vocal-1 --from 45
+    # blind variant: files named <stem>.<ratio>.<letter>.wav, key in keylock-report.json
+    target/release/reks keylock-render ~/Music/techno-2.flac --out-dir ~/keylock/techno-2-blind --blind
+    ```
+
+    Defaults: ratios 0.94, 1.00, 1.06; 90 s from 60 s in (`--from`,
+    `--seconds`); `--engines timestretch-keylock,signalsmith` limits the set.
+    Outputs: `<stem>.<engine>.<ratio>.wav` (24-bit, the file's rate) and
+    `keylock-report.json` (cost and latency per render). Compare each engine
+    against `varispeed` at the same ratio and against the 1.00 render; listen
+    for kick smear, hi-hat flamming, bass warble, phasiness on pads, and
+    pitch wobble or doubling on the vocal. Score 1–5 (5 = sounds untouched).
+
+    | Track (genre) | Engine | 0.94 | 1.06 | Notes |
+    |---|---|---|---|---|
+    | techno 1 | timestretch-keylock | | | |
+    | techno 1 | timestretch-wide | | | |
+    | techno 1 | signalsmith | | | |
+    | techno 1 | rubberband-r3 | | | |
+    | techno 1 | rubberband-r2 | | | |
+    | techno 2 | timestretch-keylock | | | |
+    | techno 2 | timestretch-wide | | | |
+    | techno 2 | signalsmith | | | |
+    | techno 2 | rubberband-r3 | | | |
+    | techno 2 | rubberband-r2 | | | |
+    | techno 3 | timestretch-keylock | | | |
+    | techno 3 | timestretch-wide | | | |
+    | techno 3 | signalsmith | | | |
+    | techno 3 | rubberband-r3 | | | |
+    | techno 3 | rubberband-r2 | | | |
+    | vocal 1 | timestretch-keylock | | | |
+    | vocal 1 | timestretch-wide | | | |
+    | vocal 1 | signalsmith | | | |
+    | vocal 1 | rubberband-r3 | | | |
+    | vocal 1 | rubberband-r2 | | | |
+
+    Listener, date, headphones/speakers: _______. Choice: pending (D21).
 11. **Listening checklist** below, run and logged.
 
 ## Acceptance criteria

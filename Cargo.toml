@@ -66,6 +66,13 @@ libc = "0.2"
 rustfft = "6.4"
 rusqlite = { version = "0.40", features = ["bundled"] }
 rubato = "5"
+# Key lock candidates (phase 5 task 10), reks-cli only, exact pins: young crates.
+# timestretch is pure Rust (MIT); the other two compile C++ with cc + bindgen
+# (libclang) and sit behind opt-in reks-cli features. See research.md §9.3.
+timestretch = "=0.15.0"
+signalsmith-stretch = "=0.1.3"
+# GPL-2.0-or-later (Rubber Band 4.0.0 vendored), compatible with GPL-3.0-or-later.
+rubberband = "=0.1.5"
 rtrb = "0.4"
 rusqlite_migration = "2.6"
 serde = { version = "1", features = ["derive"] }
