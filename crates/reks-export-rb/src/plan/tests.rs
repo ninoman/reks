@@ -499,6 +499,7 @@ fn codec_severity_follows_the_target() {
         [Problem::Unsupported { track_id: 1, .. }]
     ));
     assert!(plan.copies.is_empty());
+    assert_eq!(plan.convertible, [1]);
 
     let nxs2 = ExportOptions {
         target: TargetProfile::Cdj2000Nxs2,
@@ -510,6 +511,7 @@ fn codec_severity_follows_the_target() {
         plan.warnings.as_slice(),
         [Warning::Audio { track_id: 1, .. }]
     ));
+    assert_eq!(plan.convertible, [1]);
 }
 
 #[test]

@@ -26,7 +26,7 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use rusqlite::{named_params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::db::Library;
 use crate::error::{Error, Result};
@@ -35,12 +35,16 @@ use crate::scan::TrackId;
 use crate::timefmt;
 
 pub use reks_audio::{CancelToken, ConvertSpec, Depth, Rate, Target};
+pub use view::{plan_view, report_view, PlanView, ReportView};
+
+pub mod view;
 
 /// Suffix of the file `apply` writes before the final rename.
 pub const TEMP_SUFFIX: &str = ".reks-tmp";
 
 /// Where converted files go.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Destination {
     /// The original's folder.
     NextToOriginal,
@@ -49,7 +53,8 @@ pub enum Destination {
 }
 
 /// What the converted file does in the library.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum LibraryMode {
     /// The track points at the new file; everything attached to it stays.
     Replace,
@@ -58,7 +63,8 @@ pub enum LibraryMode {
 }
 
 /// What happens to the original file after a successful conversion.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Originals {
     Keep,
     /// Move to the OS Trash (Replace only). Never a permanent delete.
@@ -66,7 +72,8 @@ pub enum Originals {
 }
 
 /// The settings beside [`ConvertSpec`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConvertOptions {
     pub destination: Destination,
     pub library: LibraryMode,
@@ -88,7 +95,8 @@ impl Default for ConvertOptions {
 }
 
 /// The two presets of the converter dialog.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Preset {
     /// AIFF, depth kept (max 24), rate capped at 48 kHz.
     OlderPlayers,

@@ -152,6 +152,7 @@ fn stick() -> Stick {
         errors: vec![],
         bytes_to_write: 0,
         bytes_free_after: 0,
+        convertible: Vec::new(),
     };
     Stick {
         _tmp: tmp,

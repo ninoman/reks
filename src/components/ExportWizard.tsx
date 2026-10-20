@@ -3,7 +3,8 @@
  * options, read the dry run, export, read the report. Planning, progress,
  * wording and totals all come from Rust (`export_plan` → `DryRun`,
  * `export_apply` → `ExportProgress` / `ExportReportView`); this lays them
- * out.
+ * out. Audio issues the converter fixes link to it (`ConvertDialog`, Older
+ * players preset).
  */
 import { type ReactNode, useEffect } from "react";
 
@@ -20,6 +21,7 @@ import type {
   PlaylistNode,
   TargetProfile,
 } from "../lib/ipc";
+import { useConverter } from "../store/converter";
 import { canContinue, coveredIds, EXPORT_STEPS, useExportWizard } from "../store/exportWizard";
 import { usePlaylists } from "../store/playlists";
 import { useProfiles } from "../store/profiles";
@@ -563,6 +565,21 @@ function DryRunView({ dryRun: d, nodes }: { dryRun: DryRun; nodes: PlaylistNode[
       {d.warnings.length > 0 && (
         <Section title="Warnings" tone="warning">
           <Notices groups={d.warnings} />
+        </Section>
+      )}
+
+      {d.convertText !== null && (
+        <Section title="Convert for older players">
+          <p className="m-0 text-sm">{d.convertText}</p>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => useConverter.getState().open(d.convertible, "olderPlayers")}
+            >
+              Convert…
+            </Button>
+            <span className="text-xs text-fg-muted">Plan again after converting.</span>
+          </div>
         </Section>
       )}
 

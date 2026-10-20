@@ -394,7 +394,10 @@ fn node_paths(nodes: &[PlaylistNode]) -> HashMap<PlaylistId, String> {
 }
 
 /// Playlist ids for `--playlist` values: an id, or a `Folder/Name` path.
-fn resolve_playlists(nodes: &[PlaylistNode], wanted: &[String]) -> anyhow::Result<Vec<PlaylistId>> {
+pub(crate) fn resolve_playlists(
+    nodes: &[PlaylistNode],
+    wanted: &[String],
+) -> anyhow::Result<Vec<PlaylistId>> {
     let paths = node_paths(nodes);
     wanted
         .iter()

@@ -588,3 +588,83 @@ fn older_players_caps_the_rate_and_fixes_wav_variants() {
         from: 24
     }));
 }
+
+#[test]
+fn plan_and_report_views_name_tracks_and_formats() {
+    let env = Env::with(&["mp3", "flac"]);
+    let (mp3, flac) = (env.id("sine.mp3"), env.id("sine.flac"));
+    let plan = convert::plan(
+        &env.lib,
+        &[flac, mp3],
+        &Preset::OlderPlayers.spec(),
+        &Preset::OlderPlayers.options(),
+    )
+    .unwrap();
+    let view = convert::plan_view(&env.lib, &plan);
+    assert!(view.ready);
+    assert_eq!(
+        view.status,
+        "Ready to convert 1 file. Nothing has been written yet."
+    );
+    let item = &view.items[0];
+    assert_eq!(item.track_id, flac);
+    assert!(
+        item.from.starts_with("FLAC · 16-bit · 44.1 kHz"),
+        "{}",
+        item.from
+    );
+    assert!(
+        item.to.starts_with("AIFF · 16-bit · 44.1 kHz"),
+        "{}",
+        item.to
+    );
+    assert!(item.dest.ends_with("sine.aiff"));
+    assert!(!item.label.is_empty());
+    assert_eq!(view.skipped.len(), 1);
+    assert_eq!(view.skipped[0].track_id, mp3);
+    assert_eq!(
+        view.skipped[0].reason,
+        "MP3 or AAC: only lossless files convert"
+    );
+    assert!(view.facts.iter().any(|f| f.label == "Sample rate"));
+    // The UI and the CLI take the view as JSON.
+    let json = serde_json::to_value(&view).unwrap();
+    assert_eq!(json["items"][0]["trackId"], flac);
+
+    let report = run(&env, &plan);
+    let r = convert::report_view(&env.lib, &plan, &report);
+    assert_eq!(r.outcome, convert::view::Outcome::Success);
+    assert_eq!(r.status, "Converted 1 of 1 file.");
+    assert!(r.converted[0].original.starts_with("Original kept: "));
+    assert!(r.converted[0].original.ends_with("sine.flac"));
+    assert_eq!(r.skipped.len(), 1);
+
+    let empty = convert::plan(&env.lib, &[mp3], &spec(Target::Wav), &Default::default()).unwrap();
+    let view = convert::plan_view(&env.lib, &empty);
+    assert!(!view.ready);
+}
+
+#[test]
+fn settings_round_trip_as_the_ui_sends_them() {
+    let opts: ConvertOptions = serde_json::from_str(
+        r#"{"destination":{"folder":"/tmp/out"},"library":"addAsNew","originals":"keep","capRate48k":true}"#,
+    )
+    .unwrap();
+    assert_eq!(opts.destination, Destination::Folder("/tmp/out".into()));
+    assert_eq!(opts.library, LibraryMode::AddAsNew);
+    assert!(opts.cap_rate_48k);
+    let spec: ConvertSpec =
+        serde_json::from_str(r#"{"target":"aiff","depth":"bits16","rate":"hz48000"}"#).unwrap();
+    assert_eq!(
+        spec,
+        ConvertSpec {
+            target: Target::Aiff,
+            depth: Depth::Bits16,
+            rate: Rate::Hz48000
+        }
+    );
+    let back: ConvertOptions =
+        serde_json::from_value(serde_json::to_value(Preset::OlderPlayers.options()).unwrap())
+            .unwrap();
+    assert_eq!(back, Preset::OlderPlayers.options());
+}

@@ -70,6 +70,21 @@ impl Issue {
             _ => Severity::Error,
         }
     }
+
+    /// True when the converter's Older players preset (Phase 2.6) fixes this
+    /// issue on a file of `kind`: lossless sources only (D25), and rates
+    /// above 48 kHz only (the preset keeps lower rates).
+    pub fn converter_fixes(self, kind: Kind) -> bool {
+        kind.is_lossless()
+            && match self {
+                Issue::Codec(k) => matches!(k, Kind::Flac | Kind::Alac),
+                Issue::WavExtensible | Issue::FloatWav | Issue::BitDepth(_) | Issue::AiffC => true,
+                Issue::SampleRateUnsupported(rate) => rate > 48_000,
+                Issue::WavFormat(_) | Issue::Channels(_) | Issue::VbrNoXing | Issue::Over4GiB => {
+                    false
+                }
+            }
+    }
 }
 
 impl fmt::Display for Issue {
@@ -485,6 +500,35 @@ mod tests {
             channels,
             bit_depth,
             bit_rate_kbps: None,
+        }
+    }
+
+    #[test]
+    fn converter_fixes_lossless_issues_only() {
+        let fixed = [
+            Issue::Codec(Kind::Flac),
+            Issue::Codec(Kind::Alac),
+            Issue::WavExtensible,
+            Issue::FloatWav,
+            Issue::BitDepth(32),
+            Issue::SampleRateUnsupported(96_000),
+            Issue::AiffC,
+        ];
+        for issue in fixed {
+            assert!(issue.converter_fixes(Kind::Wav), "{issue:?}");
+            assert!(!issue.converter_fixes(Kind::Mp3), "{issue:?} on MP3");
+        }
+        let not_fixed = [
+            Issue::Codec(Kind::Aac),
+            Issue::WavFormat(6),
+            Issue::Channels(6),
+            Issue::VbrNoXing,
+            Issue::Over4GiB,
+            // The Older players preset keeps rates up to 48 kHz.
+            Issue::SampleRateUnsupported(22_050),
+        ];
+        for issue in not_fixed {
+            assert!(!issue.converter_fixes(Kind::Wav), "{issue:?}");
         }
     }
 

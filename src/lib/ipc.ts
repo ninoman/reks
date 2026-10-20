@@ -747,6 +747,10 @@ export interface DryRun {
   };
   problems: NoticeGroup[];
   warnings: NoticeGroup[];
+  /** Tracks whose audio issue the converter's Older players preset fixes (phase 2.6). */
+  convertible: number[];
+  /** One sentence on them; null when there are none. */
+  convertText: string | null;
 }
 
 /**
@@ -817,4 +821,111 @@ export function exportApply(
 /** Asks the running export to stop (it keeps the old database while `cancellable`). */
 export function exportCancel(): Promise<void> {
   return invoke("export_cancel");
+}
+
+/** Converter output container (`reks_audio::Target`). */
+export type ConvertTarget = "wav" | "aiff" | "flac";
+/** `reks_audio::Depth`: `keep` = the source's (16 for 16 bits or fewer, else 24). */
+export type ConvertDepth = "keep" | "bits16" | "bits24";
+/** `reks_audio::Rate`. */
+export type ConvertRate = "keep" | "hz44100" | "hz48000";
+
+/** `reks_audio::ConvertSpec`. */
+export interface ConvertSpec {
+  target: ConvertTarget;
+  depth: ConvertDepth;
+  rate: ConvertRate;
+}
+
+/** `convert::ConvertOptions`. */
+export interface ConvertOptions {
+  destination: "nextToOriginal" | { folder: string };
+  library: "replace" | "addAsNew";
+  /** `trash` needs `replace`. */
+  originals: "keep" | "trash";
+  /** With rate `keep`, sources above 48 kHz go to 44.1 or 48 kHz (Older players). */
+  capRate48k: boolean;
+}
+
+/** `convert::view::Fact`. */
+export interface ConvertFact {
+  label: string;
+  value: string;
+}
+
+/** The converter's dry run (`convert::view::PlanView`); every string is final. */
+export interface ConvertDryRun {
+  /** The kept plan this shows; `convertApply` runs exactly it. */
+  planId: number;
+  ready: boolean;
+  status: string;
+  facts: ConvertFact[];
+  items: {
+    trackId: number;
+    label: string;
+    source: string;
+    dest: string;
+    from: string;
+    to: string;
+    sizeText: string;
+  }[];
+  skipped: ConvertSkip[];
+  warnings: string[];
+}
+
+export interface ConvertSkip {
+  trackId: number;
+  label: string;
+  reason: string;
+}
+
+/** Progress of a running conversion (`convert::ConvertEvent`). */
+export type ConvertEvent =
+  | { type: "started"; trackId: number; index: number; total: number }
+  | { type: "progress"; trackId: number; fraction: number }
+  | { type: "converted"; trackId: number; newTrackId: number; dest: string }
+  | { type: "failed"; trackId: number; message: string };
+
+/** The converter's report (`convert::view::ReportView`); every string is final. */
+export interface ConvertReportView {
+  outcome: "success" | "problems" | "cancelled";
+  title: string;
+  status: string;
+  facts: ConvertFact[];
+  converted: {
+    trackId: number;
+    newTrackId: number;
+    label: string;
+    dest: string;
+    original: string;
+  }[];
+  failed: { trackId: number; label: string; message: string }[];
+  skipped: ConvertSkip[];
+}
+
+/** Plans converting `tracks`; reads file headers only, writes nothing. */
+export function convertPlan(
+  tracks: number[],
+  spec: ConvertSpec,
+  options: ConvertOptions,
+): Promise<ConvertDryRun> {
+  return invoke("convert_plan", { tracks, spec, options });
+}
+
+/**
+ * Runs the plan dry run `planId` showed, streaming progress. Rejects only when that plan is
+ * gone (replanned or already run); per-file failures are in the report.
+ */
+export function convertApply(
+  planId: number,
+  onEvent: (e: ConvertEvent) => void,
+): Promise<ConvertReportView> {
+  const channel = new Channel<ConvertEvent>();
+  channel.onmessage = onEvent;
+  return invoke("convert_apply", { planId, onEvent: channel });
+}
+
+/** Asks the running conversion to stop after cleaning up its current file. */
+export function convertCancel(): Promise<void> {
+  return invoke("convert_cancel");
 }

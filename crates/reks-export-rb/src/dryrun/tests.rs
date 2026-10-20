@@ -543,6 +543,16 @@ fn track_labels_come_from_the_library() {
     assert_eq!(dry.warnings[0].items, ["Кино – Звезда: x"]);
     assert_eq!(dry.warnings[1].items, ["track 999: y"]);
     assert_eq!(dry.problems[0].items, [format!("{second_file}: z")]);
+    assert!(dry.convertible.is_empty());
+    assert_eq!(dry.convert_text, None);
+
+    plan.convertible = vec![first, second];
+    let dry = DryRun::build(&lib, &plan);
+    assert_eq!(dry.convertible, [first, second]);
+    assert!(dry
+        .convert_text
+        .as_deref()
+        .is_some_and(|t| t.starts_with("2 tracks can be converted")));
 }
 
 #[test]
