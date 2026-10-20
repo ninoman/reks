@@ -350,7 +350,7 @@ Date of decisions: 2026-10-18.
 - Rejected: enabling `baken-export`'s `onelibrary` option (embeds the key,
   untested on players); rbox (GPL-3.0-only is compatible but the repo is
   unreachable and docs.rs fails).
-- Risks: hardware rejection, cipher parameters, spec churn, legal.
+- Risks: hardware rejection, cipher parameters (resolved for 7.2.19), spec churn, legal.
 - Planner seam (2026-10-20, Phase 4 task 8): the trait `OneLibraryExport`
   lives in `reks-export-rb` (the writer crate needs `ExportPlan`, so the
   dependency can only go writer → reks-export-rb), and the app injects the
@@ -367,6 +367,22 @@ Date of decisions: 2026-10-18.
   caller, so every stick write still happens inside `apply()`. If the
   writer wants a different shape (for example build, then commit), change
   the trait here.
+- Cipher profile (2026-10-20, task 2): rekordbox 7.2.19's `exportLibrary.db`
+  opens with stock SQLCipher 4 (AES-256-CBC, PBKDF2-HMAC-SHA512 256 000
+  rounds, HMAC-SHA512, 4096-byte pages), the key used as a passphrase
+  (`PRAGMA key`, `cipher_compatibility = 4`). The DjManager #300 report that
+  standard profiles fail does not hold for 7.2.19. The key is not all hex,
+  so a raw-key reading is ruled out.
+- Writer source (2026-10-20, tasks 4–6): rows are built from the stick's
+  `export.pdb` after baken wrote it, not from the plan or the library. On
+  the reference every `content` value equals the PDB track row's (ids,
+  `masterDbId`, `masterContentId`, `contentLink`, `analysedBits` included),
+  so mirroring the PDB makes the two libraries agree by construction and
+  needs no library access in `write`. `reks-export-rb::pdbread` is the typed
+  PDB reader. `myTag` gets the four default columns, not the reference's
+  (its user's) tags; `myTagMasterDBID` 0. The file is written in WAL mode
+  and checkpointed into one file (rekordbox leaves a `-wal`); UNVERIFIED on
+  players.
 
 ## D15. Engine DJ (Phase 5): own Rust writer targeting schema 3.0.2 (and 2.21.0), no FFI
 
