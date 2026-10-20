@@ -1,0 +1,34 @@
+# Compares reks key detection with the C++ libKeyFinder on generated
+# fixtures (phase 3 task 5, D12; target >= 95% agreement).
+# UNVERIFIED: never run yet. Manual trigger only so it cannot block CI.
+name: keyfinder parity
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libkeyfinder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libkeyfinder-dev pkg-config g++
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Build the C++ driver
+        run: |
+          mkdir -p target
+          c++ -std=c++17 -O2 fixtures/keyfinder/driver.cpp \
+            $(pkg-config --cflags --libs libkeyfinder) -o target/keyfinder-driver
+
+      - name: Parity test
+        run: |
+          REKS_KEYFINDER_DRIVER="$PWD/target/keyfinder-driver" \
+            cargo test -p reks-analysis --test key -- --ignored --nocapture

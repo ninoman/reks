@@ -10,6 +10,8 @@ pub use input::{AnalysisInput, InputError, ANALYSIS_RATE, BEAT_RATE};
 
 pub mod grid;
 
+pub mod key;
+
 /// Crate version, from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

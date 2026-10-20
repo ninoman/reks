@@ -78,6 +78,14 @@ on every downbeat (110, 87, 98, 82 Hz). Beat `n` starts at
 `beat_onset_at(rate, n)`; beats 0, 4, 8, … are downbeats. 16 bars are 30 s.
 Used by `crates/reks-analysis/tests/beats.rs`.
 
+## `keyfinder/driver.cpp` — libKeyFinder reference driver
+
+A 40-line C++ program that runs the C++ libKeyFinder on raw f32 PCM and
+prints its `key_t`. The ignored test `matches_cpp_libkeyfinder` in
+`crates/reks-analysis/tests/key.rs` feeds it the generated chord fixtures
+and compares with our port (D12); build line in the file header, CI in
+`.github/workflows/keyfinder-parity.yml` (manual). UNVERIFIED: not yet run.
+
 ## `rekordbox/collection-small.xml`
 
 A hand-written rekordbox `collection.xml` (rekordbox XML format, `PRODUCT`

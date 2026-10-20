@@ -212,6 +212,14 @@ Date of decisions: 2026-10-18.
   Essentia source); shipping `libkeyfinder-sys` (build fragility).
 - Risks: port effort "weekend-scale" is unverified; key tools disagree with
   each other often, so key is advisory with a confidence value shown.
+- Implemented (phase 3 task 5): `crates/reks-analysis/src/key.rs`, ported
+  from mixxxdj/libkeyfinder `main` (2024-11; credit in the module docs).
+  Same constants (decimate to ~4.4 kHz, 16384/4096 Blackman FFT, 72-band
+  direct spectral kernel, Sha'ath profiles × octave weights, whole-track
+  mean); key type is `reks_core::Key`. Additions: an uncalibrated
+  `confidence` (winner's margin over runner-up) and an error on NaN input.
+  Agreement with the C++ library is **UNVERIFIED** until
+  `.github/workflows/keyfinder-parity.yml` runs.
 
 ## D13. Waveforms (Phase 3): own Rust generator at 150 columns/s, calibrated against rekordbox output
 

@@ -58,7 +58,7 @@ pub enum Grid {                    // reks_analysis::grid; positions are i64 sam
     Constant { bpm: f64, first_beat: i64, first_beat_in_bar: u8 },          // bpm snapped per BeatUtils rules
     Dynamic  { beats: Vec<GridBeat> },                                        // GridBeat { position, beat_in_bar }
 }
-pub struct KeyAnalysis { pub key: Key, pub confidence: f32, pub chroma: [f32; 12] }
+pub struct KeyAnalysis { pub key: Option<Key> /* None = silence */, pub confidence: f32, pub similarity: f32, pub chroma: [f32; 12] }
 
 pub struct WaveformColumns {       // 150 columns per second
     pub low: Vec<u8>, pub mid: Vec<u8>, pub high: Vec<u8>,                   // 0..=255 per-band peak, pre-calibration
@@ -163,11 +163,18 @@ stores the grid, key, confidence and `analysis_version` on the track row
    (same MP3/AAC/FLAC files) and compare rekordbox cue/grid times with ours;
    determine the per-codec offset convention (Mixxx saw 26/52 ms on MP3);
    encode the result in `reks-audio` and record it in D4.
-5. **Key detection**: port libKeyFinder's pipeline (downsample, Blackman
+5. [x] **Key detection**: port libKeyFinder's pipeline (downsample, Blackman
    windowed chromagram across octaves, tone profiles, cosine similarity)
    on `rustfft`; tests: synthetic chord fixtures for all 24 keys; CI job
    that, when `libkeyfinder` is installed, compares against the C++ output
    on fixtures (must match ≥ 95%).
+   Done: `reks_analysis::key::detect_key(&[f32], sample_rate)` →
+   `KeyAnalysis { key: Option<reks_core::Key> /* None = silence */,
+   confidence, similarity, chroma }`; any rate ≥ ~4.35 kHz. Notation and
+   spelling come from `reks_core::Key`. All 24 synthetic progressions
+   detected; noise/silence safe. C++ parity: ignored test + manual workflow
+   `keyfinder-parity.yml` with `fixtures/keyfinder/driver.cpp`, **UNVERIFIED**
+   (not run: no libkeyfinder here). `confidence` is our own, uncalibrated.
 6. **Waveform columns**: 3 band filters (start: 4th-order Bessel at 600 Hz
    and 4 kHz as in Mixxx) + per-column peak at 150 columns/s; mono height;
    streaming over PCM; tests on sine sweeps (band bytes track frequency).

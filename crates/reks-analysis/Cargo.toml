@@ -12,6 +12,8 @@ workspace = true
 [dependencies]
 beat-this = { workspace = true }
 reks-audio = { workspace = true }
+reks-core = { workspace = true }
+rustfft = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
