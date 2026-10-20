@@ -16,7 +16,9 @@ export const dialogContentVariants = cva(
     "rounded-lg border border-border bg-surface text-fg shadow-overlay outline-none",
   ],
   {
-    variants: { size: { sm: "max-w-[360px]", md: "max-w-[560px]", lg: "max-w-[640px]" } },
+    variants: {
+      size: { sm: "max-w-[360px]", md: "max-w-[560px]", lg: "max-w-[640px]", xl: "max-w-[960px]" },
+    },
     defaultVariants: { size: "sm" },
   },
 );

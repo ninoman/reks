@@ -451,6 +451,67 @@ export function overviewWaveform(id: number): Promise<ArrayBuffer> {
   return invoke("overview_waveform", { id });
 }
 
+/** `beatgrid_*`, `waveform_columns`: the grid editor (reks-core `beatgrid.rs`, src-tauri `grid.rs`). */
+export interface GridAnchor {
+  positionMs: number;
+  bpmX100: number;
+  /** 1..beatsPerBar. */
+  beatInBar: number;
+  beatsPerBar: number;
+}
+
+export interface BeatMark {
+  /** Microseconds from the start of the track. */
+  positionUs: number;
+  /** 1 = downbeat. */
+  beatInBar: number;
+}
+
+export interface Beatgrid {
+  /** Empty: no grid yet. More than one: a dynamic grid (only nudge and lock apply). */
+  anchors: GridAnchor[];
+  /** "rekordbox" | "analysis" | "manual"; null without a grid. */
+  source: string | null;
+  locked: boolean;
+  /** Every beat line from the first anchor to the end of the track. */
+  beats: BeatMark[];
+}
+
+/** One editor edit; the grid maths are in Rust. */
+export type GridEdit =
+  | { op: "nudge"; deltaMs: number }
+  /** The beat nearest `atMs` becomes beat 1; beats do not move. */
+  | { op: "setDownbeat"; atMs: number }
+  | { op: "double" }
+  | { op: "halve" }
+  /** `anchorMs` places beat 1 only when the track has no grid yet. */
+  | { op: "setBpm"; bpmX100: number; anchorMs: number }
+  | { op: "setLocked"; locked: boolean };
+
+export function beatgridGet(id: number): Promise<Beatgrid> {
+  return invoke("beatgrid_get", { id });
+}
+
+export function beatgridEdit(id: number, edit: GridEdit): Promise<Beatgrid> {
+  return invoke("beatgrid_edit", { id, edit });
+}
+
+/** Tempo × 100 of the newest run of taps (ms timestamps, oldest first); null below two taps. */
+export function beatgridTapTempo(tapsMs: number[]): Promise<number | null> {
+  return invoke("beatgrid_tap_tempo", { tapsMs: tapsMs.map(Math.round) });
+}
+
+/** Columns per second of `waveformColumns`. */
+export const COLUMNS_PER_SECOND = 150;
+
+/**
+ * Waveform columns, 4 bytes each (`low, mid, high` 0..255, `mono` 0..31),
+ * computed on first use (raw `ipc::Response`, not JSON).
+ */
+export function waveformColumns(id: number): Promise<ArrayBuffer> {
+  return invoke("waveform_columns", { id });
+}
+
 /** `settings_*`, `library_root*`, `cache_dir_move` (reks-core `settings.rs`). */
 export type KeyNotation = "classical" | "camelot" | "openKey";
 

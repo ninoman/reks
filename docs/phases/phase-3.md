@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–3 and 5–7 done). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–3, 5–7 and 13 done). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -214,10 +214,27 @@ stores the grid, key, confidence and `analysis_version` on the track row
     30 ms modulo bar), key agreement (exact, relative, neighbour), with
     per-genre breakdown; publish `docs/analysis-parity.md` with the method.
     Then tune and re-measure.
-13. **Grid editor UI**: waveform view from our columns (zoomable, 150/s),
+13. [x] **Grid editor UI**: waveform view from our columns (zoomable, 150/s),
     beat markers, set-downbeat-here, nudge ±1 ms/±10 ms, tap tempo,
     double/halve, lock grid; edits write `beatgrid` rows with `source =
     manual` and are preserved on re-analysis.
+    Done: maths and storage in
+    [beatgrid.rs](../../crates/reks-core/src/beatgrid.rs) (`GridEdit`,
+    `tap_tempo` = least-squares slope of the newest tap run, `beat_marks`;
+    positions whole ms, tempo `bpm_x100`). Set-downbeat re-phases the bar
+    without moving beats; double/halve keep downbeats (halve keeps every
+    other one); a constant grid's tempo becomes the track's BPM
+    (`bpm_source = manual`). Only nudge and lock apply to dynamic grids.
+    Lock = `track.grid_locked` (migration 0006). Re-analysis (task 11) must
+    skip a track when `Library::grid_is_user_owned` is true (locked or any
+    `manual` row). Columns: [columns.rs](../../crates/reks-analysis/src/columns.rs)
+    computes them on demand and caches `analysis/<track_id>/columns.bin`
+    (keyed by path/size/mtime + format version); `reks-cli columns <audio>
+    <out.bin>` writes the same payload. UI:
+    [GridEditor.tsx](../../src/components/GridEditor.tsx), opened from the
+    track info panel's Beatgrid section; commands in
+    [grid.rs](../../src-tauri/src/grid.rs). Checked in the browser preview
+    on the `sine-click-128` fixture's real columns (mock backend).
 14. **Hardware check**: export 20 reks-analysed tracks (no rekordbox data)
     and run the Phase 2 checklist on NXS2 and CDJ-3000; log.
 

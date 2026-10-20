@@ -1,7 +1,7 @@
 /**
  * Track info panel (right of the table) for the primary selected track:
- * artwork, editable metadata, "Played in" (play history), and read-only cue
- * and beatgrid listings.
+ * artwork, editable metadata, "Played in" (play history), the read-only cue
+ * listing, and the beatgrid summary with its editor (`GridEditor.tsx`).
  * `TrackDetailPanel` is mounted with `key={trackId}` so switching tracks
  * starts from a fresh form (unsaved edits are dropped).
  */
@@ -34,6 +34,7 @@ import { rowAt, useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
 import { primaryIndex } from "../store/selection";
 import { useKeyLabel } from "../store/settings";
+import { GridEditorDialog } from "./GridEditor";
 import { PlayedIn } from "./PlayedIn";
 import {
   buildPatch,
@@ -100,6 +101,7 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
   const [badInput, setBadInput] = useState<ReadonlySet<EditField>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [editingGrid, setEditingGrid] = useState(false);
 
   // Latest label without reloading the form when the notation changes.
   const label = useKeyLabel();
@@ -124,6 +126,17 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
       live = false;
     };
   }, [trackId, load]);
+
+  // A grid edit changes the summary and the track's BPM, not the form.
+  const gridChanged = useCallback(() => {
+    libraryTrack(trackId).then(
+      (d) => {
+        setDetail((cur) => (cur === null ? d : { ...cur, beatgrid: d.beatgrid, track: d.track }));
+        replaceRow(d.track);
+      },
+      (e: unknown) => setError(String(e)),
+    );
+  }, [trackId, replaceRow]);
 
   if (detail === null || initial === null || form === null) {
     return (
@@ -278,7 +291,20 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
       <PlayedIn trackId={trackId} playCount={t.playCount} lastPlayed={t.lastPlayed} />
 
       <section>
-        <h3 className={sectionTitle}>Beatgrid</h3>
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className={`${sectionTitle} mb-0`}>Beatgrid</h3>
+          <Button size="xs" variant="outline" onClick={() => setEditingGrid(true)}>
+            Edit grid
+          </Button>
+        </div>
+        {editingGrid && (
+          <GridEditorDialog
+            trackId={trackId}
+            title={t.title ?? "Untitled"}
+            onClose={() => setEditingGrid(false)}
+            onChanged={gridChanged}
+          />
+        )}
         {detail.beatgrid === null ? (
           <p className={muted}>No beatgrid (needs analysis)</p>
         ) : (
