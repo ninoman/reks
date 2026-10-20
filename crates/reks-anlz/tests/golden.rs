@@ -63,8 +63,8 @@ impl Reference {
 }
 
 fn demo_dirs() -> Vec<PathBuf> {
-    let root =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/rekordbox/ref-rb6-demo/USBANLZ");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/rekordbox/ref-rb6-demo/PIONEER/USBANLZ");
     vec![root.join("P016/0000875E"), root.join("P053/0001D21F")]
 }
 

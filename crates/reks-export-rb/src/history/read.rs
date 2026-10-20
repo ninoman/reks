@@ -491,7 +491,7 @@ const GROUP: usize = 0x24;
 /// The present rows of a page rekordcrate can't parse (table 19), as raw
 /// bytes in row order. A row's extent is up to the next row's start, or
 /// to the end of the used heap.
-fn raw_rows(page: &Page, raw: &[u8]) -> Vec<Vec<u8>> {
+pub(crate) fn raw_rows(page: &Page, raw: &[u8]) -> Vec<Vec<u8>> {
     let num_rows = usize::from(page.num_rows());
     let groups = num_rows.div_ceil(16);
     let used = u16_at(raw, 0x1E).map_or(0, usize::from);

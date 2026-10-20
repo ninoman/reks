@@ -16,6 +16,8 @@
 //!                               read the stick back against a fresh plan
 //! reks rb history <stick> [--json]
 //!                               list the play history players left on the stick
+//! reks rb diff <ours-stick> <reference-stick> [--json]
+//!                               compare two sticks (PDB, playlists, ANLZ, bytes)
 //! reks history scan <stick|backup> --library <library.sqlite> [--hist1-dates] [--json]
 //!                               dry run of importing a stick's play history
 //! reks history import <stick|backup> <scan flags> [--practice|--include <session>]... [--yes]
@@ -80,6 +82,7 @@ fn main() -> anyhow::Result<()> {
              | columns <audio> <out.bin> \
              | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run] \
              | rb plan|export|validate <stick> ... | rb history <stick> [--json] \
+             | rb diff <ours-stick> <reference-stick> [--json] \
              | history scan|import <stick|backup> --library <library.sqlite> ... \
              | adopt scan <stick> --library <library.sqlite> [--json] \
              | convert plan|apply --library <library.sqlite> ...]"
