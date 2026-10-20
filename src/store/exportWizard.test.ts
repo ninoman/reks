@@ -260,6 +260,7 @@ describe("useExportWizard", () => {
         volume: 1,
       },
       anlzPreference: "reksFirst",
+      onelibraryKeySet: false,
     } as const;
     useSettings.setState({ settings });
     const w = useExportWizard.getState;

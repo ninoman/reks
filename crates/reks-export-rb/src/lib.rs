@@ -11,6 +11,7 @@ pub mod diff;
 pub mod divider;
 pub mod dryrun;
 pub mod history;
+pub mod onelibrary;
 pub mod plan;
 pub mod rbcache;
 pub mod reksanlz;

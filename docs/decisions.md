@@ -335,6 +335,13 @@ Date of decisions: 2026-10-18.
   untested on players); rbox (GPL-3.0-only is compatible but the repo is
   unreachable and docs.rs fails).
 - Risks: hardware rejection, cipher parameters, spec churn, legal.
+- Planner seam (2026-10-20, Phase 4 task 8): the trait `OneLibraryExport`
+  lives in `reks-export-rb` (the writer crate needs `ExportPlan`, so the
+  dependency can only go writer → reks-export-rb), and the app injects the
+  implementation. The key is a `reks_core::OneLibraryKey` (`zeroize`,
+  Apache-2.0 OR MIT): never serialised, never logged, stored in plain text
+  in the local library database. That is the policy's "pasted in Settings";
+  OS keychain storage is not in this phase.
 
 ## D15. Engine DJ (Phase 5): own Rust writer targeting schema 3.0.2 (and 2.21.0), no FFI
 

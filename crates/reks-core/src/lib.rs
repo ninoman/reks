@@ -20,6 +20,7 @@ pub mod preview;
 pub mod query;
 pub mod rbxml;
 pub mod scan;
+pub mod secret;
 pub mod settings;
 pub mod timefmt;
 pub mod track;
@@ -41,6 +42,7 @@ pub use query::{
     TrackQuery, TrackRow,
 };
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
+pub use secret::OneLibraryKey;
 pub use settings::{AnlzPreference, LibraryRoot, Settings, SettingsPatch, UiState};
 pub use track::{ArtworkInfo, BeatgridSummary, Cue, Track, TrackDetail, TrackPatch};
 

@@ -2,8 +2,9 @@
 //! reks that writes to a stick. It runs a planned export in this order and
 //! stops at the first step that fails:
 //!
-//! 1. **Pre-flight**: the plan is not blocked and has tracks; the stick is
-//!    still there ([`StickCheck`]): mounted at the plan's root, with the same
+//! 1. **Pre-flight**: the plan is not blocked, has tracks and does not ask
+//!    for OneLibrary (not wired yet, [`ApplyError::OneLibraryNotWired`]); the
+//!    stick is still there ([`StickCheck`]): mounted at the plan's root, with the same
 //!    volume serial; enough free space for [`ExportPlan::bytes_to_write`];
 //!    the history on the stick is what the dry run showed (a stick played
 //!    since needs a new plan, or its new history would go without backup). A
@@ -246,6 +247,11 @@ pub enum ApplyError {
     /// The writer stopped before replacing `export.pdb`.
     #[error(transparent)]
     Writer(WriterError),
+    /// The plan has the OneLibrary step on, which `apply` cannot run until
+    /// the `reks-export-onelibrary` writer lands (Phase 4 task 8). The
+    /// planner blocks such plans already; this catches one read back from JSON.
+    #[error("this build cannot write exportLibrary.db; turn the OneLibrary export off")]
+    OneLibraryNotWired,
 }
 
 /// Runs `plan` on its stick (module docs). `progress` gets [`ApplyEvent`]s,
@@ -378,6 +384,9 @@ fn preflight(plan: &ExportPlan, check: StickCheck) -> Result<Vec<ApplyWarning>, 
     }
     if plan.tracks.is_empty() {
         return Err(ApplyError::NothingToExport);
+    }
+    if plan.options.onelibrary {
+        return Err(ApplyError::OneLibraryNotWired);
     }
     let root = plan.device.mount_point.as_path();
     let free = match check {

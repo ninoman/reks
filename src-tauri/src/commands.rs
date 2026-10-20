@@ -16,6 +16,7 @@ use reks_core::{
 use reks_export_rb::device::{self, DeviceInfo};
 use reks_export_rb::devices::{self, Device, DeviceId, DeviceMatch, ProfileStatus};
 use reks_export_rb::dryrun::{self, DryRun};
+use reks_export_rb::onelibrary::NoWriter;
 use reks_export_rb::plan::{ExportOptions, Selection};
 use reks_export_rb::report::{self, ProgressView, ReportView};
 use reks_export_rb::{ApplyEnv, StickCheck, TargetProfile};
@@ -527,6 +528,11 @@ pub async fn profile_status(
 }
 
 /// A dry run and the id `export_apply` takes to write exactly that plan.
+/// Plans `exportLibrary.db` for exports with the OneLibrary option: the
+/// stub, which blocks such exports, until the reks-export-onelibrary writer
+/// lands (phase 4 task 8).
+const ONELIBRARY: NoWriter = NoWriter;
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlannedExport {
@@ -561,7 +567,7 @@ pub async fn export_plan(
     let lib = Arc::clone(&state.library);
     let sel = selection.clone();
     let (plan, dry_run) = tauri::async_runtime::spawn_blocking(move || {
-        dryrun::plan_at(&lib, &sel, &mount_point, &options).map(|plan| {
+        dryrun::plan_at(&lib, &sel, &mount_point, &options, &ONELIBRARY).map(|plan| {
             let dry_run = DryRun::build(&lib, &plan);
             (plan, dry_run)
         })

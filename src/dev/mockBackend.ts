@@ -31,6 +31,7 @@ import type {
   PlaylistStatus,
   ProfileStatus,
   Settings,
+  SettingsPatch,
   SortColumn,
   TrackDetail,
   TrackQuery,
@@ -217,6 +218,7 @@ let settings: Settings = {
   keyNotation: "classical",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
+  onelibraryKeySet: false,
   ui: {
     hiddenColumns: null,
     filterBarOpen: true,
@@ -717,6 +719,24 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
       items: [],
     });
   }
+  // The OneLibrary step as the app's stub plans it (phase 4 task 8).
+  if (opts.onelibrary) {
+    problems.push(
+      settings.onelibraryKeySet
+        ? {
+            kind: "oneLibraryUnavailable",
+            title:
+              "This build of reks cannot write exportLibrary.db yet; turn the OneLibrary export off.",
+            items: [],
+          }
+        : {
+            kind: "oneLibraryKeyMissing",
+            title:
+              "The OneLibrary export needs its key: paste it in Settings → Experimental or set REKS_ONELIBRARY_KEY.",
+            items: [],
+          },
+    );
+  }
   const none = { count: 0, bytes: 0, totalText: "None", files: [] };
   const write = copies.length * 9_400_000;
   lastPlan = { mountPoint: dev.mountPoint, label: dev.label, played, opts };
@@ -826,8 +846,8 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
           guard: null,
         },
     problems,
-    warnings:
-      copies.length > 0
+    warnings: [
+      ...(copies.length > 0
         ? [
             {
               kind: "skipped",
@@ -835,7 +855,39 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
               items: [`${copies[0]?.path ?? ""}: never analysed by rekordbox`],
             },
           ]
-        : [],
+        : []),
+      ...(opts.onelibrary
+        ? [
+            {
+              kind: "oneLibraryExperimental",
+              title:
+                "OneLibrary (exportLibrary.db) is experimental: no player has been tested with reks's file, and AlphaTheta does not support third-party OneLibrary exports.",
+              items: [],
+            },
+          ]
+        : []),
+    ],
+    onelibrary:
+      opts.onelibrary && settings.onelibraryKeySet
+        ? {
+            title: "OneLibrary (experimental)",
+            text: "Also writes exportLibrary.db for players that read OneLibrary, next to the Device Library. No player has been tested with it, and AlphaTheta does not support it. It replaces the exportLibrary.db already on the stick.",
+            write: {
+              path: "/PIONEER/rekordbox/exportLibrary.db",
+              from: null,
+              sizeText: "size not known yet",
+            },
+            removes: {
+              count: 2,
+              bytes: 1_200_000,
+              totalText: "2 files, 1.2 MB",
+              files: [
+                { path: "/PIONEER/rekordbox/exportLibrary.db-wal", from: null, sizeText: "1.1 MB" },
+                { path: "/PIONEER/rekordbox/exportExt.pdb", from: null, sizeText: "98.3 KB" },
+              ],
+            },
+          }
+        : null,
     convertible: copies.length > 0 ? TRACKS.slice(0, 2).map((t) => t.id) : [],
     convertText:
       copies.length > 0
@@ -964,9 +1016,13 @@ mockIPC((cmd, payload) => {
       return mutate(args.op as PlaylistOp);
     case "settings_get":
       return settings;
-    case "settings_set":
-      settings = { ...settings, ...(args.patch as Partial<Settings>) };
+    case "settings_set": {
+      // Like Rust: the key is stored, never echoed back.
+      const { onelibraryKey, ...patch } = args.patch as SettingsPatch;
+      settings = { ...settings, ...patch };
+      if (onelibraryKey !== undefined) settings.onelibraryKeySet = onelibraryKey !== null;
       return settings;
+    }
     case "library_roots":
       return [{ id: 1, path: "/Users/dj/Music", lastScan: "2026-10-18T19:48:00Z" }];
     case "player_devices":

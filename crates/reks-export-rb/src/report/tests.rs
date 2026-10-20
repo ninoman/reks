@@ -488,7 +488,14 @@ fn live_export_to_a_mounted_stick() {
         missing_analysis: MissingAnalysis::Generate,
         ..ExportOptions::default()
     };
-    let plan = crate::dryrun::plan_at(&w.lib, &w.sel(), &stick, &opts).unwrap();
+    let plan = crate::dryrun::plan_at(
+        &w.lib,
+        &w.sel(),
+        &stick,
+        &opts,
+        &crate::onelibrary::NoWriter,
+    )
+    .unwrap();
     assert!(plan.history.volume_serial.is_some());
     let env = ApplyEnv {
         library: &w.lib,

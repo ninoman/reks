@@ -6,7 +6,8 @@
 //! here.
 //!
 //! [`plan_at`] is the UI's entry point: the volume mounted exactly at a mount
-//! point, rekordbox's analysis from its default folders, then [`plan`].
+//! point, rekordbox's analysis from its default folders, then [`plan`] and
+//! the OneLibrary step ([`plan::plan_onelibrary`]).
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -16,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::device::{self, DeviceError, DeviceInfo, FsKind};
 use crate::history::HistoryPolicy;
+use crate::onelibrary::{self as one, ExistingLibrary, OneLibraryExport};
 use crate::plan::{
     self, human_bytes, AnlzOp, CacheLocator, ExportOptions, ExportPlan, FileOp, PlanError, Problem,
     Selection, Warning,
@@ -38,13 +40,15 @@ pub enum DryRunError {
 /// Plans exporting `sel` to the volume mounted at exactly `mount_point`
 /// (not a folder inside one: the plan treats the device root as the stick),
 /// with ANLZ from rekordbox's default analysis folders and the library's
-/// analysis cache ([`plan::plan`]). Reads only; it scans
+/// analysis cache ([`plan::plan`]), then the OneLibrary step through
+/// `onelibrary` with the key from [`one::resolve_key`]. Reads only; it scans
 /// the analysis cache and samples file bytes, so it can take a while.
 pub fn plan_at(
     lib: &Library,
     sel: &Selection,
     mount_point: &Path,
     opts: &ExportOptions,
+    onelibrary: &dyn OneLibraryExport,
 ) -> Result<ExportPlan, DryRunError> {
     let dev = device::list_devices()
         .into_iter()
@@ -52,7 +56,12 @@ pub fn plan_at(
         .ok_or_else(|| DeviceError::NotFound(mount_point.to_path_buf()))?;
     let cache = RbCache::scan(&rbcache::default_roots())?;
     let locator = CacheLocator::for_selection(lib, sel, cache)?;
-    Ok(plan::plan(lib, sel, &dev, opts, &locator)?)
+    let mut plan = plan::plan(lib, sel, &dev, opts, &locator)?;
+    if opts.onelibrary {
+        let key = one::resolve_key(lib)?;
+        plan::plan_onelibrary(&mut plan, onelibrary, key.as_ref())?;
+    }
+    Ok(plan)
 }
 
 /// What the dry-run step shows.
@@ -86,6 +95,21 @@ pub struct DryRun {
     /// One sentence on them, `None` when there are none.
     #[serde(default)]
     pub convert_text: Option<String>,
+    /// The OneLibrary step, when it is on and planned.
+    #[serde(default)]
+    pub onelibrary: Option<OneLibraryView>,
+}
+
+/// What the experimental OneLibrary step writes and removes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OneLibraryView {
+    pub title: String,
+    pub text: String,
+    /// `exportLibrary.db`.
+    pub write: FileRow,
+    /// rekordbox's files beside it that the step removes.
+    pub removes: FileGroup,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -330,6 +354,7 @@ impl DryRun {
             history: history_view(plan),
             problems: problems.finish(problem_title),
             warnings: warnings.finish(warning_title),
+            onelibrary: onelibrary_view(plan),
             convertible: plan.convertible.clone(),
             convert_text: (!plan.convertible.is_empty()).then(|| {
                 format!(
@@ -582,6 +607,34 @@ fn space_view(plan: &ExportPlan) -> SpaceView {
     }
 }
 
+fn onelibrary_view(plan: &ExportPlan) -> Option<OneLibraryView> {
+    let ol = plan.onelibrary.as_ref()?;
+    let replaces = match &ol.existing {
+        ExistingLibrary::Absent => "",
+        ExistingLibrary::Read { .. } | ExistingLibrary::NotRead { .. } => {
+            " It replaces the exportLibrary.db already on the stick."
+        }
+    };
+    Some(OneLibraryView {
+        title: "OneLibrary (experimental)".to_owned(),
+        text: format!(
+            "Also writes exportLibrary.db for players that read OneLibrary, next to the Device \
+             Library. No player has been tested with it, and AlphaTheta does not support it.\
+             {replaces}"
+        ),
+        write: FileRow {
+            path: ol.write.dst_rel.clone(),
+            from: None,
+            size_text: if ol.write.bytes == 0 {
+                "size not known yet".to_owned()
+            } else {
+                format!("about {}", human_bytes(ol.write.bytes))
+            },
+        },
+        removes: file_group(&ol.removes, false),
+    })
+}
+
 fn history_view(plan: &ExportPlan) -> HistoryView {
     let h = &plan.history;
     let policy = plan.options.history;
@@ -664,11 +717,12 @@ fn guard_view(plan: &ExportPlan) -> Option<GuardView> {
     if !g.needs_choice() {
         return None;
     }
-    let n = if g.unreadable.is_some() {
+    let pdb = if g.unreadable.is_some() {
         plan.history.pdb_sessions as usize
     } else {
         g.sessions.len()
     };
+    let n = pdb + g.onelibrary_sessions as usize;
     let title = format!(
         "{} not in your library",
         count(n, "session on this stick is", "sessions on this stick are")
@@ -689,7 +743,13 @@ fn guard_view(plan: &ExportPlan) -> Option<GuardView> {
              History later.",
         );
     }
-    let sessions = g
+    if g.onelibrary_sessions > 0 {
+        text.push_str(
+            " Sessions in the stick's exportLibrary.db can't be imported yet: Import now and \
+             Back up and continue keep them in the backup.",
+        );
+    }
+    let mut sessions: Vec<String> = g
         .sessions
         .iter()
         .map(|s| {
@@ -708,6 +768,12 @@ fn guard_view(plan: &ExportPlan) -> Option<GuardView> {
             line
         })
         .collect();
+    if g.onelibrary_sessions > 0 {
+        sessions.push(format!(
+            "exportLibrary.db: {}",
+            count(g.onelibrary_sessions as usize, "session", "sessions")
+        ));
+    }
     Some(GuardView {
         title,
         text,
@@ -798,6 +864,7 @@ fn warning_kind(w: &Warning) -> &'static str {
         Warning::EmptyPlaylist { .. } => "emptyPlaylist",
         Warning::StickHistory { .. } => "stickHistory",
         Warning::NoVolumeSerial => "noVolumeSerial",
+        Warning::OneLibraryExperimental => "oneLibraryExperimental",
     }
 }
 
@@ -853,6 +920,9 @@ fn problem_kind(p: &Problem) -> &'static str {
         Problem::DiscardNotConfirmed => "discardNotConfirmed",
         Problem::HistoryNotImported { .. } => "historyNotImported",
         Problem::HistoryImportUnavailable { .. } => "historyImportUnavailable",
+        Problem::OneLibraryKeyMissing => "oneLibraryKeyMissing",
+        Problem::OneLibraryUnavailable => "oneLibraryUnavailable",
+        Problem::OneLibraryHistoryNotImported { .. } => "oneLibraryHistoryNotImported",
     }
 }
 

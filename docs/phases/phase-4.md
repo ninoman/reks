@@ -1,6 +1,6 @@
 # Phase 4 — OneLibrary export (`exportLibrary.db`)
 
-Status: not started. Depends on: Phase 2 (legacy export, ANLZ layout, planner)
+Status: in progress (task 8 done with a stub writer). Depends on: Phase 2 (legacy export, ANLZ layout, planner)
 and Phase 3 (own analysis, so every exported track has ANLZ files). Read
 `docs/decisions.md` §OneLibrary and `docs/research.md` §2 first.
 
@@ -137,8 +137,31 @@ Mapping from the export plan (same source as Phase 2's PDB):
    the reference stick; baken's `ONELIBRARY_FILES` constant is a hint).
 7. **Reader + validator**: open what we wrote, cross-check counts and paths
    against `export.pdb` (parsed by rekordcrate) and ANLZ file existence.
-8. **Planner integration + UI**: experimental toggle, key entry in Settings,
-   warnings, dry-run shows the extra file.
+8. [x] **Planner integration + UI**: experimental toggle, key entry in Settings,
+   warnings, dry-run shows the extra file. Done (stub until the writer lands):
+   the seam is [`onelibrary.rs`](../../crates/reks-export-rb/src/onelibrary.rs)
+   in reks-export-rb: the trait `OneLibraryExport::plan(&ExportPlan,
+   &OneLibraryKey) -> OneLibraryPlan` (planned write, auxiliary files
+   removed, existing database's history, warnings/problems). The writer
+   crate depends on reks-export-rb, so it implements the trait and the app
+   picks the implementation; until then the app uses `NoWriter` (feature
+   `onelibrary-stub`), which lists the file and blocks with "this build cannot
+   write exportLibrary.db". `ExportOptions::onelibrary` (off by default,
+   labelled Experimental) runs
+   [`plan_onelibrary`](../../crates/reks-export-rb/src/plan/onelibrary.rs)
+   after the export guard. It adds an experimental warning, blocks on a
+   missing key, and lists `exportLibrary.db` plus the auxiliary files
+   (baken's `ONELIBRARY_FILES` minus the database). Sessions the writer reads
+   in an existing `exportLibrary.db` go through the export guard
+   (`OneLibraryHistoryNotImported` until a choice; Import and Back up keep the
+   file in the backup). A database it cannot read keeps the Phase 2 backup.
+   The key (`reks_core::OneLibraryKey`: redacted `Debug`, no `Serialize`,
+   zeroed on drop) is stored under `onelibrary.key` in the `setting` table
+   from Settings → Experimental. The UI only learns `onelibraryKeySet`, and
+   `REKS_ONELIBRARY_KEY` is the fallback. Left for the writer's landing:
+   `apply` refuses a plan with the option on (`OneLibraryNotWired`) until it
+   calls the writer after baken, and src-tauri swaps `NoWriter` for the
+   writer.
 9. **Hardware test**: checklist below on a OneLibrary-only player (borrow or
    rent an OPUS-QUAD/XDJ-AZ/CDJ-3000X). Log results in `docs/hw-test-log.md`.
 10. **Diff tool**: `reks-cli onelibrary diff <ref.db> <ours.db>` to speed up

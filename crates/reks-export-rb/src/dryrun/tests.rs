@@ -575,6 +575,7 @@ fn plan_at_needs_an_exact_mount_point() {
         &Selection::default(),
         &w.stick,
         &ExportOptions::default(),
+        &crate::onelibrary::NoWriter,
     )
     .unwrap_err();
     assert!(
@@ -598,6 +599,7 @@ fn live_plan_at_a_mounted_stick() {
         &Selection::default(),
         &stick,
         &ExportOptions::default(),
+        &crate::onelibrary::NoWriter,
     )
     .unwrap();
     let dry = DryRun::build(&lib, &plan);

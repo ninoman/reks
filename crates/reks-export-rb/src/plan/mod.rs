@@ -27,6 +27,11 @@
 //!   sessions against the library ([`guard_history`]); sessions not imported
 //!   yet block the plan until [`ExportOptions::history_chosen`].
 //!
+//! - OneLibrary (Phase 4 task 8, D14): with [`ExportOptions::onelibrary`],
+//!   [`plan_onelibrary`] asks a [`OneLibraryExport`] to plan
+//!   `exportLibrary.db` ([`ExportPlan::onelibrary`]). Experimental, off by
+//!   default; a missing key blocks, and history in the stick's existing
+//!   `exportLibrary.db` goes through the export guard.
 //! - Playlist dividers (D22) become planned tracks backed by a generated
 //!   silent WAV when [`ExportOptions::dividers`] is on ([`crate::divider`]);
 //!   otherwise they are left out.
@@ -39,6 +44,7 @@
 
 mod guard;
 mod locate;
+mod onelibrary;
 mod source;
 mod stick;
 mod text;
@@ -56,11 +62,13 @@ use crate::audiocheck::{self, Severity};
 use crate::device::{DeviceInfo, FsKind};
 use crate::divider::{self, DividerInfo};
 use crate::history::{self, BackupFile, BackupPlan, HistoryError, HistoryPolicy, StickHistory};
+use crate::onelibrary::OneLibraryPlan;
 use crate::reksanlz;
 use crate::TargetProfile;
 
 pub use guard::{guard_history, HistoryGuard, UnimportedSession};
 pub use locate::CacheLocator;
+pub use onelibrary::plan_onelibrary;
 pub use reksanlz::ReksCache;
 pub use source::{load, SourceTrack, Sources};
 pub use stick::anlz_dir;
@@ -118,6 +126,10 @@ pub struct ExportOptions {
     /// rekordbox's analysis or reks's first, when both have a track (the
     /// app setting of the same name, [`reks_core::settings::ANLZ_PREFERENCE`]).
     pub anlz_preference: AnlzPreference,
+    /// Also write `exportLibrary.db` for OneLibrary players
+    /// ([`plan_onelibrary`]). Off by default; experimental and UNVERIFIED
+    /// on players until a Phase 4 hardware test passes.
+    pub onelibrary: bool,
 }
 
 impl Default for ExportOptions {
@@ -133,6 +145,7 @@ impl Default for ExportOptions {
             history_chosen: false,
             dividers: false,
             anlz_preference: AnlzPreference::RekordboxFirst,
+            onelibrary: false,
         }
     }
 }
@@ -246,6 +259,10 @@ pub struct ExportPlan {
     /// in plan order: the dry run offers to convert them (Phase 2.6).
     #[serde(default)]
     pub convertible: Vec<TrackId>,
+    /// The OneLibrary step ([`plan_onelibrary`]); `None` when it is off or
+    /// has no key.
+    #[serde(default)]
+    pub onelibrary: Option<OneLibraryPlan>,
 }
 
 impl ExportPlan {
@@ -330,6 +347,10 @@ pub enum OpReason {
     Stale,
     /// A stick database file copied off before writing (history safeguard).
     HistoryBackup,
+    /// `exportLibrary.db`, written by the OneLibrary step ([`crate::onelibrary`]).
+    OneLibrary,
+    /// rekordbox's file beside `exportLibrary.db` that the OneLibrary step removes.
+    OneLibraryAuxiliary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -400,6 +421,9 @@ pub enum Warning {
     /// The OS gave no volume serial: backups go under `unknown-serial` and
     /// later history import cannot tell this stick from others.
     NoVolumeSerial,
+    /// The OneLibrary export is on: experimental, unverified on players and
+    /// unsupported by AlphaTheta (D14).
+    OneLibraryExperimental,
 }
 
 /// A blocker.
@@ -456,6 +480,18 @@ pub enum Problem {
     /// could not be read.
     HistoryImportUnavailable {
         message: String,
+    },
+    /// The OneLibrary export is on but no key is stored or in
+    /// `REKS_ONELIBRARY_KEY` ([`crate::onelibrary::resolve_key`]).
+    OneLibraryKeyMissing,
+    /// The OneLibrary export is on but this build has no writer
+    /// ([`crate::onelibrary::NoWriter`]).
+    OneLibraryUnavailable,
+    /// The stick's `exportLibrary.db` holds play history sessions reks cannot
+    /// import yet (Phase 4 task 11), and the user has not chosen what happens
+    /// to them ([`ExportOptions::history_chosen`]).
+    OneLibraryHistoryNotImported {
+        sessions: u32,
     },
 }
 
@@ -715,6 +751,7 @@ pub fn plan_sources(
         bytes_to_write,
         bytes_free_after,
         convertible,
+        onelibrary: None,
     })
 }
 
