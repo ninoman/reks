@@ -2,7 +2,7 @@
 
 Status: started 2026-10-20 ahead of the Phase 2 hardware campaign with the
 maintainer's approval (software only; anything that needs a player stays
-UNVERIFIED); tasks 1–3 and 5 done. Depends on: Phase 2 done, including its hardware campaign,
+UNVERIFIED); tasks 1–3 and 5–7 done. Depends on: Phase 2 done, including its hardware campaign,
 history safeguard and `export_manifest` (tasks 12–14). Runs before Phase 3.
 Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
@@ -245,10 +245,23 @@ Divider rules
    explicit Practice choice stores `user`. `Library::session_link_entry`
    ("Locate…") is here; counts are not recomputed until task 7. The fixture
    test (`played_stick_fixture_imports_once`) is `#[ignore]` like task 5's.
-7. **Derived counts**: `recompute_play_stats`, pre-baseline rule, frozen
+7. [x] **Derived counts**: `recompute_play_stats`, pre-baseline rule, frozen
    baseline on XML re-import. Property test: count = baseline + included
    track entries for random session sets and toggles. Deleting all sessions
    returns every track to baseline.
+   Done in [stats.rs](../../crates/reks-core/src/history/stats.rs):
+   `Library::recompute_play_stats(TrackSet)`, plus `session_update`
+   (`SessionPatch`; Practice stores reason `user`, clearing it clears the
+   reason) and `session_delete`, which task 9 builds on. History import,
+   `session_link_entry` (old and new track), the Practice toggle, session
+   delete and the rekordbox XML import each recompute the tracks they touch
+   in their own transaction. The pre-baseline rule is task 6's default
+   exclusion. XML import: `PlayCount` / `LastPlayed` fill `baseline_*` only
+   for tracks it creates (an existing row, scanned or imported, keeps its
+   baseline). Tests in [tests.rs](../../crates/reks-core/src/history/tests.rs)
+   (property test, 100-track toggle under 100 ms) and
+   `reimport_keeps_the_play_baseline_frozen` in
+   [rbxml_import.rs](../../crates/reks-core/tests/rbxml_import.rs).
 8. **Export guard**: "Import now" / "Back up and continue" / "Continue and
    discard" when `scan` finds sessions not yet imported; the planner refuses
    to apply without a choice. Tests on the fixture stick.

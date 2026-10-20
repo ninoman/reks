@@ -592,3 +592,405 @@ fn scan_writes_nothing() {
     scan(&h, &lib).unwrap();
     assert_eq!(session_count(&lib), 0);
 }
+
+// ---- Derived counts (task 7) ----
+
+/// (play_count, last_played) of a track.
+fn stats(lib: &Library, id: TrackId) -> (i64, Option<String>) {
+    lib.conn()
+        .unwrap()
+        .query_row(
+            "SELECT play_count, last_played FROM track WHERE id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap()
+}
+
+fn set_baseline(lib: &Library, id: TrackId, count: i64, last: Option<&str>) {
+    lib.conn()
+        .unwrap()
+        .execute(
+            "UPDATE track SET baseline_play_count = ?2, baseline_last_played = ?3,
+                              play_count = ?2, last_played = ?3 WHERE id = ?1",
+            params![id, count, last],
+        )
+        .unwrap();
+}
+
+fn set_baseline_date(lib: &Library, date: &str) {
+    lib.conn()
+        .unwrap()
+        .execute(
+            "UPDATE setting SET value = ?1 WHERE key = 'history.baseline_date'",
+            [format!("\"{date}\"")],
+        )
+        .unwrap();
+}
+
+fn dated(name: &str, played_on: Option<&str>, entries: Vec<SourceEntry>) -> SourceSession {
+    SourceSession {
+        played_on: played_on.map(str::to_owned),
+        ..session(name, entries)
+    }
+}
+
+#[test]
+fn counts_follow_included_track_entries() {
+    let lib = lib();
+    set_baseline_date(&lib, "2026-06-01");
+    let a = track(&lib, "/m/a.mp3", "A", "Alpha", 200_000);
+    let b = track(&lib, "/m/b.mp3", "B", "Beta", 200_000);
+    let div = track(&lib, "/m/never.mp3", "N", "Never", 200_000);
+    set_baseline(&lib, a, 5, Some("2026-05-01"));
+    set_baseline(&lib, b, 0, None);
+    lib.replace_manifest(
+        Some(SERIAL),
+        &[ManifestRow {
+            stick_path: "/Contents/d/div-1-0.wav".into(),
+            item_kind: ManifestItemKind::Divider,
+            track_id: None,
+        }],
+    )
+    .unwrap();
+    let ea = entry("/Contents/x/a.mp3", "A", "Alpha", 200);
+    let eb = entry("/Contents/x/b.mp3", "B", "Beta", 200);
+    let h = stick(
+        Some(SERIAL),
+        vec![
+            dated(
+                "HISTORY 001",
+                Some("2026-07-01"),
+                vec![
+                    ea.clone(),
+                    entry("/Contents/d/div-1-0.wav", "", "PEAK", 4),
+                    ea.clone(),
+                    entry("/Contents/u/unknown.mp3", "U", "U", 1),
+                ],
+            ),
+            // Pre-baseline: imported excluded, so not counted.
+            dated(
+                "HISTORY 002",
+                Some("2026-05-20"),
+                vec![ea.clone(), eb.clone()],
+            ),
+            dated("HISTORY 003", Some("2026-08-01"), vec![eb.clone()]),
+        ],
+    );
+    let plan = scan(&h, &lib).unwrap();
+    let report = import(&plan, &ImportChoices::default(), &lib).unwrap();
+    assert_eq!(report.created.len(), 3);
+    assert_eq!(stats(&lib, a), (7, Some("2026-07-01".into())));
+    assert_eq!(stats(&lib, b), (1, Some("2026-08-01".into())));
+    assert_eq!(stats(&lib, div), (0, None));
+
+    // Practice on and off restores the exact values.
+    let first = report.created[0];
+    let before = (stats(&lib, a), stats(&lib, b));
+    lib.session_update(
+        first,
+        SessionPatch {
+            excluded: Some(true),
+            ..SessionPatch::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(stats(&lib, a), (5, Some("2026-05-01".into())));
+    lib.session_update(
+        first,
+        SessionPatch {
+            excluded: Some(false),
+            ..SessionPatch::default()
+        },
+    )
+    .unwrap();
+    assert_eq!((stats(&lib, a), stats(&lib, b)), before);
+
+    // Including the pre-baseline session counts it.
+    lib.session_update(
+        report.created[1],
+        SessionPatch {
+            excluded: Some(false),
+            ..SessionPatch::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(stats(&lib, a), (8, Some("2026-07-01".into())));
+    assert_eq!(stats(&lib, b), (2, Some("2026-08-01".into())));
+
+    // Linking the unmatched entry counts it for its new track.
+    lib.session_link_entry(first, 3, b).unwrap();
+    assert_eq!(stats(&lib, b), (3, Some("2026-08-01".into())));
+    // Relinking moves the play from b to div.
+    lib.session_link_entry(first, 3, div).unwrap();
+    assert_eq!(stats(&lib, b).0, 2);
+    assert_eq!(stats(&lib, div), (1, Some("2026-07-01".into())));
+
+    for id in report.created {
+        lib.session_delete(id).unwrap();
+    }
+    assert_eq!(stats(&lib, a), (5, Some("2026-05-01".into())));
+    assert_eq!(stats(&lib, b), (0, None));
+    assert_eq!(stats(&lib, div), (0, None));
+    assert_eq!(session_count(&lib), 0);
+}
+
+#[test]
+fn session_update_edits_and_errors() {
+    let lib = lib();
+    let h = stick(
+        Some(SERIAL),
+        vec![session(
+            "HISTORY 001",
+            vec![entry("/Contents/a.mp3", "A", "A", 1)],
+        )],
+    );
+    let plan = scan(&h, &lib).unwrap();
+    let id = import(&plan, &ImportChoices::default(), &lib)
+        .unwrap()
+        .created[0];
+    lib.session_update(
+        id,
+        SessionPatch {
+            name: Some("  Friday  ".into()),
+            venue: Some(Some("Club".into())),
+            notes: Some(Some("  ".into())),
+            excluded: Some(false),
+        },
+    )
+    .unwrap();
+    let row: (String, Option<String>, Option<String>, bool, Option<String>) = lib
+        .conn()
+        .unwrap()
+        .query_row(
+            "SELECT name, venue, notes, excluded, excluded_reason FROM play_session WHERE id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        row,
+        ("Friday".into(), Some("Club".into()), None, false, None)
+    );
+    lib.session_update(
+        id,
+        SessionPatch {
+            excluded: Some(true),
+            ..SessionPatch::default()
+        },
+    )
+    .unwrap();
+    let reason: Option<String> = lib
+        .conn()
+        .unwrap()
+        .query_row(
+            "SELECT excluded_reason FROM play_session WHERE id = ?1",
+            [id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(reason.as_deref(), Some("user"));
+    assert!(matches!(
+        lib.session_update(
+            id,
+            SessionPatch {
+                name: Some(" ".into()),
+                ..SessionPatch::default()
+            }
+        ),
+        Err(Error::InvalidField { field: "name", .. })
+    ));
+    assert!(matches!(
+        lib.session_update(99, SessionPatch::default()),
+        Err(Error::SessionNotFound(99))
+    ));
+    assert!(matches!(
+        lib.session_delete(99),
+        Err(Error::SessionNotFound(99))
+    ));
+}
+
+/// Acceptance: Practice on a 100-track session updates within 100 ms and
+/// toggling back restores the exact values.
+#[test]
+fn practice_toggle_on_100_tracks_is_fast_and_exact() {
+    let lib = lib();
+    set_baseline_date(&lib, "2026-01-01");
+    let mut entries = Vec::new();
+    let mut ids = Vec::new();
+    for i in 0..1000 {
+        let id = track(
+            &lib,
+            &format!("/m/t{i}.mp3"),
+            "A",
+            &format!("T{i}"),
+            200_000,
+        );
+        set_baseline(&lib, id, i % 7, Some("2026-01-01"));
+        if i % 10 == 0 {
+            entries.push(entry(
+                &format!("/Contents/x/t{i}.mp3"),
+                "A",
+                &format!("T{i}"),
+                200,
+            ));
+        }
+        ids.push(id);
+    }
+    let h = stick(
+        Some(SERIAL),
+        vec![dated("HISTORY 001", Some("2026-02-01"), entries)],
+    );
+    let plan = scan(&h, &lib).unwrap();
+    let sid = import(&plan, &ImportChoices::default(), &lib)
+        .unwrap()
+        .created[0];
+    let all = |lib: &Library| ids.iter().map(|&id| stats(lib, id)).collect::<Vec<_>>();
+    let before = all(&lib);
+    let started = std::time::Instant::now();
+    lib.session_update(
+        sid,
+        SessionPatch {
+            excluded: Some(true),
+            ..SessionPatch::default()
+        },
+    )
+    .unwrap();
+    let took = started.elapsed();
+    assert!(took.as_millis() < 100, "practice toggle took {took:?}");
+    assert_eq!(stats(&lib, ids[10]), (3, Some("2026-01-01".into())));
+    lib.session_update(
+        sid,
+        SessionPatch {
+            excluded: Some(false),
+            ..SessionPatch::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(all(&lib), before);
+}
+
+mod counts_property {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    const DATES: [&str; 5] = [
+        "2025-12-01",
+        "2026-03-01",
+        "2026-06-01",
+        "2026-07-01",
+        "2026-09-15",
+    ];
+    const BASELINE_DATE: &str = "2026-06-01";
+
+    #[derive(Debug, Clone)]
+    struct Case {
+        /// (baseline count, baseline last played) per track.
+        tracks: Vec<(i64, Option<usize>)>,
+        /// (played_on, entries as track index (== tracks.len(): unmatched), choice).
+        sessions: Vec<(Option<usize>, Vec<usize>, Option<bool>)>,
+        /// (session index, excluded).
+        toggles: Vec<(usize, bool)>,
+    }
+
+    fn case() -> impl Strategy<Value = Case> {
+        prop::collection::vec((0i64..5, prop::option::of(0..DATES.len())), 1..5).prop_flat_map(
+            |tracks| {
+                let n = tracks.len();
+                let session = (
+                    prop::option::of(0..DATES.len()),
+                    prop::collection::vec(0..=n, 0..8),
+                    prop::option::of(any::<bool>()),
+                );
+                (
+                    Just(tracks),
+                    prop::collection::vec(session, 0..6),
+                    prop::collection::vec((0usize..6, any::<bool>()), 0..10),
+                )
+                    .prop_map(|(tracks, sessions, toggles)| Case {
+                        tracks,
+                        sessions,
+                        toggles,
+                    })
+            },
+        )
+    }
+
+    /// The count rules over the model.
+    fn expected(c: &Case, excluded: &[bool], t: usize) -> (i64, Option<String>) {
+        let (base, base_last) = c.tracks[t];
+        let mut count = base;
+        let mut last = base_last.map(|d| DATES[d]);
+        for ((played_on, entries, _), &ex) in c.sessions.iter().zip(excluded) {
+            let n = entries.iter().filter(|&&e| e == t).count() as i64;
+            if ex || n == 0 {
+                continue;
+            }
+            count += n;
+            if let Some(d) = played_on.map(|d| DATES[d]) {
+                last = last.max(Some(d));
+            }
+        }
+        (count, last.map(str::to_owned))
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(64))]
+
+        #[test]
+        fn count_is_baseline_plus_included_entries(c in case()) {
+            let lib = lib();
+            set_baseline_date(&lib, BASELINE_DATE);
+            let ids: Vec<TrackId> = c.tracks.iter().enumerate().map(|(i, &(n, last))| {
+                let id = track(&lib, &format!("/m/t{i}.mp3"), "A", &format!("T{i}"), 200_000);
+                set_baseline(&lib, id, n, last.map(|d| DATES[d]));
+                id
+            }).collect();
+            let sessions = c.sessions.iter().enumerate().map(|(i, (d, entries, _))| {
+                let entries = entries.iter().map(|&t| if t == ids.len() {
+                    entry("/Contents/x/nothing.mp3", "Nobody", "Nothing", 1)
+                } else {
+                    entry(&format!("/Contents/x/t{t}.mp3"), "A", &format!("T{t}"), 200)
+                }).collect();
+                dated(&format!("HISTORY {i:03}"), d.map(|d| DATES[d]), entries)
+            }).collect();
+            let plan = scan(&stick(Some(SERIAL), sessions), &lib).unwrap();
+            let mut choices = ImportChoices::default();
+            let mut excluded = Vec::new();
+            for (p, (_, _, choice)) in plan.sessions.iter().zip(&c.sessions) {
+                if let Some(ch) = choice {
+                    choices.excluded.insert(p.fingerprint.clone(), *ch);
+                }
+                excluded.push(choice.unwrap_or(p.default_exclusion.is_some()));
+            }
+            let report = import(&plan, &choices, &lib).unwrap();
+            prop_assert_eq!(report.created.len(), c.sessions.len());
+            for (i, &id) in ids.iter().enumerate() {
+                prop_assert_eq!(stats(&lib, id), expected(&c, &excluded, i));
+            }
+
+            for &(s, ex) in &c.toggles {
+                let Some(&sid) = report.created.get(s) else { continue };
+                lib.session_update(sid, SessionPatch { excluded: Some(ex), ..SessionPatch::default() }).unwrap();
+                excluded[s] = ex;
+                for (i, &id) in ids.iter().enumerate() {
+                    prop_assert_eq!(stats(&lib, id), expected(&c, &excluded, i));
+                }
+            }
+            // A full recompute agrees with the incremental ones.
+            let before: Vec<_> = ids.iter().map(|&id| stats(&lib, id)).collect();
+            lib.recompute_play_stats(TrackSet::All).unwrap();
+            let after: Vec<_> = ids.iter().map(|&id| stats(&lib, id)).collect();
+            prop_assert_eq!(before, after);
+
+            for &sid in &report.created {
+                lib.session_delete(sid).unwrap();
+            }
+            for (i, &id) in ids.iter().enumerate() {
+                let (n, last) = c.tracks[i];
+                prop_assert_eq!(stats(&lib, id), (n, last.map(|d| DATES[d].to_owned())));
+            }
+        }
+    }
+}

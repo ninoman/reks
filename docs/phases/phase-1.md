@@ -263,7 +263,9 @@ Notes (task 7, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs))
   Locations. Stored and reported: file not found (`missing = 1`, `file_size` =
   XML `Size` or 0, `file_mtime` = `''`, `kind` from extension or XML `Kind`)
   and files that exist but don't probe (XML `TotalTime`/`SampleRate`/`BitRate`).
-- Fields: XML values win; an absent or blank attribute never clears a value;
+- Fields: XML values win (except `PlayCount` and `LastPlayed`, which since
+  Phase 2.5 set the frozen play baseline of new tracks only; D23);
+  an absent or blank attribute never clears a value;
   tags fill only what is still NULL. Rating `round(r/51)`; `Tonality` → `keys.rs`
   (`key_source = rekordbox`, unparsable → warning, key kept); `AverageBpm` → `bpm_x100`
   (0 = none); 0 for track/disc number and year = none; dates must be `yyyy-mm-dd`.
