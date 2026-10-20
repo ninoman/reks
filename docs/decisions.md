@@ -280,6 +280,16 @@ Date of decisions: 2026-10-18.
   Rationale: measured on the maintainer's library, BPM 85.1% → 96.7%,
   downbeat 70.9% → 73.3%; placing beats on the kick lowered both
   (docs/analysis-parity.md).
+- Bar placement (2026-10-21, phase 3 task 12a, analyser version 4): beat 1
+  is no longer the tracker downbeat nearest the steady region's start (a
+  coin toss on many tracks). Each bar position of the constant grid scores
+  its share of all tracker downbeats, plus 0.3 if the first grid line with
+  a ≥ 10 dB low-band rise (the first kick) is on it; the old rule breaks
+  ties ([`bar.rs`](../crates/reks-analysis/src/bar.rs)). Rationale:
+  measured on the maintainer's library, downbeat 73.3% → 83.7% with BPM
+  and grid phase unchanged; phrase cues from the kick curve (re-entry
+  after a breakdown, per-position accent) added nothing, and the full
+  Beat This! model stays a later option rather than a requirement.
 
 ## D11. rekordbox XML reader/writer: own implementation on `quick-xml`
 

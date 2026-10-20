@@ -188,6 +188,15 @@ impl KickPulse {
         self.edge.get(frame as usize).copied().unwrap_or(0.0)
     }
 
+    /// The highest rise ([`KickPulse::db`]) within `slack` frames of
+    /// `sample` ([`ANALYSIS_RATE`]); 0 outside the track.
+    pub fn rise_near(&self, sample: f64, slack: i64) -> f32 {
+        let frame = (sample * f64::from(PULSE_RATE) / f64::from(ANALYSIS_RATE)).round() as i64;
+        let lo = (frame - slack).max(0);
+        let hi = (frame + slack + 1).min(self.db.len() as i64);
+        (lo..hi).map(|f| self.db[f as usize]).fold(0.0, f32::max)
+    }
+
     /// Length of the track it covers, samples.
     pub fn len_samples(&self) -> f64 {
         self.db.len() as f64 * f64::from(ANALYSIS_RATE) / f64::from(PULSE_RATE)
@@ -264,6 +273,10 @@ mod tests {
         assert_eq!(pulse.at(5.0 * 44.1 + 1.0), 6.0);
         assert_eq!(pulse.at(10.0 * 44.1 + 1.0), 0.0);
         assert_eq!(pulse.at(1e9), 0.0);
+        assert_eq!(pulse.rise_near(5.0 * 44.1, 1), 9.0);
+        assert_eq!(pulse.rise_near(0.0, 0), 3.0);
+        assert_eq!(pulse.rise_near(-1000.0, 2), 0.0);
+        assert_eq!(pulse.rise_near(1e9, 2), 0.0);
         assert_eq!(KickPulse::quantise(&[0.1, 2.3, 99.0]), [0, 9, 255]);
     }
 }
