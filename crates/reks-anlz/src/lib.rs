@@ -18,7 +18,7 @@ pub mod write;
 
 pub use build::{build, AnlzInput, AnlzSet, AnlzTarget, BuildError};
 pub use validate::{validate_file, validate_set, Expect, FileKind, Issue};
-pub use waveform::{WaveformCalibration, Waveforms, PLACEHOLDER_CALIBRATION};
+pub use waveform::{WaveformCalibration, Waveforms, CALIBRATION};
 pub use write::{CueEntry, PqtzBeat};
 
 /// Crate version, from Cargo metadata.

@@ -15,7 +15,7 @@ use reks_analysis::grid::Grid;
 use reks_analysis::waveform::WaveformColumns;
 use reks_anlz::grid::pqtz_beats;
 use reks_anlz::validate::{validate_file, Expect, FileKind, Issue};
-use reks_anlz::{build, AnlzInput, AnlzTarget, BuildError, Waveforms, PLACEHOLDER_CALIBRATION};
+use reks_anlz::{build, AnlzInput, AnlzTarget, BuildError, Waveforms, CALIBRATION};
 use reks_core::track::Cue;
 
 const PATH: &str = "/Contents/Artist/Album/Track.mp3";
@@ -42,7 +42,7 @@ fn columns(n: usize, seed: u64) -> WaveformColumns {
 
 fn waves(duration_ms: u64, seed: u64) -> Waveforms {
     let n = duration_ms.saturating_mul(150).div_ceil(1000) as usize;
-    Waveforms::encode(&columns(n, seed), &PLACEHOLDER_CALIBRATION).unwrap()
+    Waveforms::encode(&columns(n, seed), &CALIBRATION).unwrap()
 }
 
 fn cue(slot: Option<u8>, kind: i64, start_ms: f64, end_ms: Option<f64>) -> Cue {

@@ -5,10 +5,12 @@
 //! Formats: djl-analysis "Analysis Files" and crate-digger
 //! `rekordbox_anlz.ksy` (R§3.3), checked against the rekordbox 6 reference
 //! export in rekordcrate's test data. How rekordbox scales band energies is
-//! undocumented: every scale below comes from [`WaveformCalibration`], whose
-//! [`PLACEHOLDER_CALIBRATION`] values are first guesses from the value ranges
-//! of two reference tracks. Task 8 fits them against rekordbox output.
+//! undocumented; the model and its constants ([`WaveformCalibration`],
+//! `reks_analysis::calib`) were fitted against rekordbox's own files in task 8
+//! (`docs/analysis-parity/waveforms.md`). PWV6/PWV7/PWVC hold low, mid, high
+//! in that order (rekordbox's files; djl-analysis says mid, high, low).
 
+pub use reks_analysis::calib::{AutoGain, Curve, LevelStat, WaveformCalibration, CALIBRATION};
 use reks_analysis::waveform::{WaveformColumns, MONO_MAX};
 
 use crate::write::{self, WriteError};
@@ -25,55 +27,8 @@ pub const WHITENESS_MAX: u8 = 7;
 pub const TINY_HEIGHT_MAX: u8 = 15;
 /// Largest PWV5 colour component (3 bits).
 pub const COLOR_MAX: u8 = 7;
-
-/// Scaling from reks columns to Pioneer bytes. All fields are placeholders
-/// until task 8 fits them (see [`PLACEHOLDER_CALIBRATION`]).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct WaveformCalibration {
-    /// Per-band gain (low, mid, high) on the 0..=1 band peak, before gamma.
-    pub band_gain: [f32; 3],
-    /// Per-band gamma (low, mid, high) applied after gain and clamping.
-    pub band_gamma: [f32; 3],
-    /// High-band share of the band sum that maps to full whiteness (7) in
-    /// PWAV/PWV3; whiteness scales linearly below it.
-    pub whiteness_full_ratio: f32,
-    /// Whiteness of a silent column. The reference files hold 0xE0
-    /// (whiteness 7, height 0) for leading silence in PWV3.
-    pub silent_whiteness: u8,
-    /// Gain on the mono height for PWAV/PWV2 (reference PWAV peaks at
-    /// 22–24 where PWV3 peaks at 31, so rekordbox scales previews down).
-    pub preview_height_gain: f32,
-    /// Full-scale value of PWV4 bytes 2–5 (reference maximum ≈ 120).
-    pub pwv4_band_max: u8,
-    /// Full-scale value of PWV6 bytes (reference maximum ≈ 43).
-    pub pwv6_band_max: u8,
-    /// Full-scale value of PWV7 bytes (reference maximum 127).
-    pub pwv7_band_max: u8,
-    /// PWVC payload, UNVERIFIED semantics. The two reference tracks hold
-    /// (0x5b, 0x8a, 0x18c) and (0x91, 0xf9, 0x1f4), so it is per-track, not
-    /// the constant the phase doc assumed; we write the first until the
-    /// meaning is known.
-    pub pwvc: [u16; 3],
-}
-
-/// First-guess calibration: linear bands, no gain. Task 8 replaces it.
-pub const PLACEHOLDER_CALIBRATION: WaveformCalibration = WaveformCalibration {
-    band_gain: [1.0, 1.0, 1.0],
-    band_gamma: [1.0, 1.0, 1.0],
-    whiteness_full_ratio: 0.5,
-    silent_whiteness: WHITENESS_MAX,
-    preview_height_gain: 0.8,
-    pwv4_band_max: 120,
-    pwv6_band_max: 43,
-    pwv7_band_max: 127,
-    pwvc: [0x005b, 0x008a, 0x018c],
-};
-
-impl Default for WaveformCalibration {
-    fn default() -> Self {
-        PLACEHOLDER_CALIBRATION
-    }
-}
+/// Full scale of the PWV4/PWV6/PWV7 band bytes (rekordbox's maximum).
+pub const BAND_BYTE_MAX: u8 = 127;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum EncodeError {
@@ -97,15 +52,17 @@ pub struct Waveforms {
     pub pwv2: [u8; PWV2_COLUMNS],
     /// PWV3: as PWAV, 150 columns/s.
     pub pwv3: Vec<u8>,
-    /// PWV4: whiteness ×2 (placeholder), energy < 10 kHz, low, mid, high.
+    /// PWV4: height, 255 − height, low, low, mid, high (bytes 0–1 and the
+    /// second low are fits, not understood semantics).
     pub pwv4: [[u8; 6]; COLOR_PREVIEW_COLUMNS],
     /// PWV5: `R:3 G:3 B:3 H:5 0:2`, 150 columns/s.
     pub pwv5: Vec<u16>,
-    /// PWV6: mid, high, low.
+    /// PWV6: low, mid, high.
     pub pwv6: [[u8; 3]; COLOR_PREVIEW_COLUMNS],
-    /// PWV7: mid, high, low, 150 columns/s.
+    /// PWV7: low, mid, high, 150 columns/s.
     pub pwv7: Vec<[u8; 3]>,
-    /// PWVC payload (UNVERIFIED).
+    /// PWVC: the per-track band gains (low, mid, high) ×100 applied to
+    /// PWV6/PWV7, as rekordbox writes them.
     pub pwvc: [u16; 3],
 }
 
@@ -170,47 +127,56 @@ fn source_range(j: usize, m: usize, n: usize) -> std::ops::Range<usize> {
     start..end
 }
 
+/// Peak-hold envelope: each value is at least `release` times the previous
+/// output.
+fn release_envelope(x: &[u8], release: f32) -> Vec<f32> {
+    let mut held = 0.0f32;
+    x.iter()
+        .map(|&v| {
+            held = (f32::from(v) / 255.0).max(held * release);
+            held
+        })
+        .collect()
+}
+
 struct Encoder<'a> {
     c: &'a WaveformColumns,
     cal: &'a WaveformCalibration,
+    /// Per-track band gains (PWVC / 100).
+    gain: [f32; 3],
 }
 
 impl Encoder<'_> {
-    /// Calibrated band value (0 low, 1 mid, 2 high) of column `i`, 0..=1.
-    fn shaped(&self, band: usize, i: usize) -> f32 {
-        let raw = [&self.c.low, &self.c.mid, &self.c.high][band][i];
-        let x = (self.cal.band_gain[band] * f32::from(raw) / 255.0).clamp(0.0, 1.0);
-        x.powf(self.cal.band_gamma[band])
+    fn band(&self, b: usize) -> &[u8] {
+        [&self.c.low, &self.c.mid, &self.c.high][b]
     }
 
-    /// High-band share of the raw band sum over `r`, or `None` when silent.
-    fn high_ratio(&self, r: std::ops::Range<usize>) -> Option<f32> {
-        let (mut high, mut total) = (0u64, 0u64);
-        for i in r {
-            let h = u64::from(self.c.high[i]);
-            high += h;
-            total += u64::from(self.c.low[i]) + u64::from(self.c.mid[i]) + h;
-        }
-        (total > 0).then(|| high as f32 / total as f32)
+    /// Mono peak over `r`, 0..=1.
+    fn mono_peak(&self, r: std::ops::Range<usize>) -> f32 {
+        f32::from(r.map(|i| self.c.mono[i]).max().unwrap_or(0)) / f32::from(MONO_MAX)
+    }
+
+    /// Peak of band `b` over `r`, 0..=1.
+    fn band_peak(&self, b: usize, r: std::ops::Range<usize>) -> f32 {
+        f32::from(self.band(b)[r].iter().copied().max().unwrap_or(0)) / 255.0
     }
 
     fn whiteness(&self, r: std::ops::Range<usize>) -> u8 {
-        match self.high_ratio(r) {
-            None => self.cal.silent_whiteness.min(WHITENESS_MAX),
-            Some(ratio) => level(ratio / self.cal.whiteness_full_ratio, WHITENESS_MAX),
+        let [wl, wm, wh] = self.cal.whiteness_weights;
+        let sum = |b: usize| {
+            self.band(b)[r.clone()]
+                .iter()
+                .map(|&v| f32::from(v))
+                .sum::<f32>()
+        };
+        let (low, mid, high) = (wl * sum(0), wm * sum(1), wh * sum(2));
+        let total = low + mid + high;
+        if total <= 0.0 {
+            return self.cal.silent_whiteness.min(WHITENESS_MAX);
         }
-    }
-
-    fn max_shaped(&self, band: usize, r: std::ops::Range<usize>) -> f32 {
-        r.map(|i| self.shaped(band, i)).fold(0.0, f32::max)
-    }
-
-    /// PWAV-style preview height (0..=31) over `r`.
-    fn preview_height(&self, r: std::ops::Range<usize>) -> u8 {
-        let peak = r.map(|i| self.c.mono[i]).max().unwrap_or(0);
         level(
-            f32::from(peak) * self.cal.preview_height_gain / f32::from(MONO_MAX),
-            MONO_MAX,
+            self.cal.whiteness.apply((mid + high) / total),
+            WHITENESS_MAX,
         )
     }
 
@@ -218,42 +184,54 @@ impl Encoder<'_> {
         let n = self.c.len();
         std::array::from_fn(|j| {
             let r = source_range(j, PWAV_COLUMNS, n);
-            pack_mono(self.preview_height(r.clone()), self.whiteness(r))
+            let h = level(
+                self.cal.preview_height.apply(self.mono_peak(r.clone())),
+                MONO_MAX,
+            );
+            pack_mono(h, self.whiteness(r))
         })
     }
 
     fn pwv2(&self) -> [u8; PWV2_COLUMNS] {
         let n = self.c.len();
         std::array::from_fn(|j| {
-            let h = self.preview_height(source_range(j, PWV2_COLUMNS, n));
-            pack_tiny(level(f32::from(h) / f32::from(MONO_MAX), TINY_HEIGHT_MAX))
+            let peak = self.mono_peak(source_range(j, PWV2_COLUMNS, n));
+            pack_tiny(level(self.cal.tiny_height.apply(peak), TINY_HEIGHT_MAX))
         })
+    }
+
+    fn height(&self, i: usize) -> u8 {
+        level(self.cal.height.apply(self.mono_peak(i..i + 1)), MONO_MAX)
     }
 
     fn pwv3(&self) -> Vec<u8> {
         (0..self.c.len())
-            .map(|i| pack_mono(self.c.mono[i], self.whiteness(i..i + 1)))
+            .map(|i| pack_mono(self.height(i), self.whiteness(i..i + 1)))
             .collect()
     }
 
     fn pwv4(&self) -> [[u8; 6]; COLOR_PREVIEW_COLUMNS] {
         let n = self.c.len();
-        let max = self.cal.pwv4_band_max;
+        let cal = self.cal;
         std::array::from_fn(|j| {
             let r = source_range(j, COLOR_PREVIEW_COLUMNS, n);
-            let [low, mid, high] = [0, 1, 2].map(|b| level(self.max_shaped(b, r.clone()), max));
-            // Placeholders until task 8: byte 2 ("energy < 10 kHz") as the
-            // loudest band; byte 0 tracks byte 2 (their means agree in the
-            // reference files); byte 1 falls as the high-band share rises.
-            let below_10k = low.max(mid).max(high);
-            let ratio = self.high_ratio(r).unwrap_or(0.0);
+            let height = level(
+                cal.pwv4_height.apply(self.mono_peak(r.clone())),
+                BAND_BYTE_MAX,
+            );
+            let band = |k: usize, b: usize| {
+                level(
+                    cal.pwv4_bands[k].apply(self.band_peak(b, r.clone())),
+                    BAND_BYTE_MAX,
+                )
+            };
             [
-                below_10k,
-                level(1.0 - ratio, u8::MAX),
-                below_10k,
-                low,
-                mid,
-                high,
+                height,
+                cal.pwv4_complement.saturating_sub(height),
+                band(0, 0),
+                band(1, 0),
+                band(2, 1),
+                band(3, 2),
             ]
         })
     }
@@ -261,34 +239,52 @@ impl Encoder<'_> {
     fn pwv5(&self) -> Vec<u16> {
         (0..self.c.len())
             .map(|i| {
+                let v: [f32; 3] =
+                    std::array::from_fn(|b| self.cal.color[b].apply(self.band_peak(b, i..i + 1)));
+                let max = v[0].max(v[1]).max(v[2]);
+                let rgb: [u8; 3] = if max > 0.0 {
+                    v.map(|x| level(x / max, COLOR_MAX))
+                } else {
+                    [0; 3]
+                };
                 pack_color(ColorColumn {
-                    red: level(self.shaped(0, i), COLOR_MAX),
-                    green: level(self.shaped(1, i), COLOR_MAX),
-                    blue: level(self.shaped(2, i), COLOR_MAX),
-                    height: self.c.mono[i],
+                    red: rgb[0],
+                    green: rgb[1],
+                    blue: rgb[2],
+                    height: self.height(i),
                 })
             })
             .collect()
     }
 
-    /// Mid, high, low: the PWV6/PWV7 byte order.
-    fn three_band(&self, r: std::ops::Range<usize>, max: u8) -> [u8; 3] {
-        [1, 2, 0].map(|b| level(self.max_shaped(b, r.clone()), max))
-    }
-
     fn pwv6(&self) -> [[u8; 3]; COLOR_PREVIEW_COLUMNS] {
         let n = self.c.len();
         std::array::from_fn(|j| {
-            self.three_band(
-                source_range(j, COLOR_PREVIEW_COLUMNS, n),
-                self.cal.pwv6_band_max,
-            )
+            let r = source_range(j, COLOR_PREVIEW_COLUMNS, n);
+            let len = r.len().max(1) as f32;
+            std::array::from_fn(|b| {
+                let sum: f32 = self.band(b)[r.clone()].iter().map(|&x| f32::from(x)).sum();
+                let mean = sum / len / 255.0;
+                level(
+                    self.cal.overview[b].apply(self.gain[b] * mean),
+                    BAND_BYTE_MAX,
+                )
+            })
         })
     }
 
     fn pwv7(&self) -> Vec<[u8; 3]> {
+        let env: [Vec<f32>; 3] =
+            std::array::from_fn(|b| release_envelope(self.band(b), self.cal.detail_release[b]));
         (0..self.c.len())
-            .map(|i| self.three_band(i..i + 1, self.cal.pwv7_band_max))
+            .map(|i| {
+                std::array::from_fn(|b| {
+                    level(
+                        self.cal.detail[b].apply(self.gain[b] * env[b][i]),
+                        BAND_BYTE_MAX,
+                    )
+                })
+            })
             .collect()
     }
 }
@@ -307,7 +303,14 @@ impl Waveforms {
                 mono: columns.mono.len(),
             });
         }
-        let e = Encoder { c: columns, cal };
+        let bands = [&columns.low, &columns.mid, &columns.high];
+        let gain: [f32; 3] =
+            std::array::from_fn(|b| cal.auto_gain[b].gain(bands[b], &columns.mono));
+        let e = Encoder {
+            c: columns,
+            cal,
+            gain,
+        };
         Ok(Self {
             pwav: e.pwav(),
             pwv2: e.pwv2(),
@@ -316,7 +319,7 @@ impl Waveforms {
             pwv5: e.pwv5(),
             pwv6: e.pwv6(),
             pwv7: e.pwv7(),
-            pwvc: cal.pwvc,
+            pwvc: gain.map(|g| (g * 100.0).round().clamp(0.0, f32::from(u16::MAX)) as u16),
         })
     }
 
@@ -433,62 +436,156 @@ mod tests {
         }
     }
 
+    const fn linear(gain: f32) -> Curve {
+        Curve { gain, gamma: 1.0 }
+    }
+
+    /// Identity curves, unit track gain, no release: encoder structure
+    /// without the fitted constants.
+    const LINEAR: WaveformCalibration = WaveformCalibration {
+        height: linear(1.0),
+        preview_height: linear(1.0),
+        tiny_height: linear(1.0),
+        whiteness_weights: [1.0; 3],
+        whiteness: linear(1.0),
+        silent_whiteness: WHITENESS_MAX,
+        color: [linear(1.0); 3],
+        pwv4_height: linear(1.0),
+        pwv4_complement: 255,
+        pwv4_bands: [linear(1.0); 4],
+        auto_gain: [AutoGain {
+            stat: LevelStat::Mean,
+            target: 1.0,
+            min: 1.0,
+            max: 1.0,
+        }; 3],
+        detail_release: [0.0; 3],
+        detail: [linear(1.0); 3],
+        overview: [linear(1.0); 3],
+    };
+
     #[test]
     fn previews_have_fixed_sizes_and_detail_tracks_columns() {
         for n in [0usize, 1, 7, 399, 400, 401, 1199, 1201, 45_001] {
-            let w = Waveforms::encode(&sweep_columns(n), &PLACEHOLDER_CALIBRATION).unwrap();
-            assert_eq!((w.pwv3.len(), w.pwv5.len(), w.pwv7.len()), (n, n, n));
-            if n == 0 {
-                assert!(w.pwav.iter().all(|&b| b == pack_mono(0, WHITENESS_MAX)));
-                assert!(w.pwv4.iter().all(|c| c[2..] == [0; 4]));
+            for cal in [&LINEAR, &CALIBRATION] {
+                let w = Waveforms::encode(&sweep_columns(n), cal).unwrap();
+                assert_eq!((w.pwv3.len(), w.pwv5.len(), w.pwv7.len()), (n, n, n));
+                if n == 0 {
+                    assert!(w.pwav.iter().all(|&b| b == pack_mono(0, WHITENESS_MAX)));
+                    assert!(w.pwv4.iter().all(|c| c[2..] == [0; 4]));
+                }
             }
         }
     }
 
     #[test]
     fn encoders_follow_the_bands() {
-        let w = Waveforms::encode(&sweep_columns(3000), &PLACEHOLDER_CALIBRATION).unwrap();
+        let w = Waveforms::encode(&sweep_columns(3000), &LINEAR).unwrap();
         // Leading silence: 0xE0 as in rekordbox's files.
         assert_eq!(w.pwv3[0], 0xE0);
-        // Start: low band only → red PWV5, PWV7 low byte (index 2).
+        // Start: low band only → red PWV5, PWV7 low byte (index 0).
         let start = unpack_color(w.pwv5[20]);
-        assert!(start.red > 5 && start.blue == 0);
-        assert!(w.pwv7[20][2] > 100 && w.pwv7[20][1] == 0);
+        assert!(start.red == COLOR_MAX && start.blue == 0);
+        assert!(w.pwv7[20][0] > 100 && w.pwv7[20][1] == 0);
         assert_eq!(unpack_mono(w.pwv3[20]).1, 0);
-        // Middle: mid band → green / PWV7 byte 0.
+        // Middle: mid band → green / PWV7 byte 1.
         let mid = unpack_color(w.pwv5[1500]);
         assert_eq!(mid.green, COLOR_MAX);
-        assert_eq!(w.pwv7[1500][0], 127);
-        // End: high band only → blue, full whiteness, PWV7 byte 1.
+        assert_eq!(w.pwv7[1500][1], BAND_BYTE_MAX);
+        // End: high band only → blue, full whiteness, PWV7 byte 2.
         let end = unpack_color(w.pwv5[2999]);
-        assert!(end.blue > 5 && end.red == 0);
-        assert!(w.pwv7[2999][1] > 100);
+        assert!(end.blue == COLOR_MAX && end.red == 0);
+        assert!(w.pwv7[2999][2] > 100);
         assert_eq!(unpack_mono(w.pwv3[2999]).1, WHITENESS_MAX);
         // Previews: same ordering at coarse resolution.
         assert!(w.pwv4[50][3] > w.pwv4[50][5] && w.pwv4[1190][5] > w.pwv4[1190][3]);
-        assert!(w.pwv6[50][2] > w.pwv6[50][1] && w.pwv6[1190][1] > w.pwv6[1190][2]);
-        assert!(w.pwv6.iter().flatten().all(|&b| b <= 43));
-        // Preview height is the scaled column peak (31 × 0.8 → 25).
-        assert_eq!(unpack_mono(w.pwav[200]).0, 25);
-        assert_eq!(w.pwv2[50], 12);
+        assert!(w.pwv6[50][0] > w.pwv6[50][2] && w.pwv6[1190][2] > w.pwv6[1190][0]);
+        // Preview heights are the column peak over the range (31 here).
+        assert_eq!(unpack_mono(w.pwav[200]).0, 31);
+        assert_eq!(w.pwv2[50], TINY_HEIGHT_MAX);
+        assert!(w
+            .pwv4
+            .iter()
+            .all(|c| u16::from(c[0]) + u16::from(c[1]) == 255));
+        assert_eq!(w.pwvc, [100; 3]);
     }
 
     #[test]
-    fn gain_and_gamma_apply_per_band() {
+    fn curves_gain_and_release_apply_per_band() {
         let c = WaveformColumns {
-            low: vec![64],
-            mid: vec![64],
-            high: vec![64],
-            mono: vec![10],
+            low: vec![64, 0, 0, 0],
+            mid: vec![64, 0, 0, 0],
+            high: vec![64, 0, 0, 0],
+            mono: vec![10, 10, 10, 10],
         };
         let cal = WaveformCalibration {
-            band_gain: [4.0, 1.0, 1.0],
-            band_gamma: [1.0, 1.0, 0.5],
-            ..PLACEHOLDER_CALIBRATION
+            detail: [
+                linear(4.0),
+                linear(1.0),
+                Curve {
+                    gain: 1.0,
+                    gamma: 0.5,
+                },
+            ],
+            ..LINEAR
         };
         let w = Waveforms::encode(&c, &cal).unwrap();
         // low: 64/255×4 → 1.0 → 127; mid: 0.251 → 32; high: √0.251 → 64.
-        assert_eq!(w.pwv7[0], [32, 64, 127]);
+        assert_eq!(w.pwv7[0], [127, 32, 64]);
+        assert_eq!(w.pwv7[1], [0, 0, 0]);
+        // Release halves the held value per column.
+        let cal = WaveformCalibration {
+            detail_release: [0.5, 0.0, 0.0],
+            ..LINEAR
+        };
+        let w = Waveforms::encode(&c, &cal).unwrap();
+        let low: Vec<u8> = w.pwv7.iter().map(|v| v[0]).collect();
+        assert_eq!(low, [32, 16, 8, 4]);
+        // Track gain: mean of the low band 16/255 → target 32/255 gives ×2,
+        // applied to PWV6/PWV7 and written to PWVC.
+        let mut gain = LINEAR.auto_gain;
+        gain[0] = AutoGain {
+            stat: LevelStat::Mean,
+            target: 32.0 / 255.0,
+            min: 0.5,
+            max: 2.0,
+        };
+        let cal = WaveformCalibration {
+            auto_gain: gain,
+            ..LINEAR
+        };
+        let w = Waveforms::encode(&c, &cal).unwrap();
+        assert_eq!(w.pwvc, [200, 100, 100]);
+        assert_eq!(w.pwv7[0], [64, 32, 32]);
+    }
+
+    #[test]
+    fn colour_is_normalised_to_the_loudest_band() {
+        let c = WaveformColumns {
+            low: vec![200, 0],
+            mid: vec![100, 0],
+            high: vec![50, 0],
+            mono: vec![31, 0],
+        };
+        let w = Waveforms::encode(&c, &LINEAR).unwrap();
+        assert_eq!(
+            unpack_color(w.pwv5[0]),
+            ColorColumn {
+                red: 7,
+                green: 4,
+                blue: 2,
+                height: 31
+            }
+        );
+        assert_eq!(
+            unpack_color(w.pwv5[1]),
+            ColorColumn {
+                red: 0,
+                green: 0,
+                blue: 0,
+                height: 0
+            }
+        );
     }
 
     #[test]
@@ -496,7 +593,7 @@ mod tests {
         let mut c = sweep_columns(10);
         c.high.pop();
         assert_eq!(
-            Waveforms::encode(&c, &PLACEHOLDER_CALIBRATION).unwrap_err(),
+            Waveforms::encode(&c, &LINEAR).unwrap_err(),
             EncodeError::InconsistentColumns {
                 low: 10,
                 mid: 10,
@@ -511,7 +608,7 @@ mod tests {
     /// writing the parse back is byte-identical.
     #[test]
     fn round_trip_through_rekordcrate() {
-        let w = Waveforms::encode(&sweep_columns(4321), &PLACEHOLDER_CALIBRATION).unwrap();
+        let w = Waveforms::encode(&sweep_columns(4321), &CALIBRATION).unwrap();
         let sections: Vec<Vec<u8>> = [
             w.dat_sections().unwrap(),
             w.ext_sections().unwrap(),

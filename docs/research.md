@@ -231,6 +231,12 @@ types, can't construct its waveform structs from outside the crate (private
 fields), and its PWV2/PWV5 bitfields disagree with the layout above (D9
 finding).
 
+Measured 2026-10-20 on rekordbox 6's local cache (50 tracks, phase 3 task 8,
+[analysis-parity/waveforms.md](analysis-parity/waveforms.md)): PWV6 and PWV7
+bytes are low, mid, high in that order, not as in the table above; PWVC holds
+the per-track band gains ×100 (low, mid, high) applied to PWV6/PWV7, ranging
+0.80–2.37, 1.00–3.00 and 1.01–5.00 on that set; PWV7 ≤ 127, PWV6 ≤ 115.
+
 Sources: `docs/research/raw-3-analysis-anlz.md`. Key ones:
 https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/anlz.html ·
 https://raw.githubusercontent.com/Deep-Symmetry/crate-digger/main/src/main/kaitai/rekordbox_anlz.ksy ·

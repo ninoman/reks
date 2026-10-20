@@ -53,6 +53,8 @@ imagesize = { version = "0.15", default-features = false, features = ["bmp", "gi
 lofty = "0.25"
 proptest = "1"
 percent-encoding = "2.3"
+# PNG writer for the calibration pictures (dev only; already in the tree via image). MIT/Apache-2.0.
+png = "0.18"
 quick-xml = "0.42"
 # Analysis queue worker pool (phase 3 task 11). MIT/Apache-2.0; already in the tree via rten.
 rayon = "1.12"

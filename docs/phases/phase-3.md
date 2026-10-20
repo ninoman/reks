@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–3, 5–7, 9, 11 and 13 done). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–3, 5–9, 11 and 13 done). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -116,18 +116,21 @@ Encoding rules (from research §3; big-endian)
   active-loop flag yet (the library has none).
 - PQT2: the empty 56-byte form rekordbox writes without an extended grid;
   whether NXS2 features need a full PQT2 is UNVERIFIED.
-- PWAV 400 columns / PWV2 100 columns: resample the mono column stream;
-  height 5-bit (PWV2 4-bit); whiteness 3-bit from high-band ratio (initial
-  heuristic; calibrate).
-- PWV3: mono byte per column at 150/s. PWV5: `R:3 G:3 B:3 H:5` per column
-  from band energies (initial map: R = low, G = mid, B = high scaled to 0–7).
-- PWV4: 1200 columns × 6 bytes: bytes 3–5 = low/mid/high thirds, byte 2 =
-  energy < 10 kHz, bytes 0–1 = whiteness placeholder (copy behaviour from a
-  reference until understood).
-- PWV6 (1200) / PWV7 (150/s): 3 bytes per column in order mid, high, low
-  after per-band gain/gamma calibration; PWVC: three u16, UNVERIFIED
-  semantics. Not a constant: the two reference tracks hold (91, 138, 396)
-  and (145, 249, 500); we write the first until the meaning is known.
+- Waveform scaling is the task 8 fit (`reks-analysis::calib`, model and
+  error in [analysis-parity/waveforms.md](../analysis-parity/waveforms.md)).
+- PWAV 400 columns / PWV2 100 columns: peak mono over each column range
+  through a height curve; height 5-bit (PWV2 4-bit); whiteness 3-bit from
+  the weighted mid+high share of the band peaks.
+- PWV3: height and whiteness per column at 150/s. PWV5: `R:3 G:3 B:3 H:5`
+  per column, colour = per-band curves normalised so the loudest band is 7.
+- PWV4: 1200 columns × 6 bytes: byte 0 = height (0–127), byte 1 = 255 −
+  byte 0 (rekordbox's pair sums to ≈ 257), bytes 2–5 = low, low, mid, high
+  band peaks through their own curves (byte 2 is documented as "energy
+  < 10 kHz"; it tracks our < 600 Hz band at r = 0.99).
+- PWV6 (1200) / PWV7 (150/s): 3 bytes per column in order **low, mid,
+  high** (rekordbox's files; djl-analysis says mid, high, low), each band
+  × a per-track gain; PWV7 adds a peak-hold release. PWVC: those three
+  gains ×100, computed per track (rekordbox's values are per track too).
 - `.2EX` written only for `AnlzTarget::Cdj3000`-capable exports (harmless elsewhere).
 
 Analysis cache: `<cache_dir>/analysis/<track_id>/{analysis.json, bands.bin}`
@@ -218,14 +221,23 @@ rekordbox keys (D10, "Queue").
    lives in `reks-anlz`, plus `pwvc`; `Waveforms::{dat,ext,ex2}_sections`)
    and [write.rs](../../crates/reks-anlz/src/write.rs) (hand-written
    big-endian section framing, see the D9 finding). Scales come from
-   `WaveformCalibration`; `PLACEHOLDER_CALIBRATION` is a first guess from
-   two reference tracks for task 8 to fit. Section headers match rekordcrate's
+   `WaveformCalibration` (first-guess placeholder, replaced by task 8's fit). Section headers match rekordcrate's
    rekordbox 6 reference files byte for byte; every section parses with
    rekordcrate and writes back byte-identical.
-8. **Calibration against rekordbox**: for 50 rekordbox-analysed tracks, load
+8. [x] **Calibration against rekordbox**: for 50 rekordbox-analysed tracks, load
    rekordbox's `.EXT/.2EX` from the local cache, fit per-band gain/gamma and
    the whiteness heuristic to minimise column error; store constants in
    `reks-analysis::calib`; produce side-by-side PNGs in `docs/analysis-parity/`.
+   Done: [`calib.rs`](../../crates/reks-analysis/src/calib.rs) (model and
+   `CALIBRATION`, the `Default`), encoders reworked in
+   [waveform.rs](../../crates/reks-anlz/src/waveform.rs), fit and pictures in
+   the ignored [tests/calibrate.rs](../../crates/reks-anlz/tests/calibrate.rs)
+   (`REKS_RB_ANLZ`, `REKS_CALIB_MUSIC`). Mean compare.rs error over all
+   sections 0.223 → 0.097; method, per-channel table and pictures in
+   [analysis-parity/waveforms.md](../analysis-parity/waveforms.md). Findings
+   (D13): PWV6/PWV7 are low, mid, high; PWVC is the per-track band gain
+   ×100, now computed; MP3 columns lag ours by 4–8 (task 4). Crossovers
+   unchanged (follow-up: a 250 Hz / 2 kHz set for PWV6/PWV7).
 9. [x] **ANLZ builder** (`reks-anlz`): assemble `.DAT/.EXT/.2EX` with
    rekordcrate types; validator; golden test: build ANLZ for a reference
    track and compare section lists, lengths and PQTZ/PCOB contents with
