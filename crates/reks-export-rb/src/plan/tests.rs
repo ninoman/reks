@@ -134,6 +134,7 @@ fn track(id: TrackId, src: PathBuf, artist: &str, album: &str) -> SourceTrack {
         probe: None,
         has_grid: true,
         cue_count: 3,
+        divider: None,
     }
 }
 
@@ -148,6 +149,7 @@ fn sources(tracks: Vec<SourceTrack>) -> Sources {
         }],
         tracks,
         problems: vec![],
+        dividers: vec![],
     }
 }
 

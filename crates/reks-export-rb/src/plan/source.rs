@@ -9,6 +9,7 @@ use reks_core::query::MAX_PAGE;
 use reks_core::{Filter, Library, PlaylistId, PlaylistNode, Sort, SortColumn, TrackId, TrackQuery};
 
 use super::{PlannedPlaylist, Problem, Selection};
+use crate::divider::{DividerInfo, SourceDivider};
 
 /// One library track as the planner sees it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,6 +23,8 @@ pub struct SourceTrack {
     pub has_grid: bool,
     /// Hot cues, memory cues and loops (capped at 255).
     pub cue_count: u8,
+    /// Set for a playlist divider ([`crate::divider::expand`]).
+    pub divider: Option<DividerInfo>,
 }
 
 /// The planner's input.
@@ -33,6 +36,9 @@ pub struct Sources {
     pub playlists: Vec<PlannedPlaylist>,
     /// Selection problems (unknown ids, nothing selected).
     pub problems: Vec<Problem>,
+    /// The playlists' dividers, in playlist then entry order; not in
+    /// `tracks` or `playlists` until [`crate::divider::expand`].
+    pub dividers: Vec<SourceDivider>,
 }
 
 /// Loads `sel` from `lib`.
@@ -73,7 +79,9 @@ pub fn load(lib: &Library, sel: &Selection) -> reks_core::Result<Sources> {
         let mut track_ids = Vec::new();
         // Ancestors that were not selected themselves contribute no tracks.
         if !n.is_folder && inside.contains(&n.id) {
-            track_ids = playlist_entries(lib, n.id)?;
+            let dividers;
+            (track_ids, dividers) = playlist_entries(lib, n.id)?;
+            out.dividers.extend(dividers);
             for &tid in &track_ids {
                 if seen.insert(tid) {
                     out.tracks.push(source_track(lib, tid)?);
@@ -91,9 +99,14 @@ pub fn load(lib: &Library, sel: &Selection) -> reks_core::Result<Sources> {
     Ok(out)
 }
 
-/// The playlist's entries in order, duplicates included.
-fn playlist_entries(lib: &Library, id: PlaylistId) -> reks_core::Result<Vec<TrackId>> {
+/// The playlist's track entries in order, duplicates included, and its
+/// dividers.
+fn playlist_entries(
+    lib: &Library,
+    id: PlaylistId,
+) -> reks_core::Result<(Vec<TrackId>, Vec<SourceDivider>)> {
     let mut ids = Vec::new();
+    let mut dividers = Vec::new();
     let mut offset = 0;
     loop {
         let page = lib.tracks(&TrackQuery {
@@ -106,10 +119,28 @@ fn playlist_entries(lib: &Library, id: PlaylistId) -> reks_core::Result<Vec<Trac
             limit: MAX_PAGE,
             ..TrackQuery::default()
         })?;
+        if offset == 0 {
+            // Every page lists all dividers by entry position (dense, from 0),
+            // so a divider at position p has p minus earlier dividers tracks
+            // before it.
+            dividers = page
+                .dividers
+                .iter()
+                .enumerate()
+                .map(|(i, d)| SourceDivider {
+                    info: DividerInfo {
+                        playlist_id: id,
+                        ordinal: u32::try_from(i + 1).unwrap_or(u32::MAX),
+                        label: d.label.clone(),
+                    },
+                    tracks_before: usize::try_from(d.position).unwrap_or(0).saturating_sub(i),
+                })
+                .collect();
+        }
         let n = page.rows.len();
         ids.extend(page.rows.into_iter().map(|r| r.id));
         if n < MAX_PAGE as usize {
-            return Ok(ids);
+            return Ok((ids, dividers));
         }
         offset += MAX_PAGE;
     }
@@ -145,6 +176,7 @@ fn source_track(lib: &Library, id: TrackId) -> reks_core::Result<SourceTrack> {
         probe,
         has_grid: d.beatgrid.is_some(),
         cue_count: u8::try_from(d.cues.len()).unwrap_or(u8::MAX),
+        divider: None,
     })
 }
 

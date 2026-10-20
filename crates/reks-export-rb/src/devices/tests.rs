@@ -122,7 +122,7 @@ impl World {
         assert!(!plan.is_blocked(), "{:?}", plan.errors);
         let work = self.tmp.path().join("work");
         let _ = fs::remove_dir_all(&work);
-        let writer = BakenWriter::prepare(&self.lib, &sel, &work).unwrap();
+        let writer = BakenWriter::prepare(&self.lib, &sel, &plan, &work).unwrap();
         let env = ApplyEnv {
             library: &self.lib,
             app_data_dir: &self.tmp.path().join("data"),

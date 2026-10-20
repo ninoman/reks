@@ -296,6 +296,24 @@ describe("ExportWizard", () => {
     );
   });
 
+  it("playlist dividers are off by default and marked UNVERIFIED", async () => {
+    exportPlan.mockResolvedValue(dryRun());
+    await toOptions();
+    const toggle = screen.getByRole("switch", { name: "Playlist dividers" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText("UNVERIFIED")).toBeTruthy();
+    fireEvent.click(toggle);
+
+    fireEvent.click(button("Dry run"));
+    await screen.findByText(/Ready to export/);
+    expect(exportPlan).toHaveBeenCalledWith(
+      "/Volumes/REKS",
+      { playlists: [3] },
+      expect.objectContaining({ dividers: true }),
+      1,
+    );
+  });
+
   it("shows the dry run with the history backup", async () => {
     exportPlan.mockResolvedValue(
       dryRun({

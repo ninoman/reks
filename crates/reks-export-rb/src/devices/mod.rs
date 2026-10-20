@@ -30,7 +30,7 @@ mod tests;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use reks_core::{Library, NewDevice, PlaylistId, PlaylistNode, TrackId};
+use reks_core::{Library, ManifestItemKind, NewDevice, PlaylistId, PlaylistNode, TrackId};
 use serde::Serialize;
 
 use crate::apply::{ExportReport, ExportStatus};
@@ -588,12 +588,16 @@ fn stick_contents(
             "Parts of the stick's database are damaged; this status may be incomplete.".to_owned(),
         );
     }
-    let manifest: HashMap<String, Option<TrackId>> = lib
+    let manifest: HashMap<String, (ManifestItemKind, Option<TrackId>)> = lib
         .manifest(serial)?
         .into_iter()
-        .map(|m| (m.stick_path, m.track_id))
+        .map(|m| (m.stick_path, (m.item_kind, m.track_id)))
         .collect();
-    let mut have = stick_playlists(&report, |t| manifest.get(&t.file_path).copied().flatten());
+    let mut have = stick_playlists(&report, |t| match manifest.get(&t.file_path) {
+        Some((ManifestItemKind::Divider, _)) => None,
+        Some((_, id)) => Some(*id),
+        None => Some(None),
+    });
     // The stick doesn't know library playlist ids: take them from the last
     // recorded sync, by path.
     assign_ids(
@@ -607,9 +611,11 @@ fn stick_contents(
 
 /// The stick's playlists (not folders) in tree order, entries mapped to
 /// library tracks with `track_of`. `playlist_id` is left `None`.
+/// `track_of` gives a row's library track (`Some(None)`: unknown), or `None`
+/// for a divider, which is left out of the entries.
 fn stick_playlists(
     report: &ValidationReport,
-    track_of: impl Fn(&StickTrack) -> Option<TrackId>,
+    track_of: impl Fn(&StickTrack) -> Option<Option<TrackId>>,
 ) -> Vec<SyncedPlaylist> {
     let rows: HashMap<u32, &StickTrack> = report.tracks.iter().map(|t| (t.pdb_id, t)).collect();
     let pls = &report.playlists;
@@ -647,7 +653,10 @@ fn stick_playlists(
                 entries: p
                     .entries
                     .iter()
-                    .map(|id| rows.get(id).and_then(|t| track_of(t)))
+                    .filter_map(|id| match rows.get(id) {
+                        Some(t) => track_of(t),
+                        None => Some(None),
+                    })
                     .collect(),
             });
         }
@@ -706,7 +715,7 @@ pub fn record_sync(
         return Err(DevicesError::NotReadBack);
     }
 
-    let mut synced = stick_playlists(read_back, |t| t.track_id);
+    let mut synced = stick_playlists(read_back, |t| (!t.divider).then_some(t.track_id));
     let nodes: Vec<PlaylistNode> = plan
         .playlists
         .iter()

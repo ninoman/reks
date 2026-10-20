@@ -73,7 +73,7 @@ pub enum HistoryPolicy { BackUp /* default */, Discard /* only after an explicit
 pub fn plan(lib: &Library, sel: &Selection, dev: &DeviceInfo, opts: &ExportOptions, anlz: &dyn AnlzLocator)
     -> Result<ExportPlan, PlanError>;   // done: crates/reks-export-rb/src/plan/
 // ExportOptions { target, keep_stale, missing_analysis, artwork, skip_unsupported, history: HistoryPolicy,
-//                 discard_history_confirmed }
+//                 discard_history_confirmed, dividers /* Phase 2.5 */ }
 pub struct CacheLocator;   // AnlzLocator over rbcache: CacheLocator::for_selection(lib, sel, RbCache::scan(roots)?)
 pub fn apply(plan: &ExportPlan, writer: &dyn RekordboxWriter, env: &ApplyEnv /* library, app_data_dir, StickCheck */,
              progress: &(dyn Fn(ApplyEvent) + Sync), cancel: &CancelToken)

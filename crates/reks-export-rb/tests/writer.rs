@@ -134,8 +134,8 @@ impl World {
         self.plan_to(sel, &self.stick, &generate(), &NoAnlz)
     }
 
-    fn writer(&self, sel: &Selection) -> BakenWriter {
-        BakenWriter::prepare(&self.lib, sel, &self.tmp.path().join("work")).unwrap()
+    fn writer(&self, sel: &Selection, plan: &ExportPlan) -> BakenWriter {
+        BakenWriter::prepare(&self.lib, sel, plan, &self.tmp.path().join("work")).unwrap()
     }
 
     fn write(&self, sel: &Selection, plan: &ExportPlan) -> (WriterReport, Vec<ExportEvent>) {
@@ -151,9 +151,12 @@ impl World {
         cancel: &CancelToken,
     ) -> Result<(WriterReport, Vec<ExportEvent>), WriterError> {
         let events = Mutex::new(Vec::new());
-        let report =
-            self.writer(sel)
-                .write(plan, stick, &|e| events.lock().unwrap().push(e), cancel)?;
+        let report = self.writer(sel, plan).write(
+            plan,
+            stick,
+            &|e| events.lock().unwrap().push(e),
+            cancel,
+        )?;
         Ok((report, events.into_inner().unwrap()))
     }
 }

@@ -110,8 +110,8 @@ impl World {
         self.plan_with(Some(SERIAL))
     }
 
-    fn writer(&self) -> BakenWriter {
-        BakenWriter::prepare(&self.lib, &self.sel(), &self.tmp.path().join("work")).unwrap()
+    fn writer(&self, plan: &ExportPlan) -> BakenWriter {
+        BakenWriter::prepare(&self.lib, &self.sel(), plan, &self.tmp.path().join("work")).unwrap()
     }
 
     pub(crate) fn env(&self) -> ApplyEnv<'_> {
@@ -135,7 +135,7 @@ impl World {
             on_event(&e, &cancel);
             events.lock().unwrap().push(e);
         };
-        let result = apply(plan, &self.writer(), env, &progress, &cancel);
+        let result = apply(plan, &self.writer(plan), env, &progress, &cancel);
         (result, events.into_inner().unwrap())
     }
 

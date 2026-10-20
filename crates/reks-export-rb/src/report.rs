@@ -45,7 +45,7 @@ pub fn export(
     profile: Option<DeviceId>,
 ) -> ReportView {
     let tracker = ProgressTracker::new(labels);
-    let result = writer_for(env.library, sel).and_then(|(writer, _work)| {
+    let result = writer_for(env.library, sel, plan).and_then(|(writer, _work)| {
         apply(
             plan,
             &writer,
@@ -74,6 +74,7 @@ pub fn export(
 fn writer_for(
     lib: &Library,
     sel: &Selection,
+    plan: &ExportPlan,
 ) -> Result<(BakenWriter, tempfile::TempDir), ApplyError> {
     let work = tempfile::Builder::new()
         .prefix("reks-export-")
@@ -84,7 +85,7 @@ fn writer_for(
                 source,
             })
         })?;
-    let writer = BakenWriter::prepare(lib, sel, work.path()).map_err(ApplyError::Writer)?;
+    let writer = BakenWriter::prepare(lib, sel, plan, work.path()).map_err(ApplyError::Writer)?;
     Ok((writer, work))
 }
 

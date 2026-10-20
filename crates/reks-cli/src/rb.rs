@@ -4,7 +4,7 @@
 //! reks rb plan <stick> --library <library.sqlite> --playlist <id | Folder/Name>...
 //!              [--target nxs|nxs2|3000|xdj-xz|generic] [--missing-analysis skip|generate|without]
 //!              [--keep-stale] [--artwork] [--skip-unsupported] [--discard-history]
-//!              [--anlz-root <dir>]... [--json]
+//!              [--dividers] [--anlz-root <dir>]... [--json]
 //!     print the dry run; exits non-zero when the plan is blocked
 //! reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]
 //!     print the dry run; with --yes, write the stick (backup, write, validate,
@@ -37,6 +37,7 @@ use reks_export_rb::apply::{
     ApplyEnv, ApplyEvent, ApplyStage, ExportReport, ExportStatus, ManifestStatus, StickCheck,
 };
 use reks_export_rb::device::{self, DeviceInfo, FsKind};
+use reks_export_rb::divider;
 use reks_export_rb::history::{self, HistoryPolicy, HistorySession, StickHistory};
 use reks_export_rb::plan::{
     self, human_bytes, AnlzOp, CacheLocator, ExportOptions, ExportPlan, MissingAnalysis, Selection,
@@ -50,7 +51,7 @@ use serde::Serialize;
 const USAGE: &str = "usage: reks rb plan <stick> --library <library.sqlite> \
 --playlist <id|Folder/Name>... [--target nxs|nxs2|3000|xdj-xz|generic] \
 [--missing-analysis skip|generate|without] [--keep-stale] [--artwork] [--skip-unsupported] \
-[--discard-history] [--anlz-root <dir>]... [--json]
+[--discard-history] [--dividers] [--anlz-root <dir>]... [--json]
        reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]
        reks rb validate <stick> <plan flags>
        reks rb history <stick> [--json]";
@@ -129,7 +130,7 @@ fn export(args: &PlanArgs, st: &Stick) -> anyhow::Result<()> {
     }
 
     let work = tempfile::tempdir().context("temp folder for the writer")?;
-    let writer = BakenWriter::prepare(&planned.lib, &planned.sel, work.path())?;
+    let writer = BakenWriter::prepare(&planned.lib, &planned.sel, &planned.plan, work.path())?;
     let data_dir = match &args.data_dir {
         Some(d) => d.clone(),
         None => args
@@ -312,6 +313,8 @@ fn parse_plan_args(flags: &[String], cmd: Command) -> anyhow::Result<PlanArgs> {
                 .push(PathBuf::from(value()?)),
             "--keep-stale" => opts.keep_stale = true,
             "--artwork" => opts.artwork = true,
+            // UNVERIFIED on players (Phase 2.5 task 11).
+            "--dividers" => opts.dividers = true,
             "--skip-unsupported" => opts.skip_unsupported = true,
             "--discard-history" => {
                 opts.history = HistoryPolicy::Discard;
@@ -375,7 +378,10 @@ fn build_plan(
         cache.roots()
     );
     let locator = CacheLocator::for_selection(&lib, &sel, cache)?;
-    let sources = plan::load(&lib, &sel)?;
+    let mut sources = plan::load(&lib, &sel)?;
+    if args.opts.dividers {
+        divider::expand(&mut sources, &lib.cache_dir().join(divider::DIVIDER_DIR))?;
+    }
     let plan = plan::plan_sources(sources, dev, serial, &args.opts, &locator)?;
     Ok(Planned { lib, sel, plan })
 }
@@ -1045,7 +1051,8 @@ mod tests {
         .unwrap();
         let planned = build_plan(&a, &fake_dev(&stick_root), Some("4993-1CFB".into())).unwrap();
         let work = tempfile::tempdir().unwrap();
-        let writer = BakenWriter::prepare(&planned.lib, &planned.sel, work.path()).unwrap();
+        let writer =
+            BakenWriter::prepare(&planned.lib, &planned.sel, &planned.plan, work.path()).unwrap();
         let env = ApplyEnv {
             library: &planned.lib,
             app_data_dir: tmp.path(),
