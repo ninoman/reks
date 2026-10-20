@@ -178,6 +178,11 @@ Date of decisions: 2026-10-18.
 - Risks: ~real-time CPU cost on long tracks (batch with rayon, show
   progress); model provenance note in Beat This! README; agreement with
   rekordbox unknown until Phase 3 measures it on the maintainer's library.
+- Port (2026-10-20): `retrieveConstRegions`, `makeConstBpm`,
+  `roundBpmWithinRange` and `adjustPhase` from Mixxx `src/track/beatutils.cpp`
+  live in [`reks-analysis/src/grid.rs`](../crates/reks-analysis/src/grid.rs)
+  with the attribution in its module doc; tests reimplement the behaviour of
+  Mixxx's `beatutils_test.cpp`, no code copied. Deviations are listed there.
 
 ## D11. rekordbox XML reader/writer: own implementation on `quick-xml`
 
