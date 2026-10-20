@@ -1604,6 +1604,8 @@ mod tests {
             "--retry-failed",
             "--bar",
             "vote",
+            "--driver",
+            "kf",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -1614,6 +1616,7 @@ mod tests {
         assert!(f.retry_failed);
         assert_eq!(f.only, Some(vec!["mp3".to_owned(), "m4a".to_owned()]));
         assert_eq!(f.grid.bar, BarRule::Vote);
+        assert_eq!(f.driver, Some(PathBuf::from("kf")));
         assert!(Flags::parse(&["--bogus".to_owned()]).is_err());
         assert!(Flags::parse(&["--bar".to_owned(), "x".to_owned()]).is_err());
     }

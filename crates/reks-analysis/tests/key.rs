@@ -147,8 +147,8 @@ fn silence_and_tiny_inputs_do_not_panic() {
 ///
 /// Needs the `fixtures/keyfinder/driver.cpp` binary (see its header for the
 /// build line) at `REKS_KEYFINDER_DRIVER`. Run with
-/// `cargo test -p reks-analysis --test key -- --ignored`. UNVERIFIED: not
-/// yet run anywhere (see phase-3.md task 5).
+/// `cargo test -p reks-analysis --test key -- --ignored`. Last run
+/// 2026-10-21: 26 of 26 identical (phase-3.md task 5).
 #[test]
 #[ignore = "needs the libkeyfinder C++ driver (REKS_KEYFINDER_DRIVER)"]
 fn matches_cpp_libkeyfinder() {

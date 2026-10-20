@@ -4,6 +4,7 @@
 //! ```text
 //! reks parity keyfinder --driver <keyfinder-driver> [--xml ..] [--out ..] [--jobs N]
 //!                       [--every N] [--limit N] [--only flac,..] [--remap FROM=TO]...
+//!                       [--analyser N]
 //! ```
 //!
 //! Each track is decoded as `run` does ([`AnalysisInput::from_file`]); the
@@ -12,7 +13,9 @@
 //! program only: nothing of it is linked into reks. Results go to
 //! `<out>/keyfinder.jsonl` (resumable, keyed like `results.jsonl`); the
 //! report printed at the end compares both with rekordbox's `Tonality` on the
-//! scored tracks (one `TEMPO` anchor).
+//! scored tracks (one `TEMPO` anchor). `--analyser N` keeps and reports the
+//! stored results of version N, as `report` does (key code unchanged since
+//! version 3).
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -48,15 +51,12 @@ struct KeyRecord {
 }
 
 pub(super) fn run(flags: &Flags) -> anyhow::Result<()> {
-    let driver = flags
-        .driver
-        .clone()
-        .context("give --driver <path to the built fixtures/keyfinder driver>")?;
     let xml = flags.xml()?;
     let out = flags.out()?;
     std::fs::create_dir_all(&out).with_context(|| format!("creating {}", out.display()))?;
     let collection = rbxml::parse_file(&xml)?;
     let done = load(&out)?;
+    let version = flags.analyser.unwrap_or(ANALYSER_VERSION);
 
     let mut todo: Vec<(String, PathBuf, u64, i64)> = Vec::new();
     for (i, t) in collection.tracks.iter().enumerate() {
@@ -74,9 +74,9 @@ pub(super) fn run(flags: &Flags) -> anyhow::Result<()> {
         let Some((size, mtime)) = file_stamp(&path) else {
             continue;
         };
-        let fresh = done.get(&loc).is_some_and(|r| {
-            r.size == size && r.mtime == mtime && r.analyser == ANALYSER_VERSION
-        });
+        let fresh = done
+            .get(&loc)
+            .is_some_and(|r| r.size == size && r.mtime == mtime && r.analyser == version);
         if !fresh {
             todo.push((loc, path, size, mtime));
         }
@@ -86,6 +86,12 @@ pub(super) fn run(flags: &Flags) -> anyhow::Result<()> {
     }
     let jobs = flags.jobs.unwrap_or_else(default_workers).max(1);
     eprintln!("{} to compare on {jobs} workers", todo.len());
+    // Only a run needs the driver; with everything up to date this reports.
+    let driver = match (&flags.driver, todo.is_empty()) {
+        (Some(d), _) => d.clone(),
+        (None, true) => PathBuf::new(),
+        (None, false) => bail!("give --driver <path to the built fixtures/keyfinder driver>"),
+    };
 
     let writer = Mutex::new(
         OpenOptions::new()
@@ -126,7 +132,7 @@ pub(super) fn run(flags: &Flags) -> anyhow::Result<()> {
         Ok(())
     })?;
 
-    let md = report(&collection.tracks, &load(&out)?);
+    let md = report(&collection.tracks, &load(&out)?, version);
     match &flags.md {
         Some(path) => {
             std::fs::write(path, &md).with_context(|| format!("writing {}", path.display()))?
@@ -204,7 +210,11 @@ fn cpp_key(driver: &Path, mono: &[f32]) -> anyhow::Result<Option<Key>> {
 
 /// Aggregates over the scored tracks: reks against C++, and both against
 /// rekordbox.
-fn report(tracks: &[rbxml::XmlTrack], results: &HashMap<String, KeyRecord>) -> String {
+fn report(
+    tracks: &[rbxml::XmlTrack],
+    results: &HashMap<String, KeyRecord>,
+    version: u32,
+) -> String {
     let parse = |k: &Option<String>| k.as_deref().and_then(|k| Key::parse(k).ok());
     let mut rows = Vec::new();
     let mut failed = 0;
@@ -212,7 +222,7 @@ fn report(tracks: &[rbxml::XmlTrack], results: &HashMap<String, KeyRecord>) -> S
         let Some(rec) = t.location.as_deref().and_then(|l| results.get(l)) else {
             continue;
         };
-        if rec.analyser != ANALYSER_VERSION {
+        if rec.analyser != version {
             continue;
         }
         if rec.error.is_some() {
@@ -222,28 +232,40 @@ fn report(tracks: &[rbxml::XmlTrack], results: &HashMap<String, KeyRecord>) -> S
         let scored = RbGrid::from_track(t).is_some_and(|g| g.anchors.len() == 1);
         let rb = t.tonality.as_deref().and_then(|k| Key::parse(k).ok());
         if let (true, Some(rb)) = (scored, rb) {
-            rows.push((parse(&rec.reks), parse(&rec.cpp), rb));
+            rows.push(Row {
+                reks: parse(&rec.reks),
+                cpp: parse(&rec.cpp),
+                rb,
+            });
         }
     }
     let n = rows.len();
-    let same = rows.iter().filter(|(ours, cpp, _)| ours == cpp).count();
+    let same = rows.iter().filter(|r| r.reks == r.cpp).count();
     let mut md = String::new();
     let _ = writeln!(
         md,
-        "Analyser version {ANALYSER_VERSION}; {n} scored tracks with a rekordbox key \
+        "Analyser version {version}; {n} scored tracks with a rekordbox key \
          ({failed} failed to decode).\n\nreks = C++ libKeyFinder: {same} of {n} ({}).\n",
         pct(same, n)
     );
-    type Row = (Option<Key>, Option<Key>, Key);
-    let sides: [(&str, fn(&Row) -> Option<Key>); 2] =
-        [("reks", |r| r.0), ("C++ libKeyFinder", |r| r.1)];
-    for (who, key) in sides {
-        class_table(
-            &mut md,
-            &format!("{who} vs rekordbox"),
-            rows.iter().map(|r| KeyClass::of(key(r), r.2)),
-            KeyClass::label,
-        );
-    }
+    class_table(
+        &mut md,
+        "reks vs rekordbox",
+        rows.iter().map(|r| KeyClass::of(r.reks, r.rb)),
+        KeyClass::label,
+    );
+    class_table(
+        &mut md,
+        "C++ libKeyFinder vs rekordbox",
+        rows.iter().map(|r| KeyClass::of(r.cpp, r.rb)),
+        KeyClass::label,
+    );
     md
+}
+
+/// A scored track's keys.
+struct Row {
+    reks: Option<Key>,
+    cpp: Option<Key>,
+    rb: Key,
 }
