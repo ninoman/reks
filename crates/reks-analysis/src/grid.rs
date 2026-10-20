@@ -14,8 +14,11 @@
 //! - [`make_const_bpm`] also reports the span of the merged region, so
 //!   [`build_grid`] can anchor beat 1 on a downbeat inside it.
 //!
-//! [`build_grid`] adds what Mixxx does elsewhere or not at all: the downbeat
-//! anchor, the fallback to a dynamic grid and the half/double tempo rule.
+//! [`build_grid`] adds what Mixxx does elsewhere or not at all: the
+//! whole-track tempo search ([`fit_tempo`], Mixxx's tempo is one estimate),
+//! the downbeat anchor, the fallback to a dynamic grid only on a tempo change
+//! ([`tempo_change`]), the half/double tempo rule, and the choice of phase by
+//! the kick ([`kick_phase`], task 12a).
 
 use crate::onset::KickPulse;
 

@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–11 and 13 done; 12 measured, tuning (12a) in progress). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–11 and 13 done; 12 measured, tuning (12a) in progress: BPM met). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -341,10 +341,19 @@ rekordbox keys (D10, "Queue").
     grids (hand edits) are reported, not scored. Method, numbers and tuning
     plan: [analysis-parity.md](../analysis-parity.md).
 12a. **Tuning** (plan in [analysis-parity.md](../analysis-parity.md#tuning-plan),
-    priority BPM → downbeat → key): fixed grid first (`min_coverage` ≈ 0.5,
-    dynamic only on a real tempo change; what-if 92.8% BPM), kick-led beat
-    snapping and grid fit, phrase/kick-based bar placement, libKeyFinder C++
-    check then mode decision. Re-measure after each step.
+    priority BPM → downbeat → key). Re-measure after each step.
+    - [x] Fixed grid first: whole-track tempo fit (`grid::fit_tempo`),
+      `min_coverage` 0.3, dynamic only on a tempo change
+      (`grid::tempo_change`).
+    - [x] Kick: low-band onset curve ([onset.rs](../../crates/reks-analysis/src/onset.rs));
+      the kick chooses the grid's phase among clusters of beats
+      (`grid::kick_phase`); kick-placed beats measured worse, not used.
+      `reks parity run` stores every beat placement and the kick curve.
+      Version 3 on the 1,762 one-anchor tracks: BPM 85.1% → 96.7% (met),
+      downbeat 70.9% → 73.3% (below).
+    - [ ] Phrase/kick-based bar placement (downbeat: 20% of BPM-matched
+      grids have the bar rotated).
+    - [ ] libKeyFinder C++ check, then the mode decision (key).
 13. [x] **Grid editor UI**: waveform view from our columns (zoomable, 150/s),
     beat markers, set-downbeat-here, nudge ±1 ms/±10 ms, tap tempo,
     double/halve, lock grid; edits write `beatgrid` rows with `source =

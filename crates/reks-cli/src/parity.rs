@@ -1314,6 +1314,21 @@ fn downbeat_table(md: &mut String, rows: &[Row]) {
         pct(ok, matched.len()),
         matched.len()
     );
+    // Grid phase, whatever the bar: how far our grid lines sit from
+    // rekordbox's (the first downbeat stands for all of a constant grid).
+    let near = |ms: f64| {
+        matched
+            .iter()
+            .filter(|r| r.beat_ms.is_some_and(|(d, _)| d.abs() <= ms))
+            .count()
+    };
+    let _ = writeln!(
+        md,
+        "Grid phase, same tracks: our first downbeat within 30 ms of any rekordbox \
+         beat {}, within 10 ms {}.\n",
+        pct(near(DOWNBEAT_TOLERANCE_MS), matched.len()),
+        pct(near(10.0), matched.len())
+    );
 }
 
 fn key_table(md: &mut String, rows: &[Row]) {
