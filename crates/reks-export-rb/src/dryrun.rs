@@ -184,7 +184,7 @@ pub struct HistoryView {
 pub struct GuardView {
     pub title: String,
     pub text: String,
-    /// One line per session: `HISTORY 001: 12 plays, imports as practice`.
+    /// One line per session: `HISTORY 001: 12 plays`.
     pub sessions: Vec<String>,
     /// The user has chosen; [`HistoryView::policy`] is the choice.
     pub chosen: bool,
@@ -677,20 +677,22 @@ fn guard_view(plan: &ExportPlan) -> Option<GuardView> {
     };
     let practice = g.sessions.iter().filter(|s| s.practice).count();
     if practice > 0 {
-        let (who, verb, pron) = if practice == 1 {
-            ("One of them".to_owned(), "has", "it")
+        text.push_str(&if practice == 1 {
+            " One of them is dated on or before your rekordbox import, so it imports as \
+             practice (not counted)."
+                .to_owned()
         } else {
-            (format!("{practice} of them"), "have", "them")
-        };
-        text.push_str(&format!(
-            " {who} {verb} no date, or one on or before your rekordbox import, so {} as \
-             practice (not counted) until you include {pron} in History.",
-            if practice == 1 {
-                "it imports"
-            } else {
-                "they import"
-            },
-        ));
+            format!(
+                " {practice} of them are dated on or before your rekordbox import, so they \
+                 import as practice (not counted)."
+            )
+        });
+    }
+    if g.unreadable.is_none() {
+        text.push_str(
+            " Imported sessions count in play counts; you can mark any of them as practice in \
+             History later.",
+        );
     }
     let sessions = g
         .sessions

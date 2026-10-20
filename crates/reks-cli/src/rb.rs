@@ -1018,7 +1018,7 @@ mod tests {
         for want in [
             "Guard     2 sessions, 3 plays not imported into the library; pass \
              --import-history, --backup-history or --discard-history\n",
-            "  HISTORY 001: 2 plays, imports as practice\n",
+            "  HISTORY 001: 2 plays\n",
             "  - the stick holds 2 play history sessions not imported",
         ] {
             assert!(text.contains(want), "{want:?} not in\n{text}");

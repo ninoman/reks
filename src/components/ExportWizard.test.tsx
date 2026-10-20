@@ -302,8 +302,8 @@ describe("ExportWizard", () => {
       title: "2 sessions on this stick are not in your library",
       text: "Exporting erases them from the stick.",
       sessions: [
-        "HISTORY 001: 2 plays, imports as practice",
-        "HISTORY 002: 1 play, imports as practice",
+        "HISTORY 001: 2 plays",
+        "HISTORY 002: 1 play",
       ],
       chosen: false,
       canImport: true,
@@ -334,7 +334,7 @@ describe("ExportWizard", () => {
     await toOptions();
     fireEvent.click(button("Dry run"));
     const section = await screen.findByRole("region", { name: guard.title });
-    expect(within(section).getByText("HISTORY 001: 2 plays, imports as practice")).toBeTruthy();
+    expect(within(section).getByText("HISTORY 001: 2 plays")).toBeTruthy();
     expect(button("Export").disabled).toBe(true);
 
     fireEvent.click(within(section).getByRole("button", { name: "Import now" }));

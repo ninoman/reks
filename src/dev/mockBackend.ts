@@ -765,10 +765,10 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
           text: "The stick's export.pdb holds 2 history sessions with 31 played tracks. Exporting rebuilds the stick's database, which erases it.",
           guard: {
             title: "2 sessions on this stick are not in your library",
-            text: "Exporting erases them from the stick. Import now adds them to your library's history before writing; Back up and continue keeps a copy you can import later; Continue and discard erases them. 2 of them have no date, or one on or before your rekordbox import, so they import as practice (not counted) until you include them in History.",
+            text: "Exporting erases them from the stick. Import now adds them to your library's history before writing; Back up and continue keeps a copy you can import later; Continue and discard erases them. Imported sessions count in play counts; you can mark any of them as practice in History later.",
             sessions: [
-              "HISTORY 001: 19 plays, imports as practice",
-              "HISTORY 002: 12 plays, imports as practice",
+              "HISTORY 001: 19 plays",
+              "HISTORY 002: 12 plays",
             ],
             chosen: opts.historyChosen,
             canImport: true,

@@ -16,9 +16,11 @@
 //! players append to a history playlist across mounts is **UNVERIFIED**
 //! (HIST3); the rule only avoids counting the first part twice if they do.
 //!
-//! Exclusion defaults (D23): a session dated on or before the baseline date,
-//! or with no date (HIST1 off), is preselected as excluded (`pre_baseline`);
-//! [`ImportChoices`] overrides that per session (`user`). [`import`] and
+//! Exclusion defaults (D23): a session dated on or before the baseline date
+//! is preselected as excluded (`pre_baseline`); every other session, undated
+//! ones included (HIST1 off), counts. [`ImportChoices`] overrides that per
+//! session (`user`), and Practice can be set later
+//! ([`Library::session_update`]). [`import`] and
 //! [`Library::session_link_entry`] recompute the play stats of the tracks
 //! they touch (`stats`, task 7).
 
@@ -131,8 +133,6 @@ pub struct PlannedEntry {
 pub enum DefaultExclusion {
     /// Played on or before the baseline date: may be in rekordbox's count.
     PreBaseline,
-    /// No date (HIST1): it may be pre-baseline too.
-    UnknownDate,
 }
 
 /// Why a session is not imported.
@@ -262,7 +262,6 @@ pub fn scan(history: &SourceHistory, lib: &Library) -> Result<HistoryImportPlan>
             out
         };
         let default_exclusion = match (&action, &s.played_on) {
-            (SessionAction::New, None) => Some(DefaultExclusion::UnknownDate),
             (SessionAction::New, Some(d))
                 if baseline_date.as_deref().is_some_and(|b| d.as_str() <= b) =>
             {

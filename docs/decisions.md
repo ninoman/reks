@@ -378,7 +378,9 @@ Date of decisions: 2026-10-18.
     rekordbox's `collection.xml` values, plus the entries of included sessions.
     Sessions are imported read-only from sticks or from Phase 2 backups. A
     session can be marked practice (excluded) and back. Sessions dated on or
-    before the baseline date import excluded. reks preview and mixer playback
+    before the baseline date import excluded; all others, undated ones
+    included, import counted and are marked practice afterwards if need be
+    (maintainer's call, 2026-10-20; undated ones used to import excluded). reks preview and mixer playback
     never count.
   - Every writer checks what history the stick holds before writing. Phase 2
     backs up `PIONEER/rekordbox/*.pdb` and `exportLibrary.db` to

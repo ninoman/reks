@@ -11,8 +11,9 @@
 //! refuses it. The choices are the [`HistoryPolicy`] values:
 //!
 //! - `Import` ("Import now"): `apply` imports the scanned sessions with the
-//!   import's default choices (undated or pre-baseline sessions import as
-//!   practice), then backs up as `BackUp` does.
+//!   import's default choices (they count, except sessions dated on or
+//!   before the rekordbox baseline; Practice can be set later), then backs
+//!   up as `BackUp` does.
 //! - `BackUp` ("Back up and continue"): the Phase 2 backup only; the backup
 //!   folder can be imported later (`reks history import <backup>`).
 //! - `Discard` ("Continue and discard"): needs
@@ -43,7 +44,7 @@ pub struct UnimportedSession {
     /// The library holds this session's first entries; an import extends it.
     pub extends: bool,
     /// A new session the import stores as practice (not counted) by
-    /// default: undated, or dated on or before the rekordbox baseline.
+    /// default: dated on or before the rekordbox baseline.
     pub practice: bool,
 }
 

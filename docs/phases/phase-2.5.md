@@ -96,7 +96,9 @@ last_played(t) = max(baseline_last_played(t), max(played_on) of included session
 ```
 - Included means `excluded = 0`. Sessions with `played_on` on or before the
   baseline date import excluded (`pre_baseline`, "may already be in
-  rekordbox's count"); unknown dates are preselected as excluded in the dry run.
+  rekordbox's count"). Every other session counts by default, undated ones
+  included (maintainer's call, 2026-10-20: the user marks practice afterwards
+  instead).
 - The baseline is frozen. A later rekordbox XML re-import sets `baseline_*`
   only for tracks it creates, never for existing ones, because rekordbox may
   have counted the same stick histories. This replaces Phase 1's "XML values
@@ -266,7 +268,8 @@ Divider rules
    stored prefix; extending replaces the session's fingerprint. A plan entry
    whose `Extend` no longer fits fails the whole import (`StaleHistoryPlan`);
    a `New` imported meanwhile is skipped. New sessions dated on or before
-   the baseline date, or undated, default to excluded (`pre_baseline`); an
+   the baseline date default to excluded (`pre_baseline`); undated ones
+   count (they defaulted to excluded until 2026-10-20); an
    explicit Practice choice stores `user`. `Library::session_link_entry`
    ("Locate…") is here; counts are not recomputed until task 7. The fixture
    test (`played_stick_fixture_imports_once`) is `#[ignore]` like task 5's.
@@ -300,7 +303,8 @@ Divider rules
    needs `discard_history_confirmed`). Import now is the new apply stage
    `ImportHistory` before the backup: `history::import` of the dry run's
    scan (`ExportPlan::history_import`, not serialised) with default choices,
-   so undated sessions import as practice; it backs up too. An import error
+   so they count unless dated on or before the baseline (Practice is set
+   later in History); it backs up too. An import error
    aborts before any stick write; a session imported meanwhile is skipped.
    Only a stick whose `export.pdb` counts sessions is scanned: an unreadable
    one keeps the Phase 2 backup; a count that the full reader then fails on

@@ -73,13 +73,13 @@ fn unimported_sessions_block_until_a_choice() {
                 name: "HISTORY 001".into(),
                 entries: 2,
                 extends: false,
-                practice: true,
+                practice: false,
             },
             UnimportedSession {
                 name: "HISTORY 002".into(),
                 entries: 1,
                 extends: false,
-                practice: true,
+                practice: false,
             },
         ]
     );
@@ -97,14 +97,14 @@ fn unimported_sessions_block_until_a_choice() {
     let g = d.history.guard.unwrap();
     assert_eq!(g.title, "2 sessions on this stick are not in your library");
     assert!(!g.chosen && g.can_import);
-    assert_eq!(
-        g.sessions,
-        [
-            "HISTORY 001: 2 plays, imports as practice",
-            "HISTORY 002: 1 play, imports as practice"
-        ]
+    assert_eq!(g.sessions, ["HISTORY 001: 2 plays", "HISTORY 002: 1 play"]);
+    assert!(!g.text.contains("import as practice"), "{}", g.text);
+    assert!(
+        g.text
+            .contains("you can mark any of them as practice in History later"),
+        "{}",
+        g.text
     );
-    assert!(g.text.contains("2 of them have no date"), "{}", g.text);
     assert_eq!(d.problems[0].kind, "historyNotImported");
 
     // Planning again with the guard is idempotent.

@@ -520,12 +520,7 @@ fn exclusion_defaults_and_choices() {
     let defaults: Vec<_> = plan.sessions.iter().map(|s| s.default_exclusion).collect();
     assert_eq!(
         defaults,
-        vec![
-            Some(DefaultExclusion::PreBaseline),
-            None,
-            Some(DefaultExclusion::UnknownDate),
-            None
-        ]
+        vec![Some(DefaultExclusion::PreBaseline), None, None, None]
     );
     let mut choices = ImportChoices::default();
     choices
@@ -547,7 +542,7 @@ fn exclusion_defaults_and_choices() {
         vec![
             ("before".into(), true, Some("pre_baseline".into())),
             ("after".into(), false, None),
-            ("unknown".into(), true, Some("pre_baseline".into())),
+            ("unknown".into(), false, None),
             ("practice".into(), true, Some("user".into())),
         ]
     );

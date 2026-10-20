@@ -736,7 +736,7 @@ export interface NoticeGroup {
 export interface HistoryGuardView {
   title: string;
   text: string;
-  /** `HISTORY 001: 12 plays, imports as practice`. */
+  /** `HISTORY 001: 12 plays`. */
   sessions: string[];
   /** The user has chosen; `history.policy` is the choice. */
   chosen: boolean;
