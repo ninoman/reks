@@ -173,6 +173,19 @@ Date of decisions: 2026-10-18.
   the independent parser: every section must parse and write back
   byte-identical. Proposed: do the same for the remaining sections in task 9
   unless a newer rekordcrate fixes this.
+- Finding (2026-10-20, Phase 3 task 9; status: proposed, follows the task 7
+  finding): 0.3.0 is still the latest rekordcrate (crates.io, 2026-10-20) and
+  it can't write the other sections either: `Cue`/`ExtendedCue`/`BeatGrid`/
+  `CueList` keep fields private, `CueType` has no point cue (1), and there is
+  no PQT2 type. Its parser also can't read a `PCO2` with cues from rekordbox
+  or from us: it expects a non-empty comment length and no 20 padding bytes
+  after the colour. So every section is hand-written in `reks-anlz::write`;
+  cue layouts follow baken-export 4.6.1 (MIT), whose tests pin them against
+  real rekordbox 7 exports. Independent checks: rekordcrate round-trips every
+  file without point cues byte-identically (loops included); cue-bearing
+  `.EXT` files round-trip through our own reader (property test), and the
+  golden test matches rekordbox 6's PPTH/PVBR/PCOB/PCO2 bytes. Revisit if a
+  rekordcrate release makes these types constructible.
 
 ## D10. BPM/beatgrid analysis (Phase 3): Beat This! via the `beat-this` crate + a Rust port of Mixxx `BeatUtils` constant-grid logic
 

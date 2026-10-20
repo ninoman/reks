@@ -7,14 +7,35 @@
 //! header fields), `len_tag: u32` (`len_header` + payload), header fields,
 //! payload. [`file`] wraps sections in the `PMAI` file header.
 //!
-//! Why hand-written instead of `rekordcrate::anlz` types (D9 amendment,
-//! proposed): in 0.3.0 the waveform structs keep their `unknown` header
-//! fields private, so they can't be constructed outside the crate, and there
-//! are no PWV6/PWV7/PWVC types at all. rekordcrate stays the independent
-//! parser for round-trip tests.
+//! Why hand-written instead of `rekordcrate::anlz` types (D9 amendment):
+//! in 0.3.0 the waveform and cue structs keep their `unknown` fields private,
+//! so they can't be constructed outside the crate; there are no PWV6/PWV7/
+//! PWVC/PQT2 types at all, and its `CueType` has no value 1 (the point cue
+//! rekordbox writes). rekordcrate stays the independent parser for
+//! round-trip tests.
+//!
+//! Cue layouts (`PCOB`/`PCPT`, `PCO2`/`PCP2`) and the empty `PQT2` follow
+//! `baken-export` 4.6.1 (MIT, `src/anlz/cues.rs`, `generate/grid.rs`), whose
+//! tests pin them byte for byte against real rekordbox 7 exports.
 
 /// File header tag.
 pub const PMAI: [u8; 4] = *b"PMAI";
+/// Audio file path (first section of every file).
+pub const PPTH: [u8; 4] = *b"PPTH";
+/// MP3 seek table (`.DAT`).
+pub const PVBR: [u8; 4] = *b"PVBR";
+/// Beat grid (`.DAT`).
+pub const PQTZ: [u8; 4] = *b"PQTZ";
+/// Extended beat grid (`.EXT`); we only write the empty form.
+pub const PQT2: [u8; 4] = *b"PQT2";
+/// Cue list (`.DAT` and `.EXT`).
+pub const PCOB: [u8; 4] = *b"PCOB";
+/// Extended cue list (`.EXT`).
+pub const PCO2: [u8; 4] = *b"PCO2";
+/// Cue entry inside `PCOB`.
+pub const PCPT: [u8; 4] = *b"PCPT";
+/// Cue entry inside `PCO2`.
+pub const PCP2: [u8; 4] = *b"PCP2";
 /// Monochrome preview, 400 columns (`.DAT`).
 pub const PWAV: [u8; 4] = *b"PWAV";
 /// Tiny monochrome preview, 100 columns (`.DAT`, CDJ-900).
@@ -50,10 +71,38 @@ pub const COLOR_DETAIL_UNKNOWN: u32 = 0x0096_0305;
 /// PWV4 header word after `len_entries`, as in the reference files.
 pub const COLOR_PREVIEW_UNKNOWN: u32 = 0;
 
+/// `PQTZ` header word after the zero word (crate-digger: 0x00080000).
+pub const PQTZ_UNKNOWN: u32 = 0x0008_0000;
+/// `PVBR` seek entries.
+pub const PVBR_ENTRIES: usize = 400;
+/// `PCPT` entry length.
+pub const PCPT_LEN: usize = 0x38;
+/// `PCP2` entry length without a comment.
+pub const PCP2_BASE_LEN: usize = 0x58;
+/// Cue list type: memory cues and loops.
+pub const LIST_MEMORY: u32 = 0;
+/// Cue list type: hot cues and hot loops.
+pub const LIST_HOT: u32 = 1;
+/// `loop_time` of a cue that is not a loop, and `memory_count` of a list
+/// without memory cues.
+pub const NONE_U32: u32 = 0xFFFF_FFFF;
+/// `PCPT` status of the active loop.
+pub const STATUS_ACTIVE_LOOP: u32 = 4;
+/// `PCPT` word after the status (rekordbox writes 0x00010000; rekordcrate
+/// and djl-analysis say 0x00100000).
+pub const PCPT_UNKNOWN: u32 = 0x0001_0000;
+/// The three bytes after the cue type in `PCPT`/`PCP2`.
+pub const CUE_TYPE_TAIL: [u8; 3] = [0x00, 0x03, 0xE8];
+/// Bytes after the hot cue colour in a `PCP2` entry (zeros; rekordbox may
+/// put FLAC seek data there).
+pub const PCP2_TAIL_LEN: usize = 40;
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum WriteError {
     #[error("{tag} section is too large for a 32-bit length ({len} bytes)")]
     TooLarge { tag: String, len: usize },
+    #[error("{tag} section has too many entries for a 16-bit count ({count})")]
+    TooManyEntries { tag: String, count: usize },
 }
 
 fn tag_name(tag: [u8; 4]) -> String {
@@ -174,6 +223,186 @@ pub fn pwv7(columns: &[[u8; 3]]) -> Result<Vec<u8>, WriteError> {
 pub fn pwvc(values: [u16; 3]) -> Result<Vec<u8>, WriteError> {
     let payload: Vec<u8> = values.iter().flat_map(|v| v.to_be_bytes()).collect();
     section(PWVC, &[0, 0], &payload)
+}
+
+/// PPTH: header `len_path`; UTF-16BE path plus a NUL.
+pub fn ppth(path: &str) -> Result<Vec<u8>, WriteError> {
+    let mut payload: Vec<u8> = path.encode_utf16().flat_map(u16::to_be_bytes).collect();
+    payload.extend([0, 0]);
+    let len = to_u32(PPTH, payload.len())?;
+    section(PPTH, &len.to_be_bytes(), &payload)
+}
+
+/// PVBR: one zero header word, [`PVBR_ENTRIES`] zero seek entries and a
+/// trailer word. For MP3 the trailer is `audio frames × 1152` (the form
+/// rekordbox writes for CBR files, which baken's `--cdjsafe` writes for every
+/// MP3; both reference tracks have it); other formats are all zero. A real
+/// VBR seek table is not written (UNVERIFIED whether players need one).
+pub fn pvbr(mp3_audio_frames: Option<u32>) -> Result<Vec<u8>, WriteError> {
+    let mut payload = vec![0u8; 4 * PVBR_ENTRIES + 4];
+    if let Some(frames) = mp3_audio_frames {
+        let at = 4 * PVBR_ENTRIES;
+        payload[at..].copy_from_slice(&frames.saturating_mul(1152).to_be_bytes());
+    }
+    section(PVBR, &0u32.to_be_bytes(), &payload)
+}
+
+/// One `PQTZ` entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PqtzBeat {
+    /// Beat in the bar, 1–4.
+    pub beat_number: u16,
+    /// BPM × 100.
+    pub tempo: u16,
+    /// Milliseconds from the start of the track.
+    pub time_ms: u32,
+}
+
+/// PQTZ: header zero word, [`PQTZ_UNKNOWN`], `len_beats`; 8 bytes a beat.
+pub fn pqtz(beats: &[PqtzBeat]) -> Result<Vec<u8>, WriteError> {
+    let count = to_u32(PQTZ, beats.len())?;
+    let mut payload = Vec::with_capacity(8 * beats.len());
+    for b in beats {
+        payload.extend(b.beat_number.to_be_bytes());
+        payload.extend(b.tempo.to_be_bytes());
+        payload.extend(b.time_ms.to_be_bytes());
+    }
+    section(PQTZ, &words(&[0, PQTZ_UNKNOWN, count]), &payload)
+}
+
+/// PQT2 as rekordbox writes it without an extended grid: `len_header` =
+/// `len_tag` = 0x38, header word 2 = 0x01000002, the rest zero.
+pub fn pqt2_empty() -> Result<Vec<u8>, WriteError> {
+    let mut fields = [0u8; 0x38 - SECTION_HEADER_LEN];
+    fields[4..8].copy_from_slice(&0x0100_0002u32.to_be_bytes());
+    section(PQT2, &fields, &[])
+}
+
+/// One cue as the cue sections store it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CueEntry {
+    /// 0 for a memory cue, 1 = A … 8 = H.
+    pub hot_cue: u32,
+    /// The active loop (`PCPT` status 4).
+    pub active_loop: bool,
+    /// Start, ms.
+    pub time_ms: u32,
+    /// Loop end, ms; `None` for a point cue.
+    pub loop_end_ms: Option<u32>,
+    /// `PCP2` memory cue colour id (0 = none).
+    pub color_id: u8,
+    /// Quantised loop length in beats as numerator/denominator, or (0, 0).
+    pub loop_fraction: (u16, u16),
+    /// `PCP2` comment; empty writes no string.
+    pub comment: String,
+    /// `PCP2` hot cue colour: palette code then the player's RGB bytes.
+    pub hot_color: [u8; 4],
+}
+
+impl CueEntry {
+    /// `PCPT`/`PCP2` cue type: 1 point, 2 loop.
+    pub fn cue_type(&self) -> u8 {
+        if self.loop_end_ms.is_some() {
+            2
+        } else {
+            1
+        }
+    }
+
+    fn loop_time(&self) -> u32 {
+        self.loop_end_ms.unwrap_or(NONE_U32)
+    }
+}
+
+fn to_u16(tag: [u8; 4], count: usize) -> Result<u16, WriteError> {
+    u16::try_from(count).map_err(|_| WriteError::TooManyEntries {
+        tag: tag_name(tag),
+        count,
+    })
+}
+
+/// PCOB: header list type, zero u16, `len_cues` u16, `memory_count`
+/// (memory list: cues − 1; otherwise [`NONE_U32`]); 56-byte `PCPT` entries.
+/// Memory cues chain to their neighbours by list index (`0xFFFF` at the
+/// ends); hot cues carry `0xFFFF` both ways.
+pub fn pcob(list_type: u32, cues: &[CueEntry]) -> Result<Vec<u8>, WriteError> {
+    let n = to_u16(PCOB, cues.len())?;
+    let memory_count = if list_type == LIST_MEMORY && n > 0 {
+        u32::from(n) - 1
+    } else {
+        NONE_U32
+    };
+    let mut header = list_type.to_be_bytes().to_vec();
+    header.extend(0u16.to_be_bytes());
+    header.extend(n.to_be_bytes());
+    header.extend(memory_count.to_be_bytes());
+    let mut payload = Vec::with_capacity(PCPT_LEN * cues.len());
+    for (i, c) in cues.iter().enumerate() {
+        let (prev, next) = if list_type == LIST_MEMORY {
+            // i < n ≤ u16::MAX, so both indices fit.
+            let prev = if i == 0 { 0xFFFF } else { (i - 1) as u16 };
+            let next = if i + 1 == cues.len() {
+                0xFFFF
+            } else {
+                (i + 1) as u16
+            };
+            (prev, next)
+        } else {
+            (0xFFFF, 0xFFFF)
+        };
+        let status = if c.active_loop { STATUS_ACTIVE_LOOP } else { 0 };
+        payload.extend(PCPT);
+        payload.extend(words(&[
+            0x1C,
+            PCPT_LEN as u32,
+            c.hot_cue,
+            status,
+            PCPT_UNKNOWN,
+        ]));
+        payload.extend(prev.to_be_bytes());
+        payload.extend(next.to_be_bytes());
+        payload.push(c.cue_type());
+        payload.extend(CUE_TYPE_TAIL);
+        payload.extend(words(&[c.time_ms, c.loop_time(), 0, 0, 0, 0]));
+    }
+    section(PCOB, &header, &payload)
+}
+
+/// PCO2: header list type, `len_cues` u16, zero u16; `PCP2` entries of
+/// [`PCP2_BASE_LEN`] bytes plus the comment (UTF-16BE with NUL; length 0
+/// and no string when empty, as rekordbox writes it).
+pub fn pco2(list_type: u32, cues: &[CueEntry]) -> Result<Vec<u8>, WriteError> {
+    let n = to_u16(PCO2, cues.len())?;
+    let mut header = list_type.to_be_bytes().to_vec();
+    header.extend(n.to_be_bytes());
+    header.extend(0u16.to_be_bytes());
+    let mut payload = Vec::new();
+    for c in cues {
+        let comment: Vec<u8> = if c.comment.is_empty() {
+            Vec::new()
+        } else {
+            c.comment
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .flat_map(u16::to_be_bytes)
+                .collect()
+        };
+        let len = PCP2_BASE_LEN + comment.len();
+        let start = payload.len();
+        payload.extend(PCP2);
+        payload.extend(words(&[0x10, to_u32(PCO2, len)?, c.hot_cue]));
+        payload.push(c.cue_type());
+        payload.extend(CUE_TYPE_TAIL);
+        payload.extend(words(&[c.time_ms, c.loop_time()]));
+        payload.extend([c.color_id, 0x01, 0, 0, 0, 0, 0, 0]);
+        payload.extend(c.loop_fraction.0.to_be_bytes());
+        payload.extend(c.loop_fraction.1.to_be_bytes());
+        payload.extend(to_u32(PCO2, comment.len())?.to_be_bytes());
+        payload.extend(&comment);
+        payload.extend(c.hot_color);
+        payload.resize(start + len, 0);
+    }
+    section(PCO2, &header, &payload)
 }
 
 #[cfg(test)]
@@ -303,5 +532,152 @@ mod tests {
         );
         assert_eq!(&f[12..28], &PMAI_HEADER_TAIL);
         assert_eq!(&f[28..], a.as_slice());
+    }
+
+    fn hex(s: &str) -> Vec<u8> {
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
+    }
+
+    fn point(hot_cue: u32, time_ms: u32) -> CueEntry {
+        CueEntry {
+            hot_cue,
+            active_loop: false,
+            time_ms,
+            loop_end_ms: None,
+            color_id: 0,
+            loop_fraction: (0, 0),
+            comment: String::new(),
+            hot_color: [0, 0x1A, 0xFF, 0x00],
+        }
+    }
+
+    /// Hot cues B@15.280 and C@30.280 from a real rekordbox 7 export
+    /// (bytes as pinned by baken-export's `unreal_hot_cues_match_fixture_bytes`).
+    #[test]
+    fn hot_cue_sections_match_rekordbox_bytes() {
+        let cues = [point(3, 30_280), point(2, 15_280)];
+        let s = pcob(LIST_HOT, &cues).unwrap();
+        assert_eq!(
+            &s[..24],
+            &hex("50434f4200000018000000880000000100000002ffffffff")[..]
+        );
+        assert_eq!(&s[24..80], &hex("504350540000001c00000038000000030000000000010000ffffffff010003e800007648ffffffff00000000000000000000000000000000")[..]);
+        let e = pco2(LIST_HOT, &cues).unwrap();
+        assert_eq!(
+            &e[..20],
+            &hex("50434f3200000014000000c40000000100020000")[..]
+        );
+        assert_eq!(&e[20..108], &hex("50435032000000100000005800000003010003e800007648ffffffff00010000000000000000000000000000001aff0000000000000000000000000000000000000000000000000000000000000000000000000000000000")[..]);
+    }
+
+    /// A memory cue at 0.253 and the active loop 121.155–126.904 from a real
+    /// rekordbox 7 export (baken-export `active_loop_matches_fixture_bytes`).
+    #[test]
+    fn memory_list_with_active_loop_matches_rekordbox_bytes() {
+        let lp = CueEntry {
+            active_loop: true,
+            loop_end_ms: Some(126_904),
+            ..point(0, 121_155)
+        };
+        let s = pcob(LIST_MEMORY, &[lp, point(0, 253)]).unwrap();
+        assert_eq!(s, hex("50434f420000001800000088000000000000000200000001504350540000001c00000038000000000000000400010000ffff0001020003e80001d9430001efb800000000000000000000000000000000504350540000001c000000380000000000000000000100000000ffff010003e8000000fdffffffff00000000000000000000000000000000"));
+    }
+
+    #[test]
+    fn empty_cue_lists_match_reference_files() {
+        // Both rekordbox 6 reference tracks: no cues.
+        assert_eq!(
+            pcob(LIST_HOT, &[]).unwrap(),
+            hex("50434f42000000180000001800000001 00000000ffffffff"
+                .replace(' ', "")
+                .as_str())
+        );
+        assert_eq!(
+            pcob(LIST_MEMORY, &[]).unwrap(),
+            hex("50434f4200000018000000180000000000000000ffffffff")
+        );
+        assert_eq!(
+            pco2(LIST_HOT, &[]).unwrap(),
+            hex("50434f32000000140000001400000001 00000000"
+                .replace(' ', "")
+                .as_str())
+        );
+    }
+
+    #[test]
+    fn memory_chain_and_comment() {
+        let cues: Vec<CueEntry> = [281, 15_281, 150_281].map(|t| point(0, t)).into();
+        let s = pcob(LIST_MEMORY, &cues).unwrap();
+        assert_eq!(&s[12..24], &hex("000000000000000300000002")[..]);
+        let entry = |i: usize| &s[24 + 56 * i..24 + 56 * (i + 1)];
+        assert_eq!(&entry(0)[24..28], &hex("ffff0001")[..]);
+        assert_eq!(&entry(1)[24..28], &hex("00000002")[..]);
+        assert_eq!(&entry(2)[24..28], &hex("0001ffff")[..]);
+        let c = CueEntry {
+            comment: "1.1Bars".into(),
+            hot_color: [0; 4],
+            ..point(0, 80)
+        };
+        let e = pco2(LIST_MEMORY, &[c]).unwrap();
+        assert_eq!(e.len(), 20 + 104);
+        assert_eq!(
+            &e[20 + 40..20 + 64],
+            &hex("000000100031002e00310042006100720073000000000000")[..]
+        );
+    }
+
+    #[test]
+    fn grid_path_and_seek_sections() {
+        let s = pqtz(&[
+            PqtzBeat {
+                beat_number: 1,
+                tempo: 12_800,
+                time_ms: 25,
+            },
+            PqtzBeat {
+                beat_number: 2,
+                tempo: 12_800,
+                time_ms: 494,
+            },
+        ])
+        .unwrap();
+        // Header and first two entries of reference track 1's PQTZ (368 beats there).
+        assert_eq!(&s[..12], &hex("5051545a000000180000002800")[..12]);
+        assert_eq!(&s[12..24], &hex("000000000008000000000002")[..]);
+        assert_eq!(
+            &s[24..],
+            &hex("0001320000000019000232000000 01ee"
+                .replace(' ', "")
+                .as_str())[..]
+        );
+
+        let p = ppth("/Contents/Loopmasters/UnknownAlbum/Demo Track 1.mp3").unwrap();
+        assert_eq!(
+            &p[..16],
+            &hex("505054480000001000000078 00000068"
+                .replace(' ', "")
+                .as_str())[..]
+        );
+        assert_eq!(&p[p.len() - 4..], &[0, b'3', 0, 0]);
+
+        let v = pvbr(Some(6601)).unwrap();
+        assert_eq!(v.len(), 1620);
+        assert_eq!(
+            &v[..16],
+            &hex("5056425200000010000006540000 0000"
+                .replace(' ', "")
+                .as_str())[..]
+        );
+        assert_eq!(&v[1616..], &hex("00740880")[..]);
+        assert!(v[16..1616].iter().all(|&b| b == 0));
+        assert!(pvbr(None).unwrap()[16..].iter().all(|&b| b == 0));
+
+        let q = pqt2_empty().unwrap();
+        assert_eq!(q.len(), 56);
+        assert_eq!(&q[..20], b"PQT2\0\0\0\x38\0\0\0\x38\0\0\0\0\x01\0\0\x02");
+        assert!(q[20..].iter().all(|&b| b == 0));
     }
 }

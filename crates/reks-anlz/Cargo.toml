@@ -1,6 +1,6 @@
 [package]
 name = "reks-anlz"
-description = "reks ANLZ: Pioneer ANLZ model plus writer/reader helpers (Phase 2/3)"
+description = "reks ANLZ: Pioneer ANLZ builder, writer, reader and validator (Phase 2/3)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,8 +11,11 @@ workspace = true
 
 [dependencies]
 reks-analysis = { workspace = true }
+reks-core = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 binrw = { workspace = true }
+proptest = { workspace = true }
+reks-audio = { workspace = true }
 rekordcrate = { workspace = true }

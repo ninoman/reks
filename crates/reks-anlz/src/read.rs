@@ -1,6 +1,7 @@
 //! Minimal ANLZ reader: splits a file into tagged sections and decodes the
-//! few fields export validation needs (`PPTH` path, `PQTZ` beat count,
-//! `PCOB`/`PCO2` cue counts). Layout from crate-digger `anlz.ksy` /
+//! fields export validation needs (`PPTH` path, `PQTZ` beat count,
+//! `PCOB`/`PCO2` cue counts), plus full `PQTZ` beats and cue entries for
+//! [`crate::validate`] and the golden tests. Layout from crate-digger `anlz.ksy` /
 //! djl-analysis "Analysis Files" (R§4): big-endian; a `PMAI` file header,
 //! then sections of `tag[4]`, `len_header: u32`, `len_tag: u32` (whole
 //! section), header fields, payload.
@@ -8,6 +9,12 @@
 //! Why not `rekordcrate::anlz` (D8): 0.3.0 accepts only cue types 0 and 2 and
 //! fails on type 1, the point cue rekordbox and baken write, so it can't read
 //! a cue list from a real export. Section framing is all we need here.
+
+use crate::write::{
+    CueEntry, PqtzBeat, NONE_U32, PCP2, PCP2_BASE_LEN, PCPT, PCPT_LEN, STATUS_ACTIVE_LOOP,
+};
+#[cfg(doc)]
+use crate::write::{LIST_HOT, LIST_MEMORY};
 
 /// File header tag.
 pub const PMAI: [u8; 4] = *b"PMAI";
@@ -30,6 +37,12 @@ pub enum ReadError {
     ShortSection { tag: String, at: usize },
     #[error("PPTH path is not valid UTF-16")]
     BadPath,
+    #[error("{tag} section at byte {at}: {what}")]
+    BadField {
+        tag: String,
+        at: usize,
+        what: &'static str,
+    },
 }
 
 /// One section, borrowed from the file bytes.
@@ -56,6 +69,38 @@ impl Section<'_> {
             .get(at..at + 2)
             .map(|b| u16::from_be_bytes([b[0], b[1]]))
             .ok_or_else(|| self.short())
+    }
+
+    /// The header fields after the common 12-byte header.
+    pub fn header_fields(&self) -> &[u8] {
+        &self.bytes[12.min(self.len_header)..self.len_header.min(self.bytes.len())]
+    }
+
+    /// Everything after the header.
+    pub fn payload(&self) -> &[u8] {
+        &self.bytes[self.len_header.min(self.bytes.len())..]
+    }
+
+    /// `u32` at `at` (from the start of the section).
+    pub fn u32(&self, at: usize) -> Result<u32, ReadError> {
+        self.u32_at(at)
+    }
+
+    /// `u16` at `at` (from the start of the section).
+    pub fn u16(&self, at: usize) -> Result<u16, ReadError> {
+        self.u16_at(at)
+    }
+
+    pub fn tag_str(&self) -> String {
+        String::from_utf8_lossy(&self.tag).into_owned()
+    }
+
+    fn bad(&self, what: &'static str) -> ReadError {
+        ReadError::BadField {
+            tag: self.tag_str(),
+            at: self.at,
+            what,
+        }
     }
 
     fn short(&self) -> ReadError {
@@ -105,6 +150,137 @@ pub fn sections(bytes: &[u8]) -> Result<Vec<Section<'_>>, ReadError> {
     Ok(out)
 }
 
+/// `PPTH` path.
+pub fn path(section: &Section<'_>) -> Result<String, ReadError> {
+    // len_path at 12, UTF-16BE path with a trailing NUL after the header.
+    let len = section.u32_at(12)? as usize;
+    let raw = section
+        .bytes
+        .get(section.len_header..section.len_header + len)
+        .ok_or_else(|| section.short())?;
+    let units: Vec<u16> = raw
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&c| u16::from_be_bytes(c))
+        .take_while(|&u| u != 0)
+        .collect();
+    String::from_utf16(&units).map_err(|_| ReadError::BadPath)
+}
+
+/// `PQTZ` beats; `len_beats` must match the payload.
+pub fn pqtz_beats(section: &Section<'_>) -> Result<Vec<PqtzBeat>, ReadError> {
+    let n = section.u32_at(20)? as usize;
+    let payload = section.payload();
+    if payload.len() != n.saturating_mul(8) {
+        return Err(section.bad("len_beats does not match the payload"));
+    }
+    Ok(payload
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|e| PqtzBeat {
+            beat_number: u16::from_be_bytes([e[0], e[1]]),
+            tempo: u16::from_be_bytes([e[2], e[3]]),
+            time_ms: u32::from_be_bytes([e[4], e[5], e[6], e[7]]),
+        })
+        .collect())
+}
+
+/// A decoded cue list: list type and entries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CueListData {
+    /// [`LIST_MEMORY`] or [`LIST_HOT`].
+    pub list_type: u32,
+    /// `PCOB` entries leave the `PCP2`-only fields at their defaults (no
+    /// colour, no comment, no loop fraction).
+    pub cues: Vec<CueEntry>,
+}
+
+fn be32(b: &[u8], at: usize) -> Option<u32> {
+    b.get(at..at + 4)
+        .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+}
+
+fn loop_end(v: u32) -> Option<u32> {
+    (v != NONE_U32).then_some(v)
+}
+
+/// `PCOB` (56-byte `PCPT` entries) or `PCO2` (`PCP2` entries) cue list.
+pub fn cue_list(section: &Section<'_>) -> Result<CueListData, ReadError> {
+    let list_type = section.u32_at(12)?;
+    let payload = section.payload();
+    let mut cues = Vec::new();
+    match section.tag {
+        PCOB => {
+            let n = usize::from(section.u16_at(18)?);
+            if payload.len() != n * PCPT_LEN {
+                return Err(section.bad("len_cues does not match the payload"));
+            }
+            for e in payload.as_chunks::<PCPT_LEN>().0 {
+                if e[0..4] != PCPT {
+                    return Err(section.bad("entry is not PCPT"));
+                }
+                let w = |at| be32(e, at).unwrap_or(0);
+                cues.push(CueEntry {
+                    hot_cue: w(12),
+                    active_loop: w(16) == STATUS_ACTIVE_LOOP,
+                    time_ms: w(32),
+                    loop_end_ms: loop_end(w(36)).filter(|_| e[28] == 2),
+                    color_id: 0,
+                    loop_fraction: (0, 0),
+                    comment: String::new(),
+                    hot_color: [0; 4],
+                });
+            }
+        }
+        PCO2 => {
+            let n = usize::from(section.u16_at(16)?);
+            let mut at = 0;
+            for _ in 0..n {
+                let e = payload
+                    .get(at..)
+                    .filter(|e| e.len() >= PCP2_BASE_LEN && e[0..4] == PCP2)
+                    .ok_or_else(|| section.bad("entry is not PCP2"))?;
+                let len = be32(e, 8).unwrap_or(0) as usize;
+                let len_comment = be32(e, 0x28).unwrap_or(0) as usize;
+                if len < PCP2_BASE_LEN || len > e.len() || 0x2C + len_comment + 4 > len {
+                    return Err(section.bad("PCP2 entry lengths are inconsistent"));
+                }
+                let e = &e[..len];
+                let w = |at| be32(e, at).unwrap_or(0);
+                let units: Vec<u16> = e[0x2C..0x2C + len_comment]
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|&c| u16::from_be_bytes(c))
+                    .take_while(|&u| u != 0)
+                    .collect();
+                let colour = 0x2C + len_comment;
+                cues.push(CueEntry {
+                    hot_cue: w(12),
+                    active_loop: false,
+                    time_ms: w(20),
+                    loop_end_ms: loop_end(w(24)).filter(|_| e[16] == 2),
+                    color_id: e[28],
+                    loop_fraction: (
+                        u16::from_be_bytes([e[0x24], e[0x25]]),
+                        u16::from_be_bytes([e[0x26], e[0x27]]),
+                    ),
+                    comment: String::from_utf16(&units).map_err(|_| section.bad("bad comment"))?,
+                    hot_color: [e[colour], e[colour + 1], e[colour + 2], e[colour + 3]],
+                });
+                at += len;
+            }
+            if at != payload.len() {
+                return Err(section.bad("len_cues does not match the payload"));
+            }
+        }
+        _ => return Err(section.bad("not a cue list")),
+    }
+    Ok(CueListData { list_type, cues })
+}
+
 /// What export validation reads from one ANLZ file.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Summary {
@@ -123,22 +299,7 @@ pub fn summary(bytes: &[u8]) -> Result<Summary, ReadError> {
     let mut s = Summary::default();
     for section in sections(bytes)? {
         match section.tag {
-            PPTH => {
-                // len_path at 12, UTF-16BE path with a trailing NUL after the header.
-                let len = section.u32_at(12)? as usize;
-                let raw = section
-                    .bytes
-                    .get(section.len_header..section.len_header + len)
-                    .ok_or_else(|| section.short())?;
-                let units: Vec<u16> = raw
-                    .as_chunks::<2>()
-                    .0
-                    .iter()
-                    .map(|&c| u16::from_be_bytes(c))
-                    .take_while(|&u| u != 0)
-                    .collect();
-                s.path = Some(String::from_utf16(&units).map_err(|_| ReadError::BadPath)?);
-            }
+            PPTH => s.path = Some(path(&section)?),
             // len_beats at 20.
             PQTZ => s.beats += section.u32_at(20)?,
             // list type at 12, unknown u16 at 16, len_cues u16 at 18.
