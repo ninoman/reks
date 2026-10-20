@@ -71,6 +71,10 @@ pub(crate) struct OpenTrack {
     pub sample_rate: u32,
     /// Frame count from the header, when known.
     pub num_frames: Option<u64>,
+    /// Encoder delay and padding in frames, as the container reports them.
+    /// Symphonia's gapless decode (the default) trims both from the output.
+    pub delay: Option<u32>,
+    pub padding: Option<u32>,
 }
 
 /// Opens `path` and finds its default audio track.
@@ -102,6 +106,7 @@ pub(crate) fn open_track(path: &Path) -> Result<OpenTrack> {
         .ok_or_else(|| unsupported("no audio track"))?;
     let track_id = track.id;
     let num_frames = track.num_frames;
+    let (delay, padding) = (track.delay, track.padding);
     let params = track
         .codec_params
         .as_ref()
@@ -118,6 +123,8 @@ pub(crate) fn open_track(path: &Path) -> Result<OpenTrack> {
         params,
         sample_rate,
         num_frames,
+        delay,
+        padding,
     })
 }
 
@@ -131,6 +138,7 @@ pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded> {
         params,
         sample_rate: source_rate,
         num_frames,
+        ..
     } = open_track(path)?;
     let max_frames = MAX_DECODE_MS * u64::from(source_rate) / 1000;
     if let Some(frames) = num_frames.filter(|&f| f > max_frames) {
@@ -259,7 +267,7 @@ fn to_i16(s: f32) -> i16 {
     (s * 32_768.0).round().clamp(-32_768.0, 32_767.0) as i16
 }
 
-fn too_long(path: &Path, frames: u64, rate: u32) -> Error {
+pub(crate) fn too_long(path: &Path, frames: u64, rate: u32) -> Error {
     Error::TooLong {
         path: path.to_path_buf(),
         duration_ms: frames * 1000 / u64::from(rate),

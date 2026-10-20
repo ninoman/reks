@@ -68,6 +68,7 @@ impl NativeStream {
             params,
             sample_rate,
             num_frames,
+            ..
         } = open_track(path)?;
         let unsupported = |reason: String| Error::Unsupported {
             path: path.to_path_buf(),
