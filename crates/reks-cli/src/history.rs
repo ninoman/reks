@@ -14,11 +14,19 @@
 //! `<stick|backup>` is a stick's mount point, any folder standing in for a
 //! stick (no volume serial), or a Phase 2 `stick-backups/<serial>/<time>/`
 //! folder (recognised by its `manifest.json`; its serial comes from there).
-//! `<session>` is a session's stick name (`HISTORY 001`) or the start of its
-//! fingerprint (at least 8 hex digits). `--practice` imports a new session
+//! `<session>` is a session's stick name (`HISTORY 001`, or `HISTORY 001
+//! (OneLibrary)` for `exportLibrary.db`'s) or the start of its fingerprint
+//! (at least 8 hex digits). `--practice` imports a new session
 //! excluded from play counts, `--include` imports it counted (the default).
 //! `--hist1-dates` reads session dates with the UNVERIFIED table-19
 //! heuristic (HIST1); without it every session is undated.
+//!
+//! Both stick libraries are read (Phase 4 task 11): `export.pdb` and, with
+//! the OneLibrary key (Settings → Experimental, else `REKS_ONELIBRARY_KEY`),
+//! `exportLibrary.db`. Its sessions are listed with `(OneLibrary)` and
+//! import with source `onelibrary`. A database that is not read (no key,
+//! wrong key, a backup copy that does not match its manifest) is reported
+//! and left out; the `export.pdb` sessions still import.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -26,13 +34,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
 use reks_core::history::{
-    self, EntryKind, HistoryImportPlan, ImportChoices, ImportReport, MatchKind, PlannedSession,
-    SessionAction, SkipReason,
+    self, EntryKind, HistoryImportPlan, HistoryLibrary, ImportChoices, ImportReport, MatchKind,
+    PlannedSession, SessionAction, SkipReason,
 };
-use reks_core::Library;
-use reks_export_rb::history::{
-    read_play_history, HistoryReadOptions, HistorySource, BACKUP_MANIFEST,
-};
+use reks_core::{Library, OneLibraryKey};
+use reks_export_onelibrary::history::{read_both, OneLibraryStatus};
+use reks_export_rb::history::{HistoryReadOptions, HistorySource, BACKUP_MANIFEST};
+use reks_export_rb::onelibrary::resolve_key;
 use serde::Serialize;
 
 const USAGE: &str = "usage: reks history scan <stick|backup> --library <library.sqlite> \
@@ -139,6 +147,8 @@ fn source(path: &Path) -> anyhow::Result<Source> {
 #[serde(rename_all = "camelCase")]
 struct Out {
     source: HistorySource,
+    /// The source's `exportLibrary.db`.
+    onelibrary: OneLibraryStatus,
     plan: HistoryImportPlan,
     /// Fingerprint → excluded, for every new session: the choice, else the
     /// plan's default.
@@ -157,14 +167,16 @@ fn execute(args: &Args, source: &Source) -> anyhow::Result<Out> {
         .unwrap_or(Path::new("."))
         .join("cache");
     let lib = Library::open(&args.library, &cache_dir)?;
-    let read = read_play_history(
+    let key = resolve_key(&lib)?;
+    let (both, onelibrary) = read_both(
         &source.src,
         &HistoryReadOptions {
             stick_serial: source.stick_serial.clone(),
             hist1_dates: args.hist1_dates,
         },
+        key.as_ref().map(OneLibraryKey::expose),
     )?;
-    let plan = history::scan(&read.to_source_history(), &lib)?;
+    let plan = history::scan(&both, &lib)?;
     let choices = resolve_choices(&plan, &args.choices)?;
     let excluded = plan
         .sessions
@@ -186,6 +198,7 @@ fn execute(args: &Args, source: &Source) -> anyhow::Result<Out> {
     };
     Ok(Out {
         source: source.src.clone(),
+        onelibrary,
         plan,
         excluded,
         report,
@@ -200,11 +213,20 @@ fn resolve_choices(
 ) -> anyhow::Result<ImportChoices> {
     let mut choices = ImportChoices::default();
     for (sel, practice) in wanted {
-        let by_name: Vec<&PlannedSession> = plan
+        // `HISTORY 001` is export.pdb's, `HISTORY 001 (OneLibrary)` the
+        // other library's; a plain name also finds a OneLibrary-only session.
+        let mut by_name: Vec<&PlannedSession> = plan
             .sessions
             .iter()
-            .filter(|s| s.source_name == *sel)
+            .filter(|s| shown_name(s) == *sel)
             .collect();
+        if by_name.is_empty() {
+            by_name = plan
+                .sessions
+                .iter()
+                .filter(|s| s.source_name == *sel)
+                .collect();
+        }
         let hits = if !by_name.is_empty() {
             by_name
         } else if sel.len() >= MIN_FINGERPRINT_PREFIX {
@@ -236,6 +258,14 @@ fn resolve_choices(
         }
     }
     Ok(choices)
+}
+
+/// The session's stick name, with ` (OneLibrary)` for `exportLibrary.db`'s.
+fn shown_name(s: &PlannedSession) -> String {
+    match s.library {
+        HistoryLibrary::DeviceLibrary => s.source_name.clone(),
+        HistoryLibrary::OneLibrary => format!("{} (OneLibrary)", s.source_name),
+    }
 }
 
 fn action_text(s: &PlannedSession) -> String {
@@ -270,6 +300,15 @@ fn render(out: &Out) -> String {
         "Baseline  {}",
         p.baseline_date.as_deref().unwrap_or("none")
     );
+    match &out.onelibrary {
+        OneLibraryStatus::Absent => {}
+        OneLibraryStatus::Read { sessions } => {
+            let _ = writeln!(s, "OneLibrary  exportLibrary.db read: {sessions} sessions");
+        }
+        OneLibraryStatus::NotRead { reason } => {
+            let _ = writeln!(s, "OneLibrary  exportLibrary.db not read: {reason}");
+        }
+    }
     if p.sessions.is_empty() {
         let _ = writeln!(s, "No play history.");
     }
@@ -278,7 +317,7 @@ fn render(out: &Out) -> String {
         let _ = writeln!(
             s,
             "  {}  {}  {}  {}",
-            x.source_name,
+            shown_name(x),
             x.played_on.as_deref().unwrap_or("undated"),
             &x.fingerprint[..MIN_FINGERPRINT_PREFIX.min(x.fingerprint.len())],
             action_text(x)
@@ -523,6 +562,71 @@ mod tests {
         let err = run_on(&db, &stick, Command::Import, &both).unwrap_err();
         assert!(err.to_string().contains("both"), "{err}");
         assert!(run_on(&tmp.path().join("nope.sqlite"), &stick, Command::Scan, &[]).is_err());
+    }
+
+    const OL_KEY: &str = "reks-cli-test-key";
+
+    /// An `exportLibrary.db` on `stick` whose `HISTORY 001` plays a.wav twice.
+    fn put_onelibrary(stick: &Path) {
+        use reks_export_onelibrary::{cipher, schema, CipherProfile, RbVersion};
+        let db = stick.join("PIONEER/rekordbox/exportLibrary.db");
+        let conn = cipher::open_read_write(&db, OL_KEY, CipherProfile::Sqlcipher4).unwrap();
+        schema::create_empty(&conn, RbVersion::LATEST).unwrap();
+        conn.execute_batch(
+            "INSERT INTO content (content_id, title, path, length)
+                 VALUES (1, 'Sine', '/Contents/reks/x/a.wav', 30);
+             INSERT INTO history VALUES (1, 0, 'HISTORY 001', 0, 0);
+             INSERT INTO history_content VALUES (1, 1, 1), (1, 1, 2);",
+        )
+        .unwrap();
+    }
+
+    fn store_key(db: &Path) {
+        let lib = Library::open(db, &db.parent().unwrap().join("cache")).unwrap();
+        lib.update_settings(reks_core::SettingsPatch {
+            onelibrary_key: Some(reks_core::OneLibraryKey::new(OL_KEY)),
+            ..Default::default()
+        })
+        .unwrap();
+    }
+
+    /// Both stick libraries' history, the OneLibrary one only with the key.
+    #[test]
+    fn reads_exportlibrary_history_with_the_key() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (db, stick) = setup(tmp.path());
+        put_onelibrary(&stick);
+
+        let out = run_on(&db, &stick, Command::Scan, &[]).unwrap();
+        let text = render(&out);
+        assert!(
+            // No key stored (REKS_ONELIBRARY_KEY, if set, is not this one).
+            text.contains("OneLibrary  exportLibrary.db not read: "),
+            "{text}"
+        );
+        assert_eq!(out.plan.sessions.len(), 2);
+
+        store_key(&db);
+        let out = run_on(&db, &stick, Command::Scan, &[]).unwrap();
+        let text = render(&out);
+        assert!(text.contains("exportLibrary.db read: 1 sessions"), "{text}");
+        assert!(
+            text.contains("  HISTORY 001 (OneLibrary)  undated  "),
+            "{text}"
+        );
+        assert!(text.contains("Sessions  3 new, 0 extended"), "{text}");
+
+        let flags = ["--practice", "HISTORY 001 (OneLibrary)", "--yes"].map(str::to_owned);
+        let out = run_on(&db, &stick, Command::Import, &flags).unwrap();
+        let report = out.report.as_ref().unwrap();
+        assert_eq!((report.created.len(), report.entries), (3, 6));
+        // export.pdb's HISTORY 001 (twice) and 002 count; the OneLibrary
+        // session is practice.
+        assert_eq!(play_count(&db), 3);
+
+        let out = run_on(&db, &stick, Command::Import, &args("--yes")).unwrap();
+        assert_eq!(out.report.as_ref().unwrap().skipped, 3);
+        assert_eq!(play_count(&db), 3);
     }
 
     /// A Phase 2 backup of the stick reads like the stick: importing from

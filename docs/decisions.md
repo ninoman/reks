@@ -572,6 +572,11 @@ Date of decisions: 2026-10-18.
   - Entries match library tracks through `export_manifest`, keyed by (volume
     serial, stick path) and filled from the validator's read-back, so PDB
     track IDs need not stay stable; baken doesn't promise that.
+  - H2 (2026-10-21): a stick's two libraries are imported side by side.
+    Each session records its library (`play_session.source`, part of the
+    fingerprint), so sessions in `exportLibrary.db` never skip or extend
+    `export.pdb`'s; OneLibrary content paths are the PDB's, so the same
+    manifest matches them. Import now imports both before the backup.
 - Rationale: baken rebuilds `export.pdb` on every run and removes
   `exportLibrary.db` unless OneLibrary is on (R§10), so without this every
   re-export erases the history the players wrote. Derived counts (as in Mixxx)
@@ -582,6 +587,9 @@ Date of decisions: 2026-10-18.
   (player-owned data); backups in `app_cache_dir` (D19; the OS may clear it).
 - Risks: history format unknowns (date table, appends across mounts, what a
   player logs as a play) and volume serial access per OS; see R§8 item 14.
+  OneLibrary: how players fill `history`, and whether one that reads both
+  libraries logs the same plays in both (they would count twice until one
+  session is marked practice).
 
 ## D24. Stick paths: ASCII transliteration, metadata stays Unicode
 

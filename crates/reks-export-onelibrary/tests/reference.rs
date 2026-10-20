@@ -80,4 +80,6 @@ fn reference_opens_with_the_key_and_matches_its_dump() {
     let reader = OneLibraryReader::open(&db, &key).unwrap();
     assert_eq!(reader.integrity_check().unwrap(), "ok");
     assert_eq!(reader.dump().unwrap(), reference());
+    // The history reader takes rekordbox's file: no sessions on a fresh stick.
+    assert!(reader.play_history().unwrap().is_empty());
 }

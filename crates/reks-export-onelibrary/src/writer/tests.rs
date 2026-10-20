@@ -121,7 +121,8 @@ fn existing_database_is_read_with_the_key() {
         existing(stick.path(), TEST_KEY).unwrap(),
         ExistingLibrary::Read {
             sessions: 0,
-            entries: 0
+            entries: 0,
+            history: Vec::new(),
         }
     );
     assert!(matches!(

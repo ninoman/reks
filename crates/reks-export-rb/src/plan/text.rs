@@ -151,10 +151,9 @@ impl fmt::Display for Problem {
             ),
             Self::OneLibraryHistoryNotImported { sessions } => write!(
                 f,
-                "exportLibrary.db on the stick holds {sessions} play history session{} that \
-                 reks cannot import yet; back {} up or discard {}",
+                "exportLibrary.db on the stick holds {sessions} play history session{} not \
+                 in your library; import, back up or discard {}",
                 if *sessions == 1 { "" } else { "s" },
-                if *sessions == 1 { "it" } else { "them" },
                 if *sessions == 1 { "it" } else { "them" },
             ),
         }

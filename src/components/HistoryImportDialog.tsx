@@ -4,7 +4,9 @@
  * see the dry run, then import. The dry run reads the stick and changes
  * nothing; every new session has a Practice checkbox (practice sessions are
  * kept but not counted). All start unticked: every session counts unless the
- * user marks it practice, here or later in the session header.
+ * user marks it practice, here or later in the session header. Sessions
+ * from the stick's OneLibrary database (read with the OneLibrary key) carry a
+ * OneLibrary badge; a database that could not be read is said so.
  */
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
@@ -16,10 +18,12 @@ import {
   type HistoryScan,
   historyImport,
   historyScan,
+  type OneLibraryStatus,
   type PlannedSession,
   type ScanSource,
 } from "../lib/ipc";
 import { useHistory } from "../store/history";
+import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { Checkbox } from "./ui/Checkbox";
 import {
@@ -246,10 +250,16 @@ function PlanTable({
 }) {
   const { plan } = scan;
   if (plan.sessions.length === 0) {
-    return <p className="m-0 text-fg-muted">No play history on {scan.source.path}.</p>;
+    return (
+      <>
+        <p className="m-0 text-fg-muted">No play history on {scan.source.path}.</p>
+        <OneLibraryNote status={scan.onelibrary} />
+      </>
+    );
   }
   return (
     <>
+      <OneLibraryNote status={scan.onelibrary} />
       <p className="m-0 text-xs text-fg-muted">
         {scan.source.kind === "backup" ? "Backup" : "Stick"}{" "}
         <span className="font-mono">{scan.source.path}</span>
@@ -284,6 +294,16 @@ function PlanTable({
   );
 }
 
+/** Says when the stick's `exportLibrary.db` was there but not read. */
+function OneLibraryNote({ status }: { status: OneLibraryStatus }) {
+  if (status.status !== "notRead") return null;
+  return (
+    <p className="m-0 text-xs text-fg-muted" role="status">
+      The stick's OneLibrary database was not read ({status.reason}); its sessions are not listed.
+    </p>
+  );
+}
+
 function PlanRow({
   s,
   practice,
@@ -304,7 +324,14 @@ function PlanRow({
       className="align-top odd:bg-row-alt data-[skip]:text-fg-subtle [&>td]:px-2 [&>td]:py-1"
       data-skip={skip || undefined}
     >
-      <td className="whitespace-nowrap">{s.sourceName}</td>
+      <td className="whitespace-nowrap">
+        {s.sourceName}
+        {s.library === "oneLibrary" && (
+          <Badge variant="muted" className="ml-1.5">
+            OneLibrary
+          </Badge>
+        )}
+      </td>
       <td className="whitespace-nowrap">{s.playedOn ?? "Date unknown"}</td>
       <td className="text-xs">
         {skip
@@ -325,7 +352,7 @@ function PlanRow({
               className="mt-0.5"
               checked={practice}
               disabled={disabled}
-              aria-label={`Practice: ${s.sourceName}`}
+              aria-label={`Practice: ${s.sourceName}${s.library === "oneLibrary" ? " (OneLibrary)" : ""}`}
               onChange={(e) => onPractice(e.target.checked)}
             />
           </label>

@@ -33,11 +33,11 @@
           }
         ],
         "fingerprint": "39ac16d93ac30e8fdc8d7261b2069c232ace606c3966cc4bed56e65e8d0e68ee",
+        "library": "deviceLibrary",
         "playedOn": null,
         "sourceName": "HISTORY 001"
       }
     ],
-    "source": "device_library",
     "volumeSerial": "4993-1CFB"
   },
   "historySessions": 1,

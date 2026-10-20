@@ -16,6 +16,7 @@
 
 use std::path::{Path, PathBuf};
 
+use reks_core::history::SourceSession;
 use reks_core::{Library, OneLibraryKey};
 use serde::{Deserialize, Serialize};
 
@@ -54,12 +55,16 @@ pub struct OneLibraryPlan {
 )]
 pub enum ExistingLibrary {
     Absent,
-    /// Opened with the key: the play history players logged in it. Sessions
-    /// make the export guard ask for a choice (reks cannot import them
-    /// before Phase 4 task 11).
+    /// Opened with the key: the play history players logged in it.
+    /// Sessions the library has not imported make the export guard ask for
+    /// a choice; Import now imports them (Phase 4 task 11).
     Read {
         sessions: u32,
         entries: u32,
+        /// The sessions themselves ([`plan_onelibrary`](crate::plan::plan_onelibrary)
+        /// scans them). Not serialised, like [`ExportPlan::history_import`].
+        #[serde(skip)]
+        history: Vec<SourceSession>,
     },
     /// Present but not read (no reader, wrong key, corrupt). It may hold
     /// history: the Phase 2 safeguard backs it up by default.

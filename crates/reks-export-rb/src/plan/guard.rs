@@ -53,17 +53,17 @@ pub struct HistoryGuard {
     /// Reading the stick's history sessions failed after `export.pdb`
     /// counted some: they may be unimported, and `Import` can't run.
     pub unreadable: Option<String>,
-    /// History sessions in the stick's `exportLibrary.db`, when the
-    /// OneLibrary step read it ([`super::plan_onelibrary`]). reks cannot
-    /// import them yet (Phase 4 task 11); backups keep them.
+    /// Sessions in the stick's `exportLibrary.db` not imported yet, when
+    /// the OneLibrary step read it ([`super::plan_onelibrary`], Phase 4
+    /// task 11), in database order.
     #[serde(default)]
-    pub onelibrary_sessions: u32,
+    pub onelibrary_sessions: Vec<UnimportedSession>,
 }
 
 impl HistoryGuard {
     /// The export needs the user's choice before it may write.
     pub fn needs_choice(&self) -> bool {
-        self.pdb_needs_choice() || self.onelibrary_sessions > 0
+        self.pdb_needs_choice() || !self.onelibrary_sessions.is_empty()
     }
 
     /// `export.pdb`'s sessions alone need a choice.
@@ -84,7 +84,7 @@ impl HistoryGuard {
 pub fn guard_history(plan: &mut ExportPlan, lib: &Library) -> Result<(), PlanError> {
     // The OneLibrary step owns its count; this guard may run after it.
     plan.guard = HistoryGuard {
-        onelibrary_sessions: plan.guard.onelibrary_sessions,
+        onelibrary_sessions: std::mem::take(&mut plan.guard.onelibrary_sessions),
         ..HistoryGuard::default()
     };
     plan.history_import = None;
@@ -137,7 +137,8 @@ pub fn guard_history(plan: &mut ExportPlan, lib: &Library) -> Result<(), PlanErr
     Ok(())
 }
 
-fn unimported(plan: &HistoryImportPlan) -> Vec<UnimportedSession> {
+/// The sessions of `plan` an import would create or extend.
+pub(super) fn unimported(plan: &HistoryImportPlan) -> Vec<UnimportedSession> {
     plan.sessions
         .iter()
         .filter_map(|s| {

@@ -26,13 +26,6 @@ pub struct OneLibraryReader {
     _copy: TempDir,
 }
 
-/// Play history in a database: `history` rows and `history_content` rows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HistoryCounts {
-    pub sessions: u32,
-    pub entries: u32,
-}
-
 impl OneLibraryReader {
     /// Opens `path` (and its `-wal`/`-shm` when present) with `key`.
     pub fn open(path: &Path, key: &str) -> Result<Self> {
@@ -90,18 +83,8 @@ impl OneLibraryReader {
         Dump::read(&self.conn)
     }
 
-    /// Play history the players logged. UNVERIFIED: the reference has none,
-    /// so folders (if `history` has any) are counted as sessions too.
-    pub fn history_counts(&self) -> Result<HistoryCounts> {
-        let count = |table: &str| -> Result<u32> {
-            let n: i64 =
-                self.conn
-                    .query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))?;
-            Ok(u32::try_from(n).unwrap_or(u32::MAX))
-        };
-        Ok(HistoryCounts {
-            sessions: count("history")?,
-            entries: count("history_content")?,
-        })
+    /// The unlocked copy; play history reads it ([`crate::history`]).
+    pub(crate) fn conn(&self) -> &Connection {
+        &self.conn
     }
 }

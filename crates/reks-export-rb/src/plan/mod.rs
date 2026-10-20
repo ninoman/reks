@@ -245,6 +245,11 @@ pub struct ExportPlan {
     /// can't import.
     #[serde(skip)]
     pub history_import: Option<HistoryImportPlan>,
+    /// The scan of the stick's `exportLibrary.db` history behind
+    /// [`HistoryGuard::onelibrary_sessions`] ([`plan_onelibrary`]); imported
+    /// with [`Self::history_import`]. Not serialised either.
+    #[serde(skip)]
+    pub onelibrary_history_import: Option<HistoryImportPlan>,
     pub warnings: Vec<Warning>,
     /// Blockers: `apply` refuses a plan with errors.
     pub errors: Vec<Problem>,
@@ -487,9 +492,9 @@ pub enum Problem {
     /// The OneLibrary export is on but this build has no writer
     /// ([`crate::onelibrary::NoWriter`]).
     OneLibraryUnavailable,
-    /// The stick's `exportLibrary.db` holds play history sessions reks cannot
-    /// import yet (Phase 4 task 11), and the user has not chosen what happens
-    /// to them ([`ExportOptions::history_chosen`]).
+    /// The stick's `exportLibrary.db` holds play history sessions the
+    /// library has not imported, and the user has not chosen what happens
+    /// to them ([`ExportOptions::history_chosen`]; Phase 4 task 11).
     OneLibraryHistoryNotImported {
         sessions: u32,
     },
@@ -746,6 +751,7 @@ pub fn plan_sources(
         backups,
         guard: HistoryGuard::default(),
         history_import: None,
+        onelibrary_history_import: None,
         warnings,
         errors,
         bytes_to_write,

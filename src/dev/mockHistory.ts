@@ -8,6 +8,7 @@ import type {
   DeviceInfo,
   HistoryImportPlan,
   HistoryImportReport,
+  HistoryLibrary,
   HistoryScan,
   ImportChoices,
   PlannedSession,
@@ -34,6 +35,7 @@ interface MockSession {
   id: number;
   name: string;
   sourceName: string;
+  library: HistoryLibrary;
   playedOn: string | null;
   venue: string | null;
   notes: string | null;
@@ -82,9 +84,15 @@ export function mockHistory(tracks: TrackRow[]) {
   });
   const range = (from: number, n: number) => Array.from({ length: n }, (_, i) => entry(from + i));
 
-  function add(s: Omit<MockSession, "id" | "name" | "importedAt" | "notes">, notes = null) {
+  function add(
+    s: Omit<MockSession, "id" | "name" | "importedAt" | "notes" | "library"> & {
+      library?: HistoryLibrary;
+    },
+    notes = null,
+  ) {
     sessions.push({
       ...s,
+      library: s.library ?? "deviceLibrary",
       id: nextId++,
       name: s.sourceName,
       notes,
@@ -165,6 +173,7 @@ export function mockHistory(tracks: TrackRow[]) {
       id: s.id,
       name: s.name,
       sourceName: s.sourceName,
+      library: s.library,
       playedOn: s.playedOn,
       venue: s.venue,
       excluded: s.excluded,
@@ -246,16 +255,21 @@ export function mockHistory(tracks: TrackRow[]) {
     });
   }
 
-  /** The stick's sessions: one already imported, two new (one dated before the baseline). */
+  /**
+   * The stick's sessions: one already imported, three new (one dated before
+   * the baseline, one from the stick's OneLibrary database).
+   */
   function scan(source: ScanSource): HistoryScan {
     const planned = (
       sourceName: string,
       playedOn: string | null,
       entries: MockEntry[],
+      library: HistoryLibrary = "deviceLibrary",
     ): PlannedSession => ({
+      library,
       sourceName,
       playedOn,
-      fingerprint: `${sourceName.replace(/\D/g, "")}f00dfeedbeef${playedOn ?? "undated"}`,
+      fingerprint: `${sourceName.replace(/\D/g, "")}f00dfeedbeef${playedOn ?? "undated"}${library}`,
       action: { kind: "new" },
       entries: entries.map((e, position) => ({
         position,
@@ -278,8 +292,12 @@ export function mockHistory(tracks: TrackRow[]) {
       ]),
       planned("HISTORY 007", "2026-10-18", range(600, 15)),
       planned("HISTORY 008", "2026-02-02", range(700, 4)),
-    ].filter((p) => !sessions.some((s) => s.sourceName === p.sourceName));
+      planned("HISTORY 001", null, range(800, 5), "oneLibrary"),
+    ].filter(
+      (p) => !sessions.some((s) => s.sourceName === p.sourceName && s.library === p.library),
+    );
     const skipped: PlannedSession = {
+      library: "deviceLibrary",
       sourceName: "HISTORY 004",
       playedOn: "2026-09-05",
       fingerprint: "4c0ffee",
@@ -287,7 +305,6 @@ export function mockHistory(tracks: TrackRow[]) {
       entries: [],
     };
     lastPlan = {
-      source: "device_library",
       volumeSerial: "1234-ABCD",
       baselineDate: BASELINE_DATE,
       sessions: [skipped, ...fresh],
@@ -299,6 +316,7 @@ export function mockHistory(tracks: TrackRow[]) {
         source.kind === "stick"
           ? { kind: "stick", path: (source.device as DeviceInfo).mountPoint }
           : { kind: "backup", path: source.path },
+      onelibrary: { status: "read", sessions: 1 },
       plan: lastPlan,
     };
   }
@@ -329,6 +347,7 @@ export function mockHistory(tracks: TrackRow[]) {
       }));
       add({
         sourceName: p.sourceName,
+        library: p.library,
         playedOn: p.playedOn,
         venue: null,
         excluded,

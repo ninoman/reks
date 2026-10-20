@@ -9,11 +9,11 @@ use reks_core::history::{
     self, HistoryImportPlan, ImportChoices, ImportReport, SessionDetail, SessionId, SessionPatch,
     SessionQuery, SessionRef, SessionRow,
 };
-use reks_core::TrackId;
+use reks_core::{OneLibraryKey, TrackId};
+use reks_export_onelibrary::history::{read_both, OneLibraryStatus};
 use reks_export_rb::device::{self, DeviceInfo};
-use reks_export_rb::history::{
-    read_play_history, HistoryReadOptions, HistorySource, BACKUP_MANIFEST,
-};
+use reks_export_rb::history::{HistoryReadOptions, HistorySource, BACKUP_MANIFEST};
+use reks_export_rb::onelibrary::resolve_key;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -95,11 +95,14 @@ pub enum ScanSource {
 pub struct HistoryScan {
     pub plan_id: u64,
     pub source: HistorySource,
+    /// The source's `exportLibrary.db`, read with the OneLibrary key.
+    pub onelibrary: OneLibraryStatus,
     pub plan: HistoryImportPlan,
 }
 
-/// Reads the stick's or backup's history and matches it (read-only on both
-/// the source and the library). The newest scan wins.
+/// Reads the stick's or backup's history, from `export.pdb` and (with the
+/// OneLibrary key) `exportLibrary.db`, and matches it (read-only on both the
+/// source and the library). The newest scan wins.
 #[tauri::command]
 pub async fn history_scan(
     state: State<'_, AppState>,
@@ -125,17 +128,20 @@ pub async fn history_scan(
     };
     let lib = Arc::clone(&state.library);
     let read_src = src.clone();
-    let plan = tauri::async_runtime::spawn_blocking(move || -> Result<_, CmdError> {
-        let read = read_play_history(
-            &read_src,
-            &HistoryReadOptions {
-                stick_serial,
-                hist1_dates: false,
-            },
-        )?;
-        Ok(history::scan(&read.to_source_history(), &lib)?)
-    })
-    .await??;
+    let (plan, onelibrary) =
+        tauri::async_runtime::spawn_blocking(move || -> Result<_, CmdError> {
+            let key = resolve_key(&lib)?;
+            let (read, onelibrary) = read_both(
+                &read_src,
+                &HistoryReadOptions {
+                    stick_serial,
+                    hist1_dates: false,
+                },
+                key.as_ref().map(OneLibraryKey::expose),
+            )?;
+            Ok((history::scan(&read, &lib)?, onelibrary))
+        })
+        .await??;
     let mut shown = state
         .shown_history
         .lock()
@@ -146,6 +152,7 @@ pub async fn history_scan(
     Ok(HistoryScan {
         plan_id,
         source: src,
+        onelibrary,
         plan,
     })
 }

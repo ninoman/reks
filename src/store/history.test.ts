@@ -21,6 +21,7 @@ function row(id: number, playedOn: string | null, patch: Partial<SessionRow> = {
     id,
     name: `HISTORY ${id}`,
     sourceName: `HISTORY ${id}`,
+    library: "deviceLibrary",
     playedOn,
     venue: null,
     excluded: false,

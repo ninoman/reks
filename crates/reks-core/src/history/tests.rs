@@ -35,6 +35,7 @@ fn entry(path: &str, artist: &str, title: &str, secs: i64) -> SourceEntry {
 
 fn session(name: &str, entries: Vec<SourceEntry>) -> SourceSession {
     SourceSession {
+        library: HistoryLibrary::DeviceLibrary,
         source_name: name.into(),
         played_on: None,
         entries,
@@ -486,6 +487,62 @@ fn duplicate_session_in_one_source_is_skipped() {
     );
     import(&plan, &ImportChoices::default(), &lib).unwrap();
     assert_eq!(session_count(&lib), 1);
+}
+
+/// The same plays in `export.pdb` and `exportLibrary.db` are two sessions
+/// (D23 H2): each library's session gets its own fingerprint and source, and
+/// extends only a session of its own library.
+#[test]
+fn each_stick_library_imports_its_own_sessions() {
+    let lib = lib();
+    let one = |s: SourceSession| SourceSession {
+        library: HistoryLibrary::OneLibrary,
+        ..s
+    };
+    let a = || entry("/Contents/a.mp3", "A", "A", 1);
+    let b = || entry("/Contents/b.mp3", "B", "B", 1);
+    let h = stick(
+        Some(SERIAL),
+        vec![
+            session("HISTORY 001", vec![a()]),
+            one(session("HISTORY 001", vec![a()])),
+        ],
+    );
+    let plan = scan(&h, &lib).unwrap();
+    assert_ne!(plan.sessions[0].fingerprint, plan.sessions[1].fingerprint);
+    assert!(plan.sessions.iter().all(|s| s.action == SessionAction::New));
+    assert_eq!(plan.sessions[1].library, HistoryLibrary::OneLibrary);
+    let first = import(&plan, &ImportChoices::default(), &lib).unwrap();
+    let sources: Vec<String> = lib
+        .conn()
+        .unwrap()
+        .prepare("SELECT source FROM play_session ORDER BY id")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert_eq!(sources, ["device_library", "onelibrary"]);
+
+    // Re-import adds nothing; a longer OneLibrary session extends the
+    // OneLibrary one, not the legacy session of the same name.
+    let again = scan(&h, &lib).unwrap();
+    assert!(again.sessions.iter().all(|s| matches!(
+        s.action,
+        SessionAction::Skip(SkipReason::AlreadyImported { .. })
+    )));
+    let longer = stick(
+        Some(SERIAL),
+        vec![one(session("HISTORY 001", vec![a(), b()]))],
+    );
+    let plan = scan(&longer, &lib).unwrap();
+    assert_eq!(
+        only(&plan).action,
+        SessionAction::Extend {
+            session_id: first.created[1],
+            existing_entries: 1
+        }
+    );
 }
 
 #[test]

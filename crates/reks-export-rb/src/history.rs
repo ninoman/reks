@@ -26,8 +26,8 @@ use serde::{Deserialize, Serialize};
 pub mod read;
 
 pub use read::{
-    read_play_history, read_stick_tracks, DatesStatus, HistoryReadOptions, HistorySource, PdbEntry,
-    PdbSession, PdbTrack, PlayHistory,
+    check_backup_copy, read_backup_manifest, read_play_history, read_stick_tracks, DatesStatus,
+    HistoryReadOptions, HistorySource, PdbEntry, PdbSession, PdbTrack, PlayHistory,
 };
 
 /// Folder under the app data dir that holds stick backups.
