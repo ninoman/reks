@@ -6,8 +6,12 @@
 pub mod biquad;
 pub mod eq;
 pub mod filter;
+pub mod level;
+pub mod limiter;
+pub mod meter;
 pub mod smooth;
 pub mod svf;
+pub mod xfader;
 
 #[cfg(test)]
 mod testutil;

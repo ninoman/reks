@@ -93,3 +93,36 @@ Tests (`dsp::filter` tests):
 | LP+BP+HP, and no mode | 0 ±0.01 dB; HP+LP notch below −40 dB |
 | maximum resonance, LP/HP/BP, 30 Hz–20 kHz in 1/3 octaves and while FREQ sweeps end to end | finite, below 200 on full-scale noise, rings down; at 44.1, 48, 96 kHz |
 | mode switch plus ON → off on a 50 Hz tone | no sample step above 0.01 |
+
+## Channels, crossfader, master (task 6, DSP only)
+
+The parts exist as standalone blocks; wiring them into `graph.rs` (channel
+strips, filter and crossfader assign routing, master bus) is still to do.
+
+| Block | Law |
+|---|---|
+| `level::ChannelLevel` | trim (table above) × fader `v³` (0 dB at the top, −18 dB at half travel; shape **UNVERIFIED**) |
+| `level::MasterLevel` | `v³`, never above 0 dB, so the limiter stays a safety net |
+| `xfader::crossfader_gains` | side gain `sin(π/2·t)^p`, `t = clamp(distance from the far end / w, 0, 1)`; `p = 1.329` puts the progressive centre at −4 dB (R§9.1); `w = (1/40)^curve`, from the whole travel (progressive) to 1/40 of it (near-instant cut, 1.5 mm of 60 mm, **UNVERIFIED**) |
+| `xfader::AssignSwitch` | X / off / Y as three smoothed weights: `wX·gX + wOff + wY·gY`, so moving the switch crossfades |
+| `xfader::Crossfader` | position and curve smoothed like any knob |
+| `meter::PeakMeter` | instant attack, 20 dB/s fall (PPM-like; the hardware's LED ballistics are not documented), clip latch |
+| `limiter::Limiter` | always on, master and cue; see below |
+
+Limiter: stereo-linked look-ahead peak limiter after G. Burton (Signalsmith
+Audio), "Designing a straightforward limiter" (2022). Per frame: the gain that
+brings the peak to the ceiling; an exponential release (100 ms); a moving
+minimum over the look-ahead `L` (1.5 ms); a moving average over `L`; the
+signal delayed by `L − 1` frames (the latency). Every averaged gain is a
+minimum over a window that contains the delayed frame, so the ceiling
+(−1 dBFS, our choice) holds by construction; a final clamp only covers float
+rounding. NaN or infinite input becomes silence.
+
+Tests: crossfader gains at 0, 0.5 and 1 for both curve extremes (progressive
+centre −4 ±0.01 dB; sharpest centre 0 dB, full level 1/40 off the stop),
+monotonic and symmetric curves, assign and crossfader ramps; the limiter's
+ceiling on a full-scale step and on a maximum-resonance LP, HP and LP+BP
+sweep 30 Hz → 20 kHz → 30 Hz at 44.1, 48 and 96 kHz (input peaks above +12 dB),
+checked before the rounding clamp; `tests/dsp_realtime.rs` runs every block
+with all parameters moving under a counting allocator and requires zero
+allocations.

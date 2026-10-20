@@ -129,7 +129,11 @@ pub enum Control {
 6. **Channels, crossfader, master**: trim, fader taper, X/off/Y assign,
    crossfader curve law, master level, meters, limiter. Tests: crossfader gain
    at 0, 0.5 and 1 for both curve extremes (−4 dB at centre on progressive);
-   limiter ceiling holds with resonance at maximum.
+   limiter ceiling holds with resonance at maximum. Partial: the DSP blocks
+   are done and tested (`dsp::level`, `dsp::xfader`, `dsp::meter`,
+   `dsp::limiter`, [`../mixer-dsp.md`](../mixer-dsp.md)). Still to do: wire
+   channel strips, EQ, filter and crossfader assigns, master and limiter into
+   `graph.rs`, with `Control::Channel`/`Filter`/`Crossfader`/`Master`.
 7. **Cue system**: cue bus, pre/post EQ, cue/mix balance, split cue, routing.
    Test: each routing mode puts the expected signal on each output channel.
 8. **Tauri commands and IPC**: thin `mix_*` commands, typed wrappers in
