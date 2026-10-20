@@ -32,7 +32,7 @@
 //!                               reks's analysis of one file (grid, key, columns)
 //! reks anlz build <audio> <out-dir> [...] | --library <library.sqlite> --track <id> <out-dir> [...]
 //!                               build ANLZ files from reks's analysis (flags: see `anlz.rs`)
-//! reks parity run|report [--xml <collection.xml>] [--out <dir>] [...]
+//! reks parity run|report|keyfinder [--xml <collection.xml>] [--out <dir>] [...]
 //!                               analysis parity vs rekordbox (flags: see `parity.rs`)
 //! ```
 
@@ -102,7 +102,7 @@ fn main() -> anyhow::Result<()> {
              | adopt scan <stick> --library <library.sqlite> [--json] \
              | convert plan|apply --library <library.sqlite> ... \
              | analyse <audio> [--json] | anlz build <audio> <out-dir> ...\
-             | parity run|report [--xml <collection.xml>] [--out <dir>] ...]"
+             | parity run|report|keyfinder [--xml <collection.xml>] [--out <dir>] ...]"
         ),
     }
 }

@@ -8,6 +8,7 @@
 //!                    [--min-coverage <0..1>] [--placement <name>] [--analyser N]
 //!                    [--change-beats N] [--change-ratio x] [--kick-phase <ms>]
 //!                    [--kick-gain x]
+//! reks parity keyfinder --driver <bin> [run's flags]   (see `parity/keyfinder.rs`)
 //! ```
 //!
 //! `--xml` and `--out` default to `$REKS_PARITY_XML` and `$REKS_PARITY_OUT`.
@@ -54,6 +55,8 @@ use reks_core::rbxml::{self, XmlTrack};
 use reks_core::Key;
 use serde::{Deserialize, Serialize};
 
+mod keyfinder;
+
 const RESULTS: &str = "results.jsonl";
 const RUNS: &str = "runs.jsonl";
 const KICK_DIR: &str = "kick";
@@ -68,7 +71,10 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
     match args {
         [cmd, rest @ ..] if cmd == "run" => analyse(&Flags::parse(rest)?),
         [cmd, rest @ ..] if cmd == "report" => report(&Flags::parse(rest)?),
-        _ => bail!("usage: reks parity run|report [flags] (see crates/reks-cli/src/parity.rs)"),
+        [cmd, rest @ ..] if cmd == "keyfinder" => keyfinder::run(&Flags::parse(rest)?),
+        _ => bail!(
+            "usage: reks parity run|report|keyfinder [flags] (see crates/reks-cli/src/parity.rs)"
+        ),
     }
 }
 
@@ -91,6 +97,8 @@ struct Flags {
     placement: Option<BeatPlacement>,
     /// `report`: the results of this analyser version (default: current).
     analyser: Option<u32>,
+    /// `keyfinder`: the C++ libKeyFinder driver (`fixtures/keyfinder`).
+    driver: Option<PathBuf>,
 }
 
 impl Flags {
@@ -149,6 +157,7 @@ impl Flags {
                     f.grid.kick_phase_gain = value()?.parse().context("--kick-gain")?
                 }
                 "--analyser" => f.analyser = Some(value()?.parse().context("--analyser")?),
+                "--driver" => f.driver = Some(value()?.into()),
                 other => bail!("unknown flag {other}"),
             }
         }
