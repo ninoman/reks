@@ -16,11 +16,9 @@
 //! players append to a history playlist across mounts is **UNVERIFIED**
 //! (HIST3); the rule only avoids counting the first part twice if they do.
 //!
-//! Exclusion defaults (D23): a session dated on or before the baseline date
-//! is preselected as excluded (`pre_baseline`); every other session, undated
-//! ones included (HIST1 off), counts. [`ImportChoices`] overrides that per
-//! session (`user`), and Practice can be set later
-//! ([`Library::session_update`]). [`import`] and
+//! Every new session imports counted (D23, maintainer's call 2026-10-20),
+//! whatever its date. [`ImportChoices`] marks one practice at import
+//! (`user`); Practice can also be set later ([`Library::session_update`]). [`import`] and
 //! [`Library::session_link_entry`] recompute the play stats of the tracks
 //! they touch (`stats`, task 7).
 
@@ -127,14 +125,6 @@ pub struct PlannedEntry {
     pub raw: SourceEntry,
 }
 
-/// Why a session imports excluded unless the user says otherwise.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum DefaultExclusion {
-    /// Played on or before the baseline date: may be in rekordbox's count.
-    PreBaseline,
-}
-
 /// Why a session is not imported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
@@ -167,8 +157,6 @@ pub struct PlannedSession {
     /// Hex SHA-256; the key of [`ImportChoices::excluded`].
     pub fingerprint: String,
     pub action: SessionAction,
-    /// For [`SessionAction::New`]; an extended session keeps its state.
-    pub default_exclusion: Option<DefaultExclusion>,
     /// Every entry for New and Extend (Extend adds those from
     /// `existing_entries` on); empty for Skip.
     pub entries: Vec<PlannedEntry>,
@@ -261,20 +249,11 @@ pub fn scan(history: &SourceHistory, lib: &Library) -> Result<HistoryImportPlan>
             }
             out
         };
-        let default_exclusion = match (&action, &s.played_on) {
-            (SessionAction::New, Some(d))
-                if baseline_date.as_deref().is_some_and(|b| d.as_str() <= b) =>
-            {
-                Some(DefaultExclusion::PreBaseline)
-            }
-            _ => None,
-        };
         sessions.push(PlannedSession {
             source_name: s.source_name.clone(),
             played_on: s.played_on.clone(),
             fingerprint,
             action,
-            default_exclusion,
             entries,
         });
     }
@@ -312,12 +291,8 @@ pub fn import(
                     .excluded
                     .get(&s.fingerprint)
                     .copied()
-                    .unwrap_or(s.default_exclusion.is_some());
-                let reason = match (excluded, s.default_exclusion) {
-                    (false, _) => None,
-                    (true, Some(_)) => Some("pre_baseline"),
-                    (true, None) => Some("user"),
-                };
+                    .unwrap_or(false);
+                let reason = excluded.then_some("user");
                 tx.execute(
                     "INSERT INTO play_session (source, fingerprint, volume_serial, source_name,
                          name, played_on, excluded, excluded_reason, imported_at, updated_at)

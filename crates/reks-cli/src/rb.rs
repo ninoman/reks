@@ -572,8 +572,6 @@ fn render_plan(plan: &ExportPlan) -> String {
         for s in &g.sessions {
             let note = if s.extends {
                 ", adds to an imported session"
-            } else if s.practice {
-                ", imports as practice"
             } else {
                 ""
             };

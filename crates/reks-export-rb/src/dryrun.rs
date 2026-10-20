@@ -675,19 +675,6 @@ fn guard_view(plan: &ExportPlan) -> Option<GuardView> {
                  later; Continue and discard erases them."
             .to_owned(),
     };
-    let practice = g.sessions.iter().filter(|s| s.practice).count();
-    if practice > 0 {
-        text.push_str(&if practice == 1 {
-            " One of them is dated on or before your rekordbox import, so it imports as \
-             practice (not counted)."
-                .to_owned()
-        } else {
-            format!(
-                " {practice} of them are dated on or before your rekordbox import, so they \
-                 import as practice (not counted)."
-            )
-        });
-    }
     if g.unreadable.is_none() {
         text.push_str(
             " Imported sessions count in play counts; you can mark any of them as practice in \
@@ -709,8 +696,6 @@ fn guard_view(plan: &ExportPlan) -> Option<GuardView> {
             );
             if s.extends {
                 line.push_str(", adds to the imported session");
-            } else if s.practice {
-                line.push_str(", imports as practice");
             }
             line
         })

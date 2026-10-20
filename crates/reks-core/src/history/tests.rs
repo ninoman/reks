@@ -387,7 +387,6 @@ fn fingerprint_extend_appends_only_the_new_entries() {
             existing_entries: 2
         }
     );
-    assert_eq!(s.default_exclusion, None);
     assert_eq!(s.new_entries().len(), 1);
     assert_eq!(s.new_entries()[0].position, 2);
 
@@ -490,7 +489,7 @@ fn duplicate_session_in_one_source_is_skipped() {
 }
 
 #[test]
-fn exclusion_defaults_and_choices() {
+fn sessions_count_unless_marked_practice() {
     let lib = lib();
     lib.conn()
         .unwrap()
@@ -517,11 +516,6 @@ fn exclusion_defaults_and_choices() {
     );
     let plan = scan(&h, &lib).unwrap();
     assert_eq!(plan.baseline_date.as_deref(), Some("2026-06-01"));
-    let defaults: Vec<_> = plan.sessions.iter().map(|s| s.default_exclusion).collect();
-    assert_eq!(
-        defaults,
-        vec![Some(DefaultExclusion::PreBaseline), None, None, None]
-    );
     let mut choices = ImportChoices::default();
     choices
         .excluded
@@ -540,7 +534,7 @@ fn exclusion_defaults_and_choices() {
     assert_eq!(
         rows,
         vec![
-            ("before".into(), true, Some("pre_baseline".into())),
+            ("before".into(), false, None),
             ("after".into(), false, None),
             ("unknown".into(), false, None),
             ("practice".into(), true, Some("user".into())),
@@ -663,7 +657,7 @@ fn counts_follow_included_track_entries() {
                     entry("/Contents/u/unknown.mp3", "U", "U", 1),
                 ],
             ),
-            // Pre-baseline: imported excluded, so not counted.
+            // Marked practice at import, so not counted.
             dated(
                 "HISTORY 002",
                 Some("2026-05-20"),
@@ -673,7 +667,11 @@ fn counts_follow_included_track_entries() {
         ],
     );
     let plan = scan(&h, &lib).unwrap();
-    let report = import(&plan, &ImportChoices::default(), &lib).unwrap();
+    let mut choices = ImportChoices::default();
+    choices
+        .excluded
+        .insert(plan.sessions[1].fingerprint.clone(), true);
+    let report = import(&plan, &choices, &lib).unwrap();
     assert_eq!(report.created.len(), 3);
     assert_eq!(stats(&lib, a), (7, Some("2026-07-01".into())));
     assert_eq!(stats(&lib, b), (1, Some("2026-08-01".into())));
@@ -701,7 +699,7 @@ fn counts_follow_included_track_entries() {
     .unwrap();
     assert_eq!((stats(&lib, a), stats(&lib, b)), before);
 
-    // Including the pre-baseline session counts it.
+    // Including the practice session counts it.
     lib.session_update(
         report.created[1],
         SessionPatch {
@@ -957,7 +955,7 @@ mod counts_property {
                 if let Some(ch) = choice {
                     choices.excluded.insert(p.fingerprint.clone(), *ch);
                 }
-                excluded.push(choice.unwrap_or(p.default_exclusion.is_some()));
+                excluded.push(choice.unwrap_or(false));
             }
             let report = import(&plan, &choices, &lib).unwrap();
             prop_assert_eq!(report.created.len(), c.sessions.len());

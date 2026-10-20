@@ -16,9 +16,7 @@
 //! folder (recognised by its `manifest.json`; its serial comes from there).
 //! `<session>` is a session's stick name (`HISTORY 001`) or the start of its
 //! fingerprint (at least 8 hex digits). `--practice` imports a new session
-//! excluded from play counts, `--include` imports it counted; without either
-//! a session dated on or before the baseline date is excluded and every
-//! other one (undated ones too) counts.
+//! excluded from play counts, `--include` imports it counted (the default).
 //! `--hist1-dates` reads session dates with the UNVERIFIED table-19
 //! heuristic (HIST1); without it every session is undated.
 
@@ -28,8 +26,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
 use reks_core::history::{
-    self, DefaultExclusion, EntryKind, HistoryImportPlan, ImportChoices, ImportReport, MatchKind,
-    PlannedSession, SessionAction, SkipReason,
+    self, EntryKind, HistoryImportPlan, ImportChoices, ImportReport, MatchKind, PlannedSession,
+    SessionAction, SkipReason,
 };
 use reks_core::Library;
 use reks_export_rb::history::{
@@ -177,7 +175,7 @@ fn execute(args: &Args, source: &Source) -> anyhow::Result<Out> {
                 .excluded
                 .get(&s.fingerprint)
                 .copied()
-                .unwrap_or(s.default_exclusion.is_some());
+                .unwrap_or(false);
             (s.fingerprint.clone(), ex)
         })
         .collect();
@@ -319,13 +317,7 @@ fn render(out: &Out) -> String {
             if dividers == 1 { "divider" } else { "dividers" }
         );
         if let Some(&ex) = out.excluded.get(&x.fingerprint) {
-            let why = match (ex, x.default_exclusion) {
-                (false, _) => "counted",
-                (true, Some(DefaultExclusion::PreBaseline)) => {
-                    "practice (on or before the baseline; --include to count it)"
-                }
-                (true, None) => "practice",
-            };
+            let why = if ex { "practice" } else { "counted" };
             let _ = writeln!(s, "      {why}");
         }
     }

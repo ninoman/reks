@@ -73,13 +73,11 @@ fn unimported_sessions_block_until_a_choice() {
                 name: "HISTORY 001".into(),
                 entries: 2,
                 extends: false,
-                practice: false,
             },
             UnimportedSession {
                 name: "HISTORY 002".into(),
                 entries: 1,
                 extends: false,
-                practice: false,
             },
         ]
     );
