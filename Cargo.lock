@@ -3682,6 +3682,7 @@ version = "0.1.0"
 dependencies = [
  "reks-analysis",
  "reks-core",
+ "reks-export-onelibrary",
  "reks-export-rb",
  "reks-mix",
  "serde",
@@ -3721,11 +3722,13 @@ dependencies = [
  "reks-anlz",
  "reks-audio",
  "reks-core",
+ "reks-export-onelibrary",
  "reks-export-rb",
  "reks-mix",
  "serde",
  "serde_json",
  "tempfile",
+ "zeroize",
 ]
 
 [[package]]
@@ -3765,7 +3768,11 @@ version = "0.1.0"
 name = "reks-export-onelibrary"
 version = "0.1.0"
 dependencies = [
+ "reks-core",
+ "reks-export-rb",
  "rusqlite",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.21",
  "tracing",

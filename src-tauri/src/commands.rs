@@ -13,10 +13,11 @@ use reks_core::{
     PlaylistTree, ScanEvent, ScanReport, Settings, SettingsPatch, TrackDetail, TrackId, TrackPage,
     TrackPatch, TrackQuery,
 };
+use reks_export_onelibrary::{OneLibraryWriter, RbVersion};
 use reks_export_rb::device::{self, DeviceInfo};
 use reks_export_rb::devices::{self, Device, DeviceId, DeviceMatch, ProfileStatus};
 use reks_export_rb::dryrun::{self, DryRun};
-use reks_export_rb::onelibrary::{self as one, NoWriter};
+use reks_export_rb::onelibrary as one;
 use reks_export_rb::plan::{ExportOptions, Selection};
 use reks_export_rb::report::{self, ProgressView, ReportView};
 use reks_export_rb::{ApplyEnv, OneLibraryEnv, StickCheck, TargetProfile};
@@ -527,11 +528,13 @@ pub async fn profile_status(
     .await
 }
 
-/// A dry run and the id `export_apply` takes to write exactly that plan.
 /// Plans and writes `exportLibrary.db` for exports with the OneLibrary
-/// option: the stub, which blocks such exports, until the
-/// reks-export-onelibrary writer lands (phase 4 task 8).
-const ONELIBRARY: NoWriter = NoWriter;
+/// option (experimental, D14).
+const ONELIBRARY: OneLibraryWriter = OneLibraryWriter {
+    version: RbVersion::LATEST,
+};
+
+/// A dry run and the id `export_apply` takes to write exactly that plan.
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

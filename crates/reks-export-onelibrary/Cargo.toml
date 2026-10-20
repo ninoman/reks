@@ -10,6 +10,11 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+reks-core = { workspace = true }
+reks-export-rb = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
@@ -22,6 +27,3 @@ rusqlite = { workspace = true, features = ["bundled-sqlcipher"] }
 
 [target.'cfg(not(target_vendor = "apple"))'.dependencies]
 rusqlite = { workspace = true, features = ["bundled-sqlcipher-vendored-openssl"] }
-
-[dev-dependencies]
-tempfile = { workspace = true }

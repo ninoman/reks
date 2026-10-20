@@ -29,5 +29,5 @@ tracing = { workspace = true }
 reks-analysis = { workspace = true }
 reks-core = { workspace = true }
 reks-mix = { workspace = true }
-# The OneLibrary stub until reks-export-onelibrary lands (phase 4 task 8).
-reks-export-rb = { workspace = true, features = ["onelibrary-stub"] }
+reks-export-onelibrary = { workspace = true }
+reks-export-rb = { workspace = true }

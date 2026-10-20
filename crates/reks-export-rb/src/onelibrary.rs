@@ -6,10 +6,9 @@
 //!
 //! The writer lives in `reks-export-onelibrary`, which depends on this crate
 //! for [`ExportPlan`]; so this crate holds only the trait, and the app picks
-//! the implementation and hands it to `apply` with the key
-//! ([`crate::apply::OneLibraryEnv`]). Until the writer lands the app uses
-//! [`NoWriter`] (feature `onelibrary-stub`), which plans the file but blocks
-//! the export.
+//! the implementation (`reks_export_onelibrary::OneLibraryWriter`) and hands
+//! it to `apply` with the key ([`crate::apply::OneLibraryEnv`]). Tests here
+//! use [`NoWriter`], which plans the file but blocks the export.
 //!
 //! The key comes from [`resolve_key`]: the `setting` table first, then
 //! `REKS_ONELIBRARY_KEY` (Phase 4 key policy). It is never logged and never
@@ -176,14 +175,14 @@ pub fn db_write(bytes: u64) -> FileOp {
     }
 }
 
-/// Stand-in until the writer lands: lists the file and what it would remove,
+/// Test stand-in for a writer: lists the file and what it would remove,
 /// and blocks the export with [`Problem::OneLibraryUnavailable`]; `write`
 /// refuses.
-#[cfg(any(test, feature = "onelibrary-stub"))]
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoWriter;
 
-#[cfg(any(test, feature = "onelibrary-stub"))]
+#[cfg(test)]
 impl OneLibraryExport for NoWriter {
     fn plan(&self, plan: &ExportPlan, _key: &OneLibraryKey) -> Result<OneLibraryPlan, PlanError> {
         let root = plan.device.mount_point.as_path();
