@@ -7,6 +7,9 @@
 //!   new row; a file that can't be found is still stored, with `missing = 1`.
 //! - XML values win for the fields the XML carries; an absent or empty
 //!   attribute never clears a value. File tags only fill what is still empty.
+//!   Exception (D23): `PlayCount` and `LastPlayed` set the frozen play
+//!   baseline of tracks this import creates and are ignored for existing
+//!   ones; the cached play count and last played are then recomputed.
 //! - Grids and cues with `source = 'rekordbox'` are replaced; rows from any
 //!   other source are left alone. Playlists are matched by name within their
 //!   folder; tracks a user added in reks stay after the XML's entries.
@@ -302,6 +305,12 @@ pub fn import(
         by_location: row_of_location,
     };
     imp.write_playlists(&tx, &c.playlists, &rows)?;
+    // The baseline is frozen (D23): PlayCount and LastPlayed set it only
+    // for tracks this import created; every written track's cache follows.
+    let mut written: Vec<TrackId> = rows.by_xml.values().copied().collect();
+    written.sort_unstable();
+    written.dedup();
+    crate::history::recompute(&tx, &crate::history::TrackSet::Some(written))?;
     tx.commit()?;
     drop(conn);
 
@@ -633,7 +642,8 @@ impl Import<'_> {
                 tx.last_insert_rowid()
             }
         };
-        self.update_track(tx, id, t, path, file, date_added, &now)?;
+        let created = matches!(target, Target::New);
+        self.update_track(tx, id, t, path, file, date_added, created, &now)?;
         self.write_grid(tx, id, t)?;
         self.write_cues(tx, id, t)?;
         Ok(Some(id))
@@ -648,6 +658,7 @@ impl Import<'_> {
         path: &str,
         file: &FileState,
         date_added: Option<String>,
+        created: bool,
         now: &str,
     ) -> Result<()> {
         let tid = Some(t.track_id);
@@ -714,9 +725,11 @@ impl Import<'_> {
                key = coalesce(:key, key),
                bpm_source = CASE WHEN :bpm IS NULL THEN bpm_source ELSE 'rekordbox' END,
                bpm_x100 = coalesce(:bpm, bpm_x100),
-               play_count = coalesce(:play_count, play_count),
+               baseline_play_count = CASE WHEN :created
+                 THEN coalesce(:play_count, baseline_play_count) ELSE baseline_play_count END,
                date_added = coalesce(:date_added, date_added),
-               last_played = coalesce(:last_played, last_played),
+               baseline_last_played = CASE WHEN :created
+                 THEN coalesce(:last_played, baseline_last_played) ELSE baseline_last_played END,
                artwork_id = coalesce(artwork_id, :artwork_id),
                rb_track_id = :rb_track_id, rb_location = coalesce(:rb_location, rb_location),
                updated_at = :now
@@ -752,6 +765,7 @@ impl Import<'_> {
             ":rating": t.rating.map(rating_stars), ":color": color, ":key": key,
             ":bpm": t.average_bpm.and_then(bpm_x100),
             ":play_count": t.play_count, ":date_added": date_added, ":last_played": last_played,
+            ":created": created,
             ":artwork_id": info.and_then(|i| i.artwork_id),
             ":rb_track_id": t.track_id, ":rb_location": t.location, ":now": now,
         })?;

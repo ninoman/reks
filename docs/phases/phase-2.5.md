@@ -2,7 +2,7 @@
 
 Status: started 2026-10-20 ahead of the Phase 2 hardware campaign with the
 maintainer's approval (software only; anything that needs a player stays
-UNVERIFIED); tasks 1–3 and 5 done. Depends on: Phase 2 done, including its hardware campaign,
+UNVERIFIED); tasks 1–3, 5–7 and 10 done. Depends on: Phase 2 done, including its hardware campaign,
 history safeguard and `export_manifest` (tasks 12–14). Runs before Phase 3.
 Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
@@ -245,10 +245,23 @@ Divider rules
    explicit Practice choice stores `user`. `Library::session_link_entry`
    ("Locate…") is here; counts are not recomputed until task 7. The fixture
    test (`played_stick_fixture_imports_once`) is `#[ignore]` like task 5's.
-7. **Derived counts**: `recompute_play_stats`, pre-baseline rule, frozen
+7. [x] **Derived counts**: `recompute_play_stats`, pre-baseline rule, frozen
    baseline on XML re-import. Property test: count = baseline + included
    track entries for random session sets and toggles. Deleting all sessions
    returns every track to baseline.
+   Done in [stats.rs](../../crates/reks-core/src/history/stats.rs):
+   `Library::recompute_play_stats(TrackSet)`, plus `session_update`
+   (`SessionPatch`; Practice stores reason `user`, clearing it clears the
+   reason) and `session_delete`, which task 9 builds on. History import,
+   `session_link_entry` (old and new track), the Practice toggle, session
+   delete and the rekordbox XML import each recompute the tracks they touch
+   in their own transaction. The pre-baseline rule is task 6's default
+   exclusion. XML import: `PlayCount` / `LastPlayed` fill `baseline_*` only
+   for tracks it creates (an existing row, scanned or imported, keeps its
+   baseline). Tests in [tests.rs](../../crates/reks-core/src/history/tests.rs)
+   (property test, 100-track toggle under 100 ms) and
+   `reimport_keeps_the_play_baseline_frozen` in
+   [rbxml_import.rs](../../crates/reks-core/tests/rbxml_import.rs).
 8. **Export guard**: "Import now" / "Back up and continue" / "Continue and
    discard" when `scan` finds sessions not yet imported; the planner refuses
    to apply without a choice. Tests on the fixture stick.
@@ -258,7 +271,18 @@ Divider rules
    (confirm); import dry-run dialog with a Practice checkbox per session;
    "Played in" on the track detail panel (practice sessions marked); Play
    count and Last played columns and filters.
-10. **`reks-cli history scan/import`** for headless runs.
+10. [x] **`reks-cli history scan/import`** for headless runs.
+    Done in [history.rs](../../crates/reks-cli/src/history.rs):
+    `reks history scan <stick|backup> --library <db> [--hist1-dates] [--json]`
+    prints the dry run (per session: action, fingerprint prefix, entries by
+    match kind, unmatched, dividers, counted or practice);
+    `reks history import <same> [--practice|--include <session>]... [--yes]`
+    applies the choices and imports only with `--yes`. A folder with
+    `manifest.json` is read as a backup. `<session>` is the stick name or
+    a fingerprint prefix (8+ hex digits) and must name one new session.
+    Tests: a fake stick imported once (stick bytes unchanged, second run all
+    skips), selector errors, and a backup whose import makes the stick's
+    sessions skips.
 11. **Hardware session**: checklist below on CDJ-2000NXS2 and CDJ-3000; log in
     `docs/hw-test-log.md`; turn `export.dividers` on by default only after both pass.
 12. **Adopt a foreign stick** (D27, [`../stick-profiles.md`](../stick-profiles.md) §4.3):
@@ -297,7 +321,7 @@ Divider rules
 6. Mount time about the same as the same stick without dividers.
 7. Play 5 tracks (one for under 30 s, one for over 2 min), load one divider,
    and load one track without playing it. Eject, re-insert, play 2 more, eject.
-   Run `reks-cli history scan`: note what was logged (HIST2), whether the second
+   Run `reks history scan`: note what was logged (HIST2), whether the second
    mount appended or made a new session (HIST3), and that the divider is marked
    as a divider and not counted.
 8. Import into reks, then re-export: the guard finds nothing un-imported and

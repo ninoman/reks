@@ -95,6 +95,10 @@ pub enum Error {
     #[error("cannot convert {path}: {reason}")]
     Convert { path: String, reason: String },
 
+    /// No play session with this id.
+    #[error("play session {0} not found")]
+    SessionNotFound(crate::history::SessionId),
+
     /// No play session entry at this position.
     #[error("session {session} has no entry {position}")]
     SessionEntryNotFound {

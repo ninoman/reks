@@ -16,6 +16,10 @@
 //!                               read the stick back against a fresh plan
 //! reks rb history <stick> [--json]
 //!                               list the play history players left on the stick
+//! reks history scan <stick|backup> --library <library.sqlite> [--hist1-dates] [--json]
+//!                               dry run of importing a stick's play history
+//! reks history import <stick|backup> <scan flags> [--practice|--include <session>]... [--yes]
+//!                               dry run, then with --yes import the sessions
 //! reks convert plan --library <library.sqlite> (--track <id> | --playlist <id|path>)... [...]
 //!                               dry run of converting tracks (flags: see `convert.rs`)
 //! reks convert apply <plan flags> [--yes]
@@ -23,6 +27,7 @@
 //! ```
 
 mod convert;
+mod history;
 mod rb;
 
 use std::io::BufWriter;
@@ -64,10 +69,12 @@ fn main() -> anyhow::Result<()> {
         }
         [cmd, rest @ ..] if cmd == "rb" => rb::run(rest),
         [cmd, rest @ ..] if cmd == "convert" => convert::run(rest),
+        [cmd, rest @ ..] if cmd == "history" => history::run(rest),
         _ => bail!(
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
              | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run] \
              | rb plan|export|validate <stick> ... | rb history <stick> [--json] \
+             | history scan|import <stick|backup> --library <library.sqlite> ... \
              | convert plan|apply --library <library.sqlite> ...]"
         ),
     }

@@ -394,6 +394,63 @@ fn second_import_changes_nothing_and_keeps_user_data() {
     assert_eq!(cues(&env, 2).len(), 3);
 }
 
+/// D23: `PlayCount` / `LastPlayed` set the baseline of new tracks only; a
+/// re-import never moves an existing track's baseline, and the cached play
+/// count stays baseline + included sessions.
+#[test]
+fn reimport_keeps_the_play_baseline_frozen() {
+    let env = Env::new();
+    let mut c = small_collection();
+    c.tracks[0].last_played = Some("2026-09-01".into());
+    env.import(&c, fixture_remap());
+    let t1 = env.track_id(1);
+    let stats = |id: i64| -> (i64, i64, Option<String>, Option<String>) {
+        env.db()
+            .query_row(
+                "SELECT play_count, baseline_play_count, last_played, baseline_last_played
+                 FROM track WHERE id = ?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap()
+    };
+    let d = |s: &str| Some(s.to_owned());
+    assert_eq!(stats(t1), (3, 3, d("2026-09-01"), d("2026-09-01")));
+
+    // One included session with t1 played twice.
+    let db = env.db();
+    db.execute(
+        "INSERT INTO play_session (id, source, fingerprint, source_name, name, played_on,
+                                   imported_at, updated_at)
+         VALUES (1, 'device_library', 'f', 'HISTORY 001', 'HISTORY 001', '2026-10-10', 'x', 'x')",
+        [],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO play_session_entry (session_id, position, track_id)
+         VALUES (1, 0, ?1), (1, 1, ?1)",
+        [t1],
+    )
+    .unwrap();
+    drop(db);
+
+    // rekordbox has counted the same stick meanwhile; a new track arrives too.
+    c.tracks[0].play_count = Some(9);
+    c.tracks[0].last_played = Some("2026-10-10".into());
+    let dir = tempfile::tempdir().unwrap();
+    let new_path = dir.path().join("new.mp3");
+    link(&audio_dir().join("sine-click-128.mp3"), &new_path);
+    c.tracks.push(XmlTrack {
+        play_count: Some(4),
+        last_played: Some("2026-08-08".into()),
+        ..xml_track(50, &new_path)
+    });
+    env.import(&c, fixture_remap());
+    assert_eq!(stats(t1), (5, 3, d("2026-10-10"), d("2026-09-01")));
+    let t50 = env.track_id(50);
+    assert_eq!(stats(t50), (4, 4, d("2026-08-08"), d("2026-08-08")));
+}
+
 #[test]
 fn reimport_after_playlist_edits_still_matches() {
     let env = Env::new();

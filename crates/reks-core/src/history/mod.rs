@@ -18,10 +18,12 @@
 //!
 //! Exclusion defaults (D23): a session dated on or before the baseline date,
 //! or with no date (HIST1 off), is preselected as excluded (`pre_baseline`);
-//! [`ImportChoices`] overrides that per session (`user`). Play counts are not
-//! recomputed here; that is task 7.
+//! [`ImportChoices`] overrides that per session (`user`). [`import`] and
+//! [`Library::session_link_entry`] recompute the play stats of the tracks
+//! they touch (`stats`, task 7).
 
 mod matcher;
+mod stats;
 #[cfg(test)]
 mod tests;
 
@@ -37,6 +39,8 @@ use crate::scan::TrackId;
 use crate::timefmt::now_utc;
 
 use matcher::Matcher;
+pub(crate) use stats::recompute;
+pub use stats::{SessionPatch, TrackSet};
 
 /// `play_session.source` for legacy `export.pdb` history (H1).
 pub const SOURCE_DEVICE_LIBRARY: &str = "device_library";
@@ -294,6 +298,7 @@ pub fn import(
 ) -> Result<ImportReport> {
     let now = now_utc();
     let mut report = ImportReport::default();
+    let mut touched: HashSet<TrackId> = HashSet::new();
     let mut conn = lib.conn()?;
     let tx = conn.transaction()?;
     for s in &plan.sessions {
@@ -331,6 +336,7 @@ pub fn import(
                 )?;
                 let id = tx.last_insert_rowid();
                 insert_entries(&tx, id, s.new_entries(), &mut report)?;
+                touched.extend(s.new_entries().iter().filter_map(|e| e.track_id));
                 report.created.push(id);
             }
             SessionAction::Extend {
@@ -349,10 +355,14 @@ pub fn import(
                     params![session_id, s.fingerprint, now],
                 )?;
                 insert_entries(&tx, session_id, s.new_entries(), &mut report)?;
+                touched.extend(s.new_entries().iter().filter_map(|e| e.track_id));
                 report.extended.push(session_id);
             }
         }
     }
+    let mut touched: Vec<TrackId> = touched.into_iter().collect();
+    touched.sort_unstable();
+    recompute(&tx, &TrackSet::Some(touched))?;
     tx.commit()?;
     tracing::info!(
         created = report.created.len(),
@@ -366,27 +376,29 @@ pub fn import(
 }
 
 impl Library {
-    /// Links one session entry to a library track ("Locate…"). Dividers
-    /// can't be linked.
+    /// Links one session entry to a library track ("Locate…") and
+    /// recomputes the old and new track. Dividers can't be linked.
     pub fn session_link_entry(
         &self,
         session: SessionId,
         position: u32,
         track: TrackId,
     ) -> Result<()> {
-        let conn = self.conn()?;
-        let kind: Option<String> = conn
+        let mut conn = self.conn()?;
+        let conn = conn.transaction()?;
+        let row: Option<(String, Option<TrackId>)> = conn
             .query_row(
-                "SELECT item_kind FROM play_session_entry WHERE session_id = ?1 AND position = ?2",
+                "SELECT item_kind, track_id FROM play_session_entry
+                 WHERE session_id = ?1 AND position = ?2",
                 params![session, position],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()?;
-        match kind.as_deref() {
+        let old = match row {
             None => return Err(Error::SessionEntryNotFound { session, position }),
-            Some("track") => {}
+            Some((kind, old)) if kind == "track" => old,
             Some(_) => return Err(Error::NotATrackEntry { session, position }),
-        }
+        };
         let exists: bool = conn.query_row(
             "SELECT EXISTS (SELECT 1 FROM track WHERE id = ?1)",
             [track],
@@ -403,6 +415,9 @@ impl Library {
             "UPDATE play_session SET updated_at = ?2 WHERE id = ?1",
             params![session, now_utc()],
         )?;
+        let ids = old.into_iter().filter(|&o| o != track).chain([track]);
+        recompute(&conn, &TrackSet::Some(ids.collect()))?;
+        conn.commit()?;
         Ok(())
     }
 }
