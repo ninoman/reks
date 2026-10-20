@@ -18,8 +18,8 @@
 //! subfolder per track holding the audio file and rekordbox's
 //! `ANLZ0000.DAT/.EXT/.2EX` for it, then run
 //! `cargo test -p reks-anlz --test golden -- --ignored --nocapture`.
-//! Waveform error thresholds come with calibration (phase 3 task 8); until
-//! then the test prints the errors.
+//! Waveform errors are printed, not judged: compare them with the
+//! calibration set's means in `docs/analysis-parity/waveforms.md` (task 8).
 
 #![allow(clippy::print_stderr, clippy::unwrap_used, clippy::panic)]
 
@@ -35,7 +35,7 @@ use reks_anlz::read;
 use reks_anlz::validate::{validate_set, Expect};
 use reks_anlz::waveform::unpack_color;
 use reks_anlz::write::{self, PqtzBeat};
-use reks_anlz::{build, AnlzInput, AnlzSet, AnlzTarget, Waveforms, PLACEHOLDER_CALIBRATION};
+use reks_anlz::{build, AnlzInput, AnlzSet, AnlzTarget, Waveforms, CALIBRATION};
 
 const RATE: u32 = 44_100;
 
@@ -227,8 +227,7 @@ fn rekordbox6_demo_tracks() {
         let issues = validate_set(&r.dat, &r.ext, Some(&r.ex2), expect);
         assert!(issues.is_empty(), "{}: {issues:?}", r.name);
 
-        let waves =
-            Waveforms::encode(&columns_from_pwv5(&r.ext), &PLACEHOLDER_CALIBRATION).unwrap();
+        let waves = Waveforms::encode(&columns_from_pwv5(&r.ext), &CALIBRATION).unwrap();
         let ours = build_like(&r, &beats, duration_ms, &waves);
         compare_structure(&r.name, &ours.dat, &r.dat, &EXACT);
         compare_structure(&r.name, &ours.ext, &r.ext, &EXACT);
@@ -266,7 +265,7 @@ fn rekordbox_reference_tracks() {
         let duration_ms = pcm.frames() as u64 * 1000 / u64::from(pcm.sample_rate);
         let columns =
             columns_from_interleaved(&pcm.samples, pcm.sample_rate, pcm.channels).unwrap();
-        let waves = Waveforms::encode(&columns, &PLACEHOLDER_CALIBRATION).unwrap();
+        let waves = Waveforms::encode(&columns, &CALIBRATION).unwrap();
         // The grid is rekordbox's (our grid analysis is measured in task 12).
         let beats = common::beats(&r.dat);
         let ours = build_like(&r, &beats, duration_ms, &waves);

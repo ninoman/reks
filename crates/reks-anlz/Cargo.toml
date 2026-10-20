@@ -16,6 +16,9 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 binrw = { workspace = true }
+png = { workspace = true }
 proptest = { workspace = true }
 reks-audio = { workspace = true }
 rekordcrate = { workspace = true }
+unicode-normalization = { workspace = true }
+walkdir = { workspace = true }

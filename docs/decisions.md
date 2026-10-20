@@ -287,6 +287,19 @@ Date of decisions: 2026-10-18.
 - Rejected: copying baken's generator (MIT, allowed, but approximate and not
   structured for our pipeline; borrow ideas with attribution if useful).
 - Risks: PWV4 unknown bytes, PWVC semantics, 3-band non-linear scaling.
+- Calibration (2026-10-20, phase 3 task 8): fitted against rekordbox 6's
+  own files for 50 tracks; constants in `reks-analysis::calib`, method and
+  error in [`analysis-parity/waveforms.md`](analysis-parity/waveforms.md).
+  Format findings from that data, applied in `reks-anlz::waveform`:
+  PWV6/PWV7 hold **low, mid, high** (djl-analysis says mid, high, low; band
+  energy correlation says otherwise, 0.65–0.93 on the diagonal); PWVC is the
+  per-track gain per band ×100 that rekordbox applied to PWV6/PWV7 (0.99
+  correlation with the fitted gain for low and mid), so we compute and write
+  ours instead of a constant; PWV5 colour is normalised to the loudest
+  band per column. Crossovers stay at 600 Hz / 4 kHz: PWV4 bytes 2–5 follow
+  those bands closely, while PWV7 would prefer about 250 Hz / 2 kHz (an
+  estimated 20% lower PWV7 error; follow-up, needs two band sets).
+  Everything here is visual parity on files, **UNVERIFIED** on a player.
 
 ## D14. OneLibrary (Phase 4): own writer, experimental flag, no key in the repository
 
