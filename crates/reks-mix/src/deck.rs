@@ -73,6 +73,8 @@ pub(crate) struct Deck {
     quantise: bool,
     /// Play order, for the automatic sync leader; 0 when stopped.
     pub(crate) started: u64,
+    /// Sync is following a leader this block.
+    pub(crate) locked: bool,
 }
 
 impl Deck {
@@ -99,7 +101,21 @@ impl Deck {
             sync_bar: false,
             quantise: false,
             started: 0,
+            locked: false,
         })
+    }
+
+    pub(crate) fn src(&self) -> Option<&DeckSource> {
+        self.src.as_deref()
+    }
+
+    pub(crate) fn playing(&self) -> bool {
+        self.playing
+    }
+
+    /// Source frames per output frame for the current block.
+    pub(crate) fn step(&self) -> f64 {
+        self.step
     }
 
     /// Source time of the next frame.
@@ -434,6 +450,7 @@ impl Deck {
             beat: beats.and_then(|b| b.beat_at(position)),
             sync: self.sync,
             sync_bar: self.sync_bar,
+            locked: self.locked,
             quantise: self.quantise,
         }
     }

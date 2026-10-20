@@ -594,6 +594,48 @@ mod tests {
         assert_eq!(n, 0, "nudge, hot cue, quantised seek, cue");
         assert!(!r.p.graph.state().decks[1].playing, "cue paused the deck");
 
+        // Sync: deck 2 leads (it starts first), deck 1 follows with bar
+        // sync (a phase jump, then bending), then a chosen leader.
+        let other = Arc::new(
+            DeckSource::new(vec![700; RATE as usize * 4], RATE).with_grid(&[crate::GridAnchor {
+                frame: 3_000,
+                bpm: 124.0,
+                beat_in_bar: 1,
+                beats_per_bar: 4,
+            }]),
+        );
+        for c in [
+            Control::Load {
+                deck: 2,
+                src: Arc::clone(&other),
+            },
+            Control::Play { deck: 2 },
+            Control::Play { deck: 1 },
+            Control::Sync {
+                deck: 1,
+                on: true,
+                bar: true,
+            },
+        ] {
+            r.controls.push(c).unwrap();
+        }
+        let n = realtime(|| {
+            for _ in 0..8 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "sync");
+        let st = r.p.graph.state();
+        assert_eq!(st.leader, Some(2));
+        assert!(st.decks[1].locked);
+        r.controls.push(Control::Leader { deck: Some(1) }).unwrap();
+        let n = realtime(|| {
+            for _ in 0..4 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "chosen leader");
+
         // Loading over a playing deck retires `first` through the queue.
         r.controls
             .push(Control::Load {

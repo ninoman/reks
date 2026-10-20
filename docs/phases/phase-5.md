@@ -122,10 +122,22 @@ pub enum Control {
    HOT CUE jumps and plays. Quantise: cue points and paused seeks snap to the
    nearest beat; jumps while playing keep the beat phase. Dynamic grids run
    linearly between anchors, so beats land on the anchors.
-3. **Sync**: leader, tempo match, beat and bar phase, continuous phase
+3. [x] **Sync**: leader, tempo match, beat and bar phase, continuous phase
    correction on dynamic grids. Tests: 128 and 125 BPM click fixtures synced
    keep onsets within 1 ms for 64 bars; a tempo-change fixture stays within 2 ms
-   across the change.
+   across the change. Done 2026-10-21 (`sync.rs`; render tests in
+   `crates/reks-mix/tests/sync.rs`, click fixtures generated in
+   `tests/common`). Leader: the chosen deck, else the loaded deck with a grid
+   that has been playing longest (kept while all are stopped); it plays at its
+   own tempo × nudge. Every 32-frame block a follower's speed is set from both
+   local grid tempos (so dynamic grids are followed beat by beat), and its
+   beat (bar sync: place in the bar) is compared with the leader's: an error
+   over 1/32 beat jumps into phase (seek crossfade, never before the track's
+   start), a smaller one bends the speed by at most 1% (time constant 0.5 s).
+   While nudged, a follower matches tempo only and re-locks on release. A
+   stopped leader passes on its tempo, not its phase. Measured worst gaps:
+   128/125 over 64 bars 0.0005 ms; tempo change in the follower 0.043 ms, in
+   the leader 0.025 ms.
 4. **EQ**: 4-band asymmetric EQ with tapers. Sine-sweep tests: knobs at noon
    flat within ±0.1 dB; full boost +6 dB ±0.5 dB; mids full cut −30 dB ±1 dB;
    HI/LO full cut fall at 12 dB/oct ±1 dB past the turning point; silence in,
@@ -156,7 +168,9 @@ pub enum Control {
   underruns in a 60-minute soak on the maintainer's laptop; the callback uses
   under 25% of the buffer period (measured and logged).
 - Two synced constant-grid tracks stay within 2 ms of each other for
-  10 minutes (render test).
+  10 minutes (render test). Met 2026-10-21: 128/126 BPM, both decks
+  resampling, worst gap 0.022 ms
+  (`two_synced_constant_grids_stay_within_2_ms_for_10_minutes`).
 - EQ, filter and crossfader responses meet the tolerances in tasks 4–6.
 - All of the above except the soak test runs in `cargo test --workspace` with
   no audio device (CI has none).

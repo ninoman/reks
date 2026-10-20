@@ -10,6 +10,7 @@ use crate::control::Control;
 use crate::deck::Deck;
 use crate::error::{Error, Result};
 pub use crate::source::DeckSource;
+use crate::sync;
 
 /// Deck slots in the graph. The UI shows 2 or 4; idle decks cost nothing.
 pub const DECKS: usize = 4;
@@ -55,10 +56,13 @@ pub struct DeckState {
     pub bpm: Option<f64>,
     /// Beat number at the playhead (0 at the grid's first anchor).
     pub beat: Option<f64>,
-    /// Sync is on (it may not be locked: see the sync fields below).
+    /// Sync is on.
     pub sync: bool,
     /// Sync matches the downbeat too.
     pub sync_bar: bool,
+    /// Sync is following the leader (on, not the leader, and both decks
+    /// have a grid).
+    pub locked: bool,
     pub quantise: bool,
 }
 
@@ -79,6 +83,7 @@ impl Default for DeckState {
             beat: None,
             sync: false,
             sync_bar: false,
+            locked: false,
             quantise: false,
         }
     }
@@ -88,8 +93,11 @@ impl Default for DeckState {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct EngineState {
     pub decks: [DeckState; DECKS],
-    /// The sync leader, if any deck qualifies.
+    /// The sync leader: the chosen deck, else the loaded deck with a grid
+    /// that has been playing longest (kept while everything is stopped).
     pub leader: Option<u8>,
+    /// The leader was chosen with [`Control::Leader`].
+    pub leader_chosen: bool,
     pub volume: f32,
 }
 
@@ -141,6 +149,9 @@ pub struct Graph {
     decks: [Deck; DECKS],
     /// Chosen leader; `None` for automatic.
     leader: Option<usize>,
+    /// The automatic leader, kept while no deck plays.
+    auto_leader: Option<usize>,
+    engine_rate: f64,
     /// Counts play starts, for the automatic leader.
     clock: u64,
     master: Ramp,
@@ -157,6 +168,8 @@ impl Graph {
         Ok(Self {
             decks: decks.try_into().map_err(|_| Error::Resampler)?,
             leader: None,
+            auto_leader: None,
+            engine_rate: f64::from(sample_rate.max(1)),
             clock: 0,
             master: Ramp::new(volume_gain(1.0), sample_rate),
             volume: 1.0,
@@ -192,16 +205,75 @@ impl Graph {
     pub fn state(&self) -> EngineState {
         EngineState {
             decks: std::array::from_fn(|i| self.decks[i].state()),
-            leader: self.leader.map(|d| d as u8),
+            leader: self.current_leader().map(|d| d as u8),
+            leader_chosen: self.leader.is_some(),
             volume: self.volume,
         }
     }
 
-    /// Sets every deck's speed for the next block.
+    fn current_leader(&self) -> Option<usize> {
+        self.leader.or(self.auto_leader)
+    }
+
+    /// The automatic leader: the loaded deck with a grid that has been
+    /// playing longest; the previous one while nothing plays.
+    fn update_auto_leader(&mut self) {
+        let has_grid = |d: &Deck| d.src().is_some_and(|s| !s.beats().is_empty());
+        let playing = self
+            .decks
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.playing() && has_grid(d))
+            .min_by_key(|(_, d)| d.started)
+            .map(|(i, _)| i);
+        self.auto_leader = playing.or(self.auto_leader.filter(|&i| has_grid(&self.decks[i])));
+    }
+
+    /// Sets every deck's speed for the next block: the leader and unsynced
+    /// decks at their own speed, followers from [`sync::follow`].
     fn plan(&mut self) {
-        for d in &mut self.decks {
+        self.update_auto_leader();
+        let leader = self.current_leader();
+        let lead = leader.and_then(|i| {
+            let d = &mut self.decks[i];
             let speed = d.own_speed();
             d.set_speed(speed);
+            let src = d.src()?;
+            sync::Lead::new(src.beats(), d.position(), d.step(), d.playing())
+        });
+        for (i, d) in self.decks.iter_mut().enumerate() {
+            if Some(i) == leader {
+                d.locked = false;
+                continue;
+            }
+            let plan = match (&lead, d.sync, d.src()) {
+                (Some(lead), true, Some(src)) => sync::follow(
+                    lead,
+                    &sync::Follower {
+                        beats: src.beats(),
+                        position: d.position(),
+                        rate_ratio: d.rate_ratio(),
+                        playing: d.playing(),
+                        bar: d.sync_bar,
+                        nudge: d.nudge,
+                    },
+                    self.engine_rate,
+                ),
+                _ => None,
+            };
+            d.locked = plan.is_some();
+            match plan {
+                None => {
+                    let speed = d.own_speed();
+                    d.set_speed(speed);
+                }
+                Some(sync::Plan::Speed(speed)) => d.set_speed(speed),
+                Some(sync::Plan::Jump { to, speed }) => {
+                    let to = to.clamp(0.0, d.frames() as f64);
+                    d.jump(to);
+                    d.set_speed(speed);
+                }
+            }
         }
     }
 
@@ -567,9 +639,9 @@ mod tests {
         assert_eq!((d.tempo, d.nudge), (1.08, 1.0));
         assert!(d.sync && d.sync_bar && d.quantise);
         assert_eq!(st.decks[2].tempo, TEMPO_MAX);
-        assert_eq!(st.leader, Some(2));
+        assert_eq!((st.leader, st.leader_chosen), (Some(2), true));
         g.apply(Control::Leader { deck: Some(7) });
-        assert_eq!(g.state().leader, None);
+        assert_eq!((g.state().leader, g.state().leader_chosen), (None, false));
     }
 
     /// 120 BPM at 48 kHz (24,000 frames a beat) from frame 0, with hot cue
@@ -755,6 +827,98 @@ mod tests {
         let st = g.state().decks[0];
         assert!((st.position - 4_410).abs() <= 1, "{}", st.position);
         assert!((st.speed - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn the_leader_is_the_deck_playing_longest_unless_chosen() {
+        let mut g = Graph::new(RATE).unwrap();
+        for deck in 0..3 {
+            g.apply(Control::Load {
+                deck,
+                src: gridded(480_000),
+            });
+        }
+        g.apply(Control::Load {
+            deck: 3,
+            src: ramp_source(480_000),
+        });
+        assert_eq!(g.state().leader, None);
+        // Deck 3 has no grid, so it never leads.
+        for deck in [3, 2, 1] {
+            g.apply(Control::Play { deck });
+        }
+        render_frames(&mut g, 64);
+        assert_eq!(g.state().leader, Some(2));
+        g.apply(Control::Pause { deck: 2 });
+        render_frames(&mut g, RAMP * 2);
+        assert_eq!(g.state().leader, Some(1));
+        // With nothing playing, the last leader keeps the tempo.
+        g.apply(Control::Pause { deck: 1 });
+        render_frames(&mut g, RAMP * 2);
+        assert_eq!(g.state().leader, Some(1));
+        g.apply(Control::Leader { deck: Some(0) });
+        render_frames(&mut g, 64);
+        let st = g.state();
+        assert_eq!((st.leader, st.leader_chosen), (Some(0), true));
+        g.apply(Control::Leader { deck: None });
+        render_frames(&mut g, 64);
+        assert_eq!(g.state().leader, Some(1));
+    }
+
+    #[test]
+    fn sync_follows_the_leaders_tempo_and_needs_grids() {
+        let mut g = Graph::new(RATE).unwrap();
+        g.apply(Control::Load {
+            deck: 0,
+            src: gridded(480_000),
+        });
+        g.apply(Control::Tempo {
+            deck: 0,
+            ratio: 1.06,
+        });
+        g.apply(Control::Play { deck: 0 });
+        g.apply(Control::Load {
+            deck: 1,
+            src: gridded(480_000),
+        });
+        g.apply(Control::Sync {
+            deck: 1,
+            on: true,
+            bar: false,
+        });
+        render_frames(&mut g, 64);
+        // Paused follower: tempo matched, phase left alone.
+        let d = g.state().decks[1];
+        assert!(d.locked);
+        assert!((d.speed - 1.06).abs() < 1e-12);
+        assert_eq!(d.position, 0);
+        // The leader cannot follow; a deck without a grid cannot either.
+        g.apply(Control::Sync {
+            deck: 0,
+            on: true,
+            bar: false,
+        });
+        g.apply(Control::Load {
+            deck: 2,
+            src: ramp_source(480_000),
+        });
+        g.apply(Control::Sync {
+            deck: 2,
+            on: true,
+            bar: false,
+        });
+        render_frames(&mut g, 64);
+        let st = g.state();
+        assert!(!st.decks[0].locked && !st.decks[2].locked);
+        assert_eq!(st.decks[2].speed, 1.0);
+        // Sync off: back to the deck's own tempo.
+        g.apply(Control::Sync {
+            deck: 1,
+            on: false,
+            bar: false,
+        });
+        render_frames(&mut g, 64);
+        assert_eq!(g.state().decks[1].speed, 1.0);
     }
 
     #[test]
