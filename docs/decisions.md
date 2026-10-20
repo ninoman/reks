@@ -162,6 +162,17 @@ Date of decisions: 2026-10-18.
   rekordcrate API break (pin version); 0.3.0 can't represent cue type 1
   (point cues, see D8), so cue lists need a newer rekordcrate or our own
   encoding.
+- Finding (2026-10-20, Phase 3 task 7; status: proposed): rekordcrate
+  0.3.0 can't serialise our waveforms. Its waveform section structs keep the
+  `unknown` header words private (not constructible outside the crate), it
+  has no PWV6/PWV7/PWVC types (they parse as `Unknown`), and its PWV2 and
+  PWV5 bitfields disagree with djl-analysis and rekordbox's files (height in
+  the high nibble; red in the low bits). The waveform sections are therefore
+  written by hand in `reks-anlz::write` (big-endian, explicit offsets,
+  headers checked against rekordbox reference files), and rekordcrate stays
+  the independent parser: every section must parse and write back
+  byte-identical. Proposed: do the same for the remaining sections in task 9
+  unless a newer rekordcrate fixes this.
 
 ## D10. BPM/beatgrid analysis (Phase 3): Beat This! via the `beat-this` crate + a Rust port of Mixxx `BeatUtils` constant-grid logic
 

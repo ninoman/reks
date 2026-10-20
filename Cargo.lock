@@ -3636,6 +3636,9 @@ dependencies = [
 name = "reks-anlz"
 version = "0.1.0"
 dependencies = [
+ "binrw",
+ "rekordcrate",
+ "reks-analysis",
  "thiserror 2.0.21",
 ]
 
