@@ -3,7 +3,7 @@
 //! a person or rekordbox provided.
 //!
 //! The analyser itself and the queue live in `reks-analysis` (it depends on
-//! this crate, not the other way round). Columns: migration 0006.
+//! this crate, not the other way round). Columns: migration 0007.
 //!
 //! Precedence rules (docs/phases/phase-3.md, task 11):
 //! - `beatgrid` rows are replaced only when the track has no rows or all of

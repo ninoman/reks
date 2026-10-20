@@ -152,7 +152,7 @@ fn queue_analyses_everything_and_caches_it() {
         assert!(!d.track.row.needs_analysis);
         let entry = cache::entry_dir(&fx.lib.cache_dir(), id);
         assert!(entry.join("analysis.json").is_file());
-        assert!(entry.join("columns.bin").is_file());
+        assert!(entry.join("bands.bin").is_file());
     }
     // Nothing left to do.
     assert_eq!(q.enqueue_pending().unwrap(), 0);
@@ -340,4 +340,17 @@ fn missing_model_is_an_error() {
     )
     .unwrap_err();
     assert!(err.to_string().contains("missing"), "{err}");
+}
+
+#[test]
+fn a_running_track_is_not_queued_again() {
+    let fx = Fixture::new(2);
+    let q = fx.queue(1);
+    assert_eq!(q.enqueue_pending().unwrap(), 2);
+    wait_until("a running track", || q.status().unwrap().running == 1);
+    // Both are still pending in the library; one is running, one queued.
+    assert_eq!(q.enqueue_pending().unwrap(), 0);
+    assert!(q.wait_idle(LONG).unwrap());
+    assert_eq!(fx.analysed().len(), 2);
+    assert_eq!(q.status().unwrap().total, 2);
 }

@@ -1,10 +1,12 @@
 //! On-disk analysis cache (phase 3, "Analysis cache"):
-//! `<cache_dir>/analysis/<track_id>/{analysis.json, columns.bin}`.
+//! `<cache_dir>/analysis/<track_id>/{analysis.json, bands.bin}`.
 //!
 //! `analysis.json` holds everything but the waveform columns (beats, grid,
 //! key, confidences) plus the analyser version and the file's content hash;
-//! an entry is valid only when both match ([`load_valid`]). `columns.bin` is
-//! the [`WaveformColumns`] as raw bytes:
+//! an entry is valid only when both match ([`load_valid`]). `bands.bin` is
+//! the [`WaveformColumns`] as raw bytes (not `columns.bin`: that name belongs
+//! to the grid editor's columns cache, task 13, which has its own format;
+//! the two are to be merged into one file once both have landed):
 //!
 //! ```text
 //! b"RKWC"  u32 LE format (1)  u32 LE column count n
@@ -29,7 +31,7 @@ use crate::pipeline::{TrackAnalysis, ANALYSER_VERSION};
 use crate::waveform::WaveformColumns;
 
 const META_FILE: &str = "analysis.json";
-const COLUMNS_FILE: &str = "columns.bin";
+const COLUMNS_FILE: &str = "bands.bin";
 const COLUMNS_MAGIC: &[u8; 4] = b"RKWC";
 const COLUMNS_FORMAT: u32 = 1;
 
@@ -218,7 +220,7 @@ fn read(cache_dir: &Path, track: TrackId) -> Result<Option<(Meta, TrackAnalysis)
     };
     let columns = decode_columns(&bytes).ok_or_else(|| CacheError::Corrupt {
         path: cols_path.clone(),
-        reason: "bad columns.bin".into(),
+        reason: "bad bands.bin".into(),
     })?;
     if columns.len() != meta.columns {
         return Err(corrupt(format!(
@@ -349,7 +351,7 @@ mod tests {
         assert!(load_valid(dir.path(), 5, "h").is_none());
         write(dir.path(), 5, &a, "h").unwrap();
         assert!(entry_dir(dir.path(), 5).join("analysis.json").is_file());
-        assert!(entry_dir(dir.path(), 5).join("columns.bin").is_file());
+        assert!(entry_dir(dir.path(), 5).join("bands.bin").is_file());
         assert_eq!(load_valid(dir.path(), 5, "h"), Some(a.clone()));
         // Other contents: stale.
         assert!(load_valid(dir.path(), 5, "other").is_none());
@@ -385,7 +387,7 @@ mod tests {
     fn corrupt_entries_are_ignored() {
         let dir = tempfile::tempdir().unwrap();
         write(dir.path(), 1, &sample(), "h").unwrap();
-        let cols = entry_dir(dir.path(), 1).join("columns.bin");
+        let cols = entry_dir(dir.path(), 1).join("bands.bin");
         let mut bytes = fs::read(&cols).unwrap();
         bytes.pop();
         fs::write(&cols, &bytes).unwrap();

@@ -109,13 +109,14 @@ Encoding rules (from research §3; big-endian)
   and (145, 249, 500); we write the first until the meaning is known.
 - `.2EX` written only for `AnlzTarget::Cdj3000`-capable exports (harmless elsewhere).
 
-Analysis cache: `<cache_dir>/analysis/<track_id>/{analysis.json, columns.bin}`
+Analysis cache: `<cache_dir>/analysis/<track_id>/{analysis.json, bands.bin}`
 ([cache.rs](../../crates/reks-analysis/src/cache.rs): raw beats, grid, key,
-confidences as JSON; waveform columns as raw bytes). Valid only for the same
+confidences as JSON; waveform columns as raw bytes; the grid editor's
+`columns.bin` sits next to it, to be unified). Valid only for the same
 `ANALYSER_VERSION` and file content hash. The library DB keeps the grid in
 `beatgrid` (`source = 'analysis'`), key/BPM on the track row, and
 `analysis_version`, `analysis_hash`, `analysed_at`, `analysis_error`,
-`beat_confidence`, `key_confidence` on the track row (migration 0006).
+`beat_confidence`, `key_confidence` on the track row (migration 0007).
 Analysis never overwrites manual or rekordbox grids, or manual, tag or
 rekordbox keys (D10, "Queue").
 

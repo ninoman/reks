@@ -1,9 +1,11 @@
 //! Background analysis queue (phase 3 task 11).
 //!
-//! N workers (default: cores − 1) run on a dedicated rayon pool. Each worker
-//! is a long-lived loop with its own [`BeatTracker`], loaded on its first
-//! track. The beat model's own rayon work runs on the same pool, so the queue
-//! never uses more than N threads.
+//! N workers (default: cores − 1), each a plain thread with its own
+//! [`BeatTracker`] (loaded on its first track), run their analyses on one
+//! dedicated rayon pool of N threads through `install`, so the beat model's
+//! own rayon work never spreads past N cores. The worker loops are not rayon
+//! jobs themselves: a pool thread waiting inside the model's `join` may run
+//! any queued job, and a never-ending loop picked up there would hang it.
 //!
 //! Per track: hash the file; reuse the cache entry if it matches this
 //! analyser version and hash (unless the track was queued by
@@ -127,6 +129,8 @@ struct State {
     pending: VecDeque<Item>,
     /// Track ids in `pending`.
     queued: HashSet<TrackId>,
+    /// Track ids a worker has taken; not queued again unless forced.
+    running_ids: HashSet<TrackId>,
     running: usize,
     done: usize,
     failed: usize,
@@ -159,6 +163,8 @@ struct Shared {
     /// `wait_idle` waits here.
     idle: Condvar,
     sink: Sink,
+    /// Where the analyses run (see the module docs).
+    pool: rayon::ThreadPool,
 }
 
 impl Shared {
@@ -175,7 +181,6 @@ impl Shared {
 /// current track.
 pub struct AnalysisQueue {
     shared: Arc<Shared>,
-    _pool: rayon::ThreadPool,
 }
 
 impl std::fmt::Debug for AnalysisQueue {
@@ -202,7 +207,7 @@ impl AnalysisQueue {
         let workers = opts.workers.max(1);
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(workers)
-            .thread_name(|i| format!("reks-analysis-{i}"))
+            .thread_name(|i| format!("reks-analysis-pool-{i}"))
             .build()
             .map_err(|e| QueueError::Pool(e.to_string()))?;
         let shared = Arc::new(Shared {
@@ -212,16 +217,17 @@ impl AnalysisQueue {
             work: Condvar::new(),
             idle: Condvar::new(),
             sink: Box::new(sink),
+            pool,
         });
-        for _ in 0..workers {
+        for i in 0..workers {
             let shared = Arc::clone(&shared);
-            pool.spawn(move || worker(&shared));
+            std::thread::Builder::new()
+                .name(format!("reks-analysis-worker-{i}"))
+                .spawn(move || worker(&shared))
+                .map_err(|e| QueueError::Pool(e.to_string()))?;
         }
         tracing::info!(workers, "analysis queue started");
-        Ok(Self {
-            shared,
-            _pool: pool,
-        })
+        Ok(Self { shared })
     }
 
     /// Queues every track the library says needs analysis (new, changed, or
@@ -249,6 +255,10 @@ impl AnalysisQueue {
                     track_id: job.track_id,
                     force,
                 };
+                if !force && st.running_ids.contains(&job.track_id) {
+                    // Being analysed; its result is about to land.
+                    continue;
+                }
                 if st.queued.contains(&job.track_id) {
                     if force {
                         // Already waiting: move it to the front as a forced run.
@@ -388,6 +398,7 @@ fn worker(shared: &Shared) {
                 if !st.paused {
                     if let Some(item) = st.pending.pop_front() {
                         st.queued.remove(&item.track_id);
+                        st.running_ids.insert(item.track_id);
                         st.running += 1;
                         break (item, st.epoch);
                     }
@@ -406,6 +417,7 @@ fn worker(shared: &Shared) {
                 return;
             };
             st.running -= 1;
+            st.running_ids.remove(&item.track_id);
             let event = match outcome {
                 Outcome::Analysed { cached, stored } => {
                     st.done += 1;
@@ -481,7 +493,7 @@ fn run(shared: &Shared, tracker: &mut Option<BeatTracker>, item: Item, epoch: u6
                 return Outcome::Failed("beat tracker unavailable".into());
             };
             let started = Instant::now();
-            match analyse_file(t, &path) {
+            match shared.pool.install(|| analyse_file(t, &path)) {
                 Ok(a) => {
                     tracing::debug!(
                         track = id,

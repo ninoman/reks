@@ -1,4 +1,4 @@
--- Phase 3 task 11: background analysis queue. Spec: docs/phases/phase-3.md
+-- Phase 3 task 11: background analysis queue (0006 is the grid editor's grid_locked). Spec: docs/phases/phase-3.md
 -- ("Analysis cache") and reks-core/src/analysis.rs. The grid itself lives in
 -- `beatgrid` (source = 'analysis'); the key in track.key (key_source =
 -- 'analysis'). These columns say which analyser run produced them and for
