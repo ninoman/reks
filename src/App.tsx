@@ -3,7 +3,9 @@
  * playlist and Histories trees on the left (an open history session replaces
  * the toolbar, filters and table); toolbar, filter bar and track table in the
  * middle, with the track info panel sliding over the table's right edge when
- * its toolbar button is on; the transport bar along the bottom. Space plays
+ * its toolbar button is on; the mix panel (decks and mixer) under them when
+ * its header button is on, with its own shortcuts (`src/lib/mixKeys.ts`);
+ * the transport bar along the bottom. Space plays
  * and pauses wherever focus is, except in text fields, dialogs and menus;
  * Cmd/Ctrl+, opens Settings.
  * Settings load first and restore the window state (columns, panels, volume).
@@ -20,6 +22,7 @@ import { HistoryImportDialog } from "./components/HistoryImportDialog";
 import { HistoryTree } from "./components/HistoryTree";
 import { ImportWizard } from "./components/ImportWizard";
 import { LibraryToolbar } from "./components/LibraryToolbar";
+import { MixPanel } from "./components/mix/MixPanel";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
 import { SessionView } from "./components/SessionView";
@@ -33,6 +36,7 @@ import { keepsSpace } from "./lib/keys";
 import { useAnalysis } from "./store/analysis";
 import { useHistory } from "./store/history";
 import { useLibrary } from "./store/library";
+import { useMixShortcuts } from "./store/mixShortcuts";
 import { usePanels } from "./store/panels";
 import { usePlayer } from "./store/player";
 import { usePlaylists } from "./store/playlists";
@@ -47,6 +51,8 @@ export default function App() {
   const filterBarOpen = usePanels((s) => s.filterBarOpen);
   const infoOpen = usePanels((s) => s.infoOpen);
   const sessionOpen = useHistory((s) => s.openId !== null);
+  const mixOpen = usePanels((s) => s.mixOpen);
+  useMixShortcuts(mixOpen);
 
   useEffect(() => {
     // Defaults first so the table does not flash every column; settings may replace them.
@@ -127,6 +133,7 @@ export default function App() {
           )}
         </main>
       </div>
+      {mixOpen && <MixPanel />}
       <TransportBar />
       <DuplicateDialog />
       <DeleteDialog />

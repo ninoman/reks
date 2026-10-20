@@ -71,29 +71,32 @@ function leader(): number | null {
 function tick() {
   const lead = leader();
   const leadDeck = lead === null ? undefined : decks[lead];
+  const follows = (d: Deck, i: number) =>
+    d.view.sync && leadDeck !== undefined && lead !== i && d.grid && leadDeck.grid;
+  // Move every deck, then put followers in the leader's phase.
   decks.forEach((d, i) => {
     const v = d.view;
     if (!v.loaded) return;
-    const follows = v.sync && leadDeck !== undefined && lead !== i && d.grid && leadDeck.grid;
-    v.locked = follows;
-    v.speed = follows ? leadDeck.view.speed : v.tempo * v.nudge;
-    if (follows && v.playing && v.nudge === 1) {
-      // Jump into the leader's beat phase (bar phase with bar sync).
-      const lb = beatAt(leadDeck.view.positionMs);
-      const own = beatAt(v.positionMs);
-      const span = v.syncBar ? 4 : 1;
-      const frac = (x: number) => ((x % span) + span) % span;
-      let diff = frac(lb) - frac(own);
-      if (diff > span / 2) diff -= span;
-      if (diff < -span / 2) diff += span;
-      v.positionMs = msAtBeat(own + diff);
-    }
+    v.speed = follows(d, i) && leadDeck ? leadDeck.view.speed : v.tempo * v.nudge;
     if (v.playing) {
       v.positionMs += FRAME_MS * v.speed;
       if (v.positionMs >= v.durationMs) {
         v.positionMs = v.durationMs;
         v.playing = false;
       }
+    }
+  });
+  decks.forEach((d, i) => {
+    const v = d.view;
+    if (!v.loaded) return;
+    v.locked = follows(d, i);
+    if (v.locked && leadDeck !== undefined && v.playing && v.nudge === 1) {
+      // Jump into the leader's beat phase (bar phase with bar sync).
+      const span = v.syncBar ? 4 : 1;
+      const own = beatAt(v.positionMs);
+      const diff = beatAt(leadDeck.view.positionMs) - own;
+      const wrapped = diff - span * Math.round(diff / span);
+      v.positionMs = msAtBeat(own + wrapped);
     }
     v.bpm = d.grid ? GRID_BPM * v.speed : null;
     v.beat = d.grid ? beatAt(v.positionMs) : null;

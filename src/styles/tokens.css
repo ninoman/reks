@@ -114,6 +114,9 @@
   --color-grid-beat: rgb(235 235 240 / 38%);
   --color-grid-downbeat: var(--red-500);
   --color-grid-cursor: var(--indigo-500);
+  /* Deck markers on the same dark deck: cue point and hot cues. */
+  --color-deck-cue: var(--amber-500);
+  --color-deck-hotcue: var(--green-500);
 
   --color-track-pink: var(--rb-pink);
   --color-track-red: var(--rb-red);
@@ -223,6 +226,19 @@
   --sidebar-w: 240px;
   --sheet-w: 300px;
   --transport-h: 52px;
+
+  /* Mixer (phase 5): knobs, faders, deck waveforms, channel strips. */
+  --knob-sm: 22px;
+  --knob-md: 28px;
+  --fader-len: 84px;
+  --fader-w: 20px;
+  --fader-cap: 12px;
+  --deck-wave-h: 112px;
+  --deck-wave-h-compact: 44px;
+  --deck-overview-h: 14px;
+  --mixer-strip-w: 58px;
+  --mixer-row-h: 28px;
+  --mix-panel-max-h: 62vh;
 
   /* Layers. */
   --z-sticky: 1;

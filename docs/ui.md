@@ -50,7 +50,8 @@ filled controls) with `accent-fg` on it, `danger` (+ `-fg`), `success`,
 `warning`, `rating`, `focus-ring`, `overlay`, `waveform-*`, `track-*`
 (rekordbox colours: data, the same in both themes). The grid editor draws on
 its own dark deck in both themes: `deck`, `deck-fg`, `waveform-low/mid/high`
-(3-band), `grid-beat`, `grid-downbeat`, `grid-cursor`.
+(3-band), `grid-beat`, `grid-downbeat`, `grid-cursor`; the mixer's decks add
+`deck-cue` and `deck-hotcue`.
 
 The indigo `accent` stays scarce: primary buttons, the loaded track, the played
 waveform, focus rings, drop indicators. Selection and toggles that are on
@@ -133,6 +134,9 @@ menu items `--menu-item-h`.
 | `Card` | `variant`: subtle, surface; `divided` | – |
 | `Progress` | `size`: sm, md; native `<progress>` | native |
 | `Swatch` | `color` (track colour name) or `style`; `size`: xs, sm, md | – |
+| `Caption` | `tone`: muted, subtle, default; small upper-case label | – |
+| `Knob` | `size`: sm, md; `bipolar` (arc from the centre), `defaultValue` (double-click / Delete); drag up/down, arrows, Page Up/Down, Home/End | own (`role="slider"`; Radix has no knob) |
+| `Fader` | `orientation`: vertical, horizontal; `defaultValue` (double-click the cap) | Radix Slider |
 
 Menus, popovers, dialogs and tooltips portal to `<body>`; tests query
 `screen` / `document`, not the render container.
@@ -140,6 +144,40 @@ Menus, popovers, dialogs and tooltips portal to `<body>`; tests query
 Performance rule for the track table: rows and cells are plain `div`s with
 constant class strings; per-row state is `data-*` attributes styled with
 `data-[selected]:…`. No base component, Radix or `cn()` call per cell.
+
+## Mix panel (phase 5)
+
+[`src/components/mix/`](../src/components/mix/), opened with **Mix** in the
+app header, under the table. `MixPanel` is the only part that reads the store
+([`src/store/mix.ts`](../src/store/mix.ts)); `DeckStrip`, `DeckWaveform`,
+`MixerPanel`, `ChannelStrip`, `FilterUnit`, `MasterSection` and `SyncPhase`
+take props. The mixer follows the hardware: four channel strips (level, HI,
+MID 1, MID 2, LO, filter assign X/off/Y, cue, fader, crossfader assign) with
+one caption column, the master and cue section, then filter X, the crossfader
+and filter Y. Decks 1 and 3 sit left of it, 2 and 4 right; 2 decks by
+default, 4 with the toggle (shorter waveforms).
+
+- States: output off (start form: device, rate, buffer, cue routing), opening,
+  error (failed start, device lost), running. A deck is empty (how to load),
+  loading, failed or loaded; a track without a grid says sync needs one.
+- Waveforms draw on the dark `deck` like the grid editor: 8 s scrolling with
+  the playhead in the middle, beat lines, cue (`deck-cue`) and hot cues
+  (`deck-hotcue`); the overview under it is the keyboard seek slider.
+- Sync phase: a marker half a beat either side (two beats with bar sync),
+  green within 1/32 beat. The tempo fader is CDJ-style: faster towards the
+  bottom.
+- Load: the table's context menu ("Load to deck N", also in playlist views)
+  or drag a track onto a deck. Loading starts the output if it is off.
+- Shortcuts while the panel is open ([`src/lib/mixKeys.ts`](../src/lib/mixKeys.ts),
+  also under **Shortcuts** in the panel): A/S/D cue, play, sync deck 1 and
+  J/K/L deck 2 (Shift: decks 3 and 4), Q/W and U/I nudge while held, 1–4 and
+  7–0 hot cues A–D, Z/X/C crossfader. Space stays with the preview player.
+- The mixer is memoised away from the 60 Hz engine state; only the decks
+  re-render with it.
+- No meters yet: the engine reports none until phase 5 task 6.
+- Sizes: `--knob-*`, `--fader-*`, `--deck-wave-h*`, `--deck-overview-h`,
+  `--mixer-strip-w`, `--mixer-row-h`, `--mix-panel-max-h` (the panel scrolls
+  inside 62% of the window height).
 
 ## Adding a component or variant
 
