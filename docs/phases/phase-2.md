@@ -32,7 +32,7 @@ validated by reading the stick back with an independent parser.
 - Our own analysis (Phase 3). Tracks without rekordbox analysis are either
   skipped (default) or get baken's generated ANLZ (option, labelled
   approximate) until Phase 3 lands.
-- OneLibrary (Phase 4), Engine DJ (Phase 5).
+- OneLibrary (Phase 4), Engine DJ (Phase 6).
 - Writing `exportExt.pdb` My Tags, history, hot-cue banks, phrase (PSSI).
 - Importing play history and playlist dividers (Phase 2.5). This phase only
   makes sure no history is lost.

@@ -27,7 +27,7 @@ Engine DJ players.
   and Denon Engine DJ libraries.
 - Later still: a mix-prep tool, 2–4 beat-synced decks through a 4-channel mixer
   with EQ kills and filters, to try transitions while building playlists
-  ([`docs/phases/phase-6.md`](docs/phases/phase-6.md)).
+  ([`docs/phases/phase-5.md`](docs/phases/phase-5.md)).
 
 ## Status
 

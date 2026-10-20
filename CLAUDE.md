@@ -27,7 +27,7 @@ is the worst possible bug; correctness and conservative defaults beat features.
 - rekordbox legacy export: `baken-export` (MIT) behind our own adapter trait;
   `rekordcrate` (MPL-2.0) for read-back validation. Spec of record: Deep
   Symmetry `crate-digger` `.ksy` + djl-analysis docs.
-- Engine DJ export: own Rust writer (Phase 5). OneLibrary: own writer (Phase 4).
+- Engine DJ export: own Rust writer (Phase 6). OneLibrary: own writer (Phase 4).
 
 ## Licence rules (hard)
 
@@ -54,12 +54,12 @@ reks/
     reks-core/      library model, SQLite schema + migrations, scan/import, tags,
                     artwork, playlists, rekordbox XML import/export, services
     reks-audio/     Symphonia decode, resampling, overview waveform
-    reks-mix/       real-time cpal engine: decks, offline render (player now, mixer Phase 6)
+    reks-mix/       real-time cpal engine: decks, offline render (player now, mixer Phase 5)
     reks-analysis/  BPM/beatgrid, key, waveform generation (Phase 3)
     reks-anlz/      Pioneer ANLZ model + writer/reader helpers (Phase 2/3)
     reks-export-rb/ legacy rekordbox USB export (plan/dry-run/write/validate)
     reks-export-onelibrary/   Phase 4
-    reks-export-engine/       Phase 5
+    reks-export-engine/       Phase 6
     reks-cli/       thin CLI over the crates (headless testing, CI fixtures)
   src-tauri/      Tauri app: commands, state, events; no business logic here
   src/            React UI

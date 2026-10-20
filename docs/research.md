@@ -15,7 +15,7 @@ Contents
 6. Tauri 2 specifics
 7. rekordbox XML (`collection.xml`)
 8. Consolidated list of unverified items
-9. DJ mixer reference and real-time audio crates (Phase 6)
+9. DJ mixer reference and real-time audio crates (Phase 5)
 10. Play history and playlist dividers (Phases 2 and 2.5)
 11. File conversion (Phase 2.6)
 
@@ -522,8 +522,8 @@ hardware run, and the result recorded in `docs/decisions.md` or
     resolved against a real 6.8.6 export on 2026-10-19 (Phase 1 task 7). Still
     open: whether rekordbox imports `&#10;` and our stricter `Location`
     encoding, and the RGB of the pink/orange/yellow/purple track colours.
-13. Mixer (§9): Xone:92 Mk2 differences from the original; its filter slope
-    and LFO waveform; how the `rubberband` crate builds (bundled or system
+13. Mixer (§9): Xone:92 Mk2 differences from the original; its filter slope;
+    how the `rubberband` crate builds (bundled or system
     library); `rubato` 5.x API for a smoothly changing ratio.
 14. History and dividers (§10): PDB table 19 date layout; whether players
     append to a history across mounts and what they log as a play; volume
@@ -534,7 +534,7 @@ hardware run, and the result recorded in `docs/decisions.md` or
 
 ---
 
-## 9. DJ mixer reference and real-time audio crates (Phase 6)
+## 9. DJ mixer reference and real-time audio crates (Phase 5)
 
 Research date: 2026-10-19. Supports D21.
 

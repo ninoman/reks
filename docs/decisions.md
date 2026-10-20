@@ -81,7 +81,7 @@ Date of decisions: 2026-10-18.
 ## D5. Preview playback: our own `cpal` engine (`reks-mix`), decoding with Symphonia
 
 - Date: 2026-10-19 (maintainer's call; replaces rodio 0.23 from 2026-10-18).
-- Decision: the Phase 1 player is the first slice of the Phase 6 engine (D21):
+- Decision: the Phase 1 player is the first slice of the Phase 5 engine (D21):
   crate `reks-mix` on a raw `cpal` 0.18 stream, `rtrb` 0.4 queues for control,
   state and retired sources, an offline `render()` and an allocation guard
   test. One deck, play/pause/seek/volume. The output opens at 44.1 kHz when the
@@ -89,13 +89,13 @@ Date of decisions: 2026-10-18.
   resampler; on macOS this sets the device clock, as rekordbox does), else at
   the device's default rate (2026-10-19). Tracks are decoded whole to stereo
   `i16` in memory by `reks-audio` and resampled to the output rate at load with `rubato` 5 (FFT, off the audio thread). Sync, tempo, EQ,
-  filters and cue routing stay in Phase 6.
+  filters and cue routing stay in Phase 5.
 - Licence: cpal Apache-2.0; rtrb MIT/Apache-2.0; rubato MIT/Apache-2.0.
-- Rationale: Phase 6 replaces any rodio player, so building on rodio first is
+- Rationale: Phase 5 replaces any rodio player, so building on rodio first is
   throwaway work; the engine's real-time rules get tested in daily use before
   the mixer depends on them. Cost: we own resampling, device loss and the
   no-allocation rule that rodio would hide.
-- Rejected: rodio (removed by Phase 6 anyway; no per-sample control); kira
+- Rejected: rodio (removed by Phase 5 anyway; no per-sample control); kira
   (game-oriented); web-audio-api crate (niche); WebView audio (see D4).
 - Risks: Linux needs ALSA/Pulse/PipeWire client libs (standard); whole-track
   decode costs about 10 MB per minute at 44.1 kHz, so tracks over 60 minutes
@@ -393,7 +393,7 @@ Date of decisions: 2026-10-18.
   and checkpointed into one file (rekordbox leaves a `-wal`); UNVERIFIED on
   players.
 
-## D15. Engine DJ (Phase 5): own Rust writer targeting schema 3.0.2 (and 2.21.0), no FFI
+## D15. Engine DJ (Phase 6): own Rust writer targeting schema 3.0.2 (and 2.21.0), no FFI
 
 - Licence: rusqlite MIT, flate2 MIT/Apache. libdjinterop (LGPL-3.0) used as
   documentation only.
@@ -478,23 +478,27 @@ Date of decisions: 2026-10-18.
 - `TrackTable.tsx` turns off three a11y rules that don't fit its virtualised ARIA grid
   of divs; the reason is in `biome.jsonc`.
 
-## D21. Mix-prep mixer (Phase 6): 2–4 synced decks through a Xone:92-style mixer on our own cpal engine
+## D21. Mix-prep mixer (Phase 5): 2–4 synced decks through a Xone:92-style mixer on our own cpal engine
 
-- Date: 2026-10-19 (maintainer's call). Plan: [`phases/phase-6.md`](phases/phase-6.md).
+- Date: 2026-10-19 (maintainer's call). Plan: [`phases/phase-5.md`](phases/phase-5.md).
 - Decision: a preparation tool, not a performance app. While building a playlist,
   load 2–4 tracks on decks, beat-sync them from their grids, and try a transition
   or a techno layer through a model of the Allen & Heath Xone:92 music section:
-  4-band asymmetric EQ with HI/LO kill, two state-variable filters with LFOs,
+  4-band asymmetric EQ with HI/LO kill, two state-variable filters (no LFOs),
   X/Y crossfader with curve, headphone cue (R§9.1). New crate `reks-mix` owns a
   raw `cpal` stream with `rtrb` queues for control and state. Tempo is varispeed
   through `rubato` (already in the tree via `beat-this`, D10). The engine's
   first slice ships in Phase 1 as the preview player (D5), so one engine owns
   the audio device from the start.
-- Order: after Phase 5. It depends only on Phase 1 (imported grids, decode)
-  and Phase 3 (waveform columns, grid editor); moving it earlier needs a new
-  decision.
+- Order: Phase 5, after OneLibrary (Phase 4) and before Engine DJ export (now
+  Phase 6). It depends only on Phase 1 (imported grids, decode) and Phase 3
+  (waveform columns, grid editor). Changed 2026-10-20 (maintainer's call): it
+  was Phase 6, after Engine DJ.
+- Filter LFOs: dropped 2026-10-20 (maintainer's call). The Xone:92 has one
+  per filter (R§9.1); reks models the filters without them. Adding them back
+  needs a new decision.
 - Licence: cpal Apache-2.0; rtrb MIT/Apache-2.0; rubato MIT/Apache-2.0 (R§9.2).
-  EQ, filter, LFO and fader laws are our own code from published designs;
+  EQ, filter and fader laws are our own code from published designs;
   Mixxx (GPL-2.0-or-later) may be ported with attribution, as in D10.
 - Rationale: auditioning a transition while preparing a set is library work
   (rekordbox ships it in the same app), it runs on the grids we already import,
@@ -541,7 +545,7 @@ Date of decisions: 2026-10-18.
 
 - Date: 2026-10-19 (maintainer's call). Safeguard: Phase 2 tasks 12–13. Import
   from legacy sticks (H1): Phase 2.5. OneLibrary (H2): Phase 4 task 11. Engine
-  (H3): Phase 5 task 11.
+  (H3): Phase 6 task 11.
 - Decision:
   - Play count and last played are derived: a frozen baseline copied from
     rekordbox's `collection.xml` values, plus the entries of included sessions.

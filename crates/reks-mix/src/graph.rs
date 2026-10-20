@@ -6,10 +6,10 @@
 use std::f32::consts::FRAC_PI_2;
 use std::sync::Arc;
 
-/// Decks in the graph. Phase 6 raises this to 4.
+/// Decks in the graph. Phase 5 raises this to 4.
 pub const DECKS: usize = 1;
 
-/// Length of every gain ramp: play, pause, load, volume (phase-6.md: ≥ 5 ms).
+/// Length of every gain ramp: play, pause, load, volume (phase-5.md: ≥ 5 ms).
 pub const RAMP_MS: u32 = 5;
 
 /// Equal-power crossfade from the old to the new position on a seek while
