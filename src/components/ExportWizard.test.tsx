@@ -301,10 +301,7 @@ describe("ExportWizard", () => {
     const guard = {
       title: "2 sessions on this stick are not in your library",
       text: "Exporting erases them from the stick.",
-      sessions: [
-        "HISTORY 001: 2 plays",
-        "HISTORY 002: 1 play",
-      ],
+      sessions: ["HISTORY 001: 2 plays", "HISTORY 002: 1 play"],
       chosen: false,
       canImport: true,
     };

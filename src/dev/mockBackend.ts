@@ -781,10 +781,7 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
           guard: {
             title: "2 sessions on this stick are not in your library",
             text: "Exporting erases them from the stick. Import now adds them to your library's history before writing; Back up and continue keeps a copy you can import later; Continue and discard erases them. Imported sessions count in play counts; you can mark any of them as practice in History later.",
-            sessions: [
-              "HISTORY 001: 19 plays",
-              "HISTORY 002: 12 plays",
-            ],
+            sessions: ["HISTORY 001: 19 plays", "HISTORY 002: 12 plays"],
             chosen: opts.historyChosen,
             canImport: true,
           },

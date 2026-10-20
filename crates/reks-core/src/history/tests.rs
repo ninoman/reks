@@ -1015,9 +1015,15 @@ fn sessions_list_detail_and_track_sessions() {
         ],
     );
     let plan = scan(&h, &lib).unwrap();
-    let ids = import(&plan, &ImportChoices::default(), &lib)
-        .unwrap()
-        .created;
+    // Every session imports counted; mark the undated one practice.
+    let mut choices = ImportChoices::default();
+    let undated = plan
+        .sessions
+        .iter()
+        .find(|p| p.source_name == "HISTORY 003")
+        .unwrap();
+    choices.excluded.insert(undated.fingerprint.clone(), true);
+    let ids = import(&plan, &choices, &lib).unwrap().created;
 
     // Newest first, undated last.
     let all = lib.sessions(&SessionQuery::default()).unwrap();
@@ -1029,7 +1035,7 @@ fn sessions_list_detail_and_track_sessions() {
         (3, 1, false)
     );
     assert!(all[2].excluded);
-    assert_eq!(all[2].excluded_reason.as_deref(), Some("pre_baseline"));
+    assert_eq!(all[2].excluded_reason.as_deref(), Some("user"));
     let practice = lib
         .sessions(&SessionQuery {
             excluded: Some(true),
