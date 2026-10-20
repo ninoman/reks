@@ -58,6 +58,8 @@ quick-xml = "0.42"
 rayon = "1.12"
 # PDB/ANLZ reader for history and read-back validation (MPL-2.0, D7). Pinned: young crate.
 rekordcrate = { version = "=0.3.0", default-features = false }
+# Process CPU time for the parity harness (reks-cli, unix only). MIT/Apache-2.0; already in the tree.
+libc = "0.2"
 # FFT for key detection (D12). MIT/Apache-2.0.
 rustfft = "6.4"
 rusqlite = { version = "0.40", features = ["bundled"] }

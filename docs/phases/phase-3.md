@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–3, 5–7, 9, 11 and 13 done). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–7, 9, 11, 12 (measurement) and 13 done; tuning open). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -286,11 +286,24 @@ rekordbox keys (D10, "Queue").
     Tests: [tests/queue.rs](../../crates/reks-analysis/tests/queue.rs)
     (completion, pause, cancel, cache reuse and invalidation, manual data,
     failures). Throughput on real tracks is unmeasured (task 12).
-12. **Parity measurement**: run the whole imported library through reks;
+12. [x] **Parity measurement**: run the whole imported library through reks;
     report BPM agreement (|Δ| ≤ 0.05), downbeat agreement (first beat within
     30 ms modulo bar), key agreement (exact, relative, neighbour), with
     per-genre breakdown; publish `docs/analysis-parity.md` with the method.
     Then tune and re-measure.
+    Done (measurement): `reks parity run|report`
+    ([parity.rs](../../crates/reks-cli/src/parity.rs); XML and output dir
+    from flags or `REKS_PARITY_XML`/`REKS_PARITY_OUT`, resumable, per-track
+    data stays outside the repo). Baseline on the 1,762 one-anchor tracks:
+    BPM 85.1%, downbeat 70.9%, key exact 62.3%, exact/relative 63.8%, all
+    below the bar; throughput 25× real time per core (met). Multi-anchor
+    grids (hand edits) are reported, not scored. Method, numbers and tuning
+    plan: [analysis-parity.md](../analysis-parity.md).
+12a. **Tuning** (plan in [analysis-parity.md](../analysis-parity.md#tuning-plan),
+    priority BPM → downbeat → key): fixed grid first (`min_coverage` ≈ 0.5,
+    dynamic only on a real tempo change; what-if 92.8% BPM), kick-led beat
+    snapping and grid fit, phrase/kick-based bar placement, libKeyFinder C++
+    check then mode decision. Re-measure after each step.
 13. [x] **Grid editor UI**: waveform view from our columns (zoomable, 150/s),
     beat markers, set-downbeat-here, nudge ±1 ms/±10 ms, tap tempo,
     double/halve, lock grid; edits write `beatgrid` rows with `source =

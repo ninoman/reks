@@ -3689,6 +3689,8 @@ name = "reks-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libc",
+ "rayon",
  "reks-analysis",
  "reks-audio",
  "reks-core",

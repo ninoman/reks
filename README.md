@@ -48,6 +48,7 @@ Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
 | [`docs/stick-profiles.md`](docs/stick-profiles.md) | Stick profiles and adopting foreign sticks (spec, D27) |
 | [`docs/research.md`](docs/research.md) | Evidence and sources behind the decisions |
 | [`docs/research/`](docs/research/) | Raw research notes per topic |
+| [`docs/analysis-parity.md`](docs/analysis-parity.md) | reks analysis vs rekordbox on the maintainer's library: method, numbers, tuning plan |
 | [`docs/hw-test-log.md`](docs/hw-test-log.md) | Real-player test results |
 | [`docs/ui.md`](docs/ui.md) | UI design system: tokens, size scale, components |
 | [`fixtures/README.md`](fixtures/README.md) | Test fixtures: generated audio signal, ffmpeg commands, sample rekordbox XML |

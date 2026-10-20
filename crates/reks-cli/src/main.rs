@@ -26,11 +26,14 @@
 //!                               dry run of converting tracks (flags: see `convert.rs`)
 //! reks convert apply <plan flags> [--yes]
 //!                               dry run, then with --yes convert and update the library
+//! reks parity run|report [--xml <collection.xml>] [--out <dir>] [...]
+//!                               analysis parity vs rekordbox (flags: see `parity.rs`)
 //! ```
 
 mod adopt;
 mod convert;
 mod history;
+mod parity;
 mod rb;
 
 use std::io::BufWriter;
@@ -75,6 +78,7 @@ fn main() -> anyhow::Result<()> {
         [cmd, rest @ ..] if cmd == "convert" => convert::run(rest),
         [cmd, rest @ ..] if cmd == "history" => history::run(rest),
         [cmd, rest @ ..] if cmd == "adopt" => adopt::run(rest),
+        [cmd, rest @ ..] if cmd == "parity" => parity::run(rest),
         _ => bail!(
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
              | columns <audio> <out.bin> \
@@ -82,7 +86,8 @@ fn main() -> anyhow::Result<()> {
              | rb plan|export|validate <stick> ... | rb history <stick> [--json] \
              | history scan|import <stick|backup> --library <library.sqlite> ... \
              | adopt scan <stick> --library <library.sqlite> [--json] \
-             | convert plan|apply --library <library.sqlite> ...]"
+             | convert plan|apply --library <library.sqlite> ... \
+             | parity run|report [--xml <collection.xml>] [--out <dir>] ...]"
         ),
     }
 }
