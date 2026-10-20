@@ -2,6 +2,8 @@
 //!
 //! Scaffold only (Phase 1 task 1). See `docs/phases/` for what lands here.
 
+pub mod waveform;
+
 /// Crate version, from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
