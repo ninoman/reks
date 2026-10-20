@@ -7,6 +7,7 @@ pub mod apply;
 pub mod audiocheck;
 pub mod device;
 pub mod devices;
+pub mod diff;
 pub mod divider;
 pub mod dryrun;
 pub mod history;

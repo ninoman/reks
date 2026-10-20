@@ -110,6 +110,23 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
                 None => Ok(()),
             }
         }
+        [cmd, ours, theirs, flags @ ..] if cmd == "diff" => {
+            let json = match flags {
+                [] => false,
+                [f] if f == "--json" => true,
+                _ => bail!("usage: reks rb diff <ours-stick> <reference-stick> [--json]"),
+            };
+            let report = reks_export_rb::diff::diff(Path::new(ours), Path::new(theirs))?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                print!("{report}");
+            }
+            if !report.is_same() {
+                bail!("the sticks differ");
+            }
+            Ok(())
+        }
         _ => bail!("{USAGE}"),
     }
 }

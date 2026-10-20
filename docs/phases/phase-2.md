@@ -306,7 +306,7 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    baken (fixture audio, generated analysis), validate it clean, then
    delete an ANLZ or audio file, corrupt PPTH, empty PQTZ, clear a track
    row's presence bit, and change plan order/tree/cues. Byte-diff
-   (`reks-cli rb diff`) left for task 11, with the rekordbox reference export.
+   (`reks-cli rb diff`) is task 11's `reks rb diff`.
 9. [x] **Export orchestration**: `apply` = pre-flight (free space, device still
    mounted, no rekordbox running? warn), history backup (task 12), writer,
    fsync, validate, export manifest (task 13), report;
@@ -404,7 +404,22 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
       reads the stick back (read-only); non-zero exit on findings. Needs the
       export's flags (`--missing-analysis` above all). `Finding` implements
       `Display` for this and the UI.
-    - [ ] `rb diff` (needs the rekordbox reference export, task 8).
+    - [x] `reks rb diff <ours-stick> <reference-stick> [--json]`: structural
+      diff in [diff.rs](../../crates/reks-export-rb/src/diff.rs), non-zero exit
+      unless identical. Compares `export.pdb` tables and row counts, track rows
+      matched on `file_path` field by field (crate-digger offsets from the raw
+      row, artist/album/genre/key/label/colour/artwork ids resolved to names,
+      the row id left out), the playlist tree, sibling order and entries, and
+      per matched track the `.DAT`/`.EXT`/`.2EX` (presence, `PPTH`, section
+      tags, lengths and counts: `PQTZ` beats, cues, waveform entries), plus a
+      byte summary of every `PIONEER/` file (ANLZ paired by track, the rest by
+      path; `exportExt.pdb` only bytes). Reference:
+      [ref-rb6-demo](../../fixtures/rekordbox/ref-rb6-demo/README.md)
+      (rekordbox 6, from rekordcrate's test data, now a stick root). Tests:
+      reference vs itself and baken stick vs itself are empty, baken stick vs
+      reference reports differences, a copy with one title byte changed and
+      one `.EXT` removed reports exactly those two. Found: baken 4.6.1 writes
+      no `exportExt.pdb` (rekordbox 6 does).
 12. **History safeguard**: `StickHistory` in the planner; volume serial from
     the OS (`diskutil` on macOS, `GetVolumeInformationW` on Windows, `blkid`
     UUID on Linux; UNVERIFIED, R§8 item 14); `backups` with hash check at the

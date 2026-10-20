@@ -603,7 +603,7 @@ fn walk_history(bytes: &[u8], mut f: impl FnMut(&Row)) -> Result<(), String> {
 /// `types` in an `export.pdb`, in header and page-chain order. Walks each
 /// table's page chain itself, bounded by the file size and with a cycle
 /// check, because a player- or tool-damaged file must not hang us.
-fn walk_pages(
+pub(crate) fn walk_pages(
     bytes: &[u8],
     types: &[PageType],
     mut f: impl FnMut(&Page, &[u8]),
