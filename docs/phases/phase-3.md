@@ -97,8 +97,9 @@ Encoding rules (from research §3; big-endian)
   energy < 10 kHz, bytes 0–1 = whiteness placeholder (copy behaviour from a
   reference until understood).
 - PWV6 (1200) / PWV7 (150/s): 3 bytes per column in order mid, high, low
-  after per-band gain/gamma calibration; PWVC: copy the constant observed in
-  reference files (UNVERIFIED semantics).
+  after per-band gain/gamma calibration; PWVC: three u16, UNVERIFIED
+  semantics. Not a constant: the two reference tracks hold (91, 138, 396)
+  and (145, 249, 500); we write the first until the meaning is known.
 - `.2EX` written only for `AnlzTarget::Cdj3000`-capable exports (harmless elsewhere).
 
 Analysis cache: `app_cache_dir/analysis/<track_id>/{analysis.json, columns.bin}`;
@@ -131,11 +132,25 @@ stores the grid, key, confidence and `analysis_version` on the track row
    on `rustfft`; tests: synthetic chord fixtures for all 24 keys; CI job
    that, when `libkeyfinder` is installed, compares against the C++ output
    on fixtures (must match ≥ 95%).
-6. **Waveform columns**: 3 band filters (start: 4th-order Bessel at 600 Hz
+6. [x] **Waveform columns**: 3 band filters (start: 4th-order Bessel at 600 Hz
    and 4 kHz as in Mixxx) + per-column peak at 150 columns/s; mono height;
    streaming over PCM; tests on sine sweeps (band bytes track frequency).
-7. **Pioneer encoders**: PWAV/PWV2/PWV3/PWV4/PWV5/PWV6/PWV7 from columns;
+   Done: [waveform.rs](../../crates/reks-analysis/src/waveform.rs).
+   `WaveformAnalyzer` takes interleaved f32 chunks of any size (mono mix),
+   `WaveformColumns` has ⌈frames × 150 / rate⌉ columns (partial last column
+   counts). Filters are designed from the Bessel prototype (bilinear,
+   pre-warped); mid = HP 600 Hz ∘ LP 4 kHz, not Mixxx's band-pass transform.
+   Tests: sines per band, exponential sweep, odd durations, chunked = one-shot.
+7. [x] **Pioneer encoders**: PWAV/PWV2/PWV3/PWV4/PWV5/PWV6/PWV7 from columns;
    unit tests on bit packing; round-trip through rekordcrate parse.
+   Done: [waveform.rs](../../crates/reks-anlz/src/waveform.rs) (`Waveforms`
+   lives in `reks-anlz`, plus `pwvc`; `Waveforms::{dat,ext,ex2}_sections`)
+   and [write.rs](../../crates/reks-anlz/src/write.rs) (hand-written
+   big-endian section framing, see the D9 finding). Scales come from
+   `WaveformCalibration`; `PLACEHOLDER_CALIBRATION` is a first guess from
+   two reference tracks for task 8 to fit. Section headers match rekordcrate's
+   rekordbox 6 reference files byte for byte; every section parses with
+   rekordcrate and writes back byte-identical.
 8. **Calibration against rekordbox**: for 50 rekordbox-analysed tracks, load
    rekordbox's `.EXT/.2EX` from the local cache, fit per-band gain/gamma and
    the whiteness heuristic to minimise column error; store constants in

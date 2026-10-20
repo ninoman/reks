@@ -10,4 +10,9 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+reks-analysis = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+binrw = { workspace = true }
+rekordcrate = { workspace = true }

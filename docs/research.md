@@ -219,6 +219,18 @@ reference (rekordcrate ships a frequency-sweep fixture). Mixxx uses 4th-order
 Bessel filters at 600 Hz / 4 kHz for its own waveform. rekordcrate 0.3.0
 reads and writes all these sections from Rust.
 
+Observed 2026-10-20 in rekordcrate 0.3.0's test data (rekordbox 6 export,
+`data/complete_export/demo_tracks/PIONEER/USBANLZ`, two tracks): PWAV/PWV2
+header word is 0x00010000 (docs say 0x00100000); PWV3/PWV7 0x00960000;
+PWV5 0x00960305; PWV4 0; PWV6 has no such word (`len_header` 0x14); PWVC
+`len_header` 0x0E with one zero u16, then three u16 that differ per track
+(91/138/396, 145/249/500). Leading silence in PWV3 is 0xE0. Value ranges:
+PWAV height ≤ 24, PWV3 ≤ 31, PWV4 bytes 2–5 ≤ ~120, PWV6 ≤ ~43, PWV7 ≤ 127.
+Correction to the line above: rekordcrate 0.3.0 has no PWV6/PWV7/PWVC
+types, can't construct its waveform structs from outside the crate (private
+fields), and its PWV2/PWV5 bitfields disagree with the layout above (D9
+finding).
+
 Sources: `docs/research/raw-3-analysis-anlz.md`. Key ones:
 https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/anlz.html ·
 https://raw.githubusercontent.com/Deep-Symmetry/crate-digger/main/src/main/kaitai/rekordbox_anlz.ksy ·
