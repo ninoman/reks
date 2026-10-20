@@ -2,7 +2,7 @@
 //! [`render`] of the same graph.
 //!
 //! Phase 1 ships one deck as the preview player (docs/decisions.md D5); the
-//! mixer is Phase 6 (D21, `docs/phases/phase-6.md`).
+//! mixer is Phase 5 (D21, `docs/phases/phase-5.md`).
 
 pub mod engine;
 pub mod error;

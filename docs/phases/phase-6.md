@@ -1,181 +1,197 @@
-# Phase 6 — Mix-prep mixer (decks, beat sync, Xone:92-style mixer)
+# Phase 6 — Engine DJ export
 
-Status: not started; scheduled after Phase 5 (D21). Depends on: Phase 1
-(library, decode, imported grids) and Phase 3 (waveform columns, grid editor).
-Read `docs/decisions.md` D5, D10, D21 and `docs/research.md` §9 first.
+Status: not started; scheduled after the mixer (Phase 5, D21). Depends on:
+Phase 2 (export planner, FAT32/exFAT layout,
+dry-run, stale cleanup) and Phase 3 (own beatgrid/key/waveform data). Read
+`docs/decisions.md` §Engine DJ and `docs/research.md` §5 first.
 
 ## Goal
 
-While building a playlist, the DJ loads 2–4 library tracks onto decks, syncs
-them by beatgrid, and tries a transition or a techno layer through a mixer that
-behaves like the music section of an Allen & Heath Xone:92, on headphones and
-speakers. It is a preparation tool. Nothing here is meant for playing a gig.
+The same planned export (tracks + playlists + grids + cues + loops) can be
+written as a Denon/inMusic Engine DJ library (`Engine Library/Database2/m.db`)
+so one stick plays on Engine OS players (PRIME 4/4+/G2, SC6000/SC5000, SC
+LIVE, PRIME GO, Mixstream) as well as on Pioneer players. Audio files are
+shared: Engine paths point at the same `/Contents/...` files written in Phase 2.
+
+## What we know (summary; sources in research.md)
+
+- Engine DJ Desktop 5.1.0 / Engine OS 5.0.4 are current (Sept 2026). Schema
+  version is stored in `Information(schemaVersionMajor/Minor/Patch)`; mapping
+  (from libdjinterop): 2.21.0 = Engine 3.1–3.4; 2.21.1/2.21.2 = 4.0.x;
+  3.0.0 = 4.1–4.2; 3.0.1 = 4.3.x; 3.0.2 = 4.5/5.0.x (latest known). Whether
+  5.1 bumped the schema is **UNVERIFIED**.
+- Engine OS 4.1+ migrates any inserted drive forward to a 4.0.1+-only format;
+  players refuse databases from a *newer* schema ("is from a newer version of
+  Engine"). So: target the **oldest schema the user's players accept**, and
+  let the player migrate up.
+- Tables (v3 schema): `Information`, `Track`, `PerformanceData` (blobs:
+  `trackData`, `overviewWaveFormData`, `beatData`, `quickCues`, `loops`),
+  `Playlist` (linked list via `nextListId`, `parentListId`), `PlaylistEntity`
+  (linked list via `nextEntityId`), `AlbumArt`, plus views/triggers captured
+  from a real DB. 3.0.2 adds `Track.albumArtSourceHash`.
+- Blob encoding: `trackData`, `beatData`, `quickCues`, `overviewWaveFormData`
+  are zlib with a 4-byte big-endian uncompressed-length prefix (Qt
+  `qCompress`); `loops` is uncompressed little-endian. Beat grid markers:
+  `{sampleOffset f64, beatNumber i64, beatsToNext i32, unknown i32}`; first
+  marker conventionally at beat −4 and last at N+1. Cues: 8 slots, label,
+  sample offset (−1 unset), ARGB colour; big-endian doubles. Overview
+  waveform: N, N, samplesPerPoint, N×(low,mid,high) u8, 3-byte max.
+- Key enum 0–23 (0 = C major, 1 = A minor, alternating around the circle of
+  fifths). `Track.path` is relative to the `Engine Library` folder (e.g.
+  `../Contents/Artist/Album/file.mp3`).
+- Players analyse unanalysed tracks on load, so the overview waveform can be
+  omitted, but grids/cues/loops must be written or they will be lost.
+- Official third-party guidance: never change the schema, never write while
+  Engine DJ is open, bind by `(originDatabaseUuid, originId)`.
+- Engine OS drives: FAT32 or exFAT with MBR; NTFS unsupported.
+- Open-source references: libdjinterop (C++, LGPL-3.0, 0.27.1, 21 schemas,
+  write support, used by Mixxx), rb2engine (Python, MIT, 3.0.1/3.0.2, own
+  writer, no waveforms), PenBridge (Swift, MIT, own writer with waveforms),
+  endjine (Rust, MPL-2.0, experimental). Decision: **own Rust writer**, no FFI.
 
 ## Scope
 
-- `reks-mix` crate: real-time engine on a raw `cpal` stream, decks, sync, mixer
-  DSP, and an offline `render()` that runs the same graph without a device.
-  The Phase 1 preview player already runs on this engine (D5).
-- Decks (2 shown, 4 on demand): load from the track table or a playlist,
-  play/pause, CDJ-style cue (set and return), jump to the track's hot cues, seek
-  on the waveform, tempo fader (±8/±16/±50%), pitch-bend nudge, quantise.
-- Sync: one leader deck (first playing, or chosen). SYNC on a deck matches the
-  leader's tempo and beat phase from `beatgrid` rows; bar sync also matches the
-  downbeat. Varispeed: pitch follows tempo.
-- Mixer, 4 channels, modelled on the Xone:92 music channels (R§9.1):
-  - LEVEL trim (20 dB range); 4-band asymmetric EQ: HI shelf above 2.5 kHz,
-    MID 1 bell at 2 kHz, MID 2 bell at 350 Hz, LO shelf below 250 Hz; +6 dB
-    max boost; HI and LO fully cut become 12 dB/oct low-pass/high-pass (kill);
-    mids cut to −30 dB; Q narrow on boost, wide on cut.
-  - FILTER assign (X / off / Y), XFADE assign (X / off = direct / Y), CUE,
-    channel fader.
-  - Two state-variable filters, X and Y: FREQ 30 Hz–20 kHz, HP/BP/LP in any
-    combination, RESONANCE mild to wild, ON. Each has an LFO with ON, DEPTH,
-    TAP and ×2, plus sync to the leader deck's BPM (our addition). VCF TO
-    XFADER (crossfader sweeps the cutoff) and LINK (Y follows X's FREQ).
-  - Crossfader with curve: progressive with a 4 dB centre dip, through to a
-    near-instant cut.
-  - Master level; channel and master meters; a safety limiter on master and
-    cue, always on (the hardware has none; headphones make it necessary).
-- Headphone cue: per-channel CUE, pre-EQ by default with a POST EQ switch,
-  cue/mix balance, cue level, split cue. Master on outputs 1/2 and cue on 3/4
-  when the device has 4 or more outputs; otherwise split mono (L cue, R
-  master) or no cue.
-- UI: mixer panel laid out like the hardware (channel strips, filter units on
-  either side of the crossfader), 2 or 4 deck strips with scrolling waveforms
-  and beat markers, keyboard shortcuts. No "Xone" or "Allen & Heath" in UI strings.
+- `reks-export-engine` crate: DDL + triggers per target schema (3.0.2 and
+  2.21.0 initially), blob codecs with round-trip tests, writer from the
+  export plan, reader for validation.
+- Export planner integration: target "Engine DJ (schema X)" with a device
+  picker that maps player/OS version → schema.
+- Shared-stick layout: `Engine Library/` next to `PIONEER/` and `Contents/`.
 
 ## Non-goals
 
-- Live performance: MIDI controller mapping, recording the mix, booth/aux
-  outputs, effects other than the filters, DVS, streaming services.
-- Key lock in the first cut (task 10 evaluates it).
-- Master and cue on two separate audio devices (clock drift). Windows ASIO.
-- Editing grids or cues from a deck (grid editor is Phase 3 task 13).
-- Analogue sound emulation. The target is the documented response:
-  frequencies, slopes, ranges, curves.
-- Saving mixer state or transitions in the library DB.
+- Importing Engine libraries into reks (maybe later).
+- Writing history (`hm.db`). We read it (task 11) and never delete it.
+- Streaming DBs, Smartlists, crates (gone in 2.x+; folders become playlist
+  hierarchy).
+- Album art hashing exactly like Engine (`AlbumArt.hash` algorithm unknown);
+  we write art with our own hash and accept that Engine may re-hash.
+- Engine OS 1.x schemas (`m.db` + `p.db`).
 
 ## Data structures and interfaces
 
 ```rust
-// reks-mix
-pub struct EngineConfig { pub device: Option<String>, pub sample_rate: u32, pub buffer_frames: u32,
-                          pub cue: CueRouting }
-pub enum CueRouting { Outputs { master: [u16; 2], cue: [u16; 2] }, SplitMono, Off }
+pub enum EngineSchema { V2_21_0, V3_0_2 }           // extend as verified
+pub struct EngineTarget { pub schema: EngineSchema, pub write_overview_waveform: bool }
 
-pub struct DeckSource {            // built off the audio thread by the app layer
-    pub pcm: Arc<[i16]>,           // interleaved stereo at the file's rate, ~10 MB per minute
-    pub sample_rate: u32,
-    pub grid: Vec<GridAnchor>,     // from `beatgrid` rows, positions in source samples
-    pub hot_cues: Vec<(u8, i64)>,  // slot, source sample
+pub struct EngineWriter<'a> { plan: &'a ExportPlan, target: EngineTarget }
+impl EngineWriter<'_> {
+    pub fn write(&self, usb_root: &Path, progress: impl Fn(Progress)) -> Result<WriteReport>;
 }
 
-impl Engine {
-    pub fn start(cfg: EngineConfig) -> Result<Engine>;
-    pub fn send(&self, c: Control) -> Result<()>;      // never blocks; Err when the queue is full
-    pub fn poll_state(&self) -> Option<EngineState>;   // playheads, meters, sync phase; ~60 Hz
+pub mod blobs {
+    pub struct TrackData { sample_rate: f64, samples: i64, key: i32, loud_low: f64, loud_mid: f64, loud_high: f64 }
+    pub struct BeatGridMarker { sample_offset: f64, beat_number: i64, beats_to_next: i32, unknown: i32 }
+    pub struct BeatData { sample_rate: f64, samples: f64, is_set: bool, default_grid: Vec<BeatGridMarker>, adjusted_grid: Vec<BeatGridMarker> }
+    pub struct QuickCue { label: String, sample_offset: f64 /* -1 unset */, argb: [u8;4] }
+    pub struct QuickCues { cues: [QuickCue; 8], adjusted_main_cue: f64, is_main_cue_adjusted: bool, default_main_cue: f64 }
+    pub struct Loop { label: String, start: f64, end: f64, start_set: bool, end_set: bool, argb: [u8;4] }
+    pub struct OverviewWaveform { samples_per_point: f64, points: Vec<[u8;3]>, max: [u8;3] }
+    pub fn qcompress(bytes: &[u8]) -> Vec<u8>; pub fn quncompress(bytes: &[u8]) -> Result<Vec<u8>>;
+    // encode/decode for each struct, with byte-exact round-trip tests against libdjinterop fixtures
 }
-pub fn render(graph: &mut Graph, out: &mut [f32]);     // same graph, no device; deterministic
 
-pub enum Control {
-    Load { deck: u8, src: Arc<DeckSource> }, Play { deck: u8 }, Pause { deck: u8 },
-    Cue { deck: u8 }, Seek { deck: u8, sample: i64 }, HotCue { deck: u8, slot: u8 },
-    Tempo { deck: u8, ratio: f64 }, Nudge { deck: u8, ratio: f64 },
-    Sync { deck: u8, on: bool, bar: bool }, Leader { deck: u8 },
-    Channel { ch: u8, param: ChannelParam, value: f32 },   // trim, eq_*, fader, filter/xfade assign, cue
-    Filter { unit: FilterUnit, param: FilterParam, value: f32 },
-    Crossfader { pos: f32, curve: f32 },
-    Master { param: MasterParam, value: f32 },
-}
+pub fn engine_key(key: &reks_core::Key) -> i32;   // 0..23 mapping, tested against libdjinterop musical_key.hpp
 ```
 
-- Control values are 0..=1 like a knob; `reks-mix::taper` maps each to dB, Hz
-  or a curve, with a test per taper. Every parameter is smoothed (≥ 5 ms ramp).
-  Seek, cue and hot-cue jumps are instant with a short equal-power crossfade
-  from the old position (`SEEK_XFADE_MS`, Phase 1 player).
-  Filter-type and assign switches crossfade, so they don't click (the hardware does).
-- Whole tracks are decoded to memory by `reks-audio` before `Load`, so seeks and
-  sync corrections never wait on the decoder. Four 6-minute decks use about 250 MB.
-- The audio thread never allocates, locks or does I/O. Debug builds fail a
-  test if the callback allocates.
+Mapping from the export plan
+- `Track`: `path` = `../` + plan-relative audio path with `/`; `filename`,
+  `length` (s), `bpm` (int), `bpmAnalyzed` (f64 from grid), `key`, `rating`
+  (0–100 in steps of 20), metadata strings, `fileType`, `fileBytes`,
+  `isAnalyzed=1` when we write beatData, `isBeatGridLocked=1`,
+  `originDatabaseUuid` = our library UUID, `originTrackId` = our track id,
+  `dateAdded`/`dateCreated` as Engine expects (verify format from reference).
+- `PerformanceData`: `trackData` (sample rate, samples, key, loudness 0.0 =
+  no rescale), `beatData` (both grids identical from our grid; markers from
+  reks beatgrid anchors converted to sample offsets), `quickCues` (hot cues
+  A–H → 1–8; colour from reks cue colour or Engine default pad colours),
+  `loops` (reks loops; up to 8), `overviewWaveFormData` from Phase 3's
+  3-band data downsampled to N points (optional).
+- `Playlist`/`PlaylistEntity`: folders and playlists as a tree with linked-list
+  ordering; `isPersisted=1`, `isExplicitlyExported=1`; `databaseUuid` = ours.
+- `Information`: `uuid` (new per stick), schema version of the target.
 
 ## Tasks
 
-1. **Engine skeleton**: done in Phase 1 task 11 (D5): `reks-mix` crate, cpal
-   stream with device selection, `rtrb` control/state queues, `render()`,
-   allocation guard, one deck. Left for this phase: rate and buffer-size
-   selection, more than one deck, and the `Control`/`EngineState` variants below.
-2. **Deck**: `DeckSource` loading, play/pause/cue/seek/hot cue, varispeed with
-   `rubato`, nudge, quantise. Tests: at ratio 1.0 the render equals the decode
-   sample for sample; at 1.05 click spacing is 1/1.05 of the original within 1 sample.
-3. **Sync**: leader, tempo match, beat and bar phase, continuous phase
-   correction on dynamic grids. Tests: 128 and 125 BPM click fixtures synced
-   keep onsets within 1 ms for 64 bars; a tempo-change fixture stays within 2 ms
-   across the change.
-4. **EQ**: 4-band asymmetric EQ with tapers. Sine-sweep tests: knobs at noon
-   flat within ±0.1 dB; full boost +6 dB ±0.5 dB; mids full cut −30 dB ±1 dB;
-   HI/LO full cut fall at 12 dB/oct ±1 dB past the turning point; silence in,
-   silence out (no NaN or denormals).
-5. **Filters and LFOs**: two state-variable filters (trapezoidal SVF from the
-   published papers, our own code), mode combinations, resonance taper, LFO
-   with tap/×2/leader sync, VCF TO XFADER, LINK. Tests: −3 dB at the set
-   cutoff for LP and HP at minimum resonance; stable at maximum resonance across
-   30 Hz–20 kHz at 44.1, 48 and 96 kHz.
-6. **Channels, crossfader, master**: trim, fader taper, X/off/Y assign,
-   crossfader curve law, master level, meters, limiter. Tests: crossfader gain
-   at 0, 0.5 and 1 for both curve extremes (−4 dB at centre on progressive);
-   limiter ceiling holds with resonance at maximum.
-7. **Cue system**: cue bus, pre/post EQ, cue/mix balance, split cue, routing.
-   Test: each routing mode puts the expected signal on each output channel.
-8. **Tauri commands and IPC**: thin `mix_*` commands, typed wrappers in
-   `src/lib/ipc.ts`, engine state on a `Channel`, waveform columns as `ArrayBuffer`.
-9. **UI**: mixer panel, 2/4-deck layout, scrolling waveforms with beat markers
-   and sync phase, "load to deck" from the track table and playlists, shortcuts.
-10. **Key lock evaluation**: listen to `timestretch`, `signalsmith-stretch` and
-    `rubberband` at ±6% on three techno tracks and one vocal track; record the
-    choice in D21; add it as a per-deck toggle, or record why not.
-11. **Listening checklist** below, run and logged.
+1. **Reference capture**: install Engine DJ Desktop (free) and export a 5-track
+   playlist to a stick at the current version and, if available, at 3.4
+   (schema 2.21.0). Store `m.db` (metadata only) and `.schema` dumps in
+   `fixtures/engine/ref-<schema>/`.
+2. **DDL module**: embed the captured DDL (tables, indexes, views, triggers)
+   per schema; `create_empty(schema)` test with schema diff = empty.
+3. **Blob codecs**: implement `qcompress`/`quncompress` (`flate2`), all five
+   blob structs; byte-exact round-trip tests against blobs extracted from the
+   reference DB and against libdjinterop's documented examples.
+4. **Track + PerformanceData writer**: from plan; unit tests comparing to the
+   reference rows (ignoring ids/uuids/timestamps).
+5. **Playlist writer**: linked-list ordering; tests for empty, nested, and
+   reordered cases; verify with the `PlaylistPath`-style view if present.
+6. **Album art**: write `AlbumArt` rows and files per reference; UNVERIFIED hash
+   algorithm → use sha1-based 28-char URL-safe base64 and test whether Engine
+   accepts/rewrites it (hardware task).
+7. **Writer orchestration**: build DB in temp, `PRAGMA integrity_check`,
+   fsync, copy to `Engine Library/Database2/m.db`; never write while an
+   Engine DJ process is running (check process list; warn).
+8. **Reader/validator**: open our DB, decode all blobs, cross-check track count
+   and file existence; CLI `reks-cli engine verify <stick>`.
+9. **Planner + UI**: Engine target with schema picker and "also write Pioneer"
+   combined mode; dry-run lists the DB and any stale `Engine Library` files
+   (never `hm.db` or other DBs we don't write, task 11).
+10. **Hardware test**: checklist below on an Engine OS player (borrow a PRIME
+    GO or SC LIVE; also test Engine DJ Desktop reading the stick).
+11. **History (H3, D23)**: read `Engine Library/Database2/hm.db` into Phase 2.5
+    sessions with `source = 'engine'`; the writer and stale cleanup never
+    delete or overwrite `hm.db`; the Phase 2.5 export guard covers it.
+    Location, schema and whether players write it on the stick come from a
+    reference stick played on an Engine player (UNVERIFIED, R§5). Test: the
+    reference `hm.db` imports; an export leaves its hash unchanged.
 
 ## Acceptance criteria
 
-- 4 decks, both filters and all EQs at 48 kHz with 256-frame buffers: no
-  underruns in a 60-minute soak on the maintainer's laptop; the callback uses
-  under 25% of the buffer period (measured and logged).
-- Two synced constant-grid tracks stay within 2 ms of each other for
-  10 minutes (render test).
-- EQ, filter and crossfader responses meet the tolerances in tasks 4–6.
-- All of the above except the soak test runs in `cargo test --workspace` with
-  no audio device (CI has none).
+- `m.db` written by reks opens in Engine DJ Desktop (current) without a
+  migration error, and tracks/playlists/grids/cues/loops match the plan.
+- Byte-exact blob round-trips for every blob in the reference DB.
+- On a real Engine OS player: stick recognised, playlists in order, tracks load
+  with our beatgrid and cues, player-side analysis is not triggered for tracks
+  we analysed (`isAnalyzed=1`), or if it is, our grid/cues survive.
+- Combined stick works on both a CDJ and an Engine player with one copy of
+  each audio file.
 
-## Listening checklist
+## Tests
 
-Record machine, OS, audio device, date and outcome in a "Mixer" table in
-`docs/hw-test-log.md`.
+- Codec round-trips (reference blobs, synthetic edge cases: 0 cues, 8 cues,
+  non-ASCII labels, loops without end).
+- Key mapping table test (24 keys both directions, Camelot cross-check).
+- Schema diff tests per target.
+- Linked-list integrity test: every `nextListId`/`nextEntityId` chain is
+  acyclic and covers all rows exactly once.
+- Path tests: `../Contents/...` relative form, `/` separators, NFC.
 
-1. Two techno tracks at 128 and 126 BPM, synced and layered for 5 minutes on
-   speakers: no audible drift or flanging.
-2. Four decks layered (kick from one, hats from another with LO killed, etc.):
-   no dropouts while moving every control.
-3. LO kill removes the kick; HI kill leaves the body; mid cut is deep, not total.
-4. Filter X LP on channel 1, filter Y HP on channel 2, LINK on: sweeping FREQ
-   swaps lows and highs smoothly.
-5. Maximum resonance with the LFO synced to the leader: the limiter catches
-   peaks, nothing harsh on headphones.
-6. 4-output interface: master on 1/2, cue on 3/4. Laptop output: split cue on
-   the correct sides.
-7. Unplug the device while playing: the engine stops cleanly and reports it;
-   reconnect or switch device without restarting the app.
-8. One rekordbox-imported grid and one reks-analysed grid both sync.
+## Manual Engine test checklist
+
+1. Fresh exFAT (MBR) stick; export combined Pioneer + Engine.
+2. Insert into Engine OS player: library detected, no "newer version" error;
+   note whether the player migrates and how long it takes.
+3. Browse playlists (order, nesting), search by artist/title.
+4. Load 3 tracks: BPM/key display, grid alignment at bar 1 and at 3 minutes,
+   hot cues 1–8 with colours, loops, overview waveform present.
+5. Insert into Engine DJ Desktop: library reads, no repair prompt.
+6. Insert into a CDJ: legacy library still works (shared audio files).
+7. Play 2 tracks on the Engine player; on the computer note whether `hm.db`
+   exists on the stick and what `reks-cli history scan` reads; re-export and
+   confirm `hm.db` is unchanged.
+8. Record Engine OS version, player, and results in `docs/hw-test-log.md`.
 
 ## Risks
 
-- **Real-time discipline**: one allocation or lock in the callback can drop
-  out. Mitigation: allocation guard, offline render tests, soak test.
-- **Sync depends on the grid**: a wrong grid makes sync drift or sit off-beat.
-  Mitigation: Phase 3 grid editor first; show sync phase on the deck.
-- **Model fidelity**: figures come from the original Xone:92 user guide; the
-  Mk2 may differ (UNVERIFIED). The filter slope and LFO waveform are not
-  documented (UNVERIFIED); we use a 2-pole SVF and a sine/triangle LFO.
-- **Scope creep** towards a performance app (loops, MIDI, recording). Each
-  needs its own decision (D21).
+- **Schema churn** (21 versions since 2017; 4.1 moved blobs to a new table).
+  Mitigation: schema-tagged DDL fixtures; refuse unknown targets; add a new
+  schema only after capturing a reference.
+- **Player migrates the stick** into a newer-only format, breaking older
+  players the user also owns. Mitigation: document; offer separate sticks.
+- **Unknown fields** (`membershipReference`, `albumArt.hash`, loudness units).
+  Mitigation: copy reference values; keep notes in decisions.md.
+- **Waveform mismatch**: our overview waveform scaling vs Engine's. Mitigation:
+  make it optional; players regenerate.
+- **Writing while Engine DJ is open** corrupts; we only write to removable
+  media, but warn if Engine DJ is running.
