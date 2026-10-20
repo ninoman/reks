@@ -1,14 +1,10 @@
-//! reks OneLibrary (exportLibrary.db) export (Phase 4)
+//! reks OneLibrary (`exportLibrary.db`) export (Phase 4, D14).
 //!
-//! Scaffold only (Phase 1 task 1). See `docs/phases/` for what lands here.
+//! The database is SQLCipher-encrypted with a key supplied at runtime by the
+//! user (setting or `REKS_ONELIBRARY_KEY`); this crate never stores it.
 
-/// Crate version, from Cargo metadata.
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub mod cipher;
+pub mod error;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn version_is_set() {
-        assert!(!super::VERSION.is_empty());
-    }
-}
+pub use cipher::CipherProfile;
+pub use error::{Error, Result};

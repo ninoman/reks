@@ -35,7 +35,8 @@ Date of decisions: 2026-10-18.
 - Rejected: `tauri-plugin-sql` (sqlx-based, JS-facing, no Rust query API);
   `sqlx` (async overhead without benefit here); `diesel` (heavier, used by
   rbox/rekordcrate's OneLibrary branches but not needed for our own schema).
-- Risks: none significant.
+- Risks: none significant. Since Phase 4 the bundled SQLite is SQLCipher's
+  (D14), one version on all OSes still.
 
 ## D4. Audio decoding: Symphonia 0.6
 
@@ -325,8 +326,23 @@ Date of decisions: 2026-10-18.
 
 ## D14. OneLibrary (Phase 4): own writer, experimental flag, no key in the repository
 
-- Licence: rusqlite `bundled-sqlcipher` (SQLCipher BSD-style) or own page
-  cipher via RustCrypto (MIT/Apache); decide in Phase 4 task 2.
+- Licence: rusqlite `bundled-sqlcipher` (SQLCipher 4.14.0, BSD-3-Clause,
+  bundled in `libsqlite3-sys` 0.38). Crypto: CommonCrypto on Apple targets;
+  elsewhere `bundled-sqlcipher-vendored-openssl` builds OpenSSL 3 from source
+  (`openssl-src`, MIT/Apache-2.0; OpenSSL 3 is Apache-2.0, GPLv3-compatible),
+  because Windows has no system libcrypto and a vendored one avoids a
+  distro-specific `libcrypto.so` in the Linux bundles. Chosen 2026-10-20
+  (Phase 4 task 2) over an own page cipher: SQLCipher is the format's own
+  implementation.
+- SQLCipher next to the library DB: Cargo unifies features, so any build that
+  includes `reks-export-onelibrary` (the app, `cargo test --workspace`) links
+  SQLCipher's SQLite (3.51.3) instead of the plain bundled one (3.53.2) for
+  every crate, `reks-core` included. A connection without `PRAGMA key` is a
+  plain, unencrypted SQLite database, so the library file format is
+  unchanged. Checked 2026-10-20: all `reks-core` tests (migrations, WAL, FTS5)
+  pass on the SQLCipher build. Consequence: the app's SQLite version is
+  SQLCipher's, which trails upstream by a release or two; do not use SQLite
+  features newer than SQLCipher's bundled version in `reks-core`.
 - Rationale and policy: see `docs/phases/phase-4.md`. The key is user- or
   environment-supplied at runtime, mirroring libdjinterop and Mixxx, because
   the legal position is untested and the format is in flux (R§2). Feature off
