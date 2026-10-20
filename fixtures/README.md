@@ -69,6 +69,14 @@ and the 128 BPM click (8 beats) on both channels. Both are written by `hound`,
 which uses the EXTENSIBLE header above 16 bits: the form older CDJs reject
 (docs/research.md §4). That is why the converter has its own writers.
 
+## `keyfinder/driver.cpp` — libKeyFinder reference driver
+
+A 40-line C++ program that runs the C++ libKeyFinder on raw f32 PCM and
+prints its `key_t`. The ignored test `matches_cpp_libkeyfinder` in
+`crates/reks-analysis/tests/key.rs` feeds it the generated chord fixtures
+and compares with our port (D12); build line in the file header, CI in
+`.github/workflows/keyfinder-parity.yml` (manual). UNVERIFIED: not yet run.
+
 ## `rekordbox/collection-small.xml`
 
 A hand-written rekordbox `collection.xml` (rekordbox XML format, `PRODUCT`

@@ -53,6 +53,8 @@ percent-encoding = "2.3"
 quick-xml = "0.42"
 # PDB/ANLZ reader for history and read-back validation (MPL-2.0, D7). Pinned: young crate.
 rekordcrate = { version = "=0.3.0", default-features = false }
+# FFT for key detection (D12). MIT/Apache-2.0.
+rustfft = "6.4"
 rusqlite = { version = "0.40", features = ["bundled"] }
 rubato = "5"
 rtrb = "0.4"
@@ -104,4 +106,8 @@ opt-level = 3
 opt-level = 3
 
 [profile.dev.package.reks-mix]
+opt-level = 3
+
+# Key detection instantiates rustfft's generic FFTs here (key tests: 17 s → 0.3 s).
+[profile.dev.package.reks-analysis]
 opt-level = 3
