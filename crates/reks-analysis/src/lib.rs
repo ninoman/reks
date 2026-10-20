@@ -1,6 +1,12 @@
 //! reks analysis: BPM/beatgrid, key and waveform generation (Phase 3)
 //!
-//! Scaffold only (Phase 1 task 1). See `docs/phases/` for what lands here.
+//! See `docs/phases/phase-3.md`.
+
+pub mod beats;
+pub mod input;
+
+pub use beats::{Beat, BeatError, BeatList, BeatTracker, ModelPaths};
+pub use input::{AnalysisInput, InputError, ANALYSIS_RATE, BEAT_RATE};
 
 /// Crate version, from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

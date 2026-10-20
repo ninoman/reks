@@ -38,6 +38,9 @@ anyhow = "1"
 baken-export = "=4.6.1"
 # baken-export's own core (CancelToken, Progress in its export API); same pin.
 baken-core = "=4.6.1"
+# Beat/downbeat tracker (D10), rten backend only. Exact pin: young crate, and
+# its output depends on the bundled model files in crates/reks-analysis/models.
+beat-this = { version = "=1.1.0", default-features = false }
 # Must match the binrw version rekordcrate uses (its row types implement binrw traits).
 binrw = "0.14"
 blake3 = "1.8"

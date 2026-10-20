@@ -1,6 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
-Status: not started. Depends on: Phase 1 (library, decode) and Phase 2
+Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
+tasks 1–2 done). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -40,8 +41,12 @@ the repo before tuning begins.
 ## Data structures and interfaces
 
 ```rust
-pub struct AnalysisInput { pub pcm: Pcm /* f32 interleaved */, pub sample_rate: u32, pub channels: u8,
-                           pub decoder_delay_samples: u32 /* from Symphonia, see D4 */ }
+// Built (tasks 1–2); see crates/reks-analysis/src/{input,beats}.rs.
+pub struct AnalysisInput { pub mono: Vec<f32> /* 44.1 kHz */, pub beat_mono: Vec<f32> /* 22.05 kHz */,
+                           pub source_rate: u32, pub source_channels: u16,
+                           pub encoder_delay: Option<u32>, pub encoder_padding: Option<u32> /* source frames, already trimmed, see D4 */ }
+pub struct BeatList { pub sample_rate: u32 /* 44_100 */, pub beats: Vec<Beat>, pub confidence: f32 }
+pub struct Beat { pub sample: i64, pub downbeat: bool }   // BeatList::beats_s()/downbeats_s() give f64 seconds
 
 pub struct BeatAnalysis {
     pub beats_s: Vec<f64>,          // raw beat times from the tracker
@@ -108,14 +113,36 @@ stores the grid, key, confidence and `analysis_version` on the track row
 
 ## Tasks
 
-1. **Decode + conditioning**: `AnalysisInput` from `reks-audio::decode_f32`;
+1. [x] **Decode + conditioning**: `AnalysisInput` from `reks-audio::decode_f32`;
    mono mix; resample to 22.05 kHz for the beat model (`rubato`, which
    `beat-this` already pulls in) and keep 44.1 kHz for key/waveform; capture
-   Symphonia's reported delay/padding; tests on fixtures.
-2. **Beat/downbeat tracking**: integrate `beat-this` (rten backend, small
+   Symphonia's reported delay/padding; tests on fixtures. Done:
+   [`decode_f32`](../../crates/reks-audio/src/float.rs) (interleaved or
+   mono-mixed `f32`, delay/padding from the container) and
+   [input.rs](../../crates/reks-analysis/src/input.rs) (`AnalysisInput`;
+   both rates resampled from the source through `StreamResampler`, so sample
+   0 is the same instant; all positions in the crate are samples at
+   `ANALYSIS_RATE` = 44.1 kHz). Finding for task 4: MP3 (LAME) reports a
+   1105-frame delay and gapless decode trims it, but Symphonia 0.6 reports no
+   delay for ffmpeg's AAC (priming sits in the MP4 edit list, not applied), so
+   that `.m4a` decodes 1024 frames (23 ms) late; pinned by a test.
+2. [x] **Beat/downbeat tracking**: integrate `beat-this` (rten backend, small
    model bundled as a Tauri resource; full model optional download); wrap in
    `spawn_blocking`; test: 128 BPM click fixture → beats within 10 ms, 4/4
-   downbeats correct.
+   downbeats correct. Done: [beats.rs](../../crates/reks-analysis/src/beats.rs)
+   (`BeatTracker::load`/`track`, blocking, `Send`; one tracker per worker).
+   Model files and provenance in
+   [models/](../../crates/reks-analysis/models/README.md), bundled via
+   `src-tauri/tauri.conf.json`; full-model download is a TODO in
+   `ModelPaths::small`. The model's peaks sat 5–15 ms after the transient on
+   both fixtures, so each beat is refined (activation parabola, then snapped to
+   the sharpest high-frequency energy rise within ±30 ms; initial constants,
+   to be checked in task 12). Results: click fixture (WAV, MP3) max 0.2 ms; a
+   generated 4/4 drum pattern
+   ([bars.rs](../../fixtures/gen/src/bars.rs)) max 2.3 ms with every downbeat
+   right; silence gives no beats. The plain click fixture has no accents, so
+   its downbeats are not tested. Tests in
+   [tests/beats.rs](../../crates/reks-analysis/tests/beats.rs).
 3. **Grid builder**: port Mixxx `BeatUtils::retrieveConstRegions` /
    `makeConstBpm` / `roundBpmWithinRange` with attribution; choose the
    downbeat nearest the start of the longest constant region as beat 1;

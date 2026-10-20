@@ -50,6 +50,10 @@ Date of decisions: 2026-10-18.
 - Risks: no HE-AAC (rare in DJ libraries; show "unsupported codec"); MP3
   decoder-delay convention must be calibrated against rekordbox cue positions
   (R§3, R§4). Record the measured offset in D13.
+- Finding 2026-10-20 (phase 3 task 1): gapless decode trims the delay Symphonia
+  reports (LAME MP3: 1105 frames), but Symphonia 0.6 reports none for ffmpeg
+  AAC in MP4 (priming in the edit list), so such files decode 1024 frames late.
+  Input to phase 3 task 4; `reks-analysis` keeps the reported values.
 
 ## D5. Preview playback: our own `cpal` engine (`reks-mix`), decoding with Symphonia
 
@@ -175,6 +179,11 @@ Date of decisions: 2026-10-18.
   optional second opinion if disagreement is high); aubio (stale bindings);
   Essentia (AGPL, heavy build); madmom/BeatNet (non-commercial model licences,
   Python); `stratum-dsp` (unproven).
+- Integration (2026-10-20): `beat-this` 1.1.0 pinned, no default features;
+  small model + mel front end committed under `crates/reks-analysis/models/`
+  (MIT, provenance and checksums there) and bundled as Tauri resources; full
+  model is a later optional download. Beats are snapped to the nearest
+  transient (the model ran 5–15 ms late on generated fixtures).
 - Risks: ~real-time CPU cost on long tracks (batch with rayon, show
   progress); model provenance note in Beat This! README; agreement with
   rekordbox unknown until Phase 3 measures it on the maintainer's library.
