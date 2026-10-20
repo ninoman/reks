@@ -26,8 +26,8 @@ use serde::{Deserialize, Serialize};
 pub mod read;
 
 pub use read::{
-    read_play_history, DatesStatus, HistoryReadOptions, HistorySource, PdbEntry, PdbSession,
-    PdbTrack, PlayHistory,
+    read_play_history, read_stick_tracks, DatesStatus, HistoryReadOptions, HistorySource, PdbEntry,
+    PdbSession, PdbTrack, PlayHistory,
 };
 
 /// Folder under the app data dir that holds stick backups.
@@ -671,14 +671,14 @@ fn walk_table(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::time::SystemTime;
 
     use super::*;
 
     use crate::testutil::*;
 
-    pub(super) fn stick(files: &[(&str, &[u8])]) -> tempfile::TempDir {
+    pub(crate) fn stick(files: &[(&str, &[u8])]) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
         for (rel, bytes) in files {
             let path = join_rel(dir.path(), rel);
@@ -689,7 +689,7 @@ mod tests {
     }
 
     /// Every file under `root` with its bytes and mtime.
-    pub(super) fn snapshot(root: &Path) -> Vec<(PathBuf, Vec<u8>, SystemTime)> {
+    pub(crate) fn snapshot(root: &Path) -> Vec<(PathBuf, Vec<u8>, SystemTime)> {
         let mut out = Vec::new();
         let mut stack = vec![root.to_path_buf()];
         while let Some(dir) = stack.pop() {

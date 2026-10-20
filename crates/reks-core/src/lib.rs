@@ -2,6 +2,7 @@
 //!
 //! See `docs/phases/` for what lands here and when.
 
+pub mod adopt;
 pub mod artwork;
 pub mod convert;
 pub mod db;

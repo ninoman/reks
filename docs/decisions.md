@@ -524,7 +524,9 @@ Date of decisions: 2026-10-18.
   auto-sync on mount (v1); writing any reks file to the stick.
 - Risks: volume serial per OS and after reformat (R§8 item 14); player limits
   on playlist count/depth (UNVERIFIED); whether baken keeps `/Contents` paths
-  so unchanged tracks are not re-copied; rekordcrate reading a rekordbox 7 stick.
+  so unchanged tracks are not re-copied; rekordcrate reading a rekordbox 7 stick
+  (S4: reads rekordcrate's own real exports cleanly, 2026-10-20; rekordbox 7
+  UNVERIFIED until a reference fixture exists).
 
 ## D28. Stick identity: the OS's own volume ID, no file on the stick
 

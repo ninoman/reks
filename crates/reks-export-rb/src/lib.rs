@@ -2,6 +2,7 @@
 //!
 //! Phase 2 lands here piece by piece; see `docs/phases/phase-2.md`.
 
+pub mod adopt;
 pub mod apply;
 pub mod audiocheck;
 pub mod device;

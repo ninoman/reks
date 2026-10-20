@@ -26,6 +26,7 @@ const profileStatus = vi.mocked(ipc.profileStatus);
 const { useDevices } = await import("../store/devices");
 const { useProfiles } = await import("../store/profiles");
 const { useExportWizard } = await import("../store/exportWizard");
+const { useAdopt } = await import("../store/adopt");
 const { DeviceList, DevicesDialog } = await import("./DevicesDialog");
 
 const stick = (over: Partial<DeviceInfo> = {}): DeviceInfo => ({
@@ -260,6 +261,37 @@ describe("stick profiles", () => {
     );
     expect(await screen.findByText("Stick: Club")).toBeTruthy();
     expect(await screen.findByRole("radio", { name: "Club" })).toBeTruthy();
+  });
+
+  it("offers Adopt for a foreign stick: saves it, then opens the adopt dry run", async () => {
+    devicesList.mockResolvedValue([stick({ label: "GIGS" })]);
+    profileIdentify.mockResolvedValue({
+      type: "foreign",
+      volumeSerial: "AAAA-0001",
+      suggestedName: "GIGS",
+      prompt: "This stick is new to reks.",
+      note: "It holds a rekordbox library that reks did not write.",
+    });
+    profileCreate.mockResolvedValue(device({ id: 4, name: "GIGS", label: "GIGS" }));
+    render(<DevicesDialog />);
+    fireEvent.click(await screen.findByRole("button", { name: "Adopt…" }));
+    await waitFor(() => expect(useAdopt.getState().target?.deviceId).toBe(4));
+    expect(profileCreate).toHaveBeenCalledWith(
+      stick({ label: "GIGS" }),
+      "AAAA-0001",
+      "GIGS",
+      "Generic",
+    );
+    expect(useAdopt.getState().target?.info.mountPoint).toBe("/Volumes/REKS");
+    expect(useDevices.getState().dialogOpen).toBe(false);
+    useAdopt.getState().close();
+  });
+
+  it("a new stick that is not foreign has no Adopt", async () => {
+    devicesList.mockResolvedValue([stick()]);
+    render(<DevicesDialog />);
+    expect(await screen.findByRole("button", { name: "New stick" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Adopt…" })).toBeNull();
   });
 
   it("asks before relinking a stick with a known label and size", async () => {

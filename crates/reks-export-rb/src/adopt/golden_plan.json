@@ -1,0 +1,173 @@
+{
+  "history": {
+    "baselineDate": null,
+    "sessions": [
+      {
+        "action": {
+          "kind": "new"
+        },
+        "entries": [
+          {
+            "kind": "track",
+            "matchedBy": "pathSuffix",
+            "position": 0,
+            "raw": {
+              "artist": "Artist A",
+              "durationMs": 30000,
+              "stickPath": "/Contents/Artist A/x/Alpha.mp3",
+              "title": "Alpha"
+            },
+            "trackId": 1
+          },
+          {
+            "kind": "track",
+            "matchedBy": "pathSuffix",
+            "position": 1,
+            "raw": {
+              "artist": "Artist A",
+              "durationMs": 30000,
+              "stickPath": "/Contents/Artist A/y/Beta.flac",
+              "title": "Beta"
+            },
+            "trackId": 2
+          }
+        ],
+        "fingerprint": "39ac16d93ac30e8fdc8d7261b2069c232ace606c3966cc4bed56e65e8d0e68ee",
+        "playedOn": null,
+        "sourceName": "HISTORY 001"
+      }
+    ],
+    "source": "device_library",
+    "volumeSerial": "4993-1CFB"
+  },
+  "historySessions": 1,
+  "historyText": "1 play history session is imported first (mark practice sessions in History afterwards).",
+  "notes": [],
+  "playlists": [
+    {
+      "defaultChoice": {
+        "kind": "create"
+      },
+      "dividers": 0,
+      "entries": [
+        {
+          "artist": "Artist A",
+          "kind": "track",
+          "matchedBy": "pathSuffix",
+          "stickPath": "/Contents/Artist A/x/Alpha.mp3",
+          "title": "Alpha",
+          "trackId": 1
+        },
+        {
+          "artist": "Artist A",
+          "kind": "track",
+          "matchedBy": "pathSuffix",
+          "stickPath": "/Contents/Artist A/y/Beta.flac",
+          "title": "Beta",
+          "trackId": 2
+        },
+        {
+          "artist": "Artist B",
+          "kind": "track",
+          "matchedBy": "pathSuffix",
+          "stickPath": "/Contents/Artist B/z/Gamma.m4a",
+          "title": "Gamma",
+          "trackId": 3
+        }
+      ],
+      "link": [
+        {
+          "pathText": "Warmup",
+          "playlistId": 1
+        }
+      ],
+      "matched": 3,
+      "path": [
+        "Sets",
+        "Warmup"
+      ],
+      "pathText": "Sets / Warmup",
+      "pdbId": 12,
+      "text": "3 tracks; the same playlist is in your library",
+      "unmatched": 0
+    },
+    {
+      "defaultChoice": {
+        "kind": "create"
+      },
+      "dividers": 0,
+      "entries": [
+        {
+          "artist": "Artist A",
+          "kind": "track",
+          "matchedBy": "pathSuffix",
+          "stickPath": "/Contents/Artist A/y/Beta.flac",
+          "title": "Beta",
+          "trackId": 2
+        },
+        {
+          "artist": "Artist A",
+          "kind": "track",
+          "matchedBy": "pathSuffix",
+          "stickPath": "/Contents/Artist A/x/Alpha.mp3",
+          "title": "Alpha",
+          "trackId": 1
+        }
+      ],
+      "link": [],
+      "matched": 2,
+      "path": [
+        "Sets",
+        "Peak"
+      ],
+      "pathText": "Sets / Peak",
+      "pdbId": 11,
+      "text": "2 tracks",
+      "unmatched": 0
+    },
+    {
+      "defaultChoice": {
+        "kind": "create"
+      },
+      "dividers": 0,
+      "entries": [
+        {
+          "artist": "Artist B",
+          "kind": "track",
+          "matchedBy": "pathSuffix",
+          "stickPath": "/Contents/Artist B/z/Gamma.m4a",
+          "title": "Gamma",
+          "trackId": 3
+        },
+        {
+          "artist": "Artist B",
+          "kind": "track",
+          "matchedBy": null,
+          "stickPath": "/Contents/Artist B/q/Unknown.wav",
+          "title": "Unknown",
+          "trackId": null
+        }
+      ],
+      "link": [],
+      "matched": 1,
+      "path": [
+        "Odd"
+      ],
+      "pathText": "Odd",
+      "pdbId": 13,
+      "text": "2 tracks, 1 not in your library",
+      "unmatched": 1
+    }
+  ],
+  "summary": "3 playlists, 7 track entries: 6 in your library, 1 not",
+  "unmatched": [
+    {
+      "artist": "Artist B",
+      "stickPath": "/Contents/Artist B/q/Unknown.wav",
+      "title": "Unknown"
+    }
+  ],
+  "unmatchedText": "1 track is not in your library: removed from the stick on the first reks sync unless you add the files to your library.",
+  "volumeSerial": "4993-1CFB",
+  "writtenByReks": false
+}

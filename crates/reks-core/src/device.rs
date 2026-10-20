@@ -117,7 +117,7 @@ fn device_row(r: &Row<'_>) -> rusqlite::Result<Device> {
     })
 }
 
-fn get_device(conn: &Connection, id: DeviceId) -> Result<Device> {
+pub(crate) fn get_device(conn: &Connection, id: DeviceId) -> Result<Device> {
     conn.query_row(
         &format!("SELECT {COLUMNS} FROM device WHERE id = ?1"),
         [id],

@@ -203,6 +203,45 @@ pub fn read_play_history(
     Ok(history)
 }
 
+/// Every readable track row of the `export.pdb` under `device_root`, by
+/// row id, with the fields the matcher uses (adopting a stick, Phase 2.5
+/// task 12). No `export.pdb`: none. A damaged track or artist row is left
+/// out, as for history entries. Read-only.
+pub fn read_stick_tracks(device_root: &Path) -> Result<HashMap<u32, PdbTrack>, HistoryError> {
+    let Some(rb_dir) = rekordbox_dir(device_root).map_err(io_err(device_root))? else {
+        return Ok(HashMap::new());
+    };
+    let Some(pdb) = find_ci(&rb_dir, "export.pdb").map_err(io_err(&rb_dir))? else {
+        return Ok(HashMap::new());
+    };
+    let bytes = fs::read(&pdb).map_err(io_err(&pdb))?;
+    let mut tracks: HashMap<u32, RawTrack> = HashMap::new();
+    let mut artists: HashMap<u32, String> = HashMap::new();
+    let (mut names, mut entries, mut bad) = (HashMap::new(), Vec::new(), None);
+    walk_pages(&bytes, &[PageType::Tracks, PageType::Artists], |page, _| {
+        for group in &page.row_groups {
+            for row in group.present_rows() {
+                visit_row(
+                    &row,
+                    &mut names,
+                    &mut entries,
+                    &mut tracks,
+                    &mut artists,
+                    &mut bad,
+                );
+            }
+        }
+    })
+    .map_err(|message| HistoryError::Unreadable {
+        path: pdb.clone(),
+        message,
+    })?;
+    Ok(tracks
+        .iter()
+        .map(|(&id, t)| (id, t.resolve(&artists)))
+        .collect())
+}
+
 /// The backup's `export.pdb` must be listed in its manifest and hash the same.
 fn check_backup_copy(
     report: &BackupReport,
@@ -297,15 +336,7 @@ fn parse_pdb(bytes: &[u8]) -> Result<Parsed, String> {
                     .map(|(index, _, track_id)| PdbEntry {
                         index,
                         track_id,
-                        track: tracks.get(&track_id).map(|t| PdbTrack {
-                            stick_path: t.file_path.clone(),
-                            title: t.title.clone(),
-                            artist: (t.artist_id != 0)
-                                .then(|| artists.get(&t.artist_id).cloned())
-                                .flatten(),
-                            duration_ms: (t.duration_s != 0)
-                                .then(|| i64::from(t.duration_s) * 1000),
-                        }),
+                        track: tracks.get(&track_id).map(|t| t.resolve(&artists)),
                     })
                     .collect(),
             }
@@ -389,6 +420,19 @@ struct RawTrack {
     duration_s: u16,
     title: String,
     file_path: String,
+}
+
+impl RawTrack {
+    fn resolve(&self, artists: &HashMap<u32, String>) -> PdbTrack {
+        PdbTrack {
+            stick_path: self.file_path.clone(),
+            title: self.title.clone(),
+            artist: (self.artist_id != 0)
+                .then(|| artists.get(&self.artist_id).cloned())
+                .flatten(),
+            duration_ms: (self.duration_s != 0).then(|| i64::from(self.duration_s) * 1000),
+        }
+    }
 }
 
 /// Track row (crate-digger `track_row`): `artist_id` at 0x44, `id` at 0x48,

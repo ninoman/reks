@@ -115,6 +115,40 @@ pub enum MatchKind {
     Metadata,
 }
 
+/// How one stick track matched ([`match_entries`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntryMatch {
+    pub kind: EntryKind,
+    /// `None`: unmatched, or a divider.
+    pub track_id: Option<TrackId>,
+    pub matched_by: Option<MatchKind>,
+}
+
+/// Matches stick tracks to library tracks with the history matcher (same
+/// rules as [`scan`]), one result per entry, in order. Read-only. Adopting a
+/// foreign stick uses it for playlist entries (Phase 2.5 task 12).
+pub fn match_entries(
+    volume_serial: Option<&str>,
+    entries: &[SourceEntry],
+    lib: &Library,
+) -> Result<Vec<EntryMatch>> {
+    let conn = lib.conn()?;
+    let matcher = Matcher::load(&conn)?;
+    let serial = volume_serial.filter(|s| !s.is_empty());
+    entries
+        .iter()
+        .map(|e| {
+            let m = matcher.find(&conn, serial, e)?;
+            Ok(EntryMatch {
+                kind: m.kind,
+                track_id: m.track_id,
+                matched_by: m.matched_by,
+            })
+        })
+        .collect()
+}
+
 /// One entry of a planned session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

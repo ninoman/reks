@@ -117,6 +117,10 @@ pub enum Error {
     #[error("the history import plan is out of date: {0}")]
     StaleHistoryPlan(String),
 
+    /// An adopt plan no longer fits the library; nothing was written.
+    #[error("the adopt plan is out of date: {0}")]
+    StaleAdoptPlan(String),
+
     /// A thread panicked while holding the connection lock.
     #[error("library connection lock poisoned")]
     LockPoisoned,

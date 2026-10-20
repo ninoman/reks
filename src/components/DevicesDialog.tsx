@@ -23,6 +23,7 @@ import type {
   ProfileStatus,
   SyncState,
 } from "../lib/ipc";
+import { useAdopt } from "../store/adopt";
 import { deviceName, useDevices } from "../store/devices";
 import { openExportWizard } from "../store/exportWizard";
 import { mountOf, sortedKnown, useProfiles } from "../store/profiles";
@@ -286,6 +287,12 @@ export function IdentifyPrompt({
     e.preventDefault();
     if (name.trim() !== "") void run(() => profiles.create(mountPoint, name));
   };
+  /** Foreign stick: remember it, then open the adopt dry run. */
+  const adopt = () =>
+    void run(async () => {
+      const device = await profiles.create(mountPoint, name);
+      if (device !== null) openAdopt(device, mountPoint);
+    });
 
   return (
     <fieldset
@@ -323,9 +330,20 @@ export function IdentifyPrompt({
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
+          {match.type === "foreign" && (
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={busy || name.trim() === ""}
+              className="shrink-0"
+              onClick={adopt}
+            >
+              Adopt…
+            </Button>
+          )}
           <Button
             size="sm"
-            variant="primary"
+            variant={match.type === "foreign" ? "secondary" : "primary"}
             type="submit"
             disabled={busy || name.trim() === ""}
             className="shrink-0"
@@ -336,6 +354,14 @@ export function IdentifyPrompt({
       )}
     </fieldset>
   );
+}
+
+/** Opens the adopt dialog for the plugged-in stick `device` (closing this one). */
+function openAdopt(device: Device, mountPoint: string) {
+  const info = useProfiles.getState().mounted[mountPoint]?.info;
+  if (info === undefined) return;
+  useDevices.getState().setDialogOpen(false);
+  useAdopt.getState().open({ deviceId: device.id, deviceName: device.name, info });
 }
 
 /** Known sticks and the selected one's profile status. */
@@ -440,19 +466,32 @@ export function StatusView({
           </p>
           <p className="m-0 text-xs text-fg-muted">{s.sourceText}</p>
         </div>
-        <Button
-          size="sm"
-          className="shrink-0"
-          disabled={mountPoint === null}
-          title={mountPoint === null ? "Plug this stick in to change or sync it" : undefined}
-          onClick={() => {
-            if (mountPoint === null) return;
-            useDevices.getState().setDialogOpen(false);
-            openExportWizard(mountPoint);
-          }}
-        >
-          Edit and sync…
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          {mountPoint !== null && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="shrink-0"
+              title="Keep this stick's playlists as library playlists"
+              onClick={() => openAdopt(s.device, mountPoint)}
+            >
+              Adopt playlists…
+            </Button>
+          )}
+          <Button
+            size="sm"
+            className="shrink-0"
+            disabled={mountPoint === null}
+            title={mountPoint === null ? "Plug this stick in to change or sync it" : undefined}
+            onClick={() => {
+              if (mountPoint === null) return;
+              useDevices.getState().setDialogOpen(false);
+              openExportWizard(mountPoint);
+            }}
+          >
+            Edit and sync…
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-1">

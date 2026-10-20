@@ -9,6 +9,7 @@
  * Settings load first and restore the window state (columns, panels, volume).
  */
 import { useEffect } from "react";
+import { AdoptDialog } from "./components/AdoptDialog";
 import { AppHeader } from "./components/AppHeader";
 import { ConvertDialog } from "./components/ConvertDialog";
 import { DEFAULT_HIDDEN } from "./components/columns";
@@ -130,6 +131,7 @@ export default function App() {
       <ImportWizard />
       <SettingsDialog />
       <DevicesDialog />
+      <AdoptDialog />
       <ExportWizard />
       <ConvertDialog />
       <HistoryImportDialog />
