@@ -13,10 +13,13 @@
 //! - `usb_path` = the plan's `dst_rel`, and `anlz_dir`/`anlz_index` computed
 //!   from it with baken's own `AnlzSlots`, so `export.pdb`, PPTH and the
 //!   USBANLZ layout all carry our path;
-//! - `anlz` = the plan's [`AnlzSource`]: the planned cache `.DAT` or
-//!   generation. baken is always called with `generate_analysis` on and an
-//!   empty ANLZ root, so its plan keeps every track and copies nothing we
-//!   did not plan.
+//! - `anlz` = the plan's [`AnlzSource`]: the planned cache `.DAT`, the
+//!   `.DAT` [`BakenWriter::prepare`] built from reks's analysis
+//!   ([`crate::reksanlz::write_all`], in the scratch folder), or generation.
+//!   baken treats a built set like rekordbox's own files (rewrites `PPTH`,
+//!   splices the cues from the XML). baken is always called with
+//!   `generate_analysis` on and an empty ANLZ root, so its plan keeps every
+//!   track and copies nothing we did not plan.
 //!
 //! A planned track baken's plan lacks (source gone, XML out of date) or whose
 //! source differs is a [`WriterError::PlanMismatch`] before anything is
@@ -41,6 +44,7 @@ use reks_core::{rbxml, CancelToken, Library, TrackId};
 
 use super::{ExportEvent, RekordboxWriter, TrackFailure, WriterError, WriterReport};
 use crate::plan::{AnlzSource, ExportPlan, MissingAnalysis, Selection};
+use crate::reksanlz;
 
 /// Where My Settings (`MYSETTING*.DAT`, `DJMMYSETTING.DAT`, `DEVSETTING.DAT`)
 /// come from. reks never synthesises them (phase 2 non-goals).
@@ -65,6 +69,8 @@ pub struct BakenWriter {
     work_dir: PathBuf,
     settings: SettingsSource,
     device_name: Option<String>,
+    /// `.DAT` of each track's set built from reks's analysis.
+    reks_anlz: HashMap<TrackId, PathBuf>,
 }
 
 impl BakenWriter {
@@ -78,12 +84,15 @@ impl BakenWriter {
             work_dir,
             settings: SettingsSource::Skip,
             device_name: None,
+            reks_anlz: HashMap::new(),
         }
     }
 
     /// Writes `work_dir/collection.xml` for `sel` (the selection `plan` was
-    /// made from), with a row for each of the plan's dividers, and returns a
-    /// writer for it.
+    /// made from), with a row for each of the plan's dividers, builds the
+    /// ANLZ of every [`AnlzSource::Reks`] track into `work_dir/reks-anlz/`,
+    /// and returns a writer for it. Nothing goes to the stick; a set that
+    /// can't be built fails here ([`WriterError::ReksAnlz`]).
     pub fn prepare(
         lib: &Library,
         sel: &Selection,
@@ -100,11 +109,11 @@ impl BakenWriter {
         };
         let dividers = divider_rows(plan)?;
         let out = rbxml::export_file_with_dividers(lib, &sel, &dividers, &xml)?;
-        Ok(Self::new(
-            xml,
-            out.baken_playlists(),
-            work_dir.to_path_buf(),
-        ))
+        let reks_anlz = reksanlz::write_all(lib, plan, &work_dir.join("reks-anlz"))?;
+        Ok(Self {
+            reks_anlz,
+            ..Self::new(xml, out.baken_playlists(), work_dir.to_path_buf())
+        })
     }
 
     pub fn with_settings(mut self, settings: SettingsSource) -> Self {
@@ -203,7 +212,7 @@ impl RekordboxWriter for BakenWriter {
 
         let opts = self.options(plan, device_root, self.empty_anlz_root()?);
         let mut bplan = baken_export::plan(&opts).map_err(plan_error)?;
-        reconcile(&mut bplan, plan)?;
+        reconcile(&mut bplan, plan, &self.reks_anlz)?;
         tracing::info!(
             tracks = bplan.tracks.len(),
             device = %device_root.display(),
@@ -269,8 +278,13 @@ fn divider_rows(plan: &ExportPlan) -> Result<Vec<rbxml::DividerTrack>, WriterErr
         .collect()
 }
 
-/// Makes baken's plan carry out ours (module docs).
-fn reconcile(bplan: &mut baken_export::Plan, plan: &ExportPlan) -> Result<(), WriterError> {
+/// Makes baken's plan carry out ours (module docs). `reks_anlz`: the built
+/// `.DAT` of each [`AnlzSource::Reks`] track.
+fn reconcile(
+    bplan: &mut baken_export::Plan,
+    plan: &ExportPlan,
+    reks_anlz: &HashMap<TrackId, PathBuf>,
+) -> Result<(), WriterError> {
     let mut by_id: HashMap<u64, baken_export::PlanTrack> = std::mem::take(&mut bplan.tracks)
         .into_iter()
         .map(|t| (t.device.track.id, t))
@@ -312,15 +326,25 @@ fn reconcile(bplan: &mut baken_export::Plan, plan: &ExportPlan) -> Result<(), Wr
         bt.device.usb_path = t.dst_rel.clone();
         bt.device.anlz_dir = anlz_dir;
         bt.device.anlz_index = anlz_index;
+        // `export` reads only `dat` (and its siblings); the summary fields
+        // are for baken's own index lookup.
+        let entry = |dat: &Path| Entry {
+            dat: dat.to_path_buf(),
+            beats: 0,
+            first_beat_ms: 0,
+            first_tempo_x100: 0,
+        };
         bt.anlz = match &t.anlz_source {
-            // `export` reads only `dat` (and its siblings); the summary
-            // fields are for baken's own index lookup.
-            AnlzSource::RekordboxCache { dat } => Some(Entry {
-                dat: dat.clone(),
-                beats: 0,
-                first_beat_ms: 0,
-                first_tempo_x100: 0,
-            }),
+            AnlzSource::RekordboxCache { dat } => Some(entry(dat)),
+            AnlzSource::Reks => match reks_anlz.get(&t.track_id) {
+                Some(dat) => Some(entry(dat)),
+                None => {
+                    return Err(mismatch(
+                        "reks's analysis was not built (writer not prepared for this plan)"
+                            .to_owned(),
+                    ))
+                }
+            },
             AnlzSource::Generated => None,
             AnlzSource::None => {
                 return Err(WriterError::Unsupported(

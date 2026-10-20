@@ -100,6 +100,7 @@ impl World {
             serial.map(str::to_owned),
             &opts,
             &NoAnlz,
+            &NoAnlz,
         )
         .unwrap();
         assert!(!p.is_blocked(), "{:?}", p.errors);

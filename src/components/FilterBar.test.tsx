@@ -15,6 +15,7 @@ function notation(keyNotation: "classical" | "camelot" | "openKey") {
       audioDevice: null,
       keyNotation,
       cacheDir: "/cache",
+      anlzPreference: "rekordboxFirst",
       ui: {
         hiddenColumns: null,
         filterBarOpen: true,

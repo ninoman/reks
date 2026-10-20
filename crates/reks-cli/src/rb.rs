@@ -5,7 +5,8 @@
 //!              [--target nxs|nxs2|3000|xdj-xz|generic] [--missing-analysis skip|generate|without]
 //!              [--keep-stale] [--artwork] [--skip-unsupported]
 //!              [--import-history|--backup-history|--discard-history]
-//!              [--dividers] [--anlz-root <dir>]... [--json]
+//!              [--dividers] [--anlz-root <dir>]...
+//!              [--anlz rekordbox-first|reks-first|rekordbox-only] [--cache-dir <dir>] [--json]
 //!     print the dry run; exits non-zero when the plan is blocked
 //! reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]
 //!     print the dry run; with --yes, write the stick (backup, write, validate,
@@ -25,7 +26,11 @@
 //! only) or `--discard-history` (erase them, no backup) chooses; without
 //! unimported sessions the Phase 2 backup runs anyway.
 //! `--discard-history` is also the explicit confirmation `Discard` needs.
-//! `--anlz-root` replaces rekordbox's default analysis folders.
+//! `--anlz-root` replaces rekordbox's default analysis folders. `--anlz` says
+//! whose analysis wins when both rekordbox and reks have a track (default:
+//! the library's `export.anlz_preference` setting); reks's comes from the
+//! analysis cache in `--cache-dir` (default: the cache folder stored in the
+//! library, else `cache/` beside it; the app's default is its OS cache dir).
 //! `--data-dir` is where stick backups go (`stick-backups/`), by default the
 //! library's folder (the app keeps its library in its data dir). `rb validate`
 //! needs the flags the export used (`--missing-analysis` above all), or the
@@ -38,7 +43,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
-use reks_core::{CancelToken, Library, PlaylistId, PlaylistNode};
+use reks_core::{AnlzPreference, CancelToken, Library, PlaylistId, PlaylistNode};
 use reks_export_rb::apply::{
     ApplyEnv, ApplyEvent, ApplyStage, ExportReport, ExportStatus, ManifestStatus, StickCheck,
 };
@@ -46,7 +51,8 @@ use reks_export_rb::device::{self, DeviceInfo, FsKind};
 use reks_export_rb::divider;
 use reks_export_rb::history::{self, HistoryPolicy, HistorySession, StickHistory};
 use reks_export_rb::plan::{
-    self, human_bytes, AnlzOp, CacheLocator, ExportOptions, ExportPlan, MissingAnalysis, Selection,
+    self, human_bytes, AnlzOp, CacheLocator, ExportOptions, ExportPlan, MissingAnalysis, ReksCache,
+    Selection,
 };
 use reks_export_rb::rbcache::{self, RbCache};
 use reks_export_rb::validate::{self, ValidationReport};
@@ -272,6 +278,10 @@ struct PlanArgs {
     opts: ExportOptions,
     /// `None`: rekordbox's default analysis folders.
     anlz_roots: Option<Vec<PathBuf>>,
+    /// `None`: the library's setting.
+    anlz_preference: Option<AnlzPreference>,
+    /// `None`: the library's stored cache dir, else `cache/` beside it.
+    cache_dir: Option<PathBuf>,
     json: bool,
     /// `rb export`: write the stick.
     yes: bool,
@@ -284,6 +294,8 @@ fn parse_plan_args(flags: &[String], cmd: Command) -> anyhow::Result<PlanArgs> {
     let mut playlists = Vec::new();
     let mut opts = ExportOptions::default();
     let mut anlz_roots: Option<Vec<PathBuf>> = None;
+    let mut anlz_preference = None;
+    let mut cache_dir = None;
     let mut json = false;
     let mut yes = false;
     let mut data_dir = None;
@@ -318,6 +330,15 @@ fn parse_plan_args(flags: &[String], cmd: Command) -> anyhow::Result<PlanArgs> {
             "--anlz-root" => anlz_roots
                 .get_or_insert_with(Vec::new)
                 .push(PathBuf::from(value()?)),
+            "--anlz" => {
+                anlz_preference = Some(match value()?.as_str() {
+                    "rekordbox-first" => AnlzPreference::RekordboxFirst,
+                    "reks-first" => AnlzPreference::ReksFirst,
+                    "rekordbox-only" => AnlzPreference::RekordboxOnly,
+                    other => bail!("unknown --anlz {other}"),
+                })
+            }
+            "--cache-dir" => cache_dir = Some(PathBuf::from(value()?)),
             "--keep-stale" => opts.keep_stale = true,
             "--artwork" => opts.artwork = true,
             // UNVERIFIED on players (Phase 2.5 task 11).
@@ -353,6 +374,8 @@ fn parse_plan_args(flags: &[String], cmd: Command) -> anyhow::Result<PlanArgs> {
         playlists,
         opts,
         anlz_roots,
+        anlz_preference,
+        cache_dir,
         json,
         yes,
         data_dir,
@@ -374,12 +397,20 @@ fn build_plan(
     if !args.library.is_file() {
         bail!("no library at {}", args.library.display());
     }
-    let cache_dir = args
+    let beside = args
         .library
         .parent()
         .unwrap_or(Path::new("."))
         .join("cache");
-    let lib = Library::open(&args.library, &cache_dir)?;
+    let lib = Library::open(&args.library, args.cache_dir.as_ref().unwrap_or(&beside))?;
+    if args.cache_dir.is_none() {
+        lib.use_stored_cache_dir()?;
+    }
+    let mut opts = args.opts;
+    opts.anlz_preference = match args.anlz_preference {
+        Some(p) => p,
+        None => lib.settings()?.anlz_preference,
+    };
     let sel = Selection {
         playlists: resolve_playlists(&lib.playlists()?.nodes, &args.playlists)?,
     };
@@ -395,10 +426,11 @@ fn build_plan(
     );
     let locator = CacheLocator::for_selection(&lib, &sel, cache)?;
     let mut sources = plan::load(&lib, &sel)?;
-    if args.opts.dividers {
+    if opts.dividers {
         divider::expand(&mut sources, &lib.cache_dir().join(divider::DIVIDER_DIR))?;
     }
-    let mut plan = plan::plan_sources(sources, dev, serial, &args.opts, &locator)?;
+    let reks = ReksCache::new(lib.cache_dir());
+    let mut plan = plan::plan_sources(sources, dev, serial, &opts, &locator, &reks)?;
     plan::guard_history(&mut plan, &lib)?;
     Ok(Planned { lib, sel, plan })
 }
@@ -476,17 +508,19 @@ fn render_plan(plan: &ExportPlan) -> String {
         plan.tracks.len(),
         plan.copies.len()
     );
-    let (mut cached, mut generated, mut without) = (0, 0, 0);
+    let (mut cached, mut built, mut generated, mut without) = (0, 0, 0, 0);
     for a in &plan.anlz {
         match a {
             AnlzOp::CopyFromCache { .. } => cached += 1,
+            AnlzOp::Build { .. } => built += 1,
             AnlzOp::Generate { .. } => generated += 1,
             AnlzOp::Missing { .. } => without += 1,
         }
     }
     let _ = writeln!(
         o,
-        "Analysis  {cached} from rekordbox, {generated} generated, {without} without"
+        "Analysis  {cached} from rekordbox, {built} from reks, {generated} generated, \
+         {without} without"
     );
 
     let _ = writeln!(o, "Playlists");
@@ -1031,7 +1065,7 @@ mod tests {
             "Dry run: nothing has been written.",
             "; backing them up only\n",
             "Tracks    1 (1 to copy, 0 already on the stick)",
-            "Analysis  1 from rekordbox, 0 generated, 0 without",
+            "Analysis  1 from rekordbox, 0 from reks, 0 generated, 0 without",
             "  Gigs/\n    Friday (1 tracks)\n",
             "/Contents/",
             "History   2 sessions, 3 entries\n",

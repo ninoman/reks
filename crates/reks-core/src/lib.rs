@@ -41,7 +41,7 @@ pub use query::{
     TrackQuery, TrackRow,
 };
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
-pub use settings::{LibraryRoot, Settings, SettingsPatch, UiState};
+pub use settings::{AnlzPreference, LibraryRoot, Settings, SettingsPatch, UiState};
 pub use track::{ArtworkInfo, BeatgridSummary, Cue, Track, TrackDetail, TrackPatch};
 
 /// Crate version, from Cargo metadata.

@@ -122,8 +122,15 @@ impl World {
         if dividers {
             divider::expand(&mut sources, &self.lib.cache_dir().join(DIVIDER_DIR)).unwrap();
         }
-        let p =
-            plan::plan_sources(sources, &self.dev(), Some(SERIAL.into()), &opts, &NoAnlz).unwrap();
+        let p = plan::plan_sources(
+            sources,
+            &self.dev(),
+            Some(SERIAL.into()),
+            &opts,
+            &NoAnlz,
+            &NoAnlz,
+        )
+        .unwrap();
         assert!(!p.is_blocked(), "{:?}", p.errors);
         p
     }

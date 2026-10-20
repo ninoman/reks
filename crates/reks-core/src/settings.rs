@@ -3,7 +3,8 @@
 //!
 //! Each setting is one row whose value is JSON. A missing or unreadable value
 //! means the default (an unreadable one is logged), so a bad row never stops
-//! the app. Keys: [`AUDIO_DEVICE`], [`KEY_NOTATION`], [`CACHE_DIR`], [`UI_STATE`].
+//! the app. Keys: [`AUDIO_DEVICE`], [`KEY_NOTATION`], [`CACHE_DIR`], [`UI_STATE`],
+//! [`ANLZ_PREFERENCE`].
 
 use std::path::{Path, PathBuf};
 
@@ -25,6 +26,26 @@ pub const KEY_NOTATION: &str = "display.key_notation";
 pub const CACHE_DIR: &str = "storage.cache_dir";
 /// [`UiState`].
 pub const UI_STATE: &str = "ui.state";
+/// [`AnlzPreference`]: where USB exports take a track's analysis from.
+pub const ANLZ_PREFERENCE: &str = "export.anlz_preference";
+
+/// Where a USB export takes a track's ANLZ files (waveforms, beatgrid, cues)
+/// from when both rekordbox's local analysis cache and reks's own analysis
+/// have the track (Phase 3 task 10). Tracks with neither follow the export's
+/// "missing analysis" option. reks-built ANLZ is UNVERIFIED on players until
+/// the Phase 3 hardware check (task 14) passes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AnlzPreference {
+    /// rekordbox's analysis when it has the track, else reks's (default:
+    /// rekordbox's files are the ones tested on players).
+    #[default]
+    RekordboxFirst,
+    /// reks's analysis when it has the track, else rekordbox's.
+    ReksFirst,
+    /// rekordbox's analysis only; reks's is never written (Phase 2 behaviour).
+    RekordboxOnly,
+}
 
 /// Everything the Settings dialog and app start-up read.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -35,6 +56,7 @@ pub struct Settings {
     /// The cache dir in use; changed only by [`Library::move_cache_dir`].
     pub cache_dir: PathBuf,
     pub ui: UiState,
+    pub anlz_preference: AnlzPreference,
 }
 
 /// Library window state kept across launches. Window size and position are
@@ -72,6 +94,7 @@ pub struct SettingsPatch {
     pub audio_device: Option<Option<String>>,
     pub key_notation: Option<KeyNotation>,
     pub ui: Option<UiState>,
+    pub anlz_preference: Option<AnlzPreference>,
 }
 
 /// Lets `null` mean "set to none" rather than "absent".
@@ -102,6 +125,7 @@ impl Library {
             key_notation: get(&conn, KEY_NOTATION)?.unwrap_or_default(),
             cache_dir: self.cache_dir(),
             ui: get(&conn, UI_STATE)?.unwrap_or_default(),
+            anlz_preference: get(&conn, ANLZ_PREFERENCE)?.unwrap_or_default(),
         })
     }
 
@@ -119,6 +143,9 @@ impl Library {
             if let Some(mut ui) = patch.ui {
                 ui.volume = clamp_volume(ui.volume);
                 put(&tx, UI_STATE, Some(&ui))?;
+            }
+            if let Some(p) = patch.anlz_preference {
+                put(&tx, ANLZ_PREFERENCE, Some(&p))?;
             }
             tx.commit()?;
         }
@@ -420,6 +447,7 @@ mod tests {
         assert_eq!(s.key_notation, KeyNotation::Classical);
         assert_eq!(s.cache_dir, dir.path().join("cache"));
         assert_eq!(s.ui, UiState::default());
+        assert_eq!(s.anlz_preference, AnlzPreference::RekordboxFirst);
     }
 
     #[test]
@@ -436,6 +464,7 @@ mod tests {
             audio_device: Some(Some("Speakers".into())),
             key_notation: Some(KeyNotation::Camelot),
             ui: Some(ui.clone()),
+            anlz_preference: Some(AnlzPreference::ReksFirst),
         })
         .unwrap();
         let s = lib
@@ -447,6 +476,7 @@ mod tests {
         assert_eq!(s.audio_device.as_deref(), Some("Speakers"));
         assert_eq!(s.key_notation, KeyNotation::OpenKey);
         assert_eq!(s.ui, ui);
+        assert_eq!(s.anlz_preference, AnlzPreference::ReksFirst);
         assert_eq!(lib.settings().unwrap(), s);
 
         let s = lib
@@ -465,6 +495,8 @@ mod tests {
         let p: SettingsPatch = serde_json::from_str(r#"{"keyNotation":"openKey"}"#).unwrap();
         assert_eq!(p.audio_device, None);
         assert_eq!(p.key_notation, Some(KeyNotation::OpenKey));
+        let p: SettingsPatch = serde_json::from_str(r#"{"anlzPreference":"reksFirst"}"#).unwrap();
+        assert_eq!(p.anlz_preference, Some(AnlzPreference::ReksFirst));
     }
 
     #[test]

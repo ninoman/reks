@@ -63,7 +63,7 @@ pub struct PlannedTrack { pub track_id: TrackId, pub src: PathBuf, pub dst_rel: 
                           pub kind: Kind, pub probe: Probe, pub has_grid: bool, pub cue_count: u8,
                           pub anlz_source: AnlzSource }
 pub enum TargetProfile { Cdj2000Nxs, Cdj2000Nxs2, Cdj3000, XdjXz, Generic }   // affects fs + codec warnings
-pub enum AnlzSource { RekordboxCache(PathBuf), Generated, None }
+pub enum AnlzSource { RekordboxCache(PathBuf), Reks /* Phase 3 task 10 */, Generated, None }
 pub struct StickHistory { pub volume_serial: Option<String>,             // FAT/exFAT serial via the OS (R§8 item 14)
                           pub pdb_sessions: u32, pub pdb_entries: u32,  // export.pdb history rows (rekordcrate)
                           pub pdb_unreadable: bool,                     // treated as "has history"
@@ -73,7 +73,7 @@ pub enum HistoryPolicy { BackUp /* default */, Discard /* only after an explicit
 pub fn plan(lib: &Library, sel: &Selection, dev: &DeviceInfo, opts: &ExportOptions, anlz: &dyn AnlzLocator)
     -> Result<ExportPlan, PlanError>;   // done: crates/reks-export-rb/src/plan/
 // ExportOptions { target, keep_stale, missing_analysis, artwork, skip_unsupported, history: HistoryPolicy,
-//                 discard_history_confirmed, dividers /* Phase 2.5 */ }
+//                 discard_history_confirmed, dividers /* Phase 2.5 */, anlz_preference /* Phase 3 */ }
 pub struct CacheLocator;   // AnlzLocator over rbcache: CacheLocator::for_selection(lib, sel, RbCache::scan(roots)?)
 pub fn apply(plan: &ExportPlan, writer: &dyn RekordboxWriter, env: &ApplyEnv /* library, app_data_dir, StickCheck */,
              progress: &(dyn Fn(ApplyEvent) + Sync), cancel: &CancelToken)

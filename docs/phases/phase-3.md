@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–3, 5–7, 9, 11 and 13 done). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–3, 5–7, 9–11 and 13 done). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -248,9 +248,35 @@ rekordbox keys (D10, "Queue").
    (`tests/golden.rs`, ignored) needs a reference set with audio in
    `REKS_ANLZ_REF`. Task 10 maps `TargetProfile` to `AnlzTarget` and gets
    `mp3_audio_frames` from the probe.
-10. **Phase 2 integration**: `AnlzSource::Reks` in the planner; prefer reks
+10. [x] **Phase 2 integration**: `AnlzSource::Reks` in the planner; prefer reks
     analysis when present, rekordbox cache otherwise (user setting);
     `reks-cli analyse <path>` and `reks-cli anlz build`.
+    Done: [reksanlz.rs](../../crates/reks-export-rb/src/reksanlz.rs).
+    The planner asks a `ReksLocator` (`ReksCache`: a current analysis cache
+    entry, `cache::has_valid`) beside rekordbox's; `ExportOptions::anlz_preference`
+    = the app setting `export.anlz_preference` (`AnlzPreference`:
+    `rekordboxFirst` default, `reksFirst`, `rekordboxOnly`; picked and saved
+    in the export wizard's options step, `--anlz` in `reks rb`); tracks with
+    neither still follow `missing_analysis`. `BakenWriter::prepare` builds
+    each set into its scratch folder before any write (a stale entry refuses
+    the export) and hands baken the `.DAT` as a cache entry, so baken rewrites
+    `PPTH` and splices the XML cues as for rekordbox's files. A set holds the
+    cached waveforms, the **library's** grid
+    (`reks_anlz::grid::pqtz_beats_from_anchors`, so grid edits reach the
+    stick) and cues, and `PVBR` from `reks_audio::mp3_audio_frames` (new `mp3`
+    module beside the probe, which has no frame count; MPEG-1 Layer III
+    only, else a zero trailer). Every `TargetProfile` maps to `AnlzTarget::Cdj3000`: the profile
+    names the oldest player, so any stick may meet a CDJ-3000, and rekordbox
+    and baken write `.2EX` on every export. The read-back validator runs
+    `reks_anlz::validate_set` on every reks-built set on the stick
+    (`Finding::AnlzInvalid`). Tests:
+    [tests/reks_anlz.rs](../../crates/reks-export-rb/tests/reks_anlz.rs)
+    (precedence, changed file, stale cache, temp-stick export validated and
+    parsed with rekordcrate where it can, D8). CLI: `reks analyse <audio>`,
+    `reks anlz build <audio> <out-dir>` (fresh analysis, no cues) or
+    `--library <db> --track <id> <out-dir>` (what an export writes). No
+    `PSSI`/`PVB2` (FLAC seek table), as in baken's generated files; all of it
+    UNVERIFIED on players until task 14.
 11. [x] **Background queue**: analyse on import/scan with N parallel workers
     (rayon, N = cores − 1), progress channel, pause/cancel, re-analyse
     selection; store results; "needs analysis" filter goes away.

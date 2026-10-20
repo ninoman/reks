@@ -26,6 +26,7 @@ const settings: Settings = {
   audioDevice: "USB DAC",
   keyNotation: "classical",
   cacheDir: "/Users/dj/Library/Caches/reks",
+  anlzPreference: "rekordboxFirst",
   ui: {
     hiddenColumns: null,
     filterBarOpen: true,

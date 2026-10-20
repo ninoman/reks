@@ -26,9 +26,15 @@
 //!                               dry run of converting tracks (flags: see `convert.rs`)
 //! reks convert apply <plan flags> [--yes]
 //!                               dry run, then with --yes convert and update the library
+//! reks analyse <audio> [--model-dir <dir>] [--json]
+//!                               reks's analysis of one file (grid, key, columns)
+//! reks anlz build <audio> <out-dir> [...] | --library <library.sqlite> --track <id> <out-dir> [...]
+//!                               build ANLZ files from reks's analysis (flags: see `anlz.rs`)
 //! ```
 
 mod adopt;
+mod analyse;
+mod anlz;
 mod convert;
 mod history;
 mod rb;
@@ -75,6 +81,8 @@ fn main() -> anyhow::Result<()> {
         [cmd, rest @ ..] if cmd == "convert" => convert::run(rest),
         [cmd, rest @ ..] if cmd == "history" => history::run(rest),
         [cmd, rest @ ..] if cmd == "adopt" => adopt::run(rest),
+        [cmd, rest @ ..] if cmd == "analyse" => analyse::run(rest),
+        [cmd, rest @ ..] if cmd == "anlz" => anlz::run(rest),
         _ => bail!(
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
              | columns <audio> <out.bin> \
@@ -82,7 +90,8 @@ fn main() -> anyhow::Result<()> {
              | rb plan|export|validate <stick> ... | rb history <stick> [--json] \
              | history scan|import <stick|backup> --library <library.sqlite> ... \
              | adopt scan <stick> --library <library.sqlite> [--json] \
-             | convert plan|apply --library <library.sqlite> ...]"
+             | convert plan|apply --library <library.sqlite> ... \
+             | analyse <audio> [--json] | anlz build <audio> <out-dir> ...]"
         ),
     }
 }

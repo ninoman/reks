@@ -190,6 +190,27 @@ pub fn load_valid(cache_dir: &Path, track: TrackId, content_hash: &str) -> Optio
     }
 }
 
+/// Whether `track` has an entry [`load_valid`] would return, judged from
+/// `analysis.json` alone (the export planner's cheap check; the columns are
+/// read when the ANLZ files are built).
+pub fn has_valid(cache_dir: &Path, track: TrackId, content_hash: &str) -> bool {
+    let dir = entry_dir(cache_dir, track);
+    let Ok(json) = fs::read(dir.join(META_FILE)) else {
+        return false;
+    };
+    match serde_json::from_slice::<Meta>(&json) {
+        Ok(meta) => {
+            meta.analyser_version == ANALYSER_VERSION
+                && meta.content_hash == content_hash
+                && dir.join(COLUMNS_FILE).is_file()
+        }
+        Err(err) => {
+            tracing::warn!(track, %err, "ignoring analysis cache entry");
+            false
+        }
+    }
+}
+
 /// Deletes `track`'s entry, if any.
 pub fn remove(cache_dir: &Path, track: TrackId) -> Result<(), CacheError> {
     let dir = entry_dir(cache_dir, track);
@@ -355,6 +376,9 @@ mod tests {
         assert_eq!(load_valid(dir.path(), 5, "h"), Some(a.clone()));
         // Other contents: stale.
         assert!(load_valid(dir.path(), 5, "other").is_none());
+        assert!(has_valid(dir.path(), 5, "h"));
+        assert!(!has_valid(dir.path(), 5, "other"));
+        assert!(!has_valid(dir.path(), 6, "h"));
 
         // Constant grid and silence survive too.
         let mut b = a;
@@ -381,6 +405,7 @@ mod tests {
         meta.analyser_version = ANALYSER_VERSION + 1;
         fs::write(&path, serde_json::to_vec(&meta).unwrap()).unwrap();
         assert!(load_valid(dir.path(), 1, "h").is_none());
+        assert!(!has_valid(dir.path(), 1, "h"));
     }
 
     #[test]
@@ -394,6 +419,7 @@ mod tests {
         assert!(load_valid(dir.path(), 1, "h").is_none());
         fs::write(entry_dir(dir.path(), 1).join("analysis.json"), b"{").unwrap();
         assert!(load_valid(dir.path(), 1, "h").is_none());
+        assert!(!has_valid(dir.path(), 1, "h"));
     }
 
     #[test]

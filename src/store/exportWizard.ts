@@ -10,7 +10,8 @@
  * profile; the wizard can't be closed while it runs. When the dry run finds
  * play history sessions the library has not imported (the export guard,
  * Phase 2.5), `chooseHistory` records the user's choice and plans again;
- * going back withdraws it.
+ * going back withdraws it. The analysis source (`anlzPreference`) opens as
+ * the app setting and changing it saves the setting.
  */
 import { create } from "zustand";
 
@@ -33,6 +34,7 @@ import {
 } from "../lib/ipc";
 import { useDevices } from "./devices";
 import { usePlaylists } from "./playlists";
+import { useSettings } from "./settings";
 
 export type ExportStep =
   | "closed"
@@ -70,6 +72,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   discardHistoryConfirmed: false,
   historyChosen: false,
   dividers: false,
+  anlzPreference: "rekordboxFirst",
 };
 
 interface ExportWizardState {
@@ -175,11 +178,14 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
 
   open(init) {
     generation++;
+    const anlzPreference =
+      useSettings.getState().settings?.anlzPreference ?? DEFAULT_EXPORT_OPTIONS.anlzPreference;
     set({
       ...idle,
       step: "device",
       mountPoint: init?.mountPoint ?? null,
       checked: new Set(init?.playlists ?? []),
+      options: { ...DEFAULT_EXPORT_OPTIONS, anlzPreference },
     });
   },
 
@@ -222,6 +228,9 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
     // The guard's choice is made in the dry run, knowing what is not imported.
     if (patch.historyChosen === undefined) options.historyChosen = false;
     set({ options });
+    if (patch.anlzPreference !== undefined) {
+      void useSettings.getState().update({ anlzPreference: patch.anlzPreference });
+    }
   },
 
   async chooseHistory(policy, nodes) {

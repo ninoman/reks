@@ -19,6 +19,7 @@ baken-export = { workspace = true }
 binrw = { workspace = true }
 blake3 = { workspace = true }
 rekordcrate = { workspace = true }
+reks-analysis = { workspace = true }
 reks-anlz = { workspace = true }
 reks-audio = { workspace = true }
 reks-core = { workspace = true }

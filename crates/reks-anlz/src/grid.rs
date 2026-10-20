@@ -8,8 +8,12 @@
 //! already extrapolates back to the earliest beat ≥ 0; rekordbox's reference
 //! grids also start within one beat of 0). Whether rekordbox ever emits beats
 //! before the first detected one is UNVERIFIED (phase 3 doc, PQTZ rule).
+//!
+//! Exports take the library's grid instead ([`pqtz_beats_from_anchors`]):
+//! the same rule over `beatgrid` anchors.
 
 use reks_analysis::grid::Grid;
+use reks_core::beatgrid::GridAnchor;
 
 use crate::write::PqtzBeat;
 
@@ -118,6 +122,65 @@ pub fn pqtz_beats(
                 .collect()
         }
     }
+}
+
+/// The `PQTZ` beats of a library grid (`beatgrid` rows, whole ms, D10) for a
+/// track `duration_ms` long: what an export writes, so grid edits (task 13)
+/// and rekordbox's imported grids reach the stick as the library holds them.
+///
+/// Each anchor's beats run at its tempo from its position up to the next
+/// anchor (exclusive) or the end of the track (exclusive, as in
+/// [`pqtz_beats`]); `time` = the unrounded position rounded to the nearest ms,
+/// `tempo` = the anchor's `bpm_x100`, `beat_number` counts from the anchor's
+/// `beat_in_bar` in bars of `beats_per_bar` (capped at 4, PQTZ's range).
+/// Beats before 0 ms are left out, and a beat that would round onto the
+/// previous one is dropped, so times strictly increase.
+pub fn pqtz_beats_from_anchors(
+    anchors: &[GridAnchor],
+    duration_ms: u64,
+) -> Result<Vec<PqtzBeat>, GridError> {
+    let end = duration_ms as f64;
+    let mut out: Vec<PqtzBeat> = Vec::new();
+    for (i, a) in anchors.iter().enumerate() {
+        if let Some(prev) = i.checked_sub(1).map(|p| &anchors[p]) {
+            if a.position_ms <= prev.position_ms {
+                return Err(GridError::UnorderedBeats { index: i });
+            }
+        }
+        let tempo = u16::try_from(a.bpm_x100)
+            .ok()
+            .filter(|&t| t >= 100)
+            .ok_or(GridError::BadTempo(a.bpm_x100 as f64 / 100.0))?;
+        let period = 6_000_000.0 / f64::from(tempo);
+        let stop = anchors
+            .get(i + 1)
+            .map_or(end, |next| (next.position_ms as f64).min(end));
+        let bpb = i64::from(a.beats_per_bar.max(1));
+        let start = a.position_ms as f64;
+        // First beat at or after 0 ms.
+        let first = if start < 0.0 {
+            (-start / period).ceil() as i64
+        } else {
+            0
+        };
+        for n in first.. {
+            let t = start + n as f64 * period;
+            if t >= stop {
+                break;
+            }
+            let time_ms = ms(t / 1000.0);
+            if out.last().is_some_and(|b| b.time_ms >= time_ms) {
+                continue;
+            }
+            let in_bar = (i64::from(a.beat_in_bar.max(1)) - 1 + n).rem_euclid(bpb) + 1;
+            out.push(PqtzBeat {
+                beat_number: in_bar.clamp(1, 4) as u16,
+                tempo,
+                time_ms,
+            });
+        }
+    }
+    Ok(out)
 }
 
 /// The tempo (BPM) in effect at `time_ms`: that of the last beat at or before
@@ -261,6 +324,81 @@ mod tests {
         assert!(pqtz_beats(&lone, 44_100, 1_000).is_err());
         let empty = Grid::Dynamic { beats: vec![] };
         assert!(pqtz_beats(&empty, 44_100, 1_000).unwrap().is_empty());
+    }
+
+    fn anchor(position_ms: i64, bpm_x100: i64, beat_in_bar: u8) -> GridAnchor {
+        GridAnchor {
+            position_ms,
+            bpm_x100,
+            beat_in_bar,
+            beats_per_bar: 4,
+        }
+    }
+
+    #[test]
+    fn library_grid_constant_and_anchored() {
+        let triple = |b: Vec<PqtzBeat>| -> Vec<_> {
+            b.iter()
+                .map(|b| (b.beat_number, b.tempo, b.time_ms))
+                .collect()
+        };
+        // 128 BPM from 100 ms, beat 4: 468.75 ms apart, rounded, no drift.
+        let b = pqtz_beats_from_anchors(&[anchor(100, 12_800, 4)], 1_600).unwrap();
+        assert_eq!(
+            triple(b),
+            [
+                (4, 12_800, 100),
+                (1, 12_800, 569),
+                (2, 12_800, 1_038),
+                (3, 12_800, 1_506)
+            ]
+        );
+        let long = pqtz_beats_from_anchors(&[anchor(0, 12_800, 1)], 720_000).unwrap();
+        assert_eq!(long.len(), 1536);
+        assert_eq!(long[1535].time_ms, 719_531);
+
+        // A tempo change: beats of the first anchor stop before the second.
+        let b = pqtz_beats_from_anchors(&[anchor(0, 12_000, 1), anchor(1_200, 6_000, 3)], 3_300)
+            .unwrap();
+        assert_eq!(
+            triple(b),
+            [
+                (1, 12_000, 0),
+                (2, 12_000, 500),
+                (3, 12_000, 1_000),
+                (3, 6_000, 1_200),
+                (4, 6_000, 2_200),
+                (1, 6_000, 3_200)
+            ]
+        );
+
+        // An anchor before 0 (nudged): beats from the first at or after 0,
+        // numbered as if counted from the anchor.
+        let b = pqtz_beats_from_anchors(&[anchor(-300, 12_000, 1)], 1_000).unwrap();
+        assert_eq!(triple(b), [(2, 12_000, 200), (3, 12_000, 700)]);
+
+        // 3/4 bars count 1–3.
+        let waltz = GridAnchor {
+            beats_per_bar: 3,
+            ..anchor(0, 12_000, 3)
+        };
+        let n: Vec<_> = pqtz_beats_from_anchors(&[waltz], 2_000)
+            .unwrap()
+            .iter()
+            .map(|b| b.beat_number)
+            .collect();
+        assert_eq!(n, [3, 1, 2, 3]);
+
+        assert!(pqtz_beats_from_anchors(&[], 1_000).unwrap().is_empty());
+        assert_eq!(
+            pqtz_beats_from_anchors(&[anchor(0, 0, 1)], 1_000).unwrap_err(),
+            GridError::BadTempo(0.0)
+        );
+        assert_eq!(
+            pqtz_beats_from_anchors(&[anchor(10, 12_000, 1), anchor(10, 12_000, 1)], 1_000)
+                .unwrap_err(),
+            GridError::UnorderedBeats { index: 1 }
+        );
     }
 
     #[test]

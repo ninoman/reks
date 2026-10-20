@@ -537,7 +537,8 @@ pub struct PlannedExport {
 
 /// Dry run of exporting `selection` to the stick mounted at `mount_point`
 /// (phase 2 task 10): plans, writes nothing, returns the plan as the UI shows
-/// it. Scans rekordbox's analysis folders and samples file bytes, so it runs
+/// it. Scans rekordbox's analysis folders, checks reks's analysis cache
+/// (`options.anlz_preference`) and samples file bytes, so it runs
 /// on a blocking worker. The plan is kept under the returned id (the newest
 /// call wins) for `export_apply`, with `device_id`: the stick profile the
 /// export records its sync in.
