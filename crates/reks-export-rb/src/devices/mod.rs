@@ -10,7 +10,7 @@
 //!   (no prompt), [`DeviceMatch::Ambiguous`] ("Is this '<name>'?") when an
 //!   unknown or missing ID comes with a known label and size, otherwise
 //!   [`DeviceMatch::New`] or [`DeviceMatch::Foreign`] (a rekordbox library
-//!   reks did not write; adopting it is Phase 2.5).
+//!   reks did not write; [`crate::adopt`] can keep its playlists).
 //! - [`create`], [`link`] (confirming `Ambiguous`; replaces the stored ID),
 //!   [`rename`], [`set_target`], [`set_selection`].
 //! - [`selection`]: the profile as the export [`Selection`]. A Sync is the
@@ -99,7 +99,7 @@ pub enum DeviceMatch {
     },
     /// Unknown, and it holds a rekordbox library reks did not write (no
     /// export manifest for its ID). "New stick" replaces that library on the
-    /// first sync; "Adopt" comes in Phase 2.5.
+    /// first sync; "Adopt" keeps it ([`crate::adopt`]).
     Foreign {
         volume_serial: Option<String>,
         suggested_name: String,
@@ -186,13 +186,15 @@ pub fn identify_serial(
     };
     if has_library && !written_by_reks {
         let note = if serial.is_some() {
-            "It holds a rekordbox library that reks did not write. As a new stick, its \
-             playlists are replaced on the first sync (after the dry run and the history \
-             backup). Adopting a stick's playlists comes in a later version."
+            "It holds a rekordbox library that reks did not write. Adopt keeps its playlists \
+             as library playlists and imports its play history (the stick is not changed). As \
+             a plain new stick, its playlists are replaced on the first sync (after the dry run \
+             and the history backup)."
         } else {
             "It holds a rekordbox library, and without a volume ID reks can't tell whether it \
-             wrote it. As a new stick, its playlists are replaced on the first sync (after the \
-             dry run and the history backup)."
+             wrote it. Adopt keeps its playlists as library playlists (the stick is not \
+             changed). As a plain new stick, its playlists are replaced on the first sync \
+             (after the dry run and the history backup)."
         };
         return Ok(DeviceMatch::Foreign {
             volume_serial,
@@ -740,7 +742,7 @@ pub fn record_sync(
     Ok(lib.record_device_sync(dev, &synced)?)
 }
 
-fn plural(n: u32, one: &str, many: &str) -> String {
+pub(crate) fn plural(n: u32, one: &str, many: &str) -> String {
     if n == 1 {
         format!("1 {one}")
     } else {

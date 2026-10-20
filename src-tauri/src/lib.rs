@@ -1,6 +1,7 @@
 //! Tauri shell for reks. Commands, state and events only; business logic
 //! lives in `crates/*` (docs/decisions.md D2).
 
+mod adopt;
 mod commands;
 mod history;
 mod state;
@@ -92,6 +93,8 @@ pub fn run() {
             history::history_track_sessions,
             history::history_scan,
             history::history_import,
+            adopt::adopt_scan,
+            adopt::adopt_apply,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -36,6 +36,7 @@ import type {
   TrackQuery,
   TrackRow,
 } from "../lib/ipc";
+import { mockAdopt } from "./mockAdopt";
 import { mockHistory } from "./mockHistory";
 
 const CAMELOT: [string, string][] = [
@@ -464,6 +465,15 @@ const onStick: Record<number, number[]> = { 1: [2, 3, 5], 2: [5] };
 function identify(info: DeviceInfo): DeviceMatch {
   const device = known.find((d) => d.label === info.label && d.sizeBytes === info.totalBytes);
   if (device !== undefined) return { type: "known", device };
+  if (info.label === "GIGS") {
+    return {
+      type: "foreign",
+      volumeSerial: `${info.osName.toUpperCase()}-0001`,
+      suggestedName: "Gigs",
+      prompt: "This stick is new to reks.",
+      note: "It holds a rekordbox library that reks did not write. Adopt keeps its playlists as library playlists and imports its play history (the stick is not changed). As a plain new stick, its playlists are replaced on the first sync (after the dry run and the history backup).",
+    };
+  }
   return {
     type: "new",
     volumeSerial: `${info.osName.toUpperCase()}-0001`,
@@ -1058,6 +1068,6 @@ mockIPC((cmd, payload) => {
     case "plugin:dialog|open":
       return "/Users/dj/Music/rekordbox/collection.xml";
     default:
-      return history(cmd, args) ?? null;
+      return history(cmd, args) ?? mockAdopt(cmd, args) ?? null;
   }
 });

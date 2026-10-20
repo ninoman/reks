@@ -1151,3 +1151,99 @@ export function historyImport(
 ): Promise<HistoryImportReport> {
   return invoke("history_import", { planId, choices });
 }
+
+// Adopt a foreign stick (phase 2.5 task 12, D27; `reks_export_rb::adopt`).
+
+/** One stick playlist entry with its library match. */
+export interface AdoptEntry {
+  /** Null when the entry's track row is missing on the stick. */
+  stickPath: string | null;
+  title: string | null;
+  artist: string | null;
+  kind: EntryKind;
+  trackId: number | null;
+  matchedBy: MatchKind | null;
+}
+
+/** A library playlist Link may name: same name, same tracks in the same order. */
+export interface LinkCandidate {
+  playlistId: number;
+  pathText: string;
+}
+
+/** What to do with one stick playlist. */
+export type AdoptChoice =
+  | { kind: "link"; playlistId: number }
+  | { kind: "create" }
+  | { kind: "skip" };
+
+/** One stick playlist in the adopt dry run; every string is final. */
+export interface AdoptPlaylist {
+  /** Row id in `export.pdb`; the key of `AdoptChoices.playlists`. */
+  pdbId: number;
+  path: string[];
+  pathText: string;
+  entries: AdoptEntry[];
+  matched: number;
+  unmatched: number;
+  dividers: number;
+  /** Empty unless an exact ordered match exists. */
+  link: LinkCandidate[];
+  defaultChoice: AdoptChoice;
+  text: string;
+}
+
+export interface UnmatchedTrack {
+  stickPath: string | null;
+  title: string | null;
+  artist: string | null;
+}
+
+/** The adopt dry run (`adopt::AdoptPlan`); nothing is written. */
+export interface AdoptPlan {
+  volumeSerial: string | null;
+  writtenByReks: boolean;
+  /** Imported first by `adoptApply`; null when it could not be read. */
+  history: HistoryImportPlan | null;
+  historySessions: number;
+  historyText: string;
+  playlists: AdoptPlaylist[];
+  unmatched: UnmatchedTrack[];
+  summary: string;
+  unmatchedText: string;
+  notes: string[];
+}
+
+export interface AdoptScan {
+  planId: number;
+  plan: AdoptPlan;
+}
+
+export interface AdoptChoices {
+  /** The stick's profile (created or linked first). */
+  deviceId: number;
+  /** `pdbId` → choice. Absent: the plan's default (Create). */
+  playlists: Record<number, AdoptChoice>;
+  /** Practice marks for the history import. */
+  history: ImportChoices;
+}
+
+export interface AdoptReport {
+  history: HistoryImportReport | null;
+  folderId: number | null;
+  created: number[];
+  linked: number[];
+  skipped: number;
+  unmatched: UnmatchedTrack[];
+  summary: string;
+}
+
+/** Read-only dry run of adopting the mounted stick `info`. */
+export function adoptScan(info: DeviceInfo): Promise<AdoptScan> {
+  return invoke("adopt_scan", { info });
+}
+
+/** Applies the dry run `planId` showed: history first, then playlists and the stick's profile. */
+export function adoptApply(planId: number, choices: AdoptChoices): Promise<AdoptReport> {
+  return invoke("adopt_apply", { planId, choices });
+}

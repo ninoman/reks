@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use reks_core::convert::ConvertPlan;
 use reks_core::history::HistoryImportPlan;
 use reks_core::{CancelToken, Library, TrackId};
+use reks_export_rb::adopt::AdoptPlan;
 use reks_export_rb::devices::DeviceId;
 use reks_export_rb::plan::{ExportPlan, Selection};
 use reks_mix::Player;
@@ -31,6 +32,8 @@ pub struct AppState {
     /// The history import plan the import dialog's dry run shows; Import
     /// applies exactly it.
     pub shown_history: Mutex<ShownHistory>,
+    /// The adopt plan the adopt dialog's dry run shows; Adopt applies exactly it.
+    pub shown_adopt: Mutex<ShownAdopt>,
     /// App data dir (D19): stick backups go under it.
     pub data_dir: PathBuf,
     pub player: Mutex<PlayerSlot>,
@@ -62,6 +65,15 @@ pub struct ShownHistory {
     pub last_id: u64,
     /// `(id, plan)` of the newest scan that finished; taken by `history_import`.
     pub plan: Option<(u64, HistoryImportPlan)>,
+}
+
+/// The last adopt plan returned to the UI, under the id the UI sends back.
+#[derive(Debug, Default)]
+pub struct ShownAdopt {
+    /// Id of the newest `adopt_scan` call; ids only grow.
+    pub last_id: u64,
+    /// `(id, plan)` of the newest scan that finished; taken by `adopt_apply`.
+    pub plan: Option<(u64, AdoptPlan)>,
 }
 
 /// The preview player and the track on it.
@@ -96,6 +108,7 @@ impl AppState {
             convert_cancel: Mutex::new(None),
             shown_convert: Mutex::new(ShownConvert::default()),
             shown_history: Mutex::new(ShownHistory::default()),
+            shown_adopt: Mutex::new(ShownAdopt::default()),
             data_dir: data_dir.to_path_buf(),
             player: Mutex::new(PlayerSlot {
                 player: Player::new(settings.audio_device).with_volume(settings.ui.volume),

@@ -2,7 +2,7 @@
 
 Status: started 2026-10-20 ahead of the Phase 2 hardware campaign with the
 maintainer's approval (software only; anything that needs a player stays
-UNVERIFIED); tasks 1–10 done. Depends on: Phase 2 done, including its hardware campaign,
+UNVERIFIED); tasks 1–10 and 12 done; task 11 (hardware) waits for players. Depends on: Phase 2 done, including its hardware campaign,
 history safeguard and `export_manifest` (tasks 12–14). Runs before Phase 3.
 Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
@@ -364,12 +364,37 @@ Divider rules
     sessions skips.
 11. **Hardware session**: checklist below on CDJ-2000NXS2 and CDJ-3000; log in
     `docs/hw-test-log.md`; turn `export.dividers` on by default only after both pass.
-12. **Adopt a foreign stick** (D27, [`../stick-profiles.md`](../stick-profiles.md) §4.3):
+12. [x] **Adopt a foreign stick** (D27, [`../stick-profiles.md`](../stick-profiles.md) §4.3):
     `adopt::scan` / `adopt::apply`, read-only on the stick; history import
     (tasks 5–6) first; Link / Create under `From stick/<name>/` / Skip per
     playlist; UI dialog. First check open item S4 (rekordcrate on a
     rekordbox 7 fixture). Tests per stick-profiles §8 (golden `AdoptPlan`,
     stick bytes unchanged, Link only on exact ordered match).
+    Done in [`reks_export_rb::adopt`](../../crates/reks-export-rb/src/adopt/mod.rs)
+    (`scan(root, serial, lib)`, `apply`) and
+    [`reks_core::adopt`](../../crates/reks-core/src/adopt.rs)
+    (`Library::adopt_playlists`, one transaction; `playlist_track_ids`);
+    stick tracks go through the history matcher, now public as
+    `history::match_entries`, and the stick's artist and duration come from
+    `history::read_stick_tracks`. S4: no rekordbox 7 fixture exists, so
+    rekordcrate was checked on its own real exports (no findings; details in
+    stick-profiles §9); rekordbox 7 stays UNVERIFIED. Link is offered only
+    when every stick track matched and a same-named library playlist holds
+    exactly those tracks in order; apply refuses any other Link, an unknown
+    stick playlist and a profile with another volume ID. Created playlists
+    keep the stick's folders under `From stick/<profile name>/` and are
+    ticked in the profile with the linked ones. App: `adopt_scan` /
+    `adopt_apply` ([adopt.rs](../../src-tauri/src/adopt.rs)),
+    [AdoptDialog.tsx](../../src/components/AdoptDialog.tsx), opened by
+    "Adopt…" on the Foreign prompt (saves the profile first) or "Adopt
+    playlists…" on a plugged-in stick's status. CLI: `reks adopt scan`
+    ([adopt.rs](../../crates/reks-cli/src/adopt.rs)). Tests: `adopt::tests`
+    (golden plan on a synthetic rekordbox-layout stick, stick snapshot equal
+    after scan and apply, Link refusals, history first and skipped on rescan)
+    plus `reference_stick_fixture_golden_plan`, `#[ignore]` until
+    `fixtures/rekordbox/ref-<ver>/` exists; `reks_core::adopt::tests`;
+    [AdoptDialog.test.tsx](../../src/components/AdoptDialog.test.tsx) and
+    the Foreign case in DevicesDialog.test.tsx.
 
 ## Acceptance criteria
 
@@ -425,6 +450,9 @@ Divider rules
 - HIST3 One history playlist per mount, or appended across mounts?
 - HIST4 Volume serial via the OS: tracked as Phase 2 task 12.
 - Answered: rekordcrate 0.3.0 reads history playlists and entries (R§10).
+- S4 (stick-profiles §9), software part: rekordcrate reads its own real
+  exports' playlist trees cleanly; a rekordbox 7 reference stick is still
+  needed (`fixtures/rekordbox/ref-<ver>/`).
 
 ## Risks
 

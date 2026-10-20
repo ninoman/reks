@@ -9,6 +9,8 @@ pub const T_HISTORY_PLAYLISTS: u32 = 11;
 pub const T_HISTORY_ENTRIES: u32 = 12;
 pub const T_TRACKS: u32 = 0;
 pub const T_ARTISTS: u32 = 2;
+pub const T_PLAYLIST_TREE: u32 = 7;
+pub const T_PLAYLIST_ENTRIES: u32 = 8;
 /// Table 19 (`history`): layout undecoded (HIST1).
 pub const T_HISTORY: u32 = 19;
 
@@ -76,6 +78,31 @@ pub fn history_playlist(id: u32, name: &str) -> Vec<u8> {
 
 pub fn history_entry(track_id: u32, playlist_id: u32, index: u32) -> Vec<u8> {
     [track_id, playlist_id, index]
+        .iter()
+        .flat_map(|v| v.to_le_bytes())
+        .collect()
+}
+
+/// A playlist tree row: parent (0 = root), unknown, sort order, id,
+/// folder flag, name.
+pub fn playlist_node(
+    id: u32,
+    parent_id: u32,
+    sort_order: u32,
+    is_folder: bool,
+    name: &str,
+) -> Vec<u8> {
+    let mut row: Vec<u8> = [parent_id, 0, sort_order, id, u32::from(is_folder)]
+        .iter()
+        .flat_map(|v| v.to_le_bytes())
+        .collect();
+    row.extend_from_slice(&short_string(name));
+    row
+}
+
+/// A playlist entry row: entry index, track id, playlist id.
+pub fn playlist_entry(index: u32, track_id: u32, playlist_id: u32) -> Vec<u8> {
+    [index, track_id, playlist_id]
         .iter()
         .flat_map(|v| v.to_le_bytes())
         .collect()

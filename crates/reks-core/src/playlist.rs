@@ -225,7 +225,7 @@ impl Library {
     }
 }
 
-fn create(
+pub(crate) fn create(
     c: &Connection,
     parent: Option<PlaylistId>,
     name: &str,

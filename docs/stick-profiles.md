@@ -58,14 +58,14 @@ carrying stale playlists.
 - Unknown serial: if label and size match an existing device, ask
   "Is this '<name>'?" (covers a reformat; several matches: "Which of your
   sticks is this?"). Otherwise offer "New stick", or, when it holds a Device
-  Library with no `export_manifest` rows for its serial (`Foreign`), "New
-  stick" with a note that its playlists are replaced (Adopt: Phase 2.5).
+  Library with no `export_manifest` rows for its serial (`Foreign`), "Adopt…"
+  (§4.3) or "New stick" with a note that its playlists are replaced.
   The same prompt relinks every stick once after the library moves to
   another OS; on yes the stored ID is replaced (`devices::link`).
 - No serial available on this OS: fall back to label + size with an explicit
   user confirm every time; no silent match.
 
-### 4.3 Adopt a foreign stick (Phase 2.5)
+### 4.3 Adopt a foreign stick (Phase 2.5, built)
 
 1. Mount a stick with `PIONEER/rekordbox/export.pdb` not written by reks
    (no `export_manifest` rows for its serial). reks reads it read-only with
@@ -76,8 +76,9 @@ carrying stale playlists.
    ([Phase 2.5](phases/phase-2.5.md) task 6): manifest, then stick path →
    library path suffix, then (artist, title, duration ± 1 s).
 4. Dry-run dialog per stick playlist: matched/unmatched counts and a choice:
-   - **Link** to an existing library playlist (offered only when name and
-     ordered matched tracks are identical), or
+   - **Link** to an existing library playlist (offered only when the name is
+     the same, every stick track matched, and the library playlist's tracks
+     are exactly the matched tracks in the same order; dividers ignored), or
    - **Create** a new library playlist under folder `From stick/<name>/`
      (default), or
    - **Skip** (will be removed on first reks sync).
@@ -87,6 +88,17 @@ carrying stale playlists.
 6. First sync afterwards shows the usual Phase 2 warning for a
    rekordbox-written stick (rekordbox's "out of matching" caution,
    `exportLibrary.db` removed).
+
+Details: `<name>` is the stick's profile name (` (2)`, … when that folder
+already exists under a reused top-level `From stick` folder), and the stick's
+own folders are kept below it. A created playlist holds the matched tracks in
+stick order, duplicates kept; reks dividers on the stick are left out. The
+history import is its own transaction and runs first; the playlists and the
+profile ticks are one transaction, and a linked playlist that changed since
+the dry run fails it (`StaleAdoptPlan`). The stick must already be a profile:
+"Adopt…" on the `Foreign` prompt saves it with the typed name first, and a
+known plugged-in stick has "Adopt playlists…" in the Devices panel. A plan
+whose volume ID differs from the chosen profile's is refused.
 
 ## 5. Data model and API
 
@@ -148,10 +160,19 @@ pub mod devices {   // reks-export-rb
     pub fn record_sync(lib, dev, plan: &ExportPlan, report: &ExportReport) -> Result<usize>;
 }
 pub mod adopt {   // Phase 2.5, read-only on the stick
-    pub fn scan(root: &Path, lib: &Library) -> Result<AdoptPlan>;
+    pub fn scan(root: &Path, volume_serial: Option<&str>, lib: &Library) -> Result<AdoptPlan>;
     pub fn apply(plan: &AdoptPlan, choices: &AdoptChoices, lib: &Library) -> Result<AdoptReport>;
+    // AdoptChoices { device_id, playlists: pdb id → Link { playlist_id } | Create | Skip, history }
 }
+// reks-core: Library::adopt_playlists(&AdoptWrite) (one transaction),
+// history::match_entries (the history matcher for any stick track)
 ```
+
+Code: [`reks_export_rb::adopt`](../crates/reks-export-rb/src/adopt/mod.rs),
+[`reks_core::adopt`](../crates/reks-core/src/adopt.rs); app commands
+`adopt_scan` / `adopt_apply` ([`src-tauri/src/adopt.rs`](../src-tauri/src/adopt.rs)),
+UI [`AdoptDialog.tsx`](../src/components/AdoptDialog.tsx); CLI
+`reks adopt scan <stick> --library <db> [--json]` (dry run only).
 
 When the stick is mounted, status reads it (ground truth, `validate::read`,
 read-only) and maps its entries to library tracks through `export_manifest`;
@@ -198,7 +219,10 @@ after `apply`; a failed record is a report warning, never a failed export.
   hand-built selection plan.
 - Adopt: fixture `fixtures/rekordbox/ref-<ver>/` stick → golden `AdoptPlan`
   JSON; stick files byte-identical afterwards; Link only offered on exact
-  ordered match.
+  ordered match. Built on a synthetic rekordbox-layout stick
+  (`adopt::tests`, golden [`golden_plan.json`](../crates/reks-export-rb/src/adopt/golden_plan.json),
+  `REKS_BLESS=1` rewrites it); the reference-fixture test is `#[ignore]`
+  until `ref-<ver>/` exists (S4).
 
 ## 9. Open items
 
@@ -208,4 +232,13 @@ after `apply`; a failed record is a report warning, never a failed export.
 - **S3** Does baken keep existing `/Contents` paths so unchanged tracks are
   not re-copied? Already a Phase 2 acceptance criterion; profiles depend on it.
 - **S4** Can rekordcrate read a current rekordbox 7 stick's playlist tree
-  without errors? Check with the reference fixture before building adopt.
+  without errors? Checked 2026-10-20 without a rekordbox 7 fixture (none in
+  `fixtures/` yet): rekordcrate 0.3.0, through `validate::read` and
+  `reks adopt scan`, reads both real exports it ships as test data with no
+  findings and no byte changed: `complete_export/demo_tracks` (rekordbox
+  6.6.1, per its `DEVSETTING.DAT`; no playlists) and `pdb/num_rows/export.pdb`
+  (a 2.9 MB real-world export of unrecorded version: 3,886 tracks, 104 tree
+  nodes, 94 playlists with 6,637 entries, one history playlist, all 20
+  tables). No failure found, so adopt was built; rekordbox 7 itself stays
+  **UNVERIFIED** until a `fixtures/rekordbox/ref-<ver>/` export runs
+  `reference_stick_fixture_golden_plan`.

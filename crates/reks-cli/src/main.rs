@@ -20,12 +20,15 @@
 //!                               dry run of importing a stick's play history
 //! reks history import <stick|backup> <scan flags> [--practice|--include <session>]... [--yes]
 //!                               dry run, then with --yes import the sessions
+//! reks adopt scan <stick> --library <library.sqlite> [--json]
+//!                               dry run of adopting a stick reks did not write
 //! reks convert plan --library <library.sqlite> (--track <id> | --playlist <id|path>)... [...]
 //!                               dry run of converting tracks (flags: see `convert.rs`)
 //! reks convert apply <plan flags> [--yes]
 //!                               dry run, then with --yes convert and update the library
 //! ```
 
+mod adopt;
 mod convert;
 mod history;
 mod rb;
@@ -70,11 +73,13 @@ fn main() -> anyhow::Result<()> {
         [cmd, rest @ ..] if cmd == "rb" => rb::run(rest),
         [cmd, rest @ ..] if cmd == "convert" => convert::run(rest),
         [cmd, rest @ ..] if cmd == "history" => history::run(rest),
+        [cmd, rest @ ..] if cmd == "adopt" => adopt::run(rest),
         _ => bail!(
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
              | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run] \
              | rb plan|export|validate <stick> ... | rb history <stick> [--json] \
              | history scan|import <stick|backup> --library <library.sqlite> ... \
+             | adopt scan <stick> --library <library.sqlite> [--json] \
              | convert plan|apply --library <library.sqlite> ...]"
         ),
     }
