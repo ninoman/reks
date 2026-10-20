@@ -377,9 +377,10 @@ Date of decisions: 2026-10-18.
   - Play count and last played are derived: a frozen baseline copied from
     rekordbox's `collection.xml` values, plus the entries of included sessions.
     Sessions are imported read-only from sticks or from Phase 2 backups. A
-    session can be marked practice (excluded) and back. Sessions dated on or
-    before the baseline date import excluded. reks preview and mixer playback
-    never count.
+    session can be marked practice (excluded) and back. Every session
+    imports counted, whatever its date; the user marks practice afterwards
+    (maintainer's call, 2026-10-20; undated and pre-baseline sessions used
+    to import excluded). reks preview and mixer playback never count.
   - Every writer checks what history the stick holds before writing. Phase 2
     backs up `PIONEER/rekordbox/*.pdb` and `exportLibrary.db` to
     `app_data_dir/stick-backups/` by default (data dir, not cache dir: it can

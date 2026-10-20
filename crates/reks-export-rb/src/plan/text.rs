@@ -73,6 +73,9 @@ impl fmt::Display for Warning {
                 }
                 write!(f, "{}; the export erases it, ", found.join("; "))?;
                 f.write_str(match policy {
+                    HistoryPolicy::Import => {
+                        "so its sessions are imported and the stick's database files backed up first"
+                    }
                     HistoryPolicy::BackUp => "so the stick's database files are backed up first",
                     HistoryPolicy::Discard => "and it is discarded without a backup (confirmed)",
                 })
@@ -124,6 +127,16 @@ impl fmt::Display for Problem {
             Self::DiscardNotConfirmed => {
                 f.write_str("discarding the stick's play history needs an explicit confirmation")
             }
+            Self::HistoryNotImported { sessions } => write!(
+                f,
+                "the stick holds {sessions} play history session{} not imported into the \
+                 library; choose import, back up or discard",
+                if *sessions == 1 { "" } else { "s" }
+            ),
+            Self::HistoryImportUnavailable { message } => write!(
+                f,
+                "cannot import the stick's play history ({message}); back it up or discard it"
+            ),
         }
     }
 }

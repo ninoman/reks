@@ -16,8 +16,7 @@
 //! folder (recognised by its `manifest.json`; its serial comes from there).
 //! `<session>` is a session's stick name (`HISTORY 001`) or the start of its
 //! fingerprint (at least 8 hex digits). `--practice` imports a new session
-//! excluded from play counts, `--include` imports it counted; without either
-//! a session dated on or before the baseline date, or undated, is excluded.
+//! excluded from play counts, `--include` imports it counted (the default).
 //! `--hist1-dates` reads session dates with the UNVERIFIED table-19
 //! heuristic (HIST1); without it every session is undated.
 
@@ -27,8 +26,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
 use reks_core::history::{
-    self, DefaultExclusion, EntryKind, HistoryImportPlan, ImportChoices, ImportReport, MatchKind,
-    PlannedSession, SessionAction, SkipReason,
+    self, EntryKind, HistoryImportPlan, ImportChoices, ImportReport, MatchKind, PlannedSession,
+    SessionAction, SkipReason,
 };
 use reks_core::Library;
 use reks_export_rb::history::{
@@ -176,7 +175,7 @@ fn execute(args: &Args, source: &Source) -> anyhow::Result<Out> {
                 .excluded
                 .get(&s.fingerprint)
                 .copied()
-                .unwrap_or(s.default_exclusion.is_some());
+                .unwrap_or(false);
             (s.fingerprint.clone(), ex)
         })
         .collect();
@@ -318,16 +317,7 @@ fn render(out: &Out) -> String {
             if dividers == 1 { "divider" } else { "dividers" }
         );
         if let Some(&ex) = out.excluded.get(&x.fingerprint) {
-            let why = match (ex, x.default_exclusion) {
-                (false, _) => "counted",
-                (true, Some(DefaultExclusion::PreBaseline)) => {
-                    "practice (on or before the baseline; --include to count it)"
-                }
-                (true, Some(DefaultExclusion::UnknownDate)) => {
-                    "practice (undated; --include to count it)"
-                }
-                (true, None) => "practice",
-            };
+            let why = if ex { "practice" } else { "counted" };
             let _ = writeln!(s, "      {why}");
         }
     }
@@ -476,10 +466,8 @@ mod tests {
             text.contains("3 entries: 0 exact, 2 by path, 0 by tags, 1 unmatched, 0 dividers"),
             "{text}"
         );
-        assert!(
-            text.contains("practice (undated; --include to count it)"),
-            "{text}"
-        );
+        assert!(text.contains("      counted\n"), "{text}");
+        assert!(!text.contains("practice"), "{text}");
         assert!(
             text.contains("Sessions  2 new, 0 extended, 0 skipped; 4 entries, 1 unmatched"),
             "{text}"
@@ -490,7 +478,7 @@ mod tests {
         let flags = vec!["--include".to_owned(), "HISTORY 001".to_owned()];
         let out = run_on(&db, &stick, Command::Import, &flags).unwrap();
         assert!(out.report.is_none());
-        assert_eq!(out.excluded.values().filter(|&&ex| !ex).count(), 1);
+        assert_eq!(out.excluded.values().filter(|&&ex| !ex).count(), 2);
         assert_eq!(play_count(&db), 0);
 
         let fp = out.plan.sessions[1].fingerprint[..10].to_owned();
@@ -553,8 +541,8 @@ mod tests {
         assert!(matches!(out.source, HistorySource::Backup(_)));
         assert!(render(&out).starts_with("Backup "), "{}", render(&out));
         assert_eq!(out.report.as_ref().unwrap().created.len(), 2);
-        // Undated sessions import as practice by default.
-        assert_eq!(play_count(&db), 0);
+        // Undated sessions count by default.
+        assert!(play_count(&db) > 0);
 
         let out = run_on(&db, &stick, Command::Scan, &[]).unwrap();
         assert!(out

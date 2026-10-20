@@ -7,7 +7,10 @@
  * plan (`export_plan`); going back and forward plans again, and a newer plan
  * drops older answers. Export writes exactly the plan the dry run shows
  * (`export_apply` with its `planId`) and records the sync in the stick's
- * profile; the wizard can't be closed while it runs.
+ * profile; the wizard can't be closed while it runs. When the dry run finds
+ * play history sessions the library has not imported (the export guard,
+ * Phase 2.5), `chooseHistory` records the user's choice and plans again;
+ * going back withdraws it.
  */
 import { create } from "zustand";
 
@@ -22,6 +25,7 @@ import {
   exportApply,
   exportCancel,
   exportPlan,
+  type HistoryPolicy,
   type PlaylistNode,
   profileSelection,
   profileSetSelection,
@@ -64,6 +68,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   skipUnsupported: false,
   history: "backUp",
   discardHistoryConfirmed: false,
+  historyChosen: false,
   dividers: false,
 };
 
@@ -92,6 +97,11 @@ interface ExportWizardState {
   /** Ticks or unticks a playlist or folder. */
   toggle(id: number): void;
   setOptions(patch: Partial<ExportOptions>): void;
+  /**
+   * Export guard (dry-run step): what happens to the stick's unimported sessions. `discard`
+   * counts as its explicit confirmation. Plans again.
+   */
+  chooseHistory(policy: HistoryPolicy, nodes: PlaylistNode[]): Promise<void>;
   next(nodes: PlaylistNode[]): Promise<void>;
   back(): void;
   /** Plans again (dry-run step). */
@@ -209,7 +219,22 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
     const options = { ...get().options, ...patch };
     // Leaving `discard` withdraws the confirmation; it is given for one choice.
     if (options.history !== "discard") options.discardHistoryConfirmed = false;
+    // The guard's choice is made in the dry run, knowing what is not imported.
+    if (patch.historyChosen === undefined) options.historyChosen = false;
     set({ options });
+  },
+
+  async chooseHistory(policy, nodes) {
+    if (get().step !== "dryRun" || get().planning) return;
+    set({
+      options: {
+        ...get().options,
+        history: policy,
+        historyChosen: true,
+        discardHistoryConfirmed: policy === "discard",
+      },
+    });
+    await get().replan(nodes);
   },
 
   async next(nodes) {
@@ -229,7 +254,14 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
     const step = EXPORT_STEPS[i - 1];
     if (step === undefined) return;
     generation++;
-    set({ step, dryRun: null, planning: false, error: null });
+    // Going back withdraws the guard's choice; `import` has no option of its own.
+    const o = get().options;
+    const options: ExportOptions = {
+      ...o,
+      history: o.history === "import" ? "backUp" : o.history,
+      historyChosen: false,
+    };
+    set({ step, options, dryRun: null, planning: false, error: null });
   },
 
   async replan(nodes) {

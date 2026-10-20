@@ -23,6 +23,9 @@
 //!   up before its first write ([`ExportPlan::backups`], see
 //!   [`ExportPlan::backup_plan`]), with a warning whenever the stick holds or
 //!   may hold history.
+//! - Export guard (Phase 2.5 task 8): [`plan`] also checks the stick's history
+//!   sessions against the library ([`guard_history`]); sessions not imported
+//!   yet block the plan until [`ExportOptions::history_chosen`].
 //!
 //! - Playlist dividers (D22) become planned tracks backed by a generated
 //!   silent WAV when [`ExportOptions::dividers`] is on ([`crate::divider`]);
@@ -31,6 +34,7 @@
 //! ANLZ comes from an [`AnlzLocator`]: [`CacheLocator`] for rekordbox's local
 //! cache, [`NoAnlz`] in tests.
 
+mod guard;
 mod locate;
 mod source;
 mod stick;
@@ -41,6 +45,7 @@ use std::path::{Path, PathBuf};
 
 use reks_audio::{Kind, Probe};
 use reks_core::fsname;
+use reks_core::history::HistoryImportPlan;
 use reks_core::{Library, PlaylistId, TrackId};
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +55,7 @@ use crate::divider::{self, DividerInfo};
 use crate::history::{self, BackupFile, BackupPlan, HistoryError, HistoryPolicy, StickHistory};
 use crate::TargetProfile;
 
+pub use guard::{guard_history, HistoryGuard, UnimportedSession};
 pub use locate::CacheLocator;
 pub use source::{load, SourceTrack, Sources};
 pub use stick::anlz_dir;
@@ -95,6 +101,10 @@ pub struct ExportOptions {
     /// The user explicitly confirmed [`HistoryPolicy::Discard`]; without it a
     /// stick that may hold history blocks the plan.
     pub discard_history_confirmed: bool,
+    /// The user picked [`Self::history`] in the export guard, knowing the
+    /// stick holds sessions the library has not imported
+    /// ([`guard_history`]). Without it such a stick blocks the plan.
+    pub history_chosen: bool,
     /// The `export.dividers` flag: write playlist dividers as silent tracks
     /// ([`crate::divider`]). Off by default and UNVERIFIED until the Phase
     /// 2.5 hardware session passes on CDJ-2000NXS2 and CDJ-3000.
@@ -111,6 +121,7 @@ impl Default for ExportOptions {
             skip_unsupported: false,
             history: HistoryPolicy::BackUp,
             discard_history_confirmed: false,
+            history_chosen: false,
             dividers: false,
         }
     }
@@ -184,6 +195,14 @@ pub struct ExportPlan {
     /// write (`dst_rel` is the stick file, `reason` [`OpReason::HistoryBackup`]).
     /// Empty when the stick holds no history or with a confirmed `Discard`.
     pub backups: Vec<FileOp>,
+    /// Stick sessions the library has not imported (export guard).
+    #[serde(default)]
+    pub guard: HistoryGuard,
+    /// The history scan behind [`Self::guard`]; `apply` imports it under
+    /// [`HistoryPolicy::Import`]. Not serialised: a plan read back from JSON
+    /// can't import.
+    #[serde(skip)]
+    pub history_import: Option<HistoryImportPlan>,
     pub warnings: Vec<Warning>,
     /// Blockers: `apply` refuses a plan with errors.
     pub errors: Vec<Problem>,
@@ -392,6 +411,17 @@ pub enum Problem {
     /// [`HistoryPolicy::Discard`] on a stick that may hold history, without
     /// [`ExportOptions::discard_history_confirmed`].
     DiscardNotConfirmed,
+    /// The stick holds history sessions the library has not imported and
+    /// the user has not chosen what happens to them
+    /// ([`ExportOptions::history_chosen`]).
+    HistoryNotImported {
+        sessions: u32,
+    },
+    /// [`HistoryPolicy::Import`] chosen, but the stick's history sessions
+    /// could not be read.
+    HistoryImportUnavailable {
+        message: String,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -426,7 +456,8 @@ pub enum PlanError {
 /// `anlz` (usually a [`CacheLocator`] for the same selection). Asks the OS for
 /// the volume serial ([`crate::device::volume_serial`]). With
 /// [`ExportOptions::dividers`], writes the divider files into the library's
-/// cache dir ([`divider::expand`]); nothing else is written.
+/// cache dir ([`divider::expand`]); nothing else is written. Runs the
+/// export guard ([`guard_history`]).
 pub fn plan(
     lib: &Library,
     sel: &Selection,
@@ -439,12 +470,15 @@ pub fn plan(
         divider::expand(&mut sources, &lib.cache_dir().join(divider::DIVIDER_DIR))?;
     }
     let serial = crate::device::volume_serial(dev);
-    plan_sources(sources, dev, serial, opts, anlz)
+    let mut plan = plan_sources(sources, dev, serial, opts, anlz)?;
+    guard_history(&mut plan, lib)?;
+    Ok(plan)
 }
 
 /// [`plan`] on already loaded sources and a known volume serial (also the
 /// entry point for tests). Dividers count only once [`divider::expand`]ed;
-/// `sources.dividers` is ignored.
+/// `sources.dividers` is ignored. Without a library there is no export
+/// guard: call [`guard_history`] on the result.
 pub fn plan_sources(
     sources: Sources,
     dev: &DeviceInfo,
@@ -627,6 +661,8 @@ pub fn plan_sources(
         deletes,
         history,
         backups,
+        guard: HistoryGuard::default(),
+        history_import: None,
         warnings,
         errors,
         bytes_to_write,

@@ -3,7 +3,8 @@
 //! ```text
 //! reks rb plan <stick> --library <library.sqlite> --playlist <id | Folder/Name>...
 //!              [--target nxs|nxs2|3000|xdj-xz|generic] [--missing-analysis skip|generate|without]
-//!              [--keep-stale] [--artwork] [--skip-unsupported] [--discard-history]
+//!              [--keep-stale] [--artwork] [--skip-unsupported]
+//!              [--import-history|--backup-history|--discard-history]
 //!              [--dividers] [--anlz-root <dir>]... [--json]
 //!     print the dry run; exits non-zero when the plan is blocked
 //! reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]
@@ -18,7 +19,12 @@
 //!
 //! `<stick>` is the stick's mount point. Any other directory is used as the
 //! stick root (a fake stick for testing) and has no volume serial.
-//! `--discard-history` is the explicit confirmation `Discard` needs.
+//! A stick with play history sessions the library has not imported blocks the
+//! plan (export guard, Phase 2.5 task 8) until one of `--import-history`
+//! (import them into the library, then back up), `--backup-history` (back up
+//! only) or `--discard-history` (erase them, no backup) chooses; without
+//! unimported sessions the Phase 2 backup runs anyway.
+//! `--discard-history` is also the explicit confirmation `Discard` needs.
 //! `--anlz-root` replaces rekordbox's default analysis folders.
 //! `--data-dir` is where stick backups go (`stick-backups/`), by default the
 //! library's folder (the app keeps its library in its data dir). `rb validate`
@@ -51,7 +57,7 @@ use serde::Serialize;
 const USAGE: &str = "usage: reks rb plan <stick> --library <library.sqlite> \
 --playlist <id|Folder/Name>... [--target nxs|nxs2|3000|xdj-xz|generic] \
 [--missing-analysis skip|generate|without] [--keep-stale] [--artwork] [--skip-unsupported] \
-[--discard-history] [--dividers] [--anlz-root <dir>]... [--json]
+[--import-history|--backup-history|--discard-history] [--dividers] [--anlz-root <dir>]... [--json]
        reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]
        reks rb validate <stick> <plan flags>
        reks rb history <stick> [--json]";
@@ -189,6 +195,7 @@ fn print_event(e: ApplyEvent) {
         ApplyEvent::Stage { stage } => {
             let what = match stage {
                 ApplyStage::Preflight => "checking the stick",
+                ApplyStage::ImportHistory => "importing the stick's play history",
                 ApplyStage::Backup => "backing up the stick's database",
                 ApplyStage::Write => "writing",
                 ApplyStage::Sync => "flushing to the stick",
@@ -316,9 +323,18 @@ fn parse_plan_args(flags: &[String], cmd: Command) -> anyhow::Result<PlanArgs> {
             // UNVERIFIED on players (Phase 2.5 task 11).
             "--dividers" => opts.dividers = true,
             "--skip-unsupported" => opts.skip_unsupported = true,
-            "--discard-history" => {
-                opts.history = HistoryPolicy::Discard;
-                opts.discard_history_confirmed = true;
+            "--import-history" | "--backup-history" | "--discard-history" => {
+                let policy = match flag.as_str() {
+                    "--import-history" => HistoryPolicy::Import,
+                    "--backup-history" => HistoryPolicy::BackUp,
+                    _ => HistoryPolicy::Discard,
+                };
+                if opts.history_chosen && opts.history != policy {
+                    bail!("pass only one of --import-history, --backup-history, --discard-history");
+                }
+                opts.history = policy;
+                opts.history_chosen = true;
+                opts.discard_history_confirmed = policy == HistoryPolicy::Discard;
             }
             "--json" => json = true,
             "--yes" if cmd == Command::Export => yes = true,
@@ -382,7 +398,8 @@ fn build_plan(
     if args.opts.dividers {
         divider::expand(&mut sources, &lib.cache_dir().join(divider::DIVIDER_DIR))?;
     }
-    let plan = plan::plan_sources(sources, dev, serial, &args.opts, &locator)?;
+    let mut plan = plan::plan_sources(sources, dev, serial, &args.opts, &locator)?;
+    plan::guard_history(&mut plan, &lib)?;
     Ok(Planned { lib, sel, plan })
 }
 
@@ -531,6 +548,36 @@ fn render_plan(plan: &ExportPlan) -> String {
             ""
         }
     );
+    let g = &plan.guard;
+    if g.needs_choice() {
+        let what = match &g.unreadable {
+            Some(e) => format!("{} sessions may not be imported ({e})", h.pdb_sessions),
+            None => format!(
+                "{} sessions, {} plays not imported into the library",
+                g.sessions.len(),
+                g.entries()
+            ),
+        };
+        let choice = if !plan.options.history_chosen {
+            "; pass --import-history, --backup-history or --discard-history".to_owned()
+        } else {
+            match plan.options.history {
+                HistoryPolicy::Import => "; importing them before writing",
+                HistoryPolicy::BackUp => "; backing them up only",
+                HistoryPolicy::Discard => "; discarding them",
+            }
+            .to_owned()
+        };
+        let _ = writeln!(o, "Guard     {what}{choice}");
+        for s in &g.sessions {
+            let note = if s.extends {
+                ", adds to an imported session"
+            } else {
+                ""
+            };
+            let _ = writeln!(o, "  {}: {} plays{note}", s.name, s.entries);
+        }
+    }
     if !plan.backups.is_empty() {
         let _ = writeln!(
             o,
@@ -590,6 +637,16 @@ fn render_report(r: &ExportReport) -> String {
     );
     for w in &r.warnings {
         let _ = writeln!(o, "  - {w}");
+    }
+    if let Some(i) = &r.history_import {
+        let _ = writeln!(
+            o,
+            "Imported  {} new and {} extended history sessions, {} entries ({} unmatched)",
+            i.created.len(),
+            i.extended.len(),
+            i.entries,
+            i.unmatched
+        );
     }
     if let Some(dir) = &r.backup_dir {
         let files = r.backup.as_ref().map_or(0, |b| b.files.len());
@@ -794,6 +851,26 @@ mod tests {
         assert!(a.opts.keep_stale && a.json);
         assert_eq!(a.opts.history, HistoryPolicy::Discard);
         assert!(a.opts.discard_history_confirmed);
+        assert!(a.opts.history_chosen);
+        let i = parse_plan_args(
+            &args("--library l --playlist x --import-history --import-history"),
+            Command::Plan,
+        )
+        .unwrap();
+        assert_eq!(i.opts.history, HistoryPolicy::Import);
+        assert!(i.opts.history_chosen && !i.opts.discard_history_confirmed);
+        let b = parse_plan_args(
+            &args("--library l --playlist x --backup-history"),
+            Command::Plan,
+        )
+        .unwrap();
+        assert_eq!(b.opts.history, HistoryPolicy::BackUp);
+        assert!(b.opts.history_chosen);
+        assert!(parse_plan_args(
+            &args("--library l --playlist x --import-history --discard-history"),
+            Command::Plan,
+        )
+        .is_err());
         assert_eq!(a.anlz_roots, Some(vec![PathBuf::from("/a")]));
 
         let d = parse_plan_args(&args("--library l --playlist x"), Command::Plan).unwrap();
@@ -932,11 +1009,27 @@ mod tests {
             Command::Plan,
         )
         .unwrap();
+        // The export guard stops on the two sessions until a flag chooses.
+        let plan = build_plan(&a, &fake_dev(&stick_root), None).unwrap().plan;
+        assert!(plan.is_blocked());
+        let text = render_plan(&plan);
+        for want in [
+            "Guard     2 sessions, 3 plays not imported into the library; pass \
+             --import-history, --backup-history or --discard-history\n",
+            "  HISTORY 001: 2 plays\n",
+            "  - the stick holds 2 play history sessions not imported",
+        ] {
+            assert!(text.contains(want), "{want:?} not in\n{text}");
+        }
+
+        let mut a = a;
+        a.opts.history_chosen = true;
         let plan = build_plan(&a, &fake_dev(&stick_root), None).unwrap().plan;
         assert!(!plan.is_blocked(), "{:?}", plan.errors);
         let text = render_plan(&plan);
         for want in [
             "Dry run: nothing has been written.",
+            "; backing them up only\n",
             "Tracks    1 (1 to copy, 0 already on the stick)",
             "Analysis  1 from rekordbox, 0 generated, 0 without",
             "  Gigs/\n    Friday (1 tracks)\n",

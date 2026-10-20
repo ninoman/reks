@@ -577,7 +577,11 @@ async function exportApply(onEvent: Channel<ExportProgress>): Promise<ExportRepo
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
   send({});
   await wait(400);
-  if (plan.played && plan.opts.history === "backUp") {
+  if (plan.played && plan.opts.history === "import") {
+    send({ stage: "importHistory", title: "Importing the stick's play history into your library" });
+    await wait(400);
+  }
+  if (plan.played && plan.opts.history !== "discard") {
     send({ stage: "backup", title: "Backing up the stick's play history" });
     await wait(500);
   }
@@ -594,7 +598,7 @@ async function exportApply(onEvent: Channel<ExportProgress>): Promise<ExportRepo
     await wait(350);
   }
   const backupFolder = `/Users/dj/Library/Application Support/app.reks/stick-backups/4993-1CFB/2026-10-19T21-04-12Z`;
-  const backedUp = plan.played && plan.opts.history === "backUp";
+  const backedUp = plan.played && plan.opts.history !== "discard";
   const history = backedUp
     ? {
         title: "Play history backed up",
@@ -669,6 +673,14 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
     problems.push({
       kind: "unsupportedFilesystem",
       title: `Players cannot read the ${dev.fsName} file system; format the stick as FAT32.`,
+      items: [],
+    });
+  }
+  if (played && !opts.historyChosen) {
+    problems.push({
+      kind: "historyNotImported",
+      title:
+        "The stick holds 2 play history sessions not imported into your library. Choose what happens to them under the play history.",
       items: [],
     });
   }
@@ -751,14 +763,26 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
           policy: opts.history,
           title: "This stick holds play history",
           text: "The stick's export.pdb holds 2 history sessions with 31 played tracks. Exporting rebuilds the stick's database, which erases it.",
+          guard: {
+            title: "2 sessions on this stick are not in your library",
+            text: "Exporting erases them from the stick. Import now adds them to your library's history before writing; Back up and continue keeps a copy you can import later; Continue and discard erases them. Imported sessions count in play counts; you can mark any of them as practice in History later.",
+            sessions: [
+              "HISTORY 001: 19 plays",
+              "HISTORY 002: 12 plays",
+            ],
+            chosen: opts.historyChosen,
+            canImport: true,
+          },
           actionText:
-            opts.history === "backUp"
-              ? "Before writing anything, reks copies 1 database file (412.0 KB) to its data folder and checks the copies; if the backup fails, nothing is written. The report after the export shows where the copies are."
-              : opts.discardHistoryConfirmed
-                ? "You chose to discard it: no backup is made."
-                : "Discarding it needs your confirmation in the options.",
+            opts.history === "import"
+              ? "Before writing anything, reks imports 2 sessions (31 plays) into your library, then reks copies 1 database file (412.0 KB) to its data folder and checks the copies; if the backup fails, nothing is written. The report after the export shows where the copies are."
+              : opts.history === "backUp"
+                ? "Before writing anything, reks copies 1 database file (412.0 KB) to its data folder and checks the copies; if the backup fails, nothing is written. The report after the export shows where the copies are."
+                : opts.discardHistoryConfirmed
+                  ? "You chose to discard it: no backup is made."
+                  : "Discarding it needs your confirmation in the options.",
           backups:
-            opts.history === "backUp"
+            opts.history !== "discard"
               ? {
                   count: 1,
                   bytes: 412_000,
@@ -776,6 +800,7 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
           text: "Players have not logged any sessions here, so the export loses nothing.",
           actionText: null,
           backups: none,
+          guard: null,
         },
     problems,
     warnings:

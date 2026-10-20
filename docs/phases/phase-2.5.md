@@ -2,7 +2,7 @@
 
 Status: started 2026-10-20 ahead of the Phase 2 hardware campaign with the
 maintainer's approval (software only; anything that needs a player stays
-UNVERIFIED); tasks 1–7 and 10 done. Depends on: Phase 2 done, including its hardware campaign,
+UNVERIFIED); tasks 1–8 and 10 done. Depends on: Phase 2 done, including its hardware campaign,
 history safeguard and `export_manifest` (tasks 12–14). Runs before Phase 3.
 Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
@@ -94,9 +94,12 @@ Count rules (D23)
 play_count(t)  = baseline_play_count(t) + count(track entries of t in included sessions)
 last_played(t) = max(baseline_last_played(t), max(played_on) of included sessions containing t)
 ```
-- Included means `excluded = 0`. Sessions with `played_on` on or before the
-  baseline date import excluded (`pre_baseline`, "may already be in
-  rekordbox's count"); unknown dates are preselected as excluded in the dry run.
+- Included means `excluded = 0`. Every session imports included, whatever
+  its date; the user marks practice afterwards (maintainer's call,
+  2026-10-20). There is no default exclusion: undated and pre-baseline
+  sessions used to import excluded (`pre_baseline`, a reason no code writes
+  now). A session that rekordbox may already have counted is the user's to
+  mark.
 - The baseline is frozen. A later rekordbox XML re-import sets `baseline_*`
   only for tracks it creates, never for existing ones, because rekordbox may
   have counted the same stick histories. This replaces Phase 1's "XML values
@@ -265,12 +268,12 @@ Divider rules
    extend also applies when both serials are absent and takes the longest
    stored prefix; extending replaces the session's fingerprint. A plan entry
    whose `Extend` no longer fits fails the whole import (`StaleHistoryPlan`);
-   a `New` imported meanwhile is skipped. New sessions dated on or before
-   the baseline date, or undated, default to excluded (`pre_baseline`); an
-   explicit Practice choice stores `user`. `Library::session_link_entry`
+   a `New` imported meanwhile is skipped. New sessions import counted (the
+   undated and pre-baseline default exclusions were dropped on 2026-10-20);
+   an explicit Practice choice stores `user`. `Library::session_link_entry`
    ("Locate…") is here; counts are not recomputed until task 7. The fixture
    test (`played_stick_fixture_imports_once`) is `#[ignore]` like task 5's.
-7. [x] **Derived counts**: `recompute_play_stats`, pre-baseline rule, frozen
+7. [x] **Derived counts**: `recompute_play_stats`, frozen
    baseline on XML re-import. Property test: count = baseline + included
    track entries for random session sets and toggles. Deleting all sessions
    returns every track to baseline.
@@ -280,16 +283,40 @@ Divider rules
    reason) and `session_delete`, which task 9 builds on. History import,
    `session_link_entry` (old and new track), the Practice toggle, session
    delete and the rekordbox XML import each recompute the tracks they touch
-   in their own transaction. The pre-baseline rule is task 6's default
-   exclusion. XML import: `PlayCount` / `LastPlayed` fill `baseline_*` only
+   in their own transaction. XML import: `PlayCount` / `LastPlayed` fill `baseline_*` only
    for tracks it creates (an existing row, scanned or imported, keeps its
    baseline). Tests in [tests.rs](../../crates/reks-core/src/history/tests.rs)
    (property test, 100-track toggle under 100 ms) and
    `reimport_keeps_the_play_baseline_frozen` in
    [rbxml_import.rs](../../crates/reks-core/tests/rbxml_import.rs).
-8. **Export guard**: "Import now" / "Back up and continue" / "Continue and
+8. [x] **Export guard**: "Import now" / "Back up and continue" / "Continue and
    discard" when `scan` finds sessions not yet imported; the planner refuses
    to apply without a choice. Tests on the fixture stick.
+   Done in [guard.rs](../../crates/reks-export-rb/src/plan/guard.rs):
+   `plan::plan` runs `guard_history` (callers of `plan_sources` call it
+   themselves). It reads the stick's sessions (HIST1 dates off: fingerprints
+   don't use them) and runs `history::scan`; New and Extend sessions fill
+   `ExportPlan::guard` and, while `ExportOptions::history_chosen` is false,
+   add `Problem::HistoryNotImported`, so `apply` refuses the plan. The
+   choices are `HistoryPolicy::Import` (new), `BackUp` and `Discard` (still
+   needs `discard_history_confirmed`). Import now is the new apply stage
+   `ImportHistory` before the backup: `history::import` of the dry run's
+   scan (`ExportPlan::history_import`, not serialised) with default choices,
+   so they all count (Practice is set later in History); it backs up too. An import error
+   aborts before any stick write; a session imported meanwhile is skipped.
+   Only a stick whose `export.pdb` counts sessions is scanned: an unreadable
+   one keeps the Phase 2 backup; a count that the full reader then fails on
+   still needs a choice, without Import now (`HistoryImportUnavailable`).
+   Dry run: `HistoryView::guard` (title, one line per session, chosen,
+   `can_import`); report: "Play history imported and backed up". UI: the
+   dry-run step shows the three choices (Import now primary; Continue and
+   discard asks for its own confirmation), each plans again; going back
+   withdraws the choice. CLI: `reks rb plan|export --import-history |
+   --backup-history | --discard-history` (one of them). Tests:
+   `plan::guard::tests` (synthetic played stick: blocks, each choice end to
+   end, the backup scans as two new sessions, imported stick needs no
+   choice, stale import skipped, plan without its scan refused); the
+   fixture-stick test `played_stick_fixture_guard` is `#[ignore]`.
 9. **History UI**: Histories tree (year → month → session); session view in
    play order with unmatched entries greyed and "Locate…", dividers hidden by
    default; header with rename, venue, notes, Practice toggle, delete
@@ -381,7 +408,8 @@ Divider rules
   valid WAV through `audiocheck` and the validator; flag off until both players pass.
 - **Wrong matches inflate counts.** Mitigation: exact manifest matches for reks
   sticks; fallbacks need a unique match; unmatched entries never count.
-- **Double counting with rekordbox.** Mitigation: frozen baseline; sessions
-  before the baseline date import excluded.
+- **Double counting with rekordbox.** Mitigation: frozen baseline; the user
+  marks a session practice when rekordbox already counted it (no automatic
+  default since 2026-10-20).
 - **History format unknowns** (HIST1, HIST3). Mitigation: dates optional; prefix
   rule for appended sessions; fixtures from the maintainer's played sticks.

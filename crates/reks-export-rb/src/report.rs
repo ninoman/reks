@@ -148,7 +148,10 @@ impl ProgressTracker {
                 // From the sync on, the new database is on the stick.
                 v.cancellable = matches!(
                     stage,
-                    ApplyStage::Preflight | ApplyStage::Backup | ApplyStage::Write
+                    ApplyStage::Preflight
+                        | ApplyStage::ImportHistory
+                        | ApplyStage::Backup
+                        | ApplyStage::Write
                 );
             }
             ApplyEvent::Writer { event } => match event {
@@ -189,6 +192,7 @@ impl ProgressTracker {
 fn stage_title(stage: ApplyStage) -> &'static str {
     match stage {
         ApplyStage::Preflight => "Checking the stick",
+        ApplyStage::ImportHistory => "Importing the stick's play history into your library",
         ApplyStage::Backup => "Backing up the stick's play history",
         ApplyStage::Write => "Writing tracks",
         ApplyStage::Sync => "Flushing the written files to the stick",
@@ -348,12 +352,28 @@ fn history_outcome(plan: &ExportPlan, result: &Result<ExportReport, ApplyError>)
         files: files.clone(),
     };
 
-    if let Err(ApplyError::Backup(_)) = result {
-        return outcome(
-            "Play history backup failed",
-            "Nothing was written, so the stick still holds its play history.".to_owned(),
-        );
+    match result {
+        Err(ApplyError::Backup(_)) => {
+            return outcome(
+                "Play history backup failed",
+                "Nothing was written, so the stick still holds its play history.".to_owned(),
+            )
+        }
+        Err(ApplyError::HistoryImport(_) | ApplyError::NoHistoryScan) => {
+            return outcome(
+                "Play history import failed",
+                "Nothing was written, so the stick still holds its play history.".to_owned(),
+            )
+        }
+        _ => {}
     }
+    let imported = report.and_then(|r| r.history_import.as_ref()).map(|i| {
+        format!(
+            "reks imported {} ({}) into your library's history. ",
+            count(i.created.len() + i.extended.len(), "session", "sessions"),
+            count(i.entries, "play", "plays")
+        )
+    });
     if !plan.history.may_hold_history() {
         return outcome(
             "No play history on this stick",
@@ -373,7 +393,10 @@ fn history_outcome(plan: &ExportPlan, result: &Result<ExportReport, ApplyError>)
         } else {
             format!("{copied} The stick still has them too: its database was not replaced.")
         };
-        return outcome("Play history backed up", text);
+        return match imported {
+            Some(i) => outcome("Play history imported and backed up", format!("{i}{text}")),
+            None => outcome("Play history backed up", text),
+        };
     }
     if !replaced {
         return outcome(
@@ -388,7 +411,7 @@ fn history_outcome(plan: &ExportPlan, result: &Result<ExportReport, ApplyError>)
         ),
         // A backup policy always backs up a stick that may hold history;
         // reaching here means the plan had no backup files.
-        HistoryPolicy::BackUp => outcome(
+        HistoryPolicy::BackUp | HistoryPolicy::Import => outcome(
             "Play history not backed up",
             "The plan listed no database files to back up.".to_owned(),
         ),

@@ -62,10 +62,13 @@ impl StickHistory {
     }
 }
 
-/// What an export does with a stick's history. Phase 2.5 adds `Import`.
+/// What an export does with a stick's history.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum HistoryPolicy {
+    /// Import the sessions the library lacks first (Phase 2.5 export guard,
+    /// [`crate::plan::guard_history`]), then back up as `BackUp` does.
+    Import,
     /// Copy the stick's database files to the app data dir first (default).
     #[default]
     BackUp,
@@ -252,8 +255,10 @@ pub fn plan_backups(
             }
             return Ok(plan);
         }
-        HistoryPolicy::BackUp if !history.may_hold_history() => return Ok(plan),
-        HistoryPolicy::BackUp => {}
+        HistoryPolicy::BackUp | HistoryPolicy::Import if !history.may_hold_history() => {
+            return Ok(plan)
+        }
+        HistoryPolicy::BackUp | HistoryPolicy::Import => {}
     }
 
     let Some(rb_dir) = rekordbox_dir(device_root).map_err(io_err(device_root))? else {

@@ -8,12 +8,16 @@
 //!    the history on the stick is what the dry run showed (a stick played
 //!    since needs a new plan, or its new history would go without backup). A
 //!    running rekordbox is only a warning ([`ApplyWarning::RekordboxRunning`]).
-//! 2. **History backup** (D23, task 12): [`history::run_backups`] on
+//! 2. **History import** (Phase 2.5 export guard, [`crate::plan::guard_history`]):
+//!    under [`HistoryPolicy::Import`], the sessions the dry run listed as not
+//!    imported go into the library ([`reks_core::history::import`], default
+//!    choices). Any error aborts with the stick untouched.
+//! 3. **History backup** (D23, task 12): [`history::run_backups`] on
 //!    [`ExportPlan::backup_plan`]. Any error aborts with the stick untouched.
-//! 3. **Write** through the [`RekordboxWriter`], which gets the cancel token.
-//! 4. **fsync** of the database, the ANLZ files and the copied audio.
-//! 5. **Validate**: [`validate`] reads the stick back.
-//! 6. **Manifest** (task 13): `Library::replace_manifest` with the read-back
+//! 4. **Write** through the [`RekordboxWriter`], which gets the cancel token.
+//! 5. **fsync** of the database, the ANLZ files and the copied audio.
+//! 6. **Validate**: [`validate`] reads the stick back.
+//! 7. **Manifest** (task 13): `Library::replace_manifest` with the read-back
 //!    rows, only when the export is clean (no failed track, no finding, no
 //!    error after the database was written).
 //!
@@ -35,11 +39,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use reks_core::history::{self as library_history, ImportChoices, ImportReport};
 use reks_core::{CancelToken, Library};
 use serde::Serialize;
 
 use crate::device::{self, DeviceError};
-use crate::history::{self, BackupReport, HistoryError, StickHistory};
+use crate::history::{self, BackupReport, HistoryError, HistoryPolicy, StickHistory};
 use crate::plan::{anlz_dir, on_stick, AnlzSource, ExportPlan};
 use crate::validate::{self, ValidationReport};
 use crate::writer::{ExportEvent, RekordboxWriter, WriterError, WriterReport};
@@ -61,7 +66,8 @@ pub enum StickCheck {
 /// What [`apply`] needs besides the plan and the writer.
 #[derive(Debug, Clone, Copy)]
 pub struct ApplyEnv<'a> {
-    /// Receives the export manifest.
+    /// Receives the export manifest and, under [`HistoryPolicy::Import`],
+    /// the stick's history sessions.
     pub library: &'a Library,
     /// Stick backups go under `<app_data_dir>/stick-backups/` (D19, D23).
     pub app_data_dir: &'a Path,
@@ -73,6 +79,8 @@ pub struct ApplyEnv<'a> {
 #[serde(rename_all = "camelCase")]
 pub enum ApplyStage {
     Preflight,
+    /// Importing the stick's history sessions into the library.
+    ImportHistory,
     /// Copying the stick's database files to the app data dir.
     Backup,
     /// The writer runs; [`ApplyEvent::Writer`] events follow.
@@ -160,6 +168,8 @@ pub struct ExportReport {
     pub status: ExportStatus,
     pub volume_serial: Option<String>,
     pub warnings: Vec<ApplyWarning>,
+    /// The history import, under [`HistoryPolicy::Import`] with sessions to import.
+    pub history_import: Option<ImportReport>,
     /// The history backup, when the plan had one.
     pub backup: Option<BackupReport>,
     /// Folder of [`Self::backup`] (`BackupReport` leaves it out of its JSON).
@@ -182,6 +192,7 @@ impl ExportReport {
             status: ExportStatus::Cancelled,
             volume_serial,
             warnings,
+            history_import: None,
             backup: None,
             backup_dir: None,
             writer: None,
@@ -221,6 +232,14 @@ pub enum ApplyError {
     /// The stick changed since the dry run; plan again.
     #[error("the stick changed since the dry run ({0}); plan the export again")]
     PlanOutOfDate(String),
+    /// Importing the stick's history into the library failed; nothing was
+    /// written to the stick.
+    #[error("importing the stick's play history failed, nothing was written: {0}")]
+    HistoryImport(#[source] reks_core::Error),
+    /// [`HistoryPolicy::Import`] with sessions to import, but the plan has
+    /// no history scan (it was read back from JSON); plan again.
+    #[error("the plan has no history scan to import; plan the export again")]
+    NoHistoryScan,
     /// Backing up the stick's history failed; nothing was written.
     #[error("backing up the stick's play history failed, nothing was written: {0}")]
     Backup(#[source] HistoryError),
@@ -252,6 +271,26 @@ pub fn apply(
     let mut report = ExportReport::new(serial.clone(), warnings);
     if cancel.is_cancelled() {
         return Ok(report);
+    }
+
+    if plan.options.history == HistoryPolicy::Import && !plan.guard.sessions.is_empty() {
+        stage(ApplyStage::ImportHistory);
+        let scanned = plan
+            .history_import
+            .as_ref()
+            .ok_or(ApplyError::NoHistoryScan)?;
+        let imported = library_history::import(scanned, &ImportChoices::default(), env.library)
+            .map_err(ApplyError::HistoryImport)?;
+        tracing::info!(
+            created = imported.created.len(),
+            extended = imported.extended.len(),
+            entries = imported.entries,
+            "imported the stick's play history"
+        );
+        report.history_import = Some(imported);
+        if cancel.is_cancelled() {
+            return Ok(report);
+        }
     }
 
     stage(ApplyStage::Backup);
