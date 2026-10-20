@@ -49,11 +49,33 @@ Date of decisions: 2026-10-18.
   per OS and webkit2gtk needs host GStreamer plugins.
 - Risks: no HE-AAC (rare in DJ libraries; show "unsupported codec"); MP3
   decoder-delay convention must be calibrated against rekordbox cue positions
-  (R§3, R§4). Record the measured offset in D13.
+  (R§3, R§4); measured below.
 - Finding 2026-10-20 (phase 3 task 1): gapless decode trims the delay Symphonia
   reports (LAME MP3: 1105 frames), but Symphonia 0.6 reports none for ffmpeg
   AAC in MP4 (priming in the edit list), so such files decode 1024 frames late.
-  Input to phase 3 task 4; `reks-analysis` keeps the reported values.
+  Input to phase 3 task 4 (resolved in the next entry).
+- Timing convention (2026-10-20, phase 3 task 4): **reks positions are
+  rekordbox positions.** The decoders (`decode_f32`, `decode_stereo`) put
+  sample 0 where rekordbox does, by prepending silence
+  ([`reks_audio::timing`](../crates/reks-audio/src/timing.rs)); analysis,
+  waveforms, preview and export inherit it, and cues/grids imported from
+  rekordbox already use it. Rules, from the maintainer's rekordbox 6 library
+  (method and numbers: [analysis-parity.md](analysis-parity.md), "Timing
+  offset per codec"): an MP3 whose Info frame carries LAME's own tag (encoder
+  `LAME…`, valid tag CRC) is delay + one frame later (1105 + 1152 samples,
+  51.2 ms); an MP3 with another Info tag (ffmpeg's `Lavf`/`Lavc`, or a LAME
+  tag with a bad CRC, n = 2) is the trimmed delay later (25.1 ms); MP3
+  without an Info tag, FLAC, WAV, AIFF and ALAC as decoded. Symphonia's MP3
+  decode equals ffmpeg's gapless decode sample for sample on every library
+  MP3, so the offsets are rekordbox's convention, not a decoder error (Mixxx's
+  26/52 ms, R§3). AAC in MP4: as decoded, **UNVERIFIED** — Symphonia applies
+  neither the edit list nor `iTunSMPB`, and the one AAC track measured
+  (iTunes, 2112 priming frames) sits near our decode, not near true gapless.
+  `ANALYSER_VERSION` 2. Whether a CDJ's own MP3 decoder agrees with
+  rekordbox's timeline is a hardware check (phase 3 checklist).
+  Rejected: shifting only at export (preview and the grid editor would
+  disagree with imported cues); decoding with gapless off (gives the delay
+  but not LAME files' extra Info frame, which Symphonia never decodes).
 
 ## D5. Preview playback: our own `cpal` engine (`reks-mix`), decoding with Symphonia
 

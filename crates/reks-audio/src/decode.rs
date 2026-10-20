@@ -3,10 +3,12 @@
 //!
 //! Mono is copied to both channels; channels past the second are dropped.
 //! Resampling runs here, off the audio thread (docs/decisions.md D5).
+//! Sample 0 is on rekordbox's timeline ([`crate::timing`]).
 
 use std::fs::File;
 use std::path::Path;
 
+use symphonia::core::codecs::audio::well_known::CODEC_ID_MP3;
 use symphonia::core::codecs::audio::{AudioCodecParameters, AudioDecoderOptions};
 use symphonia::core::errors::Error as SymErr;
 use symphonia::core::formats::probe::Hint;
@@ -18,6 +20,7 @@ use crate::error::{Error, Result};
 use crate::overview::Overview;
 use crate::probe::decode_err;
 use crate::resample::{StreamResampler, CHUNK};
+use crate::timing::{mp3_timeline, read_mp3_info, Timeline};
 
 /// Longest track [`decode_stereo`] accepts: about 690 MB of PCM at 48 kHz.
 pub const MAX_DECODE_MS: u64 = 60 * 60 * 1000;
@@ -60,6 +63,8 @@ pub struct Decoded {
     pub source_rate: u32,
     /// Overview waveform at the file's rate; see [`crate::overview`].
     pub overview: Vec<f32>,
+    /// The silence put before the decoded audio ([`crate::timing`]).
+    pub timeline: Timeline,
 }
 
 /// The opened container and its default audio track.
@@ -75,6 +80,8 @@ pub(crate) struct OpenTrack {
     /// Symphonia's gapless decode (the default) trims both from the output.
     pub delay: Option<u32>,
     pub padding: Option<u32>,
+    /// Where sample 0 goes on rekordbox's timeline.
+    pub timeline: Timeline,
 }
 
 /// Opens `path` and finds its default audio track.
@@ -117,6 +124,15 @@ pub(crate) fn open_track(path: &Path) -> Result<OpenTrack> {
         .sample_rate
         .filter(|&sr| sr > 0)
         .ok_or_else(|| unsupported("unknown sample rate"))?;
+    let timeline = if params.codec == CODEC_ID_MP3 {
+        let info = read_mp3_info(path).unwrap_or_else(|e| {
+            tracing::debug!(path = %path.display(), error = %e, "no MP3 Info header read");
+            None
+        });
+        mp3_timeline(info.as_ref(), delay)
+    } else {
+        Timeline::NONE
+    };
     Ok(OpenTrack {
         format,
         track_id,
@@ -125,6 +141,7 @@ pub(crate) fn open_track(path: &Path) -> Result<OpenTrack> {
         num_frames,
         delay,
         padding,
+        timeline,
     })
 }
 
@@ -138,6 +155,7 @@ pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded> {
         params,
         sample_rate: source_rate,
         num_frames,
+        timeline,
         ..
     } = open_track(path)?;
     let max_frames = MAX_DECODE_MS * u64::from(source_rate) / 1000;
@@ -154,6 +172,10 @@ pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded> {
     let mut overview = Overview::new();
     let mut frame_count: u64 = 0;
     let mut scratch: Vec<f32> = Vec::new();
+    for _ in 0..timeline.lead_frames {
+        overview.push(0.0, 0.0);
+        sink.push(0.0, 0.0);
+    }
 
     loop {
         let packet = match format.next_packet() {
@@ -197,6 +219,7 @@ pub fn decode_stereo(path: &Path, target_rate: Option<u32>) -> Result<Decoded> {
         pcm: sink.finish()?,
         source_rate,
         overview: overview.finish(),
+        timeline,
     })
 }
 

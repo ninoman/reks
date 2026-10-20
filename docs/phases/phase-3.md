@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–3, 5–11 and 13 done). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–11 and 13 done; 12 in progress). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -44,7 +44,8 @@ the repo before tuning begins.
 // Built (tasks 1–2); see crates/reks-analysis/src/{input,beats}.rs.
 pub struct AnalysisInput { pub mono: Vec<f32> /* 44.1 kHz */, pub beat_mono: Vec<f32> /* 22.05 kHz */,
                            pub source_rate: u32, pub source_channels: u16,
-                           pub encoder_delay: Option<u32>, pub encoder_padding: Option<u32> /* source frames, already trimmed, see D4 */ }
+                           pub encoder_delay: Option<u32>, pub encoder_padding: Option<u32> /* source frames, already trimmed, see D4 */,
+                           pub timeline: reks_audio::Timeline /* leading silence that puts sample 0 on rekordbox's timeline (task 4) */ }
 pub struct BeatList { pub sample_rate: u32 /* 44_100 */, pub beats: Vec<Beat>, pub confidence: f32 }
 pub struct Beat { pub sample: i64, pub downbeat: bool }   // BeatList::beats_s()/downbeats_s() give f64 seconds
 
@@ -190,10 +191,21 @@ rekordbox keys (D10, "Queue").
    dropped). The constant grid's `first_beat` is extrapolated back to the
    earliest beat ≥ 0; the PQTZ writer decides whether to emit beats before
    the first tracked one.
-4. **Decoder-delay calibration**: export a reference set from rekordbox
+4. [x] **Decoder-delay calibration**: export a reference set from rekordbox
    (same MP3/AAC/FLAC files) and compare rekordbox cue/grid times with ours;
    determine the per-codec offset convention (Mixxx saw 26/52 ms on MP3);
    encode the result in `reks-audio` and record it in D4.
+   Done: measured on the maintainer's library instead of re-encoded copies
+   (rekordbox's grid vs our raw beats, per-track median, grouped by codec and
+   MP3 header; the lossless tracks give the tracker's own bias, +1.8 ms):
+   LAME-tagged MP3 +51.2 ms (delay + Info frame), ffmpeg-tagged MP3 +25.1 ms
+   (delay), untagged MP3 and lossless 0; Symphonia matches ffmpeg's gapless
+   decode exactly, so this is rekordbox's convention. Encoded in
+   [timing.rs](../../crates/reks-audio/src/timing.rs) (Info/LAME tag reader,
+   rules); `decode_f32` and `decode_stereo` prepend the lead, so all reks
+   positions are rekordbox positions (D4). AAC stays as decoded,
+   **UNVERIFIED** (one track). New fixture `sine-click-128-lame.mp3` (LAME's
+   own tag). Numbers: [analysis-parity.md](../analysis-parity.md).
 5. [x] **Key detection**: port libKeyFinder's pipeline (downsample, Blackman
    windowed chromagram across octaves, tone profiles, cosine similarity)
    on `rustfft`; tests: synthetic chord fixtures for all 24 keys; CI job
@@ -383,6 +395,10 @@ rekordbox keys (D10, "Queue").
 4. Key display matches the user's notation preference; master tempo pitch
    change does not alter displayed key.
 5. Long track (12 min): grid still aligned at the end.
+6. Timing (task 4): one LAME-encoded and one ffmpeg-encoded MP3, reks-analysed:
+   grid lines sit on the kicks at the start and the end, as with the
+   rekordbox-analysed copy (the CDJ's MP3 decoder must agree with rekordbox's
+   timeline; UNVERIFIED until run).
 
 ## Risks
 
