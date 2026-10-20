@@ -64,12 +64,10 @@ pub struct EngineConfig { pub device: Option<String>, pub sample_rate: u32, pub 
                           pub cue: CueRouting }
 pub enum CueRouting { Outputs { master: [u16; 2], cue: [u16; 2] }, SplitMono, Off }
 
-pub struct DeckSource {            // built off the audio thread by the app layer
-    pub pcm: Arc<[i16]>,           // interleaved stereo at the file's rate, ~10 MB per minute
-    pub sample_rate: u32,
-    pub grid: Vec<GridAnchor>,     // from `beatgrid` rows, positions in source samples
-    pub hot_cues: Vec<(u8, i64)>,  // slot, source sample
-}
+pub struct DeckSource { .. }      // built off the audio thread by the app layer:
+// DeckSource::new(pcm: Vec<i16>, sample_rate)   interleaved stereo, ~10 MB per minute
+//     .with_grid(&[GridAnchor { frame, bpm, beat_in_bar, beats_per_bar }])  // `beatgrid` rows, source frames
+//     .with_hot_cues(vec![(slot, frame)])
 
 impl Engine {
     pub fn start(cfg: EngineConfig) -> Result<Engine>;
@@ -112,9 +110,18 @@ pub enum Control {
    `Control` in `control.rs` with every variant above plus `Quantise`;
    `Leader` takes `Option<u8>` (`None` = automatic) and `Seek` keeps its
    `frame` field. Mixer variants are accepted and ignored until tasks 4–7.
-2. **Deck**: `DeckSource` loading, play/pause/cue/seek/hot cue, varispeed with
+2. [x] **Deck**: `DeckSource` loading, play/pause/cue/seek/hot cue, varispeed with
    `rubato`, nudge, quantise. Tests: at ratio 1.0 the render equals the decode
    sample for sample; at 1.05 click spacing is 1/1.05 of the original within 1 sample.
+   Done 2026-10-21 (`deck.rs`, `varispeed.rs`, `beatmap.rs`, `source.rs`;
+   render tests in `crates/reks-mix/tests/deck.rs`). At exactly unit step the
+   deck copies frames (bit-exact); otherwise it reads through rubato's async
+   sinc resampler (128 taps, 32-frame chunks) with its own source-time clock,
+   so the reported position matches what is heard to under half a frame. CUE:
+   playing → back to the cue point and pause; paused → set the cue point.
+   HOT CUE jumps and plays. Quantise: cue points and paused seeks snap to the
+   nearest beat; jumps while playing keep the beat phase. Dynamic grids run
+   linearly between anchors, so beats land on the anchors.
 3. **Sync**: leader, tempo match, beat and bar phase, continuous phase
    correction on dynamic grids. Tests: 128 and 125 BPM click fixtures synced
    keep onsets within 1 ms for 64 bars; a tempo-change fixture stays within 2 ms

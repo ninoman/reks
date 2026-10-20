@@ -315,7 +315,7 @@ fn open_stream(
         channels: config.channels,
         buffer_frames,
     };
-    let processor = Processor::new(Graph::new(config.sample_rate), queues, config.sample_rate);
+    let processor = Processor::new(Graph::new(config.sample_rate)?, queues, config.sample_rate);
 
     let stream = match supported.sample_format() {
         SampleFormat::F32 => build::<f32>(&dev, &config, processor, health)?,
@@ -483,7 +483,7 @@ mod tests {
             retired: retire_tx,
         };
         Rig {
-            p: Processor::new(Graph::new(RATE), queues, RATE),
+            p: Processor::new(Graph::new(RATE).unwrap(), queues, RATE),
             controls,
             states,
             retired,
@@ -491,7 +491,7 @@ mod tests {
     }
 
     fn source(frames: usize, value: i16) -> Arc<DeckSource> {
-        Arc::new(DeckSource::new(vec![value; frames * 2]))
+        Arc::new(DeckSource::new(vec![value; frames * 2], RATE))
     }
 
     /// Runs `f` with allocation counting on; returns the count.
@@ -536,6 +536,63 @@ mod tests {
             }
         });
         assert_eq!(n, 0, "seek, volume, formats");
+
+        // Varispeed, nudge, cue, hot cue and quantised jumps.
+        let gridded = Arc::new(
+            DeckSource::new(vec![500; RATE as usize * 4], 44_100)
+                .with_grid(&[crate::GridAnchor {
+                    frame: 0,
+                    bpm: 128.0,
+                    beat_in_bar: 1,
+                    beats_per_bar: 4,
+                }])
+                .with_hot_cues(vec![(1, 30_000)]),
+        );
+        for c in [
+            Control::Load {
+                deck: 1,
+                src: Arc::clone(&gridded),
+            },
+            Control::Tempo {
+                deck: 1,
+                ratio: 1.06,
+            },
+            Control::Quantise { deck: 1, on: true },
+            Control::Play { deck: 1 },
+        ] {
+            r.controls.push(c).unwrap();
+        }
+        let n = realtime(|| {
+            for _ in 0..4 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "varispeed");
+        for c in [
+            Control::Nudge {
+                deck: 1,
+                ratio: 0.97,
+            },
+            Control::HotCue { deck: 1, slot: 1 },
+            Control::Seek {
+                deck: 1,
+                frame: 50_000,
+            },
+            Control::Tempo {
+                deck: 1,
+                ratio: 1.0,
+            },
+            Control::Cue { deck: 1 },
+        ] {
+            r.controls.push(c).unwrap();
+        }
+        let n = realtime(|| {
+            for _ in 0..8 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "nudge, hot cue, quantised seek, cue");
+        assert!(!r.p.graph.state().decks[1].playing, "cue paused the deck");
 
         // Loading over a playing deck retires `first` through the queue.
         r.controls

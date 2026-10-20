@@ -31,6 +31,10 @@ pub enum Error {
     #[error("track is at {track} Hz but the output runs at {device} Hz")]
     RateMismatch { track: u32, device: u32 },
 
+    /// The varispeed resampler refused its fixed setup.
+    #[error("could not set up the varispeed resampler")]
+    Resampler,
+
     /// The engine thread exited before reporting.
     #[error("audio engine thread failed to start")]
     ThreadFailed,

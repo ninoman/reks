@@ -112,7 +112,7 @@ impl Player {
                 device: rate,
             });
         }
-        let src = Arc::new(DeckSource::new(samples));
+        let src = Arc::new(DeckSource::new(samples, sample_rate));
         self.engine()?.send(Control::Load {
             deck: DECK,
             src: Arc::clone(&src),
