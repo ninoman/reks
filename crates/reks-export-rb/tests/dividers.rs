@@ -144,6 +144,7 @@ impl World {
             library: &self.lib,
             app_data_dir: &data,
             stick: StickCheck::Directory,
+            onelibrary: None,
         };
         let report = apply(plan, &writer, &env, &|_| {}, &CancelToken::new()).unwrap();
         assert_eq!(

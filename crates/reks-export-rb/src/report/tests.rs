@@ -501,6 +501,7 @@ fn live_export_to_a_mounted_stick() {
         library: &w.lib,
         app_data_dir: &w.data,
         stick: crate::StickCheck::Mounted,
+        onelibrary: None,
     };
     let views = Mutex::new(Vec::new());
     let labels = plan_track_labels(&w.lib, &plan);

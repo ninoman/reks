@@ -22,7 +22,9 @@ pub mod testutil;
 pub mod validate;
 pub mod writer;
 
-pub use apply::{apply, ApplyEnv, ApplyError, ApplyEvent, ExportReport, ExportStatus, StickCheck};
+pub use apply::{
+    apply, ApplyEnv, ApplyError, ApplyEvent, ExportReport, ExportStatus, OneLibraryEnv, StickCheck,
+};
 pub use target::TargetProfile;
 
 /// Crate version, from Cargo metadata.

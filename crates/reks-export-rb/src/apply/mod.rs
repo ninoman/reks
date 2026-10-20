@@ -2,10 +2,10 @@
 //! reks that writes to a stick. It runs a planned export in this order and
 //! stops at the first step that fails:
 //!
-//! 1. **Pre-flight**: the plan is not blocked, has tracks and does not ask
-//!    for OneLibrary (not wired yet, [`ApplyError::OneLibraryNotWired`]); the
-//!    stick is still there ([`StickCheck`]): mounted at the plan's root, with the same
-//!    volume serial; enough free space for [`ExportPlan::bytes_to_write`];
+//! 1. **Pre-flight**: the plan is not blocked, has tracks and, with the
+//!    OneLibrary option on, has its OneLibrary step and a writer in
+//!    [`ApplyEnv::onelibrary`]; the stick is still there ([`StickCheck`]):
+//!    mounted at the plan's root, with the same volume serial; enough free space for [`ExportPlan::bytes_to_write`];
 //!    the history on the stick is what the dry run showed (a stick played
 //!    since needs a new plan, or its new history would go without backup). A
 //!    running rekordbox is only a warning ([`ApplyWarning::RekordboxRunning`]).
@@ -16,9 +16,16 @@
 //! 3. **History backup** (D23, task 12): [`history::run_backups`] on
 //!    [`ExportPlan::backup_plan`]. Any error aborts with the stick untouched.
 //! 4. **Write** through the [`RekordboxWriter`], which gets the cancel token.
-//! 5. **fsync** of the database, the ANLZ files and the copied audio.
-//! 6. **Validate**: [`validate`] reads the stick back.
-//! 7. **Manifest** (task 13): `Library::replace_manifest` with the read-back
+//!    baken removes rekordbox's OneLibrary files once the new `export.pdb`
+//!    is in place.
+//! 5. **OneLibrary** (Phase 4, experimental, option on only): what is left
+//!    of [`OneLibraryPlan::removes`] goes, then
+//!    [`OneLibraryExport::write`] puts `exportLibrary.db` on the stick. Only
+//!    after a clean write: with failed tracks or a writer error it would not
+//!    match `export.pdb`, so it is skipped (an error in the report).
+//! 6. **fsync** of the databases, the ANLZ files and the copied audio.
+//! 7. **Validate**: [`validate`] reads the stick back.
+//! 8. **Manifest** (task 13): `Library::replace_manifest` with the read-back
 //!    rows, only when the export is clean (no failed track, no finding, no
 //!    error after the database was written).
 //!
@@ -34,19 +41,20 @@
 //! - `Ok` with [`ExportStatus::Success`] or [`ExportStatus::Problems`]: the
 //!   stick has a new `export.pdb`. `Problems` lists what went wrong: tracks
 //!   that failed alone (the writer goes on without them), validator findings,
-//!   errors after the database was replaced (prune, fsync, validation I/O,
-//!   manifest).
+//!   errors after the database was replaced (prune, OneLibrary, fsync,
+//!   validation I/O, manifest).
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use reks_core::history::{self as library_history, ImportChoices, ImportReport};
-use reks_core::{CancelToken, Library};
+use reks_core::{CancelToken, Library, OneLibraryKey};
 use serde::Serialize;
 
 use crate::device::{self, DeviceError};
 use crate::history::{self, BackupReport, HistoryError, HistoryPolicy, StickHistory};
-use crate::plan::{anlz_dir, on_stick, AnlzSource, ExportPlan};
+use crate::onelibrary::{OneLibraryExport, OneLibraryPlan, OneLibraryWritten};
+use crate::plan::{anlz_dir, on_stick, AnlzSource, ExportPlan, FileOp};
 use crate::validate::{self, ValidationReport};
 use crate::writer::{ExportEvent, RekordboxWriter, WriterError, WriterReport};
 
@@ -73,6 +81,25 @@ pub struct ApplyEnv<'a> {
     /// Stick backups go under `<app_data_dir>/stick-backups/` (D19, D23).
     pub app_data_dir: &'a Path,
     pub stick: StickCheck,
+    /// The OneLibrary writer and key, for plans with the option on; `None`
+    /// refuses them ([`ApplyError::NoOneLibraryWriter`]).
+    pub onelibrary: Option<OneLibraryEnv<'a>>,
+}
+
+/// What the OneLibrary step needs. Kept out of [`ExportPlan`], which is
+/// serialisable: the key must never be.
+#[derive(Clone, Copy)]
+pub struct OneLibraryEnv<'a> {
+    pub export: &'a dyn OneLibraryExport,
+    pub key: &'a OneLibraryKey,
+}
+
+impl std::fmt::Debug for OneLibraryEnv<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OneLibraryEnv")
+            .field("key", self.key)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Steps of [`apply`], in order.
@@ -86,6 +113,8 @@ pub enum ApplyStage {
     Backup,
     /// The writer runs; [`ApplyEvent::Writer`] events follow.
     Write,
+    /// Writing `exportLibrary.db` (OneLibrary option on only).
+    OneLibrary,
     /// Flushing written files to the stick.
     Sync,
     /// Reading the stick back.
@@ -178,6 +207,9 @@ pub struct ExportReport {
     /// What the writer did; `None` when cancelled before writing, or when
     /// the writer failed after replacing `export.pdb` (then in [`Self::errors`]).
     pub writer: Option<WriterReport>,
+    /// The OneLibrary step, when it wrote `exportLibrary.db`; when it did
+    /// not, why is in [`Self::errors`].
+    pub onelibrary: Option<OneLibraryReport>,
     /// The read-back; `None` when cancelled or when reading failed.
     pub validation: Option<ValidationReport>,
     pub manifest: ManifestStatus,
@@ -197,6 +229,7 @@ impl ExportReport {
             backup: None,
             backup_dir: None,
             writer: None,
+            onelibrary: None,
             validation: None,
             manifest: ManifestStatus::Skipped,
             manifest_rows: 0,
@@ -208,6 +241,17 @@ impl ExportReport {
     pub fn findings(&self) -> &[validate::Finding] {
         self.validation.as_ref().map_or(&[], |v| &v.findings)
     }
+}
+
+/// What the OneLibrary step did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OneLibraryReport {
+    #[serde(flatten)]
+    pub written: OneLibraryWritten,
+    /// rekordbox's auxiliary files that were still there after the writer
+    /// (baken removes them first) and that this step removed.
+    pub auxiliary_removed: usize,
 }
 
 /// Why [`apply`] stopped with the stick's old `export.pdb` in place.
@@ -247,11 +291,14 @@ pub enum ApplyError {
     /// The writer stopped before replacing `export.pdb`.
     #[error(transparent)]
     Writer(WriterError),
-    /// The plan has the OneLibrary step on, which `apply` cannot run until
-    /// the `reks-export-onelibrary` writer lands (Phase 4 task 8). The
-    /// planner blocks such plans already; this catches one read back from JSON.
-    #[error("this build cannot write exportLibrary.db; turn the OneLibrary export off")]
-    OneLibraryNotWired,
+    /// The plan has the OneLibrary option on but [`ApplyEnv::onelibrary`]
+    /// is `None` (no writer or no key).
+    #[error("this export cannot write exportLibrary.db; turn the OneLibrary export off")]
+    NoOneLibraryWriter,
+    /// The plan has the OneLibrary option on but no OneLibrary step (it was
+    /// read back from JSON); plan again.
+    #[error("the plan has no OneLibrary step; plan the export again")]
+    NoOneLibraryPlan,
 }
 
 /// Runs `plan` on its stick (module docs). `progress` gets [`ApplyEvent`]s,
@@ -269,7 +316,7 @@ pub fn apply(
 
     let stage = |stage| progress(ApplyEvent::Stage { stage });
     stage(ApplyStage::Preflight);
-    let warnings = preflight(plan, env.stick)?;
+    let warnings = preflight(plan, env)?;
     for w in &warnings {
         tracing::warn!(warning = %w, "export pre-flight");
         progress(ApplyEvent::Warning { warning: w.clone() });
@@ -327,6 +374,24 @@ pub fn apply(
         Err(e) => return Err(ApplyError::Writer(e)),
     }
 
+    if let (Some(ol), Some(ol_env)) = (onelibrary_plan(plan), env.onelibrary) {
+        stage(ApplyStage::OneLibrary);
+        match write_onelibrary(plan, ol, ol_env, report.writer.as_ref()) {
+            Ok(r) => {
+                tracing::info!(
+                    tracks = r.written.tracks,
+                    bytes = r.written.bytes,
+                    "exportLibrary.db written"
+                );
+                report.onelibrary = Some(r);
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "exportLibrary.db not written");
+                report.errors.push(e);
+            }
+        }
+    }
+
     stage(ApplyStage::Sync);
     if let Err(e) = sync_written(plan) {
         report.errors.push(e);
@@ -378,7 +443,7 @@ pub fn apply(
 }
 
 /// Pre-flight checks (module docs, step 1).
-fn preflight(plan: &ExportPlan, check: StickCheck) -> Result<Vec<ApplyWarning>, ApplyError> {
+fn preflight(plan: &ExportPlan, env: &ApplyEnv<'_>) -> Result<Vec<ApplyWarning>, ApplyError> {
     if plan.is_blocked() {
         return Err(ApplyError::Blocked(plan.errors.len()));
     }
@@ -386,10 +451,15 @@ fn preflight(plan: &ExportPlan, check: StickCheck) -> Result<Vec<ApplyWarning>, 
         return Err(ApplyError::NothingToExport);
     }
     if plan.options.onelibrary {
-        return Err(ApplyError::OneLibraryNotWired);
+        if onelibrary_plan(plan).is_none() {
+            return Err(ApplyError::NoOneLibraryPlan);
+        }
+        if env.onelibrary.is_none() {
+            return Err(ApplyError::NoOneLibraryWriter);
+        }
     }
     let root = plan.device.mount_point.as_path();
-    let free = match check {
+    let free = match env.stick {
         StickCheck::Mounted => {
             let dev = device::list_devices()
                 .into_iter()
@@ -430,6 +500,65 @@ fn preflight(plan: &ExportPlan, check: StickCheck) -> Result<Vec<ApplyWarning>, 
         warnings.push(ApplyWarning::RekordboxRunning);
     }
     Ok(warnings)
+}
+
+/// The plan's OneLibrary step, when the option is on.
+fn onelibrary_plan(plan: &ExportPlan) -> Option<&OneLibraryPlan> {
+    plan.onelibrary.as_ref().filter(|_| plan.options.onelibrary)
+}
+
+/// The OneLibrary step (module docs, step 5). `Err` is the report's line.
+fn write_onelibrary(
+    plan: &ExportPlan,
+    ol: &OneLibraryPlan,
+    env: OneLibraryEnv<'_>,
+    writer: Option<&WriterReport>,
+) -> Result<OneLibraryReport, String> {
+    let skipped = |why: String| format!("exportLibrary.db not written: {why}");
+    match writer {
+        None => {
+            return Err(skipped(
+                "the Device Library write ended with an error, so it might not match export.pdb"
+                    .to_owned(),
+            ))
+        }
+        Some(w) if !w.failures.is_empty() => {
+            return Err(skipped(format!(
+                "{} failed, so it would not match export.pdb",
+                match w.failures.len() {
+                    1 => "1 track".to_owned(),
+                    n => format!("{n} tracks"),
+                }
+            )))
+        }
+        Some(_) => {}
+    }
+    let root = plan.device.mount_point.as_path();
+    let auxiliary_removed = remove_auxiliary(root, &ol.removes).map_err(skipped)?;
+    let written = env
+        .export
+        .write(plan, env.key, root)
+        .map_err(|e| skipped(e.to_string()))?;
+    Ok(OneLibraryReport {
+        written,
+        auxiliary_removed,
+    })
+}
+
+/// Removes those of `removes` still on the stick, before the new
+/// `exportLibrary.db`: SQLite would replay an old `-wal` into it. A file that
+/// won't go stops the step.
+fn remove_auxiliary(root: &Path, removes: &[FileOp]) -> Result<usize, String> {
+    let mut removed = 0;
+    for f in removes {
+        let path = on_stick(root, &f.dst_rel);
+        match fs::remove_file(&path) {
+            Ok(()) => removed += 1,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("cannot remove {}: {e}", path.display())),
+        }
+    }
+    Ok(removed)
 }
 
 fn history_change(planned: &StickHistory, now: &StickHistory) -> String {

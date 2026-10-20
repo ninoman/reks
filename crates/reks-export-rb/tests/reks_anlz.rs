@@ -369,6 +369,7 @@ fn export_with_reks_anlz_validates() {
         library: &w.lib,
         app_data_dir: &w.tmp.path().join("data"),
         stick: StickCheck::Directory,
+        onelibrary: None,
     };
     let report = apply(&plan, &writer, &env, &|_| {}, &CancelToken::new()).unwrap();
     // The read-back validator ran `validate_set` on every reks-built set.

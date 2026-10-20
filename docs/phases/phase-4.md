@@ -140,6 +140,11 @@ Mapping from the export plan (same source as Phase 2's PDB):
    encrypt (or build encrypted from the start), fsync, rename into place;
    remove rekordbox's auxiliary OneLibrary files if present (list them from
    the reference stick; baken's `ONELIBRARY_FILES` constant is a hint).
+   The write is `OneLibraryExport::write(plan, key, device_root)`
+   ([onelibrary.rs](../../crates/reks-export-rb/src/onelibrary.rs)); `apply`
+   calls it and already removes the auxiliary files first (see task 8). The
+   writer touches only `exportLibrary.db` and a temp file beside it, and
+   leaves no macOS `._` file (baken #192, #196).
 7. **Reader + validator**: open what we wrote, cross-check counts and paths
    against `export.pdb` (parsed by rekordcrate) and ANLZ file existence.
 8. [x] **Planner integration + UI**: experimental toggle, key entry in Settings,
@@ -163,10 +168,21 @@ Mapping from the export plan (same source as Phase 2's PDB):
    The key (`reks_core::OneLibraryKey`: redacted `Debug`, no `Serialize`,
    zeroed on drop) is stored under `onelibrary.key` in the `setting` table
    from Settings → Experimental. The UI only learns `onelibraryKeySet`, and
-   `REKS_ONELIBRARY_KEY` is the fallback. Left for the writer's landing:
-   `apply` refuses a plan with the option on (`OneLibraryNotWired`) until it
-   calls the writer after baken, and src-tauri swaps `NoWriter` for the
-   writer.
+   `REKS_ONELIBRARY_KEY` is the fallback.
+   Apply side (2026-10-20): with the option on, `apply` takes the writer and
+   key in `ApplyEnv::onelibrary` (`OneLibraryEnv`, never in the plan) and
+   refuses without them (`NoOneLibraryWriter`, `NoOneLibraryPlan`). After the
+   baken write (which removes rekordbox's OneLibrary files once the new
+   `export.pdb` is in place), the `oneLibrary` stage removes what is left of
+   the plan's auxiliary files and calls `OneLibraryExport::write`, before the
+   fsync and the read-back. It runs only after a clean write: with failed
+   tracks or a writer error `exportLibrary.db` would not match `export.pdb`,
+   so it is skipped. A skip or a failure is an error in the report (status
+   Problems, no manifest); `ExportReport::onelibrary` and the report's
+   "OneLibrary (experimental)" line say what was written. The app resolves
+   the key at export time and passes the stub, whose `write` refuses. Left
+   for the writer's landing: src-tauri swaps `NoWriter` for the writer and
+   drops the `onelibrary-stub` feature.
 9. **Hardware test**: checklist below on a OneLibrary-only player (borrow or
    rent an OPUS-QUAD/XDJ-AZ/CDJ-3000X). Log results in `docs/hw-test-log.md`.
 10. **Diff tool**: `reks-cli onelibrary diff <ref.db> <ours.db>` to speed up

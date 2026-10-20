@@ -120,6 +120,7 @@ impl World {
             library: &self.lib,
             app_data_dir: &self.data,
             stick: StickCheck::Directory,
+            onelibrary: None,
         }
     }
 
@@ -447,6 +448,7 @@ fn preflight_refusals_write_nothing() {
     // A plain directory is not a mounted volume.
     let env = ApplyEnv {
         stick: StickCheck::Mounted,
+        onelibrary: None,
         ..w.env()
     };
     let result = w.apply_with(&plan, &env, |_, _| {}).0;
@@ -544,4 +546,22 @@ fn events_and_report_json() {
     assert_eq!(json["status"], "cancelled");
     assert_eq!(json["manifest"], "skipped");
     assert_eq!(json["manifestRows"], 0);
+}
+
+#[test]
+fn remove_auxiliary_removes_what_is_left_and_skips_what_is_gone() {
+    let dir = tempfile::tempdir().unwrap();
+    let rb = dir.path().join("PIONEER/rekordbox");
+    fs::create_dir_all(&rb).unwrap();
+    fs::write(rb.join("exportLibrary.db-wal"), b"wal").unwrap();
+    let op = |name: &str| FileOp {
+        src: None,
+        dst_rel: format!("/PIONEER/rekordbox/{name}"),
+        bytes: 3,
+        track_id: None,
+        reason: crate::plan::OpReason::OneLibraryAuxiliary,
+    };
+    let removes = [op("exportLibrary.db-wal"), op("exportLibrary.db-shm")];
+    assert_eq!(remove_auxiliary(dir.path(), &removes), Ok(1));
+    assert!(!rb.join("exportLibrary.db-wal").exists());
 }

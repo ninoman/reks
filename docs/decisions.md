@@ -358,6 +358,15 @@ Date of decisions: 2026-10-18.
   Apache-2.0 OR MIT): never serialised, never logged, stored in plain text
   in the local library database. That is the policy's "pasted in Settings";
   OS keychain storage is not in this phase.
+- Apply seam (2026-10-20): the trait also has `write(plan, key,
+  device_root)`, which `apply` calls after baken has written `export.pdb`
+  and removed rekordbox's OneLibrary files, the order baken uses for its own
+  OneLibrary file. The key reaches `apply` in `ApplyEnv` (`OneLibraryEnv`),
+  not in the serialisable plan. The writer writes the file in place
+  atomically itself (task 6), like `RekordboxWriter`; `apply` stays the only
+  caller, so every stick write still happens inside `apply()`. If the
+  writer wants a different shape (for example build, then commit), change
+  the trait here.
 
 ## D15. Engine DJ (Phase 5): own Rust writer targeting schema 3.0.2 (and 2.21.0), no FFI
 
