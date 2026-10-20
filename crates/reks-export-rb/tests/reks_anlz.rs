@@ -23,7 +23,7 @@ use reks_anlz::grid::pqtz_beats_from_anchors;
 use reks_anlz::{read, Expect};
 use reks_core::analysis::file_content_hash;
 use reks_core::rbxml::{self, ImportOptions, PrefixRemap};
-use reks_core::{AnlzPreference, CancelToken, Library, TrackId};
+use reks_core::{AnlzPreference, CancelToken, GridEdit, Library, TrackId};
 use reks_export_rb::apply::{apply, ApplyEnv, ExportStatus, StickCheck};
 use reks_export_rb::device::{DeviceInfo, FsKind};
 use reks_export_rb::dryrun::DryRun;
@@ -282,6 +282,56 @@ fn preference_picks_the_source() {
     assert!(built > 0);
     let audio: u64 = p.copies.iter().map(|c| c.bytes).sum();
     assert_eq!(p.bytes_to_write, audio + built);
+}
+
+#[test]
+fn edited_grid_prefers_reks_over_rekordbox() {
+    let w = World::new();
+    let dat = w.tmp.path().join("rb/ANLZ0000.DAT");
+    let rb = AnlzSource::RekordboxCache { dat };
+    let a = w.ids["a.mp3"];
+    assert_eq!(
+        w.sources(&w.plan(AnlzPreference::RekordboxFirst))["a.mp3"],
+        rb
+    );
+
+    // A grid-editor edit on the rekordbox-analysed track: rekordbox's cached
+    // PQTZ would lose it, so the default takes reks's set (the library grid).
+    w.lib
+        .edit_beatgrid(a, GridEdit::Nudge { delta_ms: 10 })
+        .unwrap();
+    assert_eq!(
+        w.sources(&w.plan(AnlzPreference::RekordboxFirst))["a.mp3"],
+        AnlzSource::Reks
+    );
+    assert_eq!(
+        w.sources(&w.plan(AnlzPreference::ReksFirst))["a.mp3"],
+        AnlzSource::Reks
+    );
+    // `rekordboxOnly` never writes reks's analysis.
+    assert_eq!(
+        w.sources(&w.plan(AnlzPreference::RekordboxOnly))["a.mp3"],
+        rb
+    );
+
+    // Without reks's analysis rekordbox's set still beats skipping the track.
+    cache::remove(&w.lib.cache_dir(), a).unwrap();
+    assert_eq!(
+        w.sources(&w.plan(AnlzPreference::RekordboxFirst))["a.mp3"],
+        rb
+    );
+}
+
+#[test]
+fn locked_grid_prefers_reks_over_rekordbox() {
+    let w = World::new();
+    w.lib
+        .edit_beatgrid(w.ids["a.mp3"], GridEdit::SetLocked { locked: true })
+        .unwrap();
+    assert_eq!(
+        w.sources(&w.plan(AnlzPreference::RekordboxFirst))["a.mp3"],
+        AnlzSource::Reks
+    );
 }
 
 #[test]

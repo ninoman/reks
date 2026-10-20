@@ -427,7 +427,7 @@ function OptionsStep() {
       <div className="px-4 py-3">
         <Field
           label="Analysis to write"
-          hint="Waveforms, beatgrid and cues when rekordbox and reks have both analysed a track. reks's analysis is not yet tested on players. Saved for later exports."
+          hint="Waveforms, beatgrid and cues when rekordbox and reks have both analysed a track. A beatgrid you edited or locked uses reks's unless rekordbox's only is chosen. reks's analysis is not yet tested on players. Saved for later exports."
         >
           <Select
             aria-label="Analysis to write"

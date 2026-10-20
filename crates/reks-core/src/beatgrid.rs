@@ -11,12 +11,19 @@
 //! Only nudge and lock apply to a dynamic grid (more than one anchor); the
 //! other edits need a constant grid (phase 3 non-goal: dynamic-grid editing).
 
+use std::collections::HashSet;
+
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::scan::TrackId;
+
+/// SQL predicate on a `track` row: its grid is locked or edited by hand.
+const USER_OWNED: &str = "(grid_locked OR EXISTS (SELECT 1 FROM beatgrid
+                                                  WHERE beatgrid.track_id = track.id
+                                                    AND beatgrid.source = 'manual'))";
 
 /// Slowest tempo an edit may produce, ×100.
 pub const MIN_BPM_X100: i64 = 3000;
@@ -329,14 +336,23 @@ impl Library {
     pub fn grid_is_user_owned(&self, id: TrackId) -> Result<bool> {
         let conn = self.conn()?;
         conn.query_row(
-            "SELECT grid_locked OR EXISTS (SELECT 1 FROM beatgrid
-                                           WHERE track_id = ?1 AND source = 'manual')
-             FROM track WHERE id = ?1",
+            &format!("SELECT {USER_OWNED} FROM track WHERE id = ?1"),
             [id],
             |r| r.get(0),
         )
         .optional()?
         .ok_or(Error::TrackNotFound(id))
+    }
+
+    /// Every track whose grid [`Library::grid_is_user_owned`], in one query
+    /// (the USB export planner asks for a whole selection at once).
+    pub fn user_owned_grids(&self) -> Result<HashSet<TrackId>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(&format!("SELECT id FROM track WHERE {USER_OWNED}"))?;
+        let ids = stmt
+            .query_map([], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(ids)
     }
 }
 

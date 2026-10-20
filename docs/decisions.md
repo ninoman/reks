@@ -141,9 +141,11 @@ Date of decisions: 2026-10-18.
   mitigation). The phase doc's "prefer reks" is the `reksFirst` value;
   `rekordboxOnly` restores Phase 2 behaviour. Consequences: tracks only reks
   analysed now export with reks ANLZ by default instead of being skipped or
-  generated (UNVERIFIED until phase 3 task 14); a grid edited in reks on a
-  rekordbox-analysed track reaches the stick only under `reksFirst`, since
-  rekordbox's cached `PQTZ` is copied as it is.
+  generated (UNVERIFIED until phase 3 task 14). A track whose grid the user
+  owns (locked or edited, `Library::grid_is_user_owned`) takes reks's
+  analysis under `rekordboxFirst` too when reks has one, since rekordbox's
+  cached `PQTZ` is copied as it is and the edit would be lost;
+  `rekordboxOnly` still never writes reks's.
   - Phase 2's ANLZ for imported tracks depends on rekordbox's local cache
     existing on the machine; otherwise fall back to generation.
 

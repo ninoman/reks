@@ -38,7 +38,8 @@ pub const ANLZ_PREFERENCE: &str = "export.anlz_preference";
 #[serde(rename_all = "camelCase")]
 pub enum AnlzPreference {
     /// rekordbox's analysis when it has the track, else reks's (default:
-    /// rekordbox's files are the ones tested on players).
+    /// rekordbox's files are the ones tested on players). A grid the user
+    /// owns (locked or edited) takes reks's first, so the edit is exported.
     #[default]
     RekordboxFirst,
     /// reks's analysis when it has the track, else rekordbox's.

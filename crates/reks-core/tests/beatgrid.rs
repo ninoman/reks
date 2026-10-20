@@ -49,6 +49,7 @@ fn reading_rounds_to_whole_ms_and_lists_beats() {
     assert_eq!(g.beats.len(), 8);
     assert_eq!(g.beats[7].position_us, 3_520_000);
     assert!(!lib.grid_is_user_owned(id).unwrap());
+    assert!(lib.user_owned_grids().unwrap().is_empty());
 }
 
 #[test]
@@ -61,6 +62,7 @@ fn edits_write_manual_rows() {
     assert_eq!(g.source.as_deref(), Some("manual"));
     assert_eq!(sources(&dir), ["manual"]);
     assert!(lib.grid_is_user_owned(id).unwrap());
+    assert_eq!(lib.user_owned_grids().unwrap(), [id].into());
     let g = lib.edit_beatgrid(id, GridEdit::Double).unwrap();
     assert_eq!(g.anchors[0].bpm_x100, 24_000);
     // The track detail summary reads the same rows.
@@ -80,6 +82,7 @@ fn lock_blocks_edits_until_unlocked() {
     // Locking alone keeps the rows' source but protects them.
     assert_eq!(sources(&dir), ["analysis"]);
     assert!(lib.grid_is_user_owned(id).unwrap());
+    assert_eq!(lib.user_owned_grids().unwrap(), [id].into());
     assert!(matches!(
         lib.edit_beatgrid(id, GridEdit::Halve),
         Err(Error::GridLocked(t)) if t == id

@@ -88,6 +88,7 @@ fn track(id: TrackId, src: PathBuf) -> SourceTrack {
         album: Some("One".into()),
         probe: None,
         has_grid: true,
+        grid_user_owned: false,
         cue_count: 0,
         divider: None,
     }

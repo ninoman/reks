@@ -134,6 +134,7 @@ fn track(id: TrackId, src: PathBuf, artist: &str, album: &str) -> SourceTrack {
         album: Some(album.into()),
         probe: None,
         has_grid: true,
+        grid_user_owned: false,
         cue_count: 3,
         divider: None,
     }

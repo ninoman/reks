@@ -842,7 +842,9 @@ fn check_track(
 }
 
 /// The track's analysis under `pref`; `None` when neither source has it.
-/// The second source is only asked when the first has nothing.
+/// The second source is only asked when the first has nothing. A grid the
+/// user owns puts reks first under `RekordboxFirst` too: rekordbox's cached
+/// `PQTZ` is copied as it is, so the edit would not reach the stick.
 fn choose_anlz(
     t: &SourceTrack,
     pref: AnlzPreference,
@@ -852,6 +854,7 @@ fn choose_anlz(
     let rekordbox = || anlz.locate(t).map(|dat| AnlzSource::RekordboxCache { dat });
     let ours = || reks.has_analysis(t).then_some(AnlzSource::Reks);
     match pref {
+        AnlzPreference::RekordboxFirst if t.grid_user_owned => ours().or_else(rekordbox),
         AnlzPreference::RekordboxFirst => rekordbox().or_else(ours),
         AnlzPreference::ReksFirst => ours().or_else(rekordbox),
         AnlzPreference::RekordboxOnly => rekordbox(),

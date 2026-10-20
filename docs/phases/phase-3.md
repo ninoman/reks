@@ -257,7 +257,10 @@ rekordbox keys (D10, "Queue").
     = the app setting `export.anlz_preference` (`AnlzPreference`:
     `rekordboxFirst` default, `reksFirst`, `rekordboxOnly`; picked and saved
     in the export wizard's options step, `--anlz` in `reks rb`); tracks with
-    neither still follow `missing_analysis`. `BakenWriter::prepare` builds
+    neither still follow `missing_analysis`. A user-owned grid (locked or
+    edited; `SourceTrack::grid_user_owned`, one `Library::user_owned_grids`
+    query per export) puts reks first under `rekordboxFirst` too, so the edit
+    reaches the stick. `BakenWriter::prepare` builds
     each set into its scratch folder before any write (a stale entry refuses
     the export) and hands baken the `.DAT` as a cache entry, so baken rewrites
     `PPTH` and splices the XML cues as for rekordbox's files. A set holds the
@@ -271,8 +274,8 @@ rekordbox keys (D10, "Queue").
     `reks_anlz::validate_set` on every reks-built set on the stick
     (`Finding::AnlzInvalid`). Tests:
     [tests/reks_anlz.rs](../../crates/reks-export-rb/tests/reks_anlz.rs)
-    (precedence, changed file, stale cache, temp-stick export validated and
-    parsed with rekordcrate where it can, D8). CLI: `reks analyse <audio>`,
+    (precedence, edited/locked grid, changed file, stale cache, temp-stick
+    export validated and parsed with rekordcrate where it can, D8). CLI: `reks analyse <audio>`,
     `reks anlz build <audio> <out-dir>` (fresh analysis, no cues) or
     `--library <db> --track <id> <out-dir>` (what an export writes). No
     `PSSI`/`PVB2` (FLAC seek table), as in baken's generated files; all of it
