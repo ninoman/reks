@@ -127,8 +127,8 @@ function SessionHeader({ detail }: { detail: SessionDetail }) {
       </div>
       {s.excluded && s.excludedReason === "pre_baseline" && (
         <p className="m-0 text-xs text-fg-muted">
-          Imported as practice: played on or before the rekordbox baseline, or undated, so rekordbox
-          may already have counted it. Turn Practice off to count it.
+          Imported as practice: played on or before the rekordbox baseline, so rekordbox may already
+          have counted it. Turn Practice off to count it.
         </p>
       )}
       <div className="flex flex-wrap gap-2">

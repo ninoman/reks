@@ -3,8 +3,9 @@
  * folder (a stick backup reks made before an export, or a copy of a stick),
  * see the dry run, then import. The dry run reads the stick and changes
  * nothing; every new session has a Practice checkbox (practice sessions are
- * kept but not counted). Sessions dated on or before the rekordbox baseline,
- * or undated, start as practice because rekordbox may have counted them.
+ * kept but not counted). Sessions dated on or before the rekordbox baseline
+ * start as practice because rekordbox may have counted them; undated ones
+ * start counted.
  */
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
@@ -300,9 +301,7 @@ function PlanRow({
   const why =
     s.defaultExclusion === "preBaseline"
       ? "On or before the baseline: rekordbox may have counted it"
-      : s.defaultExclusion === "unknownDate"
-        ? "No date: it may be before the baseline"
-        : null;
+      : null;
   return (
     <tr
       className="align-top odd:bg-row-alt data-[skip]:text-fg-subtle [&>td]:px-2 [&>td]:py-1"

@@ -1055,7 +1055,7 @@ export interface PlannedSession {
   fingerprint: string;
   action: SessionAction;
   /** Why a new session is preselected as Practice. */
-  defaultExclusion: "preBaseline" | "unknownDate" | null;
+  defaultExclusion: "preBaseline" | null;
   entries: PlannedEntry[];
 }
 

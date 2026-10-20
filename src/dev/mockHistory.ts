@@ -133,8 +133,8 @@ export function mockHistory(tracks: TrackRow[]) {
     sourceName: "HISTORY 005",
     playedOn: null,
     venue: null,
-    excluded: true,
-    excludedReason: "pre_baseline",
+    excluded: false,
+    excludedReason: null,
     entries: range(300, 9),
   });
 
@@ -257,8 +257,7 @@ export function mockHistory(tracks: TrackRow[]) {
       playedOn,
       fingerprint: `${sourceName.replace(/\D/g, "")}f00dfeedbeef${playedOn ?? "undated"}`,
       action: { kind: "new" },
-      defaultExclusion:
-        playedOn === null ? "unknownDate" : playedOn <= BASELINE_DATE ? "preBaseline" : null,
+      defaultExclusion: playedOn !== null && playedOn <= BASELINE_DATE ? "preBaseline" : null,
       entries: entries.map((e, position) => ({
         position,
         kind: e.kind,
