@@ -6,6 +6,7 @@ mod analysis;
 mod commands;
 mod grid;
 mod history;
+mod mix;
 mod state;
 
 use tauri::Manager;
@@ -68,6 +69,11 @@ pub fn run() {
             commands::player_volume,
             commands::player_state,
             commands::overview_waveform,
+            mix::mix_device_options,
+            mix::mix_start,
+            mix::mix_stop,
+            mix::mix_load,
+            mix::mix_control,
             grid::beatgrid_get,
             grid::beatgrid_edit,
             grid::beatgrid_tap_tempo,

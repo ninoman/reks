@@ -161,8 +161,18 @@ pub enum Control {
    `graph.rs`, with `Control::Channel`/`Filter`/`Crossfader`/`Master`.
 7. **Cue system**: cue bus, pre/post EQ, cue/mix balance, split cue, routing.
    Test: each routing mode puts the expected signal on each output channel.
-8. **Tauri commands and IPC**: thin `mix_*` commands, typed wrappers in
+8. [x] **Tauri commands and IPC**: thin `mix_*` commands, typed wrappers in
    `src/lib/ipc.ts`, engine state on a `Channel`, waveform columns as `ArrayBuffer`.
+   Done 2026-10-21 ([`src-tauri/src/mix.rs`](../../src-tauri/src/mix.rs)):
+   `mix_device_options`, `mix_start` (device, rate, buffer, cue routing; the
+   state goes to a `Channel` at 60 Hz until `mix_stop`), `mix_load` (decodes
+   at the engine rate on a worker with grid and hot cues in frames,
+   `reks_core::deck`, then builds the `DeckSource` there; a newer load for
+   the deck wins), `mix_control` (`MixControl` mirrors `Control`; seek in ms;
+   `Load` is `mix_load`). Waveforms and beat lines reuse `waveform_columns`
+   (raw `ArrayBuffer`) and `beatgrid_get`. Dev mock: `src/dev/mockMix.ts`.
+   No meters in `MixState` yet: `EngineState` has none until task 6 wires
+   them; add them to `MixState` and `ipc.ts` then.
 9. **UI**: mixer panel, 2/4-deck layout, scrolling waveforms with beat markers
    and sync phase, "load to deck" from the track table and playlists, shortcuts.
 10. **Key lock evaluation**: listen to `timestretch`, `signalsmith-stretch` and

@@ -12,6 +12,7 @@ use reks_export_rb::plan::{ExportPlan, Selection};
 use reks_mix::Player;
 
 use crate::analysis::Analysis;
+use crate::mix::Mix;
 
 /// File name of the library database (docs/decisions.md D19).
 const DB_FILE: &str = "reks.sqlite";
@@ -39,6 +40,8 @@ pub struct AppState {
     /// App data dir (D19): stick backups go under it.
     pub data_dir: PathBuf,
     pub player: Mutex<PlayerSlot>,
+    /// The mixer engine and its decks (Phase 5).
+    pub mix: Mix,
     /// Background analysis queue (Phase 3 task 11).
     pub analysis: Analysis,
 }
@@ -122,6 +125,7 @@ impl AppState {
                 track: None,
                 generation: 0,
             }),
+            mix: Mix::default(),
             analysis,
         })
     }
