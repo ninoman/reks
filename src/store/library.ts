@@ -44,7 +44,6 @@ export interface FilterState {
   ratingMin: number;
   playlistId: number | null;
   missing: boolean | null;
-  needsAnalysis: boolean | null;
   /** Play count range (D23: baseline plus counted sessions). */
   playsMin: number | null;
   playsMax: number | null;
@@ -64,7 +63,6 @@ export const noFilters: FilterState = {
   ratingMin: 0,
   playlistId: null,
   missing: null,
-  needsAnalysis: null,
   playsMin: null,
   playsMax: null,
   lastPlayed: null,
@@ -110,7 +108,6 @@ export function buildFilters(f: FilterState, now: Date = new Date()): Filter[] {
   if (f.ratingMin > 0) out.push({ type: "ratingMin", rating: f.ratingMin });
   if (f.playlistId !== null) out.push({ type: "playlist", id: f.playlistId });
   if (f.missing !== null) out.push({ type: "missing", missing: f.missing });
-  if (f.needsAnalysis !== null) out.push({ type: "needsAnalysis", needs: f.needsAnalysis });
   if (f.playsMin !== null || f.playsMax !== null) {
     out.push({ type: "playCountRange", min: f.playsMin ?? 0, max: f.playsMax ?? PLAYS_MAX });
   }

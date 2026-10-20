@@ -71,7 +71,6 @@ describe("buildFilters", () => {
         ratingMin: 3,
         playlistId: 11,
         missing: false,
-        needsAnalysis: true,
         playsMin: null,
         playsMax: null,
         lastPlayed: null,
@@ -84,7 +83,6 @@ describe("buildFilters", () => {
       { type: "ratingMin", rating: 3 },
       { type: "playlist", id: 11 },
       { type: "missing", missing: false },
-      { type: "needsAnalysis", needs: true },
     ]);
   });
 

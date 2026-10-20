@@ -230,19 +230,6 @@ export function FilterBar() {
         </Select>
       </Field>
 
-      <Field label="Analysis" set={f.needsAnalysis !== null}>
-        <Select
-          size="sm"
-          aria-label="Analysis"
-          value={triState(f.needsAnalysis)}
-          onChange={(e) => set({ needsAnalysis: parseTriState(e.target.value) })}
-        >
-          <option value="">Any</option>
-          <option value="true">Needs analysis</option>
-          <option value="false">Analysed</option>
-        </Select>
-      </Field>
-
       <Field label="Plays" set={f.playsMin !== null || f.playsMax !== null}>
         <Input
           size="sm"

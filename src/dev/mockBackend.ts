@@ -287,7 +287,6 @@ function query(q: TrackQuery) {
     if (f.type === "bpmRange")
       rows = rows.filter((r) => r.bpmX100 !== null && r.bpmX100 >= f.min && r.bpmX100 <= f.max);
     if (f.type === "missing") rows = rows.filter((r) => r.missing === f.missing);
-    if (f.type === "needsAnalysis") rows = rows.filter((r) => r.needsAnalysis === f.needs);
     if (f.type === "neverPlayed")
       rows = rows.filter((r) => r.playCount === 0 && r.lastPlayed === null);
     if (f.type === "playCountRange")
@@ -936,6 +935,20 @@ mockIPC((cmd, payload) => {
   switch (cmd) {
     case "library_query":
       return query(args.query as TrackQuery);
+    case "analysis_subscribe":
+    case "analysis_pause":
+    case "analysis_resume":
+    case "analysis_cancel":
+      return {
+        queued: 0,
+        running: 0,
+        done: 0,
+        failed: 0,
+        total: 0,
+        paused: cmd === "analysis_pause",
+      };
+    case "analysis_reanalyse":
+      return (args.ids as number[]).length;
     case "library_facets":
       return { genres: GENRES, keys: KEYS, colours: COLOURS, playlists: NODES } satisfies Facets;
     case "library_track":

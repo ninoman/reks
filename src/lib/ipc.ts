@@ -17,7 +17,6 @@ export type Filter =
   | { type: "ratingMin"; rating: number }
   | { type: "playlist"; id: number }
   | { type: "missing"; missing: boolean }
-  | { type: "needsAnalysis"; needs: boolean }
   /** Play count 0 and no last played (D23). */
   | { type: "neverPlayed" }
   | { type: "playCountRange"; min: number; max: number }
@@ -274,6 +273,55 @@ export function scanStart(roots: string[], onEvent: (e: ScanEvent) => void): Pro
 
 export function scanCancel(): Promise<void> {
   return invoke("scan_cancel");
+}
+
+/** Background analysis counts (`reks_analysis::QueueStatus`); done/failed/total cover the current batch. */
+export interface AnalysisStatus {
+  queued: number;
+  running: number;
+  done: number;
+  failed: number;
+  total: number;
+  paused: boolean;
+}
+
+/** Which library fields an analysis changed (manual and rekordbox data never change). */
+export interface AnalysisStored {
+  grid: boolean;
+  bpm: boolean;
+  key: boolean;
+}
+
+export type AnalysisEvent =
+  | { type: "analysed"; trackId: number; cached: boolean; stored: AnalysisStored }
+  | { type: "failed"; trackId: number; message: string }
+  | { type: "status"; status: AnalysisStatus };
+
+/** Sends every analysis event to `onEvent`; resolves to the current counts, `null` when analysis is off. */
+export function analysisSubscribe(
+  onEvent: (e: AnalysisEvent) => void,
+): Promise<AnalysisStatus | null> {
+  const channel = new Channel<AnalysisEvent>();
+  channel.onmessage = onEvent;
+  return invoke("analysis_subscribe", { onEvent: channel });
+}
+
+export function analysisPause(): Promise<AnalysisStatus> {
+  return invoke("analysis_pause");
+}
+
+export function analysisResume(): Promise<AnalysisStatus> {
+  return invoke("analysis_resume");
+}
+
+/** Drops queued tracks; the ones running finish but are not stored. */
+export function analysisCancel(): Promise<AnalysisStatus> {
+  return invoke("analysis_cancel");
+}
+
+/** Re-analyses `ids` first, ignoring the cache; resolves to how many were queued. */
+export function analysisReanalyse(ids: number[]): Promise<number> {
+  return invoke("analysis_reanalyse", { ids });
 }
 
 export function rbxmlPreview(path: string, remap: PrefixRemap[]): Promise<ImportPreview> {

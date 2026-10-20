@@ -2,6 +2,7 @@
 //! lives in `crates/*` (docs/decisions.md D2).
 
 mod adopt;
+mod analysis;
 mod commands;
 mod history;
 mod state;
@@ -35,7 +36,11 @@ pub fn run() {
             } else {
                 paths.app_data_dir()?
             };
-            let state = AppState::open(&data_dir, &paths.app_cache_dir()?)?;
+            let model_dir = analysis::model_dir(paths.resource_dir().ok().as_deref());
+            let state = AppState::open(&data_dir, &paths.app_cache_dir()?, &model_dir)?;
+            // Tracks added or changed while the app was closed, or analysed
+            // by an older analyser version.
+            state.analysis.queue_pending();
             app.manage(state);
             Ok(())
         })
@@ -95,6 +100,11 @@ pub fn run() {
             history::history_import,
             adopt::adopt_scan,
             adopt::adopt_apply,
+            analysis::analysis_subscribe,
+            analysis::analysis_pause,
+            analysis::analysis_resume,
+            analysis::analysis_cancel,
+            analysis::analysis_reanalyse,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

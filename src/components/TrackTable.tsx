@@ -27,6 +27,7 @@ import {
 } from "react";
 
 import { hasType, readTracks, TRACKS_MIME, type TrackDrag, zoneAt } from "../lib/dnd";
+import { useAnalysis } from "../store/analysis";
 import { useConverter } from "../store/converter";
 import { entryPosition, itemAt, useLibrary, type ViewItem, viewCount } from "../store/library";
 import { usePlayer } from "../store/player";
@@ -386,6 +387,12 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
           onSelect={() => useConverter.getState().open(selectedTrackIds())}
         >
           Convert…
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={selectedTrackIds().length === 0}
+          onSelect={() => void useAnalysis.getState().reanalyse(selectedTrackIds())}
+        >
+          Re-analyse
         </ContextMenuItem>
         {view !== null && (
           <>
