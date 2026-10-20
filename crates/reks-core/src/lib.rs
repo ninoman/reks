@@ -5,6 +5,7 @@
 pub mod adopt;
 pub mod analysis;
 pub mod artwork;
+pub mod beatgrid;
 pub mod convert;
 pub mod db;
 pub mod device;
@@ -25,6 +26,7 @@ pub mod track;
 
 pub use analysis::{AnalysisJob, AnalysisRecord, GridAnchor, StoreOutcome};
 pub use artwork::ArtworkId;
+pub use beatgrid::{BeatMark, Beatgrid, GridAnchor, GridEdit};
 pub use db::Library;
 pub use device::{Device, DeviceId, NewDevice, SyncedPlaylist, SyncedRecord};
 pub use error::{Error, Result};

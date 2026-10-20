@@ -48,7 +48,9 @@ Semantic colours: `bg`, `bg-subtle` (chrome), `row-alt`, `surface`,
 `accent` (text, lines, focus ring), `accent-solid` (+ `-hover`, `-active`;
 filled controls) with `accent-fg` on it, `danger` (+ `-fg`), `success`,
 `warning`, `rating`, `focus-ring`, `overlay`, `waveform-*`, `track-*`
-(rekordbox colours: data, the same in both themes).
+(rekordbox colours: data, the same in both themes). The grid editor draws on
+its own dark deck in both themes: `deck`, `deck-fg`, `waveform-low/mid/high`
+(3-band), `grid-beat`, `grid-downbeat`, `grid-cursor`.
 
 The indigo `accent` stays scarce: primary buttons, the loaded track, the played
 waveform, focus rings, drop indicators. Selection and toggles that are on
@@ -123,7 +125,7 @@ menu items `--menu-item-h`.
 | `DropdownMenu*` | Content, Item (`variant`: default, danger), CheckboxItem, Separator | Radix DropdownMenu |
 | `ContextMenu*` | Content, Item, Separator; wrap the whole area, not each row | Radix ContextMenu |
 | `Popover*` | Content (`align`, `sideOffset`) | Radix Popover |
-| `Dialog*` | Content `size`: sm, md, lg, `closeOnOutsideClick`; Header, Title, Description, Body, Footer | Radix Dialog |
+| `Dialog*` | Content `size`: sm, md, lg, xl (960 px, the grid editor), `closeOnOutsideClick`; Header, Title, Description, Body, Footer | Radix Dialog |
 | `Sheet` + `SheetHeader` | right-hand slide-over (non-modal, inside its parent) | Web Animations |
 | `ScrollArea` | themed scrollbars; not for the virtualised table | Radix ScrollArea |
 | `Separator` | `orientation` (decorative) | – |

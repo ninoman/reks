@@ -3689,6 +3689,7 @@ name = "reks-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "reks-analysis",
  "reks-audio",
  "reks-core",
  "reks-export-rb",

@@ -4,6 +4,7 @@
 mod adopt;
 mod analysis;
 mod commands;
+mod grid;
 mod history;
 mod state;
 
@@ -67,6 +68,10 @@ pub fn run() {
             commands::player_volume,
             commands::player_state,
             commands::overview_waveform,
+            grid::beatgrid_get,
+            grid::beatgrid_edit,
+            grid::beatgrid_tap_tempo,
+            grid::waveform_columns,
             commands::settings_get,
             commands::settings_set,
             commands::library_roots,

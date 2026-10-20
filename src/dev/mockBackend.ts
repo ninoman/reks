@@ -37,6 +37,7 @@ import type {
   TrackRow,
 } from "../lib/ipc";
 import { mockAdopt } from "./mockAdopt";
+import { mockGrid } from "./mockGrid";
 import { mockHistory } from "./mockHistory";
 
 const CAMELOT: [string, string][] = [
@@ -1081,6 +1082,11 @@ mockIPC((cmd, payload) => {
     case "plugin:dialog|open":
       return "/Users/dj/Music/rekordbox/collection.xml";
     default:
-      return history(cmd, args) ?? mockAdopt(cmd, args) ?? null;
+      return (
+        history(cmd, args) ??
+        mockAdopt(cmd, args) ??
+        mockGrid(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
+        null
+      );
   }
 });

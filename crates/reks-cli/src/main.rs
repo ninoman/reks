@@ -57,6 +57,7 @@ fn main() -> anyhow::Result<()> {
             let n: u32 = n.parse().context("track count")?;
             synth_xml(n, Path::new(out))
         }
+        [cmd, file, out] if cmd == "columns" => columns(Path::new(file), Path::new(out)),
         [cmd] if cmd == "devices" => {
             for name in reks_mix::output_devices()? {
                 println!("{name}");
@@ -76,6 +77,7 @@ fn main() -> anyhow::Result<()> {
         [cmd, rest @ ..] if cmd == "adopt" => adopt::run(rest),
         _ => bail!(
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
+             | columns <audio> <out.bin> \
              | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run] \
              | rb plan|export|validate <stick> ... | rb history <stick> [--json] \
              | history scan|import <stick|backup> --library <library.sqlite> ... \
@@ -83,6 +85,16 @@ fn main() -> anyhow::Result<()> {
              | convert plan|apply --library <library.sqlite> ...]"
         ),
     }
+}
+
+/// Writes the waveform columns of `file` (4 bytes per 1/150 s: low, mid,
+/// high, mono), the payload the grid editor draws.
+fn columns(file: &Path, out: &Path) -> anyhow::Result<()> {
+    let cols = reks_analysis::columns::file_columns(file)?;
+    let bytes = cols.to_interleaved().context("inconsistent columns")?;
+    std::fs::write(out, &bytes).with_context(|| format!("writing {}", out.display()))?;
+    println!("{} columns -> {}", cols.len(), out.display());
+    Ok(())
 }
 
 /// Imports (or previews, with `--dry-run`) `xml` into the library at `db`,

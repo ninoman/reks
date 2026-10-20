@@ -44,6 +44,11 @@
   --amber-600: #c08532;
   --amber-700: #9a6516;
 
+  /* Grid editor waveform: 3-band on a dark deck in both themes (like the players). */
+  --wave-low: #2f7bff;
+  --wave-mid: #f29a2e;
+  --wave-high: #f4f4f8;
+
   /* rekordbox track colours (names from reks-core rbxml::TRACK_COLOURS); data, not theme. */
   --rb-pink: #ff007f;
   --rb-red: #ff0000;
@@ -100,6 +105,15 @@
   --color-waveform-played: var(--color-accent);
   --color-waveform-rest: var(--mist-400);
   --color-waveform-playhead: var(--color-fg);
+  /* Grid editor (the same in both themes: it draws on its own dark deck). */
+  --color-deck: var(--mist-950);
+  --color-deck-fg: var(--mist-75);
+  --color-waveform-low: var(--wave-low);
+  --color-waveform-mid: var(--wave-mid);
+  --color-waveform-high: var(--wave-high);
+  --color-grid-beat: rgb(235 235 240 / 38%);
+  --color-grid-downbeat: var(--red-500);
+  --color-grid-cursor: var(--indigo-500);
 
   --color-track-pink: var(--rb-pink);
   --color-track-red: var(--rb-red);
