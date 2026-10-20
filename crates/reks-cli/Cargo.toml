@@ -18,9 +18,13 @@ reks-audio = { workspace = true }
 reks-core = { workspace = true }
 reks-export-rb = { workspace = true }
 reks-mix = { workspace = true }
+rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
 
 [dev-dependencies]
 reks-export-rb = { workspace = true, features = ["test-util"] }

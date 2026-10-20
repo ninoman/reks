@@ -11,9 +11,10 @@ use std::path::Path;
 use reks_core::{AnalysisAnchor, AnalysisRecord};
 
 use crate::beats::{BeatError, BeatList, BeatTracker};
-use crate::grid::{self, build_grid, Grid, GridError, GridOptions, TrackedBeat};
+use crate::grid::{self, build_grid_with_pulse, Grid, GridError, GridOptions, TrackedBeat};
 use crate::input::{AnalysisInput, InputError, ANALYSIS_RATE};
 use crate::key::{detect_key, KeyAnalysis, KeyError};
+use crate::onset::{KickOnsets, KickPulse};
 use crate::waveform::{columns_from_interleaved, WaveformColumns, WaveformError};
 
 /// Version of the whole analyser. Bump it whenever a change alters results
@@ -21,7 +22,9 @@ use crate::waveform::{columns_from_interleaved, WaveformColumns, WaveformError};
 /// re-analysed and every cache entry is stale.
 ///
 /// 2: MP3 positions on rekordbox's timeline (`reks_audio::timing`, task 4).
-pub const ANALYSER_VERSION: u32 = 2;
+/// 3: whole-track tempo fit, dynamic grids only on a tempo change, grid
+///    phase from the kicks (task 12a).
+pub const ANALYSER_VERSION: u32 = 3;
 
 /// A dynamic grid's beats are merged into one tempo anchor while each stays
 /// within this distance of where the anchor's rounded tempo puts it.
@@ -65,7 +68,20 @@ pub fn analyse_input(
     tracker: &mut BeatTracker,
     input: &AnalysisInput,
 ) -> Result<TrackAnalysis, AnalyseError> {
-    let beats = tracker.track(input)?;
+    let kicks = KickOnsets::from_mono(&input.mono);
+    let beats = tracker.track_with(input, &kicks)?;
+    analyse_tracked(input, beats, Some(&kicks.pulse()))
+}
+
+/// [`analyse_input`] after beat tracking: grid, key and columns for
+/// `beats` (placed on the audio, as [`BeatTracker::track`] returns them);
+/// `pulse` lines the constant grid up with the kicks
+/// ([`grid::kick_phase`]).
+pub fn analyse_tracked(
+    input: &AnalysisInput,
+    beats: BeatList,
+    pulse: Option<&KickPulse>,
+) -> Result<TrackAnalysis, AnalyseError> {
     let tracked = grid::BeatList {
         sample_rate: beats.sample_rate,
         beats: beats
@@ -77,7 +93,7 @@ pub fn analyse_input(
             })
             .collect(),
     };
-    let grid = match build_grid(&tracked, &GridOptions::default()) {
+    let grid = match build_grid_with_pulse(&tracked, pulse, &GridOptions::default()) {
         Ok(g) => Some(g),
         Err(GridError::TooFewBeats(_)) => None,
         Err(e) => return Err(e.into()),

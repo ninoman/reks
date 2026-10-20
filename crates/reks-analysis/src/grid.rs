@@ -17,6 +17,8 @@
 //! [`build_grid`] adds what Mixxx does elsewhere or not at all: the downbeat
 //! anchor, the fallback to a dynamic grid and the half/double tempo rule.
 
+use crate::onset::KickPulse;
+
 /// Phase error inaudible in a mix; also the snapping tolerance (Mixxx: 25 ms).
 pub const MAX_PHASE_ERROR_S: f64 = 0.025;
 /// A region drifting further than this in one direction is not constant.
@@ -25,6 +27,12 @@ const MAX_PHASE_ERROR_SUM_S: f64 = 0.1;
 const MAX_OUTLIERS: usize = 1;
 /// Regions shorter than this are too unstable to extend the main region.
 const MIN_REGION_BEATS: usize = 16;
+/// [`fit_tempo`]: a beat within this distance of the grid counts as on it.
+pub const FIT_TOLERANCE_S: f64 = 0.015;
+/// [`fit_tempo`]: tempos searched around each estimate (fraction either way).
+const FIT_SPAN: f64 = 0.03;
+/// [`fit_tempo`] histogram bin, seconds.
+const FIT_BIN_S: f64 = 0.001;
 
 /// One beat from the tracker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +82,15 @@ pub struct GridOptions {
     /// Fraction of beats that must sit on the constant grid (within
     /// [`MAX_PHASE_ERROR_S`]) for it to be used.
     pub min_coverage: f64,
+    /// A tempo change: a constant region of at least this many beats ...
+    pub change_beats: usize,
+    /// ... whose tempo differs from the constant grid's by at least this
+    /// fraction (and is not a 2:1 or 3:2 tracker error).
+    pub change_ratio: f64,
+    /// [`kick_phase`] search radius, ms; 0 turns it off.
+    pub kick_phase_ms: u32,
+    /// [`kick_phase`] moves the grid only for this much more kick attack.
+    pub kick_phase_gain: f64,
     /// Preferred tempo range; tempos outside it are doubled or halved.
     pub min_bpm: f64,
     pub max_bpm: f64,
@@ -82,7 +99,11 @@ pub struct GridOptions {
 impl Default for GridOptions {
     fn default() -> Self {
         Self {
-            min_coverage: 0.8,
+            min_coverage: 0.3,
+            change_beats: 32,
+            change_ratio: 0.005,
+            kick_phase_ms: 60,
+            kick_phase_gain: 1.5,
             min_bpm: 70.0,
             max_bpm: 180.0,
         }
@@ -322,15 +343,205 @@ pub fn adjust_phase(first_beat: f64, bpm: f64, sample_rate: u32, beats: &[i64]) 
     }
 }
 
+/// Result of [`fit_tempo`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TempoFit {
+    /// A multiple of 0.01 BPM.
+    pub bpm: f64,
+    /// Position of a grid line, samples (`0..beat length`).
+    pub phase: f64,
+    /// Beats within [`FIT_TOLERANCE_S`] of the grid.
+    pub on_grid: usize,
+}
+
+/// Whole-track tempo search: of the tempos in 0.01 BPM steps within
+/// ±3% of each of `estimates` (BPM), the one whose grid, at its best phase,
+/// has the most beats within [`FIT_TOLERANCE_S`]; ties go to the roundest
+/// tempo (1, 0.5, 0.1, then 0.01 BPM), then to the one nearest an estimate.
+///
+/// Mixxx's estimate comes from one stretch of steady beats, so a noisy beat
+/// list (fills, breakdowns, the tracker hopping onto hi-hats) leaves it a
+/// few hundredths of a BPM off, which drifts a beat over a track. Counting
+/// beats on the grid over the whole track pins the tempo down to 0.01 BPM
+/// (0.01 BPM over 800 beats is 25 ms at 140 BPM).
+pub fn fit_tempo(beats: &[i64], sample_rate: u32, estimates: &[f64]) -> Option<TempoFit> {
+    let sr = f64::from(sample_rate);
+    let mut candidates: Vec<i64> = estimates
+        .iter()
+        .filter(|e| e.is_finite() && **e > 0.0)
+        .flat_map(|&e| {
+            let lo = (e * (1.0 - FIT_SPAN) * 100.0).ceil() as i64;
+            let hi = (e * (1.0 + FIT_SPAN) * 100.0).floor() as i64;
+            lo.max(1)..=hi
+        })
+        .collect();
+    candidates.sort_unstable();
+    candidates.dedup();
+    let roundness = |centi: i64| match centi {
+        c if c % 100 == 0 => 0,
+        c if c % 50 == 0 => 1,
+        c if c % 10 == 0 => 2,
+        _ => 3,
+    };
+    let distance = |centi: i64| {
+        estimates
+            .iter()
+            .map(|e| (centi as f64 / 100.0 - e).abs())
+            .fold(f64::INFINITY, f64::min)
+    };
+    let mut best: Option<(i64, TempoFit)> = None;
+    for centi in candidates {
+        let bpm = centi as f64 / 100.0;
+        let (phase, on_grid) = best_phase(beats, 60.0 * sr / bpm, sr);
+        let better = match &best {
+            None => true,
+            Some((b, f)) => {
+                (on_grid, std::cmp::Reverse(roundness(centi)))
+                    > (f.on_grid, std::cmp::Reverse(roundness(*b)))
+                    || (on_grid == f.on_grid
+                        && roundness(centi) == roundness(*b)
+                        && distance(centi) < distance(*b))
+            }
+        };
+        if better {
+            best = Some((
+                centi,
+                TempoFit {
+                    bpm,
+                    phase,
+                    on_grid,
+                },
+            ));
+        }
+    }
+    best.map(|(_, f)| f)
+}
+
+/// The grid phase (samples, `0..beat_len`) that puts the most beats within
+/// [`FIT_TOLERANCE_S`] of a grid line (the mean of those beats), and that
+/// count.
+fn best_phase(beats: &[i64], beat_len: f64, sr: f64) -> (f64, usize) {
+    let bin = FIT_BIN_S * sr;
+    let bins = (beat_len / bin).ceil().max(1.0) as usize;
+    let mut hist = vec![0usize; bins];
+    for &b in beats {
+        let k = ((b as f64).rem_euclid(beat_len) / bin) as usize;
+        hist[k.min(bins - 1)] += 1;
+    }
+    let half = ((FIT_TOLERANCE_S / FIT_BIN_S).round() as usize).min((bins - 1) / 2);
+    // Circular window sum of 2 * half + 1 bins centred on each bin.
+    let mut sum: usize = (0..=2 * half).map(|i| hist[(bins - half + i) % bins]).sum();
+    let mut best = (0, sum);
+    for centre in 1..bins {
+        sum += hist[(centre + half) % bins];
+        sum -= hist[(centre + bins - half - 1) % bins];
+        if sum > best.1 {
+            best = (centre, sum);
+        }
+    }
+    // The window's beats, averaged: the middle of a plateau of equal sums.
+    let centre = (best.0 as f64 + 0.5) * bin;
+    let reach = (half as f64 + 0.5) * bin;
+    let (mut sum_off, mut n) = (0.0, 0usize);
+    for &b in beats {
+        let mut off = (b as f64 - centre).rem_euclid(beat_len);
+        if off > beat_len / 2.0 {
+            off -= beat_len;
+        }
+        if off.abs() <= reach {
+            sum_off += off;
+            n += 1;
+        }
+    }
+    let phase = if n == 0 {
+        centre
+    } else {
+        (centre + sum_off / n as f64).rem_euclid(beat_len)
+    };
+    (phase, best.1)
+}
+
+/// Smallest move [`kick_phase`] makes: below it the placed beats already
+/// sit on the attack; above it the grid was on another cluster of beats
+/// (hi-hats, bass notes).
+const KICK_PHASE_MIN_MS: i64 = 15;
+
+/// Moves a constant grid (`origin`, `bpm`) by [`KICK_PHASE_MIN_MS`] to
+/// `radius_ms` either way when its lines, over the whole track, then sit
+/// on at least `gain` times as much kick attack ([`KickPulse::at`]); then
+/// [`adjust_phase`] centres it on the beats there. Unchanged otherwise.
+pub fn kick_phase(
+    origin: f64,
+    bpm: f64,
+    sample_rate: u32,
+    beats: &[i64],
+    pulse: &KickPulse,
+    radius_ms: u32,
+    gain: f64,
+) -> f64 {
+    let sr = f64::from(sample_rate);
+    let beat_len = 60.0 * sr / bpm;
+    let end = pulse.len_samples();
+    let score = |o: f64| -> f64 {
+        let mut line = o.rem_euclid(beat_len);
+        let mut sum = 0.0;
+        while line < end {
+            sum += f64::from(pulse.at(line));
+            line += beat_len;
+        }
+        sum
+    };
+    let ms = sr / 1000.0;
+    let radius = i64::from(radius_ms);
+    // The current phase, allowing for the pulse's 5 ms frames.
+    let here = (-KICK_PHASE_MIN_MS + 1..KICK_PHASE_MIN_MS)
+        .map(|shift| score(origin + shift as f64 * ms))
+        .fold(0.0, f64::max);
+    let (mut best_shift, mut best) = (0i64, here * gain);
+    for shift in (-radius..=-KICK_PHASE_MIN_MS).chain(KICK_PHASE_MIN_MS..=radius) {
+        let s = score(origin + shift as f64 * ms);
+        if s > best || (s == best && best_shift != 0 && shift.abs() < best_shift.abs()) {
+            (best_shift, best) = (shift, s);
+        }
+    }
+    if best_shift == 0 || best <= 0.0 {
+        return origin;
+    }
+    adjust_phase(origin + best_shift as f64 * ms, bpm, sample_rate, beats)
+}
+
+/// Tempo of the median gap between beats, BPM.
+fn median_gap_bpm(beats: &[i64], sample_rate: u32) -> Option<f64> {
+    let mut gaps: Vec<i64> = beats.windows(2).map(|w| w[1] - w[0]).collect();
+    if gaps.is_empty() {
+        return None;
+    }
+    let mid = gaps.len() / 2;
+    let gap = *gaps.select_nth_unstable(mid).1;
+    (gap > 0).then(|| 60.0 * f64::from(sample_rate) / gap as f64)
+}
+
 /// Builds the grid for a tracked beat list.
 ///
-/// Constant when the tempo from [`make_const_bpm`] puts at least
-/// `opts.min_coverage` of all beats within [`MAX_PHASE_ERROR_S`] of the grid;
-/// beat 1 is then the flagged downbeat nearest the start of the merged
-/// constant region (its first beat when no downbeat is flagged). Otherwise
+/// The constant tempo is [`fit_tempo`] around [`make_const_bpm`]'s tempo
+/// and the median beat gap. The grid is constant when it puts at least
+/// `opts.min_coverage` of all beats within [`MAX_PHASE_ERROR_S`] of a grid
+/// line and the beats show no tempo change ([`tempo_change`]); beat 1 is
+/// then the flagged downbeat nearest the start of [`make_const_bpm`]'s
+/// merged constant region (its first beat when no downbeat is flagged). Otherwise
 /// dynamic, numbered from the downbeat flags. Either way a tempo outside
 /// `opts.min_bpm..=opts.max_bpm` is doubled or halved into it.
 pub fn build_grid(input: &BeatList, opts: &GridOptions) -> Result<Grid, GridError> {
+    build_grid_with_pulse(input, None, opts)
+}
+
+/// [`build_grid`], then a constant grid's phase is lined up with the kicks
+/// ([`kick_phase`]) when `pulse` is given and `opts.kick_phase_ms > 0`.
+pub fn build_grid_with_pulse(
+    input: &BeatList,
+    pulse: Option<&KickPulse>,
+    opts: &GridOptions,
+) -> Result<Grid, GridError> {
     if input.sample_rate == 0 {
         return Err(GridError::ZeroSampleRate);
     }
@@ -348,17 +559,45 @@ pub fn build_grid(input: &BeatList, opts: &GridOptions) -> Result<Grid, GridErro
     let sr = f64::from(input.sample_rate);
     let positions: Vec<i64> = input.beats.iter().map(|b| b.position).collect();
     let regions = retrieve_const_regions(&positions, input.sample_rate);
-    if let Some(tempo) = make_const_bpm(&regions, input.sample_rate) {
+    let mixxx = make_const_bpm(&regions, input.sample_rate);
+    let estimates: Vec<f64> = mixxx
+        .map(|t| t.bpm)
+        .into_iter()
+        .chain(median_gap_bpm(&positions, input.sample_rate))
+        .collect();
+    if let Some(fit) = fit_tempo(&positions, input.sample_rate, &estimates) {
+        let (region_start, region_end) = mixxx
+            .map_or((positions[0], positions[positions.len() - 1]), |t| {
+                (t.region_start, t.region_end)
+            });
+        let tempo = ConstTempo {
+            bpm: fit.bpm,
+            region_start,
+            region_end,
+        };
         let beat_len = 60.0 * sr / tempo.bpm;
-        let origin = adjust_phase(
-            tempo.region_start as f64,
-            tempo.bpm,
-            input.sample_rate,
-            &positions,
-        );
-        let coverage = on_grid_fraction(&positions, origin, beat_len, MAX_PHASE_ERROR_S * sr);
-        tracing::debug!(bpm = tempo.bpm, coverage, "constant grid candidate");
-        if coverage >= opts.min_coverage {
+        // Phase from the steady region (a noisy track's beats can cluster
+        // off the beat too); the whole-track best phase without one.
+        let start = mixxx.map_or(fit.phase, |t| t.region_start as f64);
+        let origin = adjust_phase(start, tempo.bpm, input.sample_rate, &positions);
+        let origin = match pulse {
+            Some(p) if opts.kick_phase_ms > 0 => kick_phase(
+                origin,
+                tempo.bpm,
+                input.sample_rate,
+                &positions,
+                p,
+                opts.kick_phase_ms,
+                opts.kick_phase_gain,
+            ),
+            _ => origin,
+        };
+        // How steady the beat is, at the tempo's best phase.
+        let best = adjust_phase(fit.phase, tempo.bpm, input.sample_rate, &positions);
+        let coverage = on_grid_fraction(&positions, best, beat_len, MAX_PHASE_ERROR_S * sr);
+        let change = tempo_change(&regions, beat_len, input.sample_rate, opts);
+        tracing::debug!(bpm = tempo.bpm, coverage, change, "constant grid candidate");
+        if coverage >= opts.min_coverage && !change {
             let anchor_beat = nearest_downbeat(&input.beats, tempo.region_start, tempo.region_end)
                 .unwrap_or(tempo.region_start);
             let anchor = origin + ((anchor_beat as f64 - origin) / beat_len).round() * beat_len;
@@ -375,6 +614,40 @@ pub fn build_grid(input: &BeatList, opts: &GridOptions) -> Result<Grid, GridErro
         }
     }
     Ok(dynamic_grid(&input.beats, input.sample_rate, opts))
+}
+
+/// Ratios of tracked to grid beat length that are tracker errors (half or
+/// double time, triplet feel), not tempo changes.
+const TRACKER_RATIOS: [f64; 4] = [0.5, 2.0, 2.0 / 3.0, 1.5];
+
+/// Evidence of a real tempo change against a constant grid of `beat_len`
+/// samples: a region from [`retrieve_const_regions`] of at least
+/// `opts.change_beats` beats whose tempo differs by at least
+/// `opts.change_ratio` and drifts off the grid by more than twice
+/// [`MAX_PHASE_ERROR_S`] over its length. Noisy beats break into short
+/// regions or ones close to the grid's tempo; a track that really changes
+/// tempo holds the other tempo for many bars.
+pub fn tempo_change(
+    regions: &[ConstRegion],
+    beat_len: f64,
+    sample_rate: u32,
+    opts: &GridOptions,
+) -> bool {
+    let max_drift = 2.0 * MAX_PHASE_ERROR_S * f64::from(sample_rate);
+    regions.windows(2).any(|pair| {
+        let len = pair[0].beat_length;
+        if len <= 0.0 {
+            return false;
+        }
+        let beats = beats_in((pair[1].first_beat - pair[0].first_beat) as f64, len);
+        let ratio = len / beat_len;
+        beats >= opts.change_beats
+            && (ratio - 1.0).abs() >= opts.change_ratio
+            && (len - beat_len).abs() * beats as f64 > max_drift
+            && !TRACKER_RATIOS
+                .iter()
+                .any(|r| (ratio / r - 1.0).abs() < opts.change_ratio)
+    })
 }
 
 /// Beat number (1–4) of the beat `index` beats after a downbeat.
@@ -499,6 +772,7 @@ fn number_beats(beats: &[TrackedBeat]) -> Vec<GridBeat> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::onset::PULSE_RATE;
 
     const SR: u32 = 44_100;
 
@@ -833,6 +1107,170 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// `input` with every beat whose index `i` satisfies `pick(i)` moved by
+    /// `offset_ms` (a hi-hat or bass note the tracker took for the beat).
+    fn displace(mut input: BeatList, offset_ms: f64, pick: impl Fn(usize) -> bool) -> BeatList {
+        for (i, b) in input.beats.iter_mut().enumerate() {
+            if pick(i) {
+                b.position += secs(offset_ms / 1000.0);
+            }
+        }
+        input
+    }
+
+    #[test]
+    fn noisy_steady_tracks_stay_constant() {
+        // (name, beats): all at 143 BPM; most used to fall back to dynamic.
+        let base = || synth(&one(143.0, 0.3, 360.0), 4.0, 4, 0);
+        let cases = [
+            // Half the beats 45 ms late in runs of 8: no constant region is
+            // long, coverage ≈ 0.5 (the old 0.8 floor went dynamic).
+            ("runs off the beat", displace(base(), 45.0, |i| i % 16 >= 8)),
+            // Every third beat on an off-beat hi-hat.
+            ("hi-hats", displace(base(), 105.0, |i| i % 3 == 1)),
+            // A 64-beat breakdown tracked in half time is a tracker error.
+            ("half-time breakdown", {
+                let mut b = base();
+                let keep: Vec<TrackedBeat> = b
+                    .beats
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| !(300..364).contains(i) || i % 2 == 0)
+                    .map(|(_, b)| *b)
+                    .collect();
+                b.beats = keep;
+                b
+            }),
+        ];
+        for (name, input) in cases {
+            let grid = build_grid(&input, &GridOptions::default()).unwrap();
+            assert!(
+                matches!(grid, Grid::Constant { bpm, .. } if bpm == 143.0),
+                "{name}: {grid:?}"
+            );
+            let old = GridOptions {
+                min_coverage: 0.8,
+                ..GridOptions::default()
+            };
+            if name == "runs off the beat" {
+                assert!(matches!(
+                    build_grid(&input, &old).unwrap(),
+                    Grid::Dynamic { .. }
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn a_real_tempo_step_is_dynamic() {
+        // 3 minutes at 128, then 64 beats (30 s) at 130: 85% of the beats
+        // sit on the 128 grid, but the 130 section holds for 16 bars.
+        let step = vec![
+            Segment {
+                bpm: 128.0,
+                from: 0.5,
+                to: 180.5,
+            },
+            Segment {
+                bpm: 130.0,
+                from: 180.5,
+                to: 180.5 + 64.0 * 60.0 / 130.0,
+            },
+        ];
+        let input = synth(&step, 3.0, 4, 0);
+        let grid = build_grid(&input, &GridOptions::default()).unwrap();
+        assert!(matches!(grid, Grid::Dynamic { .. }), "{grid:?}");
+        // The same change for only 16 beats is not evidence.
+        let short = vec![
+            Segment {
+                bpm: 128.0,
+                from: 0.5,
+                to: 180.5,
+            },
+            Segment {
+                bpm: 130.0,
+                from: 180.5,
+                to: 180.5 + 16.0 * 60.0 / 130.0,
+            },
+        ];
+        let grid = build_grid(&synth(&short, 3.0, 4, 0), &GridOptions::default()).unwrap();
+        assert!(
+            matches!(grid, Grid::Constant { bpm, .. } if bpm == 128.0),
+            "{grid:?}"
+        );
+    }
+
+    #[test]
+    fn fit_tempo_finds_the_exact_tempo() {
+        let sr = f64::from(SR);
+        // 137 BPM for 6 minutes, ±6 ms jitter, a third of the beats 40 ms off.
+        let input = displace(synth(&one(137.0, 0.25, 360.0), 6.0, 4, 0), 40.0, |i| {
+            i % 3 == 0
+        });
+        let beats: Vec<i64> = input.beats.iter().map(|b| b.position).collect();
+        // Estimates a little off either way still land on 137.00.
+        for estimate in [136.6, 137.04, 137.3] {
+            let fit = fit_tempo(&beats, SR, &[estimate]).unwrap();
+            assert_eq!(fit.bpm, 137.0, "from {estimate}");
+            assert!(fit.on_grid >= beats.len() * 2 / 3 - 2, "{fit:?}");
+            // Phase: a grid line within 6 ms of 0.25 s.
+            let len = 60.0 * sr / 137.0;
+            let d = (0.25 * sr - fit.phase).rem_euclid(len);
+            assert!(d.min(len - d) < 0.006 * sr, "{fit:?}");
+        }
+        // A fractional tempo is kept to 0.01 BPM.
+        let input = synth(&one(126.37, 0.1, 360.0), 3.0, 4, 0);
+        let beats: Vec<i64> = input.beats.iter().map(|b| b.position).collect();
+        assert_eq!(fit_tempo(&beats, SR, &[126.2]).unwrap().bpm, 126.37);
+        assert_eq!(fit_tempo(&beats, SR, &[]), None);
+    }
+
+    #[test]
+    fn kick_phase_moves_the_grid_onto_the_kicks() {
+        // 140 BPM; the tracker took a hi-hat 45 ms after the kick for 60% of
+        // the beats (in runs of 24), so the grid lands on the hats.
+        let kicks = synth(&one(140.0, 0.5, 300.0), 0.0, 4, 0);
+        let input = displace(kicks.clone(), 45.0, |i| i % 40 < 24);
+        let first_line = |g: &Grid| match g {
+            Grid::Constant {
+                bpm, first_beat, ..
+            } => (*bpm, *first_beat),
+            other => panic!("expected constant, got {other:?}"),
+        };
+        let len = 60.0 * f64::from(SR) / 140.0;
+        let off_kick = |first: i64| {
+            let d = (first - kicks.beats[0].position) as f64;
+            let d = d.rem_euclid(len);
+            d.min(len - d) / f64::from(SR) * 1000.0
+        };
+        let opts = GridOptions::default();
+        let (bpm, first) = first_line(&build_grid(&input, &opts).unwrap());
+        assert_eq!(bpm, 140.0);
+        assert!((off_kick(first) - 45.0).abs() < 2.0, "{}", off_kick(first));
+
+        // A rise curve with a 12 dB attack at every kick (5 ms frames).
+        let frames = (300.5 * f64::from(PULSE_RATE)) as usize;
+        let mut q = vec![0u8; frames];
+        for b in &kicks.beats {
+            let f = (b.position as f64 * f64::from(PULSE_RATE) / f64::from(SR)) as usize;
+            for (k, slot) in q.iter_mut().skip(f).take(5).enumerate() {
+                *slot = (48 - 8 * k) as u8;
+            }
+        }
+        let pulse = KickPulse::from_quarter_db(q);
+        let grid = build_grid_with_pulse(&input, Some(&pulse), &opts).unwrap();
+        let (bpm, first) = first_line(&grid);
+        assert_eq!(bpm, 140.0);
+        assert!(off_kick(first) < 2.0, "{}", off_kick(first));
+        // Off: unchanged.
+        let off = GridOptions {
+            kick_phase_ms: 0,
+            ..opts
+        };
+        let (_, first) = first_line(&build_grid_with_pulse(&input, Some(&pulse), &off).unwrap());
+        assert!((off_kick(first) - 45.0).abs() < 2.0);
     }
 
     #[test]

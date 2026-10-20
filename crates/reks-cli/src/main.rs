@@ -32,6 +32,8 @@
 //!                               reks's analysis of one file (grid, key, columns)
 //! reks anlz build <audio> <out-dir> [...] | --library <library.sqlite> --track <id> <out-dir> [...]
 //!                               build ANLZ files from reks's analysis (flags: see `anlz.rs`)
+//! reks parity run|report [--xml <collection.xml>] [--out <dir>] [...]
+//!                               analysis parity vs rekordbox (flags: see `parity.rs`)
 //! ```
 
 mod adopt;
@@ -39,6 +41,7 @@ mod analyse;
 mod anlz;
 mod convert;
 mod history;
+mod parity;
 mod rb;
 
 use std::io::BufWriter;
@@ -85,6 +88,7 @@ fn main() -> anyhow::Result<()> {
         [cmd, rest @ ..] if cmd == "adopt" => adopt::run(rest),
         [cmd, rest @ ..] if cmd == "analyse" => analyse::run(rest),
         [cmd, rest @ ..] if cmd == "anlz" => anlz::run(rest),
+        [cmd, rest @ ..] if cmd == "parity" => parity::run(rest),
         _ => bail!(
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
              | columns <audio> <out.bin> \
@@ -94,7 +98,8 @@ fn main() -> anyhow::Result<()> {
              | history scan|import <stick|backup> --library <library.sqlite> ... \
              | adopt scan <stick> --library <library.sqlite> [--json] \
              | convert plan|apply --library <library.sqlite> ... \
-             | analyse <audio> [--json] | anlz build <audio> <out-dir> ...]"
+             | analyse <audio> [--json] | anlz build <audio> <out-dir> ...\
+             | parity run|report [--xml <collection.xml>] [--out <dir>] ...]"
         ),
     }
 }
