@@ -75,6 +75,7 @@ impl World {
             serial(),
             opts,
             &self.locator(),
+            &NoAnlz,
         )
         .unwrap()
     }
@@ -133,6 +134,7 @@ fn track(id: TrackId, src: PathBuf, artist: &str, album: &str) -> SourceTrack {
         album: Some(album.into()),
         probe: None,
         has_grid: true,
+        grid_user_owned: false,
         cue_count: 3,
         divider: None,
     }
@@ -422,6 +424,7 @@ fn missing_analysis_skips_or_generates() {
         serial(),
         &ExportOptions::default(),
         &NoAnlz,
+        &NoAnlz,
     )
     .unwrap();
     assert!(plan.tracks.is_empty());
@@ -447,7 +450,7 @@ fn missing_analysis_skips_or_generates() {
             missing_analysis: mode,
             ..ExportOptions::default()
         };
-        let plan = plan_sources(src.clone(), &w.dev(), serial(), &opts, &NoAnlz).unwrap();
+        let plan = plan_sources(src.clone(), &w.dev(), serial(), &opts, &NoAnlz, &NoAnlz).unwrap();
         assert_eq!(plan.tracks.len(), 3);
         assert_eq!(plan.anlz[0], want);
     }
@@ -530,6 +533,7 @@ fn device_checks() {
         serial(),
         &ExportOptions::default(),
         &w.locator(),
+        &NoAnlz,
     )
     .unwrap();
     assert!(matches!(
@@ -545,7 +549,15 @@ fn device_checks() {
     dev.fs = FsKind::Other("apfs".into());
     dev.fs_name = "apfs".into();
     dev.free_bytes = 1 << 30;
-    let plan = plan_sources(src, &dev, serial(), &ExportOptions::default(), &w.locator()).unwrap();
+    let plan = plan_sources(
+        src,
+        &dev,
+        serial(),
+        &ExportOptions::default(),
+        &w.locator(),
+        &NoAnlz,
+    )
+    .unwrap();
     assert_eq!(
         plan.errors,
         [Problem::UnsupportedFilesystem {
@@ -745,6 +757,7 @@ fn rekordbox_cache_locator_finds_or_explains() {
         serial(),
         &ExportOptions::default(),
         &locator,
+        &NoAnlz,
     )
     .unwrap();
 
@@ -769,7 +782,7 @@ fn rekordbox_cache_locator_finds_or_explains() {
     );
     assert!(plan.warnings.contains(&Warning::Skipped {
         track_id: b,
-        reason: Missing::Mismatch.to_string(),
+        reason: format!("{}; reks has not analysed it yet", Missing::Mismatch),
     }));
     assert_eq!(plan.errors, [Problem::PlaylistNotFound { id: 999 }]);
 
@@ -782,12 +795,13 @@ fn rekordbox_cache_locator_finds_or_explains() {
         serial(),
         &ExportOptions::default(),
         &locator,
+        &NoAnlz,
     )
     .unwrap();
     assert!(plan.tracks.is_empty());
     assert!(plan.warnings.contains(&Warning::Skipped {
         track_id: a,
-        reason: Missing::NoRoots.to_string(),
+        reason: format!("{}; reks has not analysed it yet", Missing::NoRoots),
     }));
 
     // An empty selection gives an empty locator, not an error.
@@ -928,7 +942,15 @@ fn clean_or_unreadable_sticks() {
     )));
 
     // No serial from the OS: said so.
-    let plan = plan_sources(src, &w.dev(), None, &ExportOptions::default(), &NoAnlz).unwrap();
+    let plan = plan_sources(
+        src,
+        &w.dev(),
+        None,
+        &ExportOptions::default(),
+        &NoAnlz,
+        &NoAnlz,
+    )
+    .unwrap();
     assert!(plan.warnings.contains(&Warning::NoVolumeSerial));
     assert_eq!(plan.backup_plan().volume_serial, None);
 }

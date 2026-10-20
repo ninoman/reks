@@ -139,6 +139,7 @@ pub fn expand(sources: &mut Sources, dir: &Path) -> Result<(), PlanError> {
                 album: None,
                 probe: None,
                 has_grid: false,
+                grid_user_owned: false,
                 cue_count: 0,
                 divider: Some(d.info),
             },

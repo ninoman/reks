@@ -16,6 +16,9 @@
 //! - For tracks with analysis ([`AnlzSource`] not `None`): `PQTZ` holds beats
 //!   where the plan says `has_grid`, and the cue count of the `.DAT` (`PCOB`)
 //!   and, when present, the `.EXT` (`PCO2`) equals the plan's `cue_count`.
+//! - For tracks whose ANLZ reks built ([`AnlzSource::Reks`]): the `.DAT`,
+//!   `.EXT` and `.2EX` as baken left them pass [`reks_anlz::validate_set`]
+//!   (section lists and order, lengths, beats, cues, waveform sizes).
 //! - The playlist tree (names, folder/playlist kind, sibling order) and each
 //!   playlist's entries in order match the plan.
 //!
@@ -229,6 +232,12 @@ pub enum Finding {
         expected: u8,
         found: u32,
     },
+    /// An ANLZ set reks built fails [`reks_anlz::validate_set`] on the stick.
+    AnlzInvalid {
+        track_id: TrackId,
+        path: String,
+        issues: Vec<String>,
+    },
     /// A planned playlist or folder (`Folder/Name` path) is absent.
     PlaylistMissing {
         path: String,
@@ -270,7 +279,8 @@ impl Finding {
             | Finding::AnlzUnreadable { track_id, .. }
             | Finding::PpthMismatch { track_id, .. }
             | Finding::GridEmpty { track_id, .. }
-            | Finding::CueCount { track_id, .. } => Some(*track_id),
+            | Finding::CueCount { track_id, .. }
+            | Finding::AnlzInvalid { track_id, .. } => Some(*track_id),
             _ => None,
         }
     }
@@ -347,6 +357,15 @@ impl std::fmt::Display for Finding {
             } => write!(
                 f,
                 "track {track_id}: {path} has {found} cues, the plan {expected}"
+            ),
+            Self::AnlzInvalid {
+                track_id,
+                path,
+                issues,
+            } => write!(
+                f,
+                "track {track_id}: {path} fails the ANLZ check: {}",
+                issues.join("; ")
             ),
             Self::PlaylistMissing { path } => write!(f, "playlist {path} is not on the stick"),
             Self::UnexpectedPlaylist { path } => {
@@ -579,6 +598,10 @@ fn check_tracks(
             });
         }
 
+        if t.anlz_source == AnlzSource::Reks {
+            check_reks_set(root, track_id, &row.analyze_path, &row.file_path, findings)?;
+        }
+
         // `.EXT` carries the colour waveform and the extended cues NXS2 and
         // newer players read; check it when the writer put one there.
         let ext_rel = with_extension(&row.analyze_path, "EXT");
@@ -598,6 +621,49 @@ fn check_tracks(
                 }
             }
         }
+    }
+    Ok(())
+}
+
+/// [`reks_anlz::validate_set`] on a set reks built, as it sits on the stick.
+/// A missing `.DAT`/`.EXT` is already a finding elsewhere (or the issue
+/// list says so); the `.2EX` is checked when present.
+fn check_reks_set(
+    root: &Path,
+    track_id: TrackId,
+    dat_rel: &str,
+    file_path: &str,
+    findings: &mut Vec<Finding>,
+) -> Result<(), ValidateError> {
+    let read = |rel: &str| -> Result<Option<Vec<u8>>, ValidateError> {
+        match locate(root, rel).map_err(io_err(root))? {
+            Some(path) => fs::read(&path).map(Some).map_err(io_err(&path)),
+            None => Ok(None),
+        }
+    };
+    let (Some(dat), Some(ext)) = (read(dat_rel)?, read(&with_extension(dat_rel, "EXT"))?) else {
+        findings.push(Finding::AnlzMissing {
+            track_id,
+            path: with_extension(dat_rel, "EXT"),
+        });
+        return Ok(());
+    };
+    let ex2 = read(&with_extension(dat_rel, "2EX"))?;
+    let issues = reks_anlz::validate_set(
+        &dat,
+        &ext,
+        ex2.as_deref(),
+        reks_anlz::Expect {
+            path: Some(file_path),
+            duration_ms: None,
+        },
+    );
+    if !issues.is_empty() {
+        findings.push(Finding::AnlzInvalid {
+            track_id,
+            path: dat_rel.to_string(),
+            issues: issues.iter().map(ToString::to_string).collect(),
+        });
     }
     Ok(())
 }

@@ -112,7 +112,15 @@ impl World {
             ..ExportOptions::default()
         };
         let sources = plan::load(&self.lib, sel).unwrap();
-        plan::plan_sources(sources, &self.info(), Some(SERIAL.into()), &opts, &NoAnlz).unwrap()
+        plan::plan_sources(
+            sources,
+            &self.info(),
+            Some(SERIAL.into()),
+            &opts,
+            &NoAnlz,
+            &NoAnlz,
+        )
+        .unwrap()
     }
 
     /// A Sync: the profile's plan written by baken through `apply`.

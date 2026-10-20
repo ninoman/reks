@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use reks_core::{CancelToken, TrackPatch};
 
 use super::*;
-use crate::plan::{plan_sources, MissingAnalysis, PlannedPlaylist, SourceTrack, Sources};
+use crate::plan::{plan_sources, MissingAnalysis, NoAnlz, PlannedPlaylist, SourceTrack, Sources};
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/audio");
 
@@ -72,7 +72,7 @@ impl World {
             fs::write(dir.join("ANLZ0000.DAT"), [1u8; 1000]).unwrap();
             Some(dir.join("ANLZ0000.DAT"))
         };
-        plan_sources(sources, &self.dev(), serial(), opts, &locate).unwrap()
+        plan_sources(sources, &self.dev(), serial(), opts, &locate, &NoAnlz).unwrap()
     }
 }
 
@@ -88,6 +88,7 @@ fn track(id: TrackId, src: PathBuf) -> SourceTrack {
         album: Some("One".into()),
         probe: None,
         has_grid: true,
+        grid_user_owned: false,
         cue_count: 0,
         divider: None,
     }
@@ -295,6 +296,7 @@ fn warnings_are_grouped_and_unknown_tracks_get_their_id() {
                 w.cache.join("1.DAT")
             })
         },
+        &NoAnlz,
     )
     .unwrap();
     let dry = DryRun::new(&plan, &labels());
@@ -318,8 +320,8 @@ fn warnings_are_grouped_and_unknown_tracks_get_their_id() {
     assert_eq!(
         skipped.items,
         [
-            "Alpha – Second: no rekordbox analysis found",
-            "track 7: no rekordbox analysis found",
+            "Alpha – Second: no rekordbox analysis found; reks has not analysed it yet",
+            "track 7: no rekordbox analysis found; reks has not analysed it yet",
         ]
     );
     assert_eq!(

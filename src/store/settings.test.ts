@@ -19,6 +19,7 @@ const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
   audioDevice: null,
   keyNotation: "camelot",
   cacheDir: "/cache",
+  anlzPreference: "rekordboxFirst",
   ui: {
     hiddenColumns: null,
     filterBarOpen: true,

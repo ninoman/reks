@@ -11,7 +11,8 @@
 //! source and covered by tests where a test can provoke it):
 //!
 //! - Refused before any write ([`WriterError::Blocked`], [`WriterError::Unsupported`],
-//!   [`WriterError::PlanMismatch`], baken's own plan errors): nothing changed.
+//!   [`WriterError::PlanMismatch`], [`WriterError::ReksAnlz`], baken's own
+//!   plan errors): nothing changed.
 //! - Cancelled ([`WriterReport::cancelled`]), or the stick failed as a whole
 //!   ([`WriterError::DeviceWrite`], [`WriterError::NotEnoughSpace`]): the old
 //!   `export.pdb` is untouched. Audio and ANLZ written so far stay; new audio
@@ -155,6 +156,10 @@ pub enum WriterError {
         #[source]
         source: std::io::Error,
     },
+    /// A track's ANLZ could not be built from reks's analysis; nothing was
+    /// written.
+    #[error(transparent)]
+    ReksAnlz(#[from] crate::reksanlz::TrackBuildError),
     /// Any other baken error, before `export.pdb` was touched.
     #[error("baken: {0}")]
     Baken(String),

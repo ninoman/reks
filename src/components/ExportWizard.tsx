@@ -12,6 +12,7 @@ import { type ReactNode, useEffect, useState } from "react";
 
 import { cn } from "../lib/cn";
 import type {
+  AnlzPreference,
   DryRun,
   DryRunFileGroup,
   ExportOptions,
@@ -67,6 +68,12 @@ const TARGETS: { value: TargetProfile; label: string }[] = [
 ];
 
 /** `exportWithout` is left out: the writer refuses it (baken writes ANLZ for every track). */
+const ANLZ_SOURCES: { value: AnlzPreference; label: string }[] = [
+  { value: "rekordboxFirst", label: "rekordbox's, then reks's" },
+  { value: "reksFirst", label: "reks's, then rekordbox's" },
+  { value: "rekordboxOnly", label: "rekordbox's only" },
+];
+
 const MISSING: { value: MissingAnalysis; label: string }[] = [
   { value: "skip", label: "Leave them out" },
   { value: "generate", label: "Generate approximate analysis" },
@@ -419,8 +426,26 @@ function OptionsStep() {
       </div>
       <div className="px-4 py-3">
         <Field
-          label="Tracks without rekordbox analysis"
-          hint="Generated analysis is approximate until reks analyses audio itself."
+          label="Analysis to write"
+          hint="Waveforms, beatgrid and cues when rekordbox and reks have both analysed a track. A beatgrid you edited or locked uses reks's unless rekordbox's only is chosen. reks's analysis is not yet tested on players. Saved for later exports."
+        >
+          <Select
+            aria-label="Analysis to write"
+            value={o.anlzPreference}
+            onChange={(e) => set({ anlzPreference: e.target.value as AnlzPreference })}
+          >
+            {ANLZ_SOURCES.map((a) => (
+              <option key={a.value} value={a.value}>
+                {a.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+      <div className="px-4 py-3">
+        <Field
+          label="Tracks without analysis"
+          hint="Neither source has them. Generated analysis is approximate."
         >
           <Select
             value={o.missingAnalysis}

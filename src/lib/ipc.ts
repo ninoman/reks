@@ -581,6 +581,8 @@ export interface Settings {
   /** The cache dir in use. */
   cacheDir: string;
   ui: UiState;
+  /** Whose analysis a USB export writes when rekordbox and reks both have a track. */
+  anlzPreference: AnlzPreference;
 }
 
 /** Absent fields stay; `audioDevice: null` goes back to the system default. */
@@ -588,6 +590,7 @@ export interface SettingsPatch {
   audioDevice?: string | null;
   keyNotation?: KeyNotation;
   ui?: UiState;
+  anlzPreference?: AnlzPreference;
 }
 
 export interface LibraryRoot {
@@ -793,7 +796,13 @@ export function profileStatus(id: number, mountPoint: string | null): Promise<Pr
   return invoke("profile_status", { id, mountPoint });
 }
 
-/** Tracks without rekordbox analysis (`MissingAnalysis`). The writer refuses `exportWithout`. */
+/**
+ * Where an export takes a track's ANLZ when rekordbox's cache and reks's own analysis both have
+ * it (`reks_core::AnlzPreference`, phase 3 task 10). reks-built ANLZ is UNVERIFIED on players.
+ */
+export type AnlzPreference = "rekordboxFirst" | "reksFirst" | "rekordboxOnly";
+
+/** Tracks with no analysis at all (`MissingAnalysis`). The writer refuses `exportWithout`. */
 export type MissingAnalysis = "skip" | "generate" | "exportWithout";
 
 /**
@@ -816,6 +825,8 @@ export interface ExportOptions {
   historyChosen: boolean;
   /** The `export.dividers` flag: playlist dividers as silent tracks (UNVERIFIED, D22). */
   dividers: boolean;
+  /** Seeded from and saved to the `anlzPreference` setting by the wizard. */
+  anlzPreference: AnlzPreference;
 }
 
 /** Playlists and folders (= everything under them) to export (`plan::Selection`). */

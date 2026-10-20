@@ -12,6 +12,7 @@ vi.mock("../lib/ipc", async (original) => ({
   profileSelection: vi.fn(),
   profileSetSelection: vi.fn(),
   profileSetTarget: vi.fn(),
+  settingsSet: vi.fn(),
 }));
 
 const ipc = await import("../lib/ipc");
@@ -23,6 +24,8 @@ vi.mocked(ipc.devicesList).mockResolvedValue([]);
 const profileSelection = vi.mocked(ipc.profileSelection);
 const profileSetSelection = vi.mocked(ipc.profileSetSelection);
 const profileSetTarget = vi.mocked(ipc.profileSetTarget);
+const settingsSet = vi.mocked(ipc.settingsSet);
+const { useSettings } = await import("./settings");
 const { coveredIds, DEFAULT_EXPORT_OPTIONS, selectionOf, useExportWizard } = await import(
   "./exportWizard"
 );
@@ -242,6 +245,39 @@ describe("useExportWizard", () => {
     w().setOptions({ historyChosen: true });
     w().setOptions({ keepStale: true });
     expect(w().options.historyChosen).toBe(false);
+  });
+
+  it("opens with the analysis setting and saves a change to it", async () => {
+    const settings = {
+      audioDevice: null,
+      keyNotation: "classical",
+      cacheDir: "/cache",
+      ui: {
+        hiddenColumns: null,
+        filterBarOpen: true,
+        filtersEnabled: true,
+        infoOpen: false,
+        volume: 1,
+      },
+      anlzPreference: "reksFirst",
+    } as const;
+    useSettings.setState({ settings });
+    const w = useExportWizard.getState;
+    w().open();
+    expect(w().options.anlzPreference).toBe("reksFirst");
+
+    settingsSet.mockResolvedValueOnce({ ...settings, anlzPreference: "rekordboxOnly" });
+    w().setOptions({ anlzPreference: "rekordboxOnly" });
+    expect(w().options.anlzPreference).toBe("rekordboxOnly");
+    expect(settingsSet).toHaveBeenCalledWith({ anlzPreference: "rekordboxOnly" });
+    await vi.waitFor(() =>
+      expect(useSettings.getState().settings?.anlzPreference).toBe("rekordboxOnly"),
+    );
+    // Other options don't touch the setting.
+    settingsSet.mockClear();
+    w().setOptions({ keepStale: true });
+    expect(settingsSet).not.toHaveBeenCalled();
+    useSettings.setState({ settings: null });
   });
 
   it("leaving discard withdraws the confirmation", () => {

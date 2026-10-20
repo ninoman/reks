@@ -5,7 +5,8 @@
 //! and the overview waveform ([`overview`]). See `docs/phases/phase-1.md`.
 //!
 //! Phase 3: whole-track `f32` decode for analysis ([`decode_f32`]), with the
-//! encoder delay and padding the container reports.
+//! encoder delay and padding the container reports. MP3 frame count for the
+//! ANLZ `PVBR` trailer ([`mp3_audio_frames`]).
 //!
 //! Phase 2.6 converter building blocks: streaming decode at the source's
 //! precision ([`NativeStream`]), streaming resampling ([`resample`]),
@@ -18,6 +19,7 @@ pub mod decode;
 pub mod dither;
 pub mod error;
 pub mod float;
+pub mod mp3;
 pub mod native;
 pub mod overview;
 pub mod probe;
@@ -30,6 +32,7 @@ pub use decode::{decode_stereo, Decoded, StereoPcm, MAX_DECODE_MS};
 pub use dither::Requantiser;
 pub use error::{Error, Result};
 pub use float::{decode_f32, FloatPcm, Layout};
+pub use mp3::mp3_audio_frames;
 pub use native::{NativeFormat, NativeStream};
 pub use probe::{probe, Kind, Probe};
 pub use resample::StreamResampler;

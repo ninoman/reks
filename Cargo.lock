@@ -3690,6 +3690,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "reks-analysis",
+ "reks-anlz",
  "reks-audio",
  "reks-core",
  "reks-export-rb",
@@ -3745,6 +3746,7 @@ dependencies = [
  "blake3",
  "proptest",
  "rekordcrate",
+ "reks-analysis",
  "reks-anlz",
  "reks-audio",
  "reks-core",

@@ -30,7 +30,15 @@ fn options(history: HistoryPolicy, chosen: bool) -> ExportOptions {
 /// What `plan::plan` does, with the test stick's serial.
 fn plan_guarded(w: &World, opts: &ExportOptions) -> ExportPlan {
     let sources = plan::load(&w.lib, &w.sel()).unwrap();
-    let mut p = plan::plan_sources(sources, &w.dev(), Some(SERIAL.into()), opts, &NoAnlz).unwrap();
+    let mut p = plan::plan_sources(
+        sources,
+        &w.dev(),
+        Some(SERIAL.into()),
+        opts,
+        &NoAnlz,
+        &NoAnlz,
+    )
+    .unwrap();
     guard_history(&mut p, &w.lib).unwrap();
     p
 }

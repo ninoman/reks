@@ -37,7 +37,8 @@ pub enum DryRunError {
 
 /// Plans exporting `sel` to the volume mounted at exactly `mount_point`
 /// (not a folder inside one: the plan treats the device root as the stick),
-/// with ANLZ from rekordbox's default analysis folders. Reads only; it scans
+/// with ANLZ from rekordbox's default analysis folders and the library's
+/// analysis cache ([`plan::plan`]). Reads only; it scans
 /// the analysis cache and samples file bytes, so it can take a while.
 pub fn plan_at(
     lib: &Library,
@@ -408,12 +409,14 @@ fn summary(plan: &ExportPlan) -> Vec<Fact> {
     let lists = plan.playlists.iter().filter(|p| !p.is_folder).count();
     let folders = plan.playlists.len() - lists;
     let (mut cached, mut cached_bytes, mut generated, mut without) = (0, 0u64, 0, 0);
+    let mut built = 0;
     for a in &plan.anlz {
         match a {
             AnlzOp::CopyFromCache { bytes, .. } => {
                 cached += 1;
                 cached_bytes += bytes;
             }
+            AnlzOp::Build { .. } => built += 1,
             AnlzOp::Generate { track_id } if !divider_ids.contains(track_id) => generated += 1,
             AnlzOp::Generate { .. } => {}
             AnlzOp::Missing { .. } => without += 1,
@@ -423,6 +426,11 @@ fn summary(plan: &ExportPlan) -> Vec<Fact> {
         "{cached} from rekordbox ({})",
         human_bytes(cached_bytes)
     )];
+    if built > 0 {
+        analysis.push(format!(
+            "{built} from reks's analysis (UNVERIFIED on players)"
+        ));
+    }
     if generated > 0 {
         analysis.push(format!("{generated} generated (approximate)"));
     }

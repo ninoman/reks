@@ -21,6 +21,10 @@ pub struct SourceTrack {
     /// From the library's columns; `None` makes the planner probe the file.
     pub probe: Option<Probe>,
     pub has_grid: bool,
+    /// The user owns the library grid (locked or edited by hand,
+    /// [`Library::grid_is_user_owned`]): the planner prefers reks's analysis,
+    /// whose `PQTZ` is that grid, over rekordbox's cached one.
+    pub grid_user_owned: bool,
     /// Hot cues, memory cues and loops (capped at 255).
     pub cue_count: u8,
     /// Set for a playlist divider ([`crate::divider::expand`]).
@@ -74,6 +78,7 @@ pub fn load(lib: &Library, sel: &Selection) -> reks_core::Result<Sources> {
         }
     }
 
+    let user_owned = lib.user_owned_grids()?;
     let mut seen: HashSet<TrackId> = HashSet::new();
     for n in nodes.iter().filter(|n| wanted.contains(&n.id)) {
         let mut track_ids = Vec::new();
@@ -84,7 +89,8 @@ pub fn load(lib: &Library, sel: &Selection) -> reks_core::Result<Sources> {
             out.dividers.extend(dividers);
             for &tid in &track_ids {
                 if seen.insert(tid) {
-                    out.tracks.push(source_track(lib, tid)?);
+                    out.tracks
+                        .push(source_track(lib, tid, user_owned.contains(&tid))?);
                 }
             }
         }
@@ -146,7 +152,11 @@ fn playlist_entries(
     }
 }
 
-fn source_track(lib: &Library, id: TrackId) -> reks_core::Result<SourceTrack> {
+fn source_track(
+    lib: &Library,
+    id: TrackId,
+    grid_user_owned: bool,
+) -> reks_core::Result<SourceTrack> {
     let d = lib.track(id)?;
     let t = &d.track;
     let probe = match (
@@ -175,6 +185,7 @@ fn source_track(lib: &Library, id: TrackId) -> reks_core::Result<SourceTrack> {
         album: t.row.album.clone(),
         probe,
         has_grid: d.beatgrid.is_some(),
+        grid_user_owned,
         cue_count: u8::try_from(d.cues.len()).unwrap_or(u8::MAX),
         divider: None,
     })
