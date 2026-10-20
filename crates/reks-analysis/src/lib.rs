@@ -3,6 +3,7 @@
 //! See `docs/phases/phase-3.md`.
 
 pub mod beats;
+pub mod columns;
 pub mod grid;
 pub mod input;
 pub mod key;

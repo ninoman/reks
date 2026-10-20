@@ -3626,6 +3626,7 @@ dependencies = [
  "reks-audio",
  "reks-core",
  "reks-fixtures-gen",
+ "rusqlite",
  "rustfft",
  "tempfile",
  "thiserror 2.0.21",
@@ -3646,6 +3647,7 @@ dependencies = [
 name = "reks-app"
 version = "0.1.0"
 dependencies = [
+ "reks-analysis",
  "reks-core",
  "reks-export-rb",
  "reks-mix",
@@ -3680,6 +3682,7 @@ name = "reks-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "reks-analysis",
  "reks-audio",
  "reks-core",
  "reks-export-rb",

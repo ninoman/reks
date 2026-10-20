@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+reks-analysis = { workspace = true }
 reks-audio = { workspace = true }
 reks-core = { workspace = true }
 reks-export-rb = { workspace = true }
