@@ -20,6 +20,7 @@ const MIGRATION_LIST: &[M<'static>] = &[
     M::up(include_str!("../migrations/0003_device_profiles.sql")),
     M::up(include_str!("../migrations/0004_superseded_file.sql")),
     M::up(include_str!("../migrations/0005_dividers_history.sql")),
+    M::up(include_str!("../migrations/0006_grid_lock.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 

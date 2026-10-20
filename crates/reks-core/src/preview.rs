@@ -81,6 +81,13 @@ impl Library {
         Ok(())
     }
 
+    /// Track `id`'s file and a key for caches derived from it: 32 hex digits
+    /// over the path, size and mtime, so a changed or moved file gets a new key.
+    pub fn track_file_key(&self, id: TrackId) -> Result<(PathBuf, String)> {
+        let file = self.track_file(id)?;
+        Ok((PathBuf::from(&file.path), file_key(&file)))
+    }
+
     fn track_file(&self, id: TrackId) -> Result<TrackFile> {
         let conn = self.conn()?;
         conn.query_row(
@@ -99,14 +106,17 @@ impl Library {
     }
 
     fn overview_path(&self, file: &TrackFile) -> PathBuf {
-        let mut h = blake3::Hasher::new();
-        h.update(file.path.as_bytes());
-        h.update(&[0]);
-        h.update(&file.size.to_le_bytes());
-        h.update(file.mtime.as_bytes());
-        let key = h.finalize().to_hex();
         self.cache_dir()
             .join("waveform/overview")
-            .join(format!("{}.f32", &key[..32]))
+            .join(format!("{}.f32", file_key(file)))
     }
+}
+
+fn file_key(file: &TrackFile) -> String {
+    let mut h = blake3::Hasher::new();
+    h.update(file.path.as_bytes());
+    h.update(&[0]);
+    h.update(&file.size.to_le_bytes());
+    h.update(file.mtime.as_bytes());
+    h.finalize().to_hex()[..32].to_owned()
 }

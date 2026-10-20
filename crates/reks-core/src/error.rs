@@ -121,6 +121,18 @@ pub enum Error {
     #[error("the adopt plan is out of date: {0}")]
     StaleAdoptPlan(String),
 
+    /// The grid edit needs a beatgrid and the track has none.
+    #[error("track {0} has no beatgrid")]
+    NoGrid(crate::scan::TrackId),
+
+    /// The grid edit needs a constant grid (one tempo anchor).
+    #[error("track {0} has a dynamic beatgrid; only nudge applies")]
+    DynamicGrid(crate::scan::TrackId),
+
+    /// The track's grid is locked; unlock it to edit.
+    #[error("the beatgrid of track {0} is locked")]
+    GridLocked(crate::scan::TrackId),
+
     /// A thread panicked while holding the connection lock.
     #[error("library connection lock poisoned")]
     LockPoisoned,

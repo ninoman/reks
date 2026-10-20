@@ -4,6 +4,7 @@
 
 pub mod adopt;
 pub mod artwork;
+pub mod beatgrid;
 pub mod convert;
 pub mod db;
 pub mod device;
@@ -23,6 +24,7 @@ pub mod timefmt;
 pub mod track;
 
 pub use artwork::ArtworkId;
+pub use beatgrid::{BeatMark, Beatgrid, GridAnchor, GridEdit};
 pub use db::Library;
 pub use device::{Device, DeviceId, NewDevice, SyncedPlaylist, SyncedRecord};
 pub use error::{Error, Result};
