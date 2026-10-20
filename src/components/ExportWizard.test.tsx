@@ -131,6 +131,7 @@ function dryRun(over: Partial<DryRun> = {}): DryRun {
     warnings: [],
     convertible: [],
     convertText: null,
+    onelibrary: null,
     ...over,
   };
 }
@@ -409,6 +410,47 @@ describe("ExportWizard", () => {
       expect.objectContaining({ dividers: true }),
       1,
     );
+  });
+
+  it("OneLibrary is off by default, marked experimental, and its dry run lists the file", async () => {
+    exportPlan.mockResolvedValue(
+      dryRun({
+        onelibrary: {
+          title: "OneLibrary (experimental)",
+          text: "Also writes exportLibrary.db for players that read OneLibrary.",
+          write: {
+            path: "/PIONEER/rekordbox/exportLibrary.db",
+            from: null,
+            sizeText: "size not known yet",
+          },
+          removes: {
+            count: 1,
+            bytes: 3,
+            totalText: "1 file, 3 B",
+            files: [{ path: "/PIONEER/rekordbox/exportExt.pdb", from: null, sizeText: "3 B" }],
+          },
+        },
+      }),
+    );
+    await toOptions();
+    const toggle = screen.getByRole("switch", { name: "OneLibrary" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText("EXPERIMENTAL")).toBeTruthy();
+    expect(screen.getByText(/not supported by AlphaTheta/)).toBeTruthy();
+    expect(screen.getByText(/Settings → Experimental/)).toBeTruthy();
+    fireEvent.click(toggle);
+
+    fireEvent.click(button("Dry run"));
+    await screen.findByText(/Ready to export/);
+    expect(exportPlan).toHaveBeenCalledWith(
+      "/Volumes/REKS",
+      { playlists: [3] },
+      expect.objectContaining({ onelibrary: true }),
+      1,
+    );
+    expect(screen.getByText("OneLibrary (experimental)")).toBeTruthy();
+    expect(screen.getByText(/Write \/PIONEER\/rekordbox\/exportLibrary.db/)).toBeTruthy();
+    expect(screen.getByText("Remove: 1 file, 3 B")).toBeTruthy();
   });
 
   it("shows the dry run with the history backup", async () => {

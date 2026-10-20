@@ -73,6 +73,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   historyChosen: false,
   dividers: false,
   anlzPreference: "rekordboxFirst",
+  onelibrary: false,
 };
 
 interface ExportWizardState {

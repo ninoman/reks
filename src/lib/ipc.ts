@@ -583,6 +583,8 @@ export interface Settings {
   ui: UiState;
   /** Whose analysis a USB export writes when rekordbox and reks both have a track. */
   anlzPreference: AnlzPreference;
+  /** A OneLibrary key is stored; the key itself never leaves Rust. */
+  onelibraryKeySet: boolean;
 }
 
 /** Absent fields stay; `audioDevice: null` goes back to the system default. */
@@ -591,6 +593,8 @@ export interface SettingsPatch {
   keyNotation?: KeyNotation;
   ui?: UiState;
   anlzPreference?: AnlzPreference;
+  /** Stores the OneLibrary key (Settings → Experimental); `null` removes it. Never empty. */
+  onelibraryKey?: string | null;
 }
 
 export interface LibraryRoot {
@@ -827,6 +831,8 @@ export interface ExportOptions {
   dividers: boolean;
   /** Seeded from and saved to the `anlzPreference` setting by the wizard. */
   anlzPreference: AnlzPreference;
+  /** Also write `exportLibrary.db` (OneLibrary, experimental, phase 4). Off by default. */
+  onelibrary: boolean;
 }
 
 /** Playlists and folders (= everything under them) to export (`plan::Selection`). */
@@ -916,6 +922,16 @@ export interface DryRun {
   convertible: number[];
   /** One sentence on them; null when there are none. */
   convertText: string | null;
+  /** The experimental OneLibrary step (`dryrun::OneLibraryView`); null when off or unplanned. */
+  onelibrary: OneLibraryView | null;
+}
+
+/** What the OneLibrary step writes (`exportLibrary.db`) and removes beside it. */
+export interface OneLibraryView {
+  title: string;
+  text: string;
+  write: DryRunFileRow;
+  removes: DryRunFileGroup;
 }
 
 /**

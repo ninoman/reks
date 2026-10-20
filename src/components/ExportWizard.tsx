@@ -30,6 +30,7 @@ import { useConverter } from "../store/converter";
 import { canContinue, coveredIds, EXPORT_STEPS, useExportWizard } from "../store/exportWizard";
 import { usePlaylists } from "../store/playlists";
 import { useProfiles } from "../store/profiles";
+import { useSettings } from "../store/settings";
 import { DeviceList } from "./DevicesDialog";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
@@ -407,6 +408,7 @@ function OptionRow({
 
 function OptionsStep() {
   const o = useExportWizard((s) => s.options);
+  const keySet = useSettings((s) => s.settings?.onelibraryKeySet ?? false);
   const set = (patch: Partial<ExportOptions>) => useExportWizard.getState().setOptions(patch);
   return (
     <Card>
@@ -499,6 +501,23 @@ function OptionsStep() {
           aria-label="Playlist dividers"
           checked={o.dividers}
           onCheckedChange={(v) => set({ dividers: v })}
+        />
+      </OptionRow>
+      <OptionRow
+        title="OneLibrary"
+        hint={`Also write exportLibrary.db, the library newer players read. Not tested on any player and not supported by AlphaTheta.${
+          keySet ? "" : " Needs the key: add it in Settings → Experimental."
+        }`}
+        badge={
+          <Badge variant="muted" title="Experimental: not tested on any player">
+            EXPERIMENTAL
+          </Badge>
+        }
+      >
+        <Switch
+          aria-label="OneLibrary"
+          checked={o.onelibrary}
+          onCheckedChange={(v) => set({ onelibrary: v })}
         />
       </OptionRow>
       <div className="flex flex-col gap-2 px-4 py-3">
@@ -634,6 +653,17 @@ function DryRunView({ dryRun: d, nodes }: { dryRun: DryRun; nodes: PlaylistNode[
             </Button>
             <span className="text-xs text-fg-muted">Plan again after converting.</span>
           </div>
+        </Section>
+      )}
+
+      {d.onelibrary !== null && (
+        <Section title={d.onelibrary.title} tone="warning">
+          <p className="m-0 text-sm">{d.onelibrary.text}</p>
+          <p className="m-0 font-mono text-xs [overflow-wrap:anywhere]">
+            Write {d.onelibrary.write.path}{" "}
+            <span className="text-fg-muted">({d.onelibrary.write.sizeText})</span>
+          </p>
+          <Files label="Remove" group={d.onelibrary.removes} />
         </Section>
       )}
 
