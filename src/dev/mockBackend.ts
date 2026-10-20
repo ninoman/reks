@@ -702,6 +702,15 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
         label: "Tracks",
         value: `${copies.length}: ${copies.length} to copy, 0 already on the stick`,
       },
+      ...(opts.dividers
+        ? [
+            {
+              label: "Dividers",
+              value:
+                "2 dividers, 1.4 MB: silent tracks titled with the label, analysis generated (UNVERIFIED on players)",
+            },
+          ]
+        : []),
       { label: "Playlists", value: String(lists.length) },
       { label: "Analysis", value: `${copies.length - 1} from rekordbox (1.2 MB)` },
       { label: "Copy", value: `${copies.length} files, ${(write / 1e6).toFixed(1)} MB` },

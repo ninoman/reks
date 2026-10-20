@@ -111,6 +111,7 @@ fn stick() -> Stick {
                 has_grid: true,
                 cue_count: cues,
                 anlz_source: AnlzSource::Generated,
+                divider: None,
             }
         })
         .collect();

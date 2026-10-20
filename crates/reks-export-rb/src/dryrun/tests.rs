@@ -89,6 +89,7 @@ fn track(id: TrackId, src: PathBuf) -> SourceTrack {
         probe: None,
         has_grid: true,
         cue_count: 0,
+        divider: None,
     }
 }
 
@@ -113,6 +114,7 @@ fn sources(tracks: Vec<SourceTrack>) -> Sources {
         ],
         tracks,
         problems: vec![],
+        dividers: vec![],
     }
 }
 
@@ -602,4 +604,63 @@ fn live_plan_at_a_mounted_stick() {
     assert!(!dry.ready);
     assert_eq!(kinds(&dry.problems), ["nothingSelected"]);
     assert_eq!(dry.problems[0].title, "No playlist selected.");
+}
+
+#[test]
+fn dividers_are_their_own_group() {
+    use crate::divider::{self, DividerInfo, SourceDivider};
+
+    let w = World::new();
+    let a = w.add("sine-click-128.mp3", "a.mp3");
+    let b = w.add("sine-click-128.mp3", "b.mp3");
+    let mut src = sources(vec![track(1, a), track(2, b)]);
+    src.dividers = ["PEAK", "END"]
+        .iter()
+        .zip([1, 2])
+        .map(|(label, n)| SourceDivider {
+            info: DividerInfo {
+                playlist_id: 11,
+                ordinal: n,
+                label: (*label).to_owned(),
+            },
+            tracks_before: if n == 1 { 1 } else { 2 },
+        })
+        .collect();
+    divider::expand(&mut src, &w.cache.join("dividers")).unwrap();
+    let opts = ExportOptions {
+        dividers: true,
+        ..ExportOptions::default()
+    };
+    let plan = w.plan(src, &opts, &[1, 2]);
+    assert!(!plan.is_blocked(), "{:?}", plan.errors);
+    let order: Vec<Option<&str>> = plan.playlists[1]
+        .track_ids
+        .iter()
+        .map(|id| {
+            let t = plan.tracks.iter().find(|t| t.track_id == *id).unwrap();
+            t.divider.as_ref().map(|d| d.label.as_str())
+        })
+        .collect();
+    assert_eq!(order, [None, Some("PEAK"), None, Some("END")]);
+
+    let dry = DryRun::new(&plan, &labels());
+    assert_eq!(
+        fact(&dry.summary, "Tracks"),
+        "2: 2 to copy, 0 already on the stick"
+    );
+    let size = human_bytes(2 * divider::wav_bytes().len() as u64);
+    assert_eq!(
+        fact(&dry.summary, "Dividers"),
+        format!(
+            "2 dividers, {size}: silent tracks titled with the label, analysis generated \
+             (UNVERIFIED on players)"
+        )
+    );
+    assert_eq!(fact(&dry.summary, "Analysis"), "2 from rekordbox (2.0 KB)");
+    assert_eq!(dry.playlists[1].detail, "2 tracks, 2 dividers");
+    assert_eq!(dry.copies.count, 4);
+
+    let labels: TrackLabels = divider_labels(&plan).collect();
+    let d = plan.tracks.iter().find(|t| t.is_divider()).unwrap();
+    assert_eq!(labels[&d.track_id], "Divider \"PEAK\"");
 }

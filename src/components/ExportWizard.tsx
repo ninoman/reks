@@ -26,6 +26,7 @@ import { canContinue, coveredIds, EXPORT_STEPS, useExportWizard } from "../store
 import { usePlaylists } from "../store/playlists";
 import { useProfiles } from "../store/profiles";
 import { DeviceList } from "./DevicesDialog";
+import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import { Checkbox } from "./ui/Checkbox";
@@ -371,16 +372,21 @@ function PlaylistsStep({ nodes }: { nodes: PlaylistNode[] }) {
 function OptionRow({
   title,
   hint,
+  badge,
   children,
 }: {
   title: string;
   hint: string;
+  badge?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <div className="min-w-0">
-        <p className="m-0 text-sm font-semibold">{title}</p>
+        <p className="m-0 flex items-center gap-2 text-sm font-semibold">
+          {title}
+          {badge}
+        </p>
         <p className="m-0 text-xs text-fg-muted">{hint}</p>
       </div>
       {children}
@@ -449,6 +455,21 @@ function OptionsStep() {
           aria-label="Artwork"
           checked={o.artwork}
           onCheckedChange={(v) => set({ artwork: v })}
+        />
+      </OptionRow>
+      <OptionRow
+        title="Playlist dividers"
+        hint="Write each divider as a few seconds of silence titled with its label. Not yet tested on players."
+        badge={
+          <Badge variant="muted" title="Not yet tested on a CDJ or XDJ">
+            UNVERIFIED
+          </Badge>
+        }
+      >
+        <Switch
+          aria-label="Playlist dividers"
+          checked={o.dividers}
+          onCheckedChange={(v) => set({ dividers: v })}
         />
       </OptionRow>
       <div className="flex flex-col gap-2 px-4 py-3">

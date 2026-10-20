@@ -19,7 +19,10 @@ mod write;
 use std::collections::BTreeMap;
 
 pub use colour::{colour_name, colour_rgb, TRACK_COLOURS};
-pub use export::{export, export_file, Selection, XmlExport};
+pub use export::{
+    export, export_file, export_file_with_dividers, export_with_dividers, DividerTrack, Selection,
+    XmlExport,
+};
 pub use import::{
     import, preview, ImportEvent, ImportOptions, ImportPreview, ImportReport, ImportStage,
     ImportWarning, PrefixRemap, Unmatched, UnmatchedReason, PREVIEW_SAMPLE,

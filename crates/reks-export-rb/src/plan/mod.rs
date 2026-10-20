@@ -24,6 +24,10 @@
 //!   [`ExportPlan::backup_plan`]), with a warning whenever the stick holds or
 //!   may hold history.
 //!
+//! - Playlist dividers (D22) become planned tracks backed by a generated
+//!   silent WAV when [`ExportOptions::dividers`] is on ([`crate::divider`]);
+//!   otherwise they are left out.
+//!
 //! ANLZ comes from an [`AnlzLocator`]: [`CacheLocator`] for rekordbox's local
 //! cache, [`NoAnlz`] in tests.
 
@@ -42,6 +46,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::audiocheck::{self, Severity};
 use crate::device::{DeviceInfo, FsKind};
+use crate::divider::{self, DividerInfo};
 use crate::history::{self, BackupFile, BackupPlan, HistoryError, HistoryPolicy, StickHistory};
 use crate::TargetProfile;
 
@@ -90,6 +95,10 @@ pub struct ExportOptions {
     /// The user explicitly confirmed [`HistoryPolicy::Discard`]; without it a
     /// stick that may hold history blocks the plan.
     pub discard_history_confirmed: bool,
+    /// The `export.dividers` flag: write playlist dividers as silent tracks
+    /// ([`crate::divider`]). Off by default and UNVERIFIED until the Phase
+    /// 2.5 hardware session passes on CDJ-2000NXS2 and CDJ-3000.
+    pub dividers: bool,
 }
 
 impl Default for ExportOptions {
@@ -102,6 +111,7 @@ impl Default for ExportOptions {
             skip_unsupported: false,
             history: HistoryPolicy::BackUp,
             discard_history_confirmed: false,
+            dividers: false,
         }
     }
 }
@@ -226,6 +236,15 @@ pub struct PlannedTrack {
     pub has_grid: bool,
     pub cue_count: u8,
     pub anlz_source: AnlzSource,
+    /// Set for a playlist divider (synthetic `track_id`, generated `src`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub divider: Option<DividerInfo>,
+}
+
+impl PlannedTrack {
+    pub fn is_divider(&self) -> bool {
+        self.divider.is_some()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -391,11 +410,23 @@ pub enum PlanError {
     /// baken could not parse the XML we would hand it.
     #[error("baken cannot parse the exported XML: {0}")]
     Xml(String),
+    /// A generated divider file could not be written.
+    #[error("cannot write the divider file {}: {source}", path.display())]
+    DividerFile {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    /// The synthetic divider ids would collide with library track ids.
+    #[error("no free track ids for playlist dividers")]
+    DividerIds,
 }
 
 /// Plans exporting `sel` from `lib` to `dev`. ANLZ lookup goes through
 /// `anlz` (usually a [`CacheLocator`] for the same selection). Asks the OS for
-/// the volume serial ([`crate::device::volume_serial`]).
+/// the volume serial ([`crate::device::volume_serial`]). With
+/// [`ExportOptions::dividers`], writes the divider files into the library's
+/// cache dir ([`divider::expand`]); nothing else is written.
 pub fn plan(
     lib: &Library,
     sel: &Selection,
@@ -403,13 +434,17 @@ pub fn plan(
     opts: &ExportOptions,
     anlz: &dyn AnlzLocator,
 ) -> Result<ExportPlan, PlanError> {
-    let sources = load(lib, sel)?;
+    let mut sources = load(lib, sel)?;
+    if opts.dividers {
+        divider::expand(&mut sources, &lib.cache_dir().join(divider::DIVIDER_DIR))?;
+    }
     let serial = crate::device::volume_serial(dev);
     plan_sources(sources, dev, serial, opts, anlz)
 }
 
 /// [`plan`] on already loaded sources and a known volume serial (also the
-/// entry point for tests).
+/// entry point for tests). Dividers count only once [`divider::expand`]ed;
+/// `sources.dividers` is ignored.
 pub fn plan_sources(
     sources: Sources,
     dev: &DeviceInfo,
@@ -530,6 +565,7 @@ pub fn plan_sources(
             has_grid: t.has_grid,
             cue_count: t.cue_count,
             anlz_source,
+            divider: t.divider,
         });
     }
 
@@ -695,6 +731,10 @@ fn check_track(
         });
     }
 
+    // A divider's analysis is always generated (D22): rekordbox never saw it.
+    if t.divider.is_some() {
+        return Ok(Some((probe, meta.len(), mtime, AnlzSource::Generated)));
+    }
     let anlz_source = match anlz.locate(t) {
         Some(dat) => AnlzSource::RekordboxCache { dat },
         None => match opts.missing_analysis {

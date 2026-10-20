@@ -23,6 +23,11 @@
 //! written. [`MissingAnalysis::ExportWithout`] is refused: baken has no way
 //! to write a track without ANLZ.
 //!
+//! Playlist dividers (D22) reach baken as rows of the temp XML
+//! ([`rbxml::DividerTrack`], built by [`BakenWriter::prepare`] from the
+//! plan's divider tracks) and are reconciled like any track: the synthetic
+//! id is their `TrackID`, their analysis is generated.
+//!
 //! baken's own space estimate (`space_needed`) is made with its paths and
 //! counts every track's analysis as generated; it is an estimate from above
 //! and only refuses a stick that is already nearly full.
@@ -76,9 +81,15 @@ impl BakenWriter {
         }
     }
 
-    /// Writes `work_dir/collection.xml` for `sel` (the selection the plan
-    /// was made from) and returns a writer for it.
-    pub fn prepare(lib: &Library, sel: &Selection, work_dir: &Path) -> Result<Self, WriterError> {
+    /// Writes `work_dir/collection.xml` for `sel` (the selection `plan` was
+    /// made from), with a row for each of the plan's dividers, and returns a
+    /// writer for it.
+    pub fn prepare(
+        lib: &Library,
+        sel: &Selection,
+        plan: &ExportPlan,
+        work_dir: &Path,
+    ) -> Result<Self, WriterError> {
         std::fs::create_dir_all(work_dir).map_err(|source| WriterError::Io {
             path: work_dir.to_path_buf(),
             source,
@@ -87,7 +98,8 @@ impl BakenWriter {
         let sel = rbxml::Selection {
             playlists: sel.playlists.clone(),
         };
-        let out = rbxml::export_file(lib, &sel, &xml)?;
+        let dividers = divider_rows(plan)?;
+        let out = rbxml::export_file_with_dividers(lib, &sel, &dividers, &xml)?;
         Ok(Self::new(
             xml,
             out.baken_playlists(),
@@ -221,6 +233,40 @@ impl RekordboxWriter for BakenWriter {
             Err(e) => Err(export_error(e, fingerprint(device_root) != before)),
         }
     }
+}
+
+/// The temp XML's rows for the plan's dividers.
+fn divider_rows(plan: &ExportPlan) -> Result<Vec<rbxml::DividerTrack>, WriterError> {
+    plan.tracks
+        .iter()
+        .filter_map(|t| t.divider.as_ref().map(|d| (t, d)))
+        .map(|(t, d)| {
+            let p = &t.probe;
+            let track_id = u32::try_from(t.track_id).map_err(|_| WriterError::PlanMismatch {
+                track_id: Some(t.track_id),
+                message: "divider id does not fit a TrackID".to_owned(),
+            })?;
+            let size = std::fs::metadata(&t.src)
+                .map_err(|source| WriterError::Io {
+                    path: t.src.clone(),
+                    source,
+                })?
+                .len();
+            let bits = u32::from(p.bit_depth.unwrap_or(16));
+            let pcm_kbps = p.sample_rate * u32::from(p.channels) * bits / 1000;
+            Ok(rbxml::DividerTrack {
+                playlist_id: d.playlist_id,
+                ordinal: d.ordinal,
+                track_id,
+                label: d.label.clone(),
+                path: t.src.clone(),
+                size,
+                duration_ms: p.duration_ms,
+                sample_rate: p.sample_rate,
+                bit_rate_kbps: p.bit_rate_kbps.unwrap_or(pcm_kbps),
+            })
+        })
+        .collect()
 }
 
 /// Makes baken's plan carry out ours (module docs).

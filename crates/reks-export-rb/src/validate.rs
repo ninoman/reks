@@ -98,8 +98,12 @@ impl ValidationReport {
             .filter(|t| seen.insert(t.file_path.as_str()))
             .map(|t| ManifestRow {
                 stick_path: t.file_path.clone(),
-                item_kind: ManifestItemKind::Track,
-                track_id: t.track_id,
+                item_kind: if t.divider {
+                    ManifestItemKind::Divider
+                } else {
+                    ManifestItemKind::Track
+                },
+                track_id: if t.divider { None } else { t.track_id },
             })
             .collect()
     }
@@ -116,8 +120,11 @@ pub struct StickTrack {
     pub file_path: String,
     /// `/PIONEER/USBANLZ/.../ANLZ0000.DAT`, empty without analysis.
     pub analyze_path: String,
-    /// The planned track with this `file_path`.
+    /// The planned track with this `file_path` (a synthetic id for a divider).
     pub track_id: Option<TrackId>,
+    /// The planned track is a playlist divider (D22).
+    #[serde(default)]
+    pub divider: bool,
 }
 
 /// A playlist tree row as read back from `export.pdb`.
@@ -392,13 +399,15 @@ pub fn validate(device_root: &Path, plan: &ExportPlan) -> Result<ValidationRepor
             return Ok(finding_only(Finding::PdbUnreadable { message }))
         }
     };
-    let planned: HashMap<&str, TrackId> = plan
+    let planned: HashMap<&str, (TrackId, bool)> = plan
         .tracks
         .iter()
-        .map(|t| (t.dst_rel.as_str(), t.track_id))
+        .map(|t| (t.dst_rel.as_str(), (t.track_id, t.is_divider())))
         .collect();
     for t in &mut report.tracks {
-        t.track_id = planned.get(t.file_path.as_str()).copied();
+        let found = planned.get(t.file_path.as_str()).copied();
+        t.track_id = found.map(|(id, _)| id);
+        t.divider = found.is_some_and(|(_, d)| d);
     }
     check_tracks(device_root, plan, &report.tracks, &mut report.findings)?;
     check_playlists(
@@ -1020,6 +1029,7 @@ fn track_row(row: &Row) -> Result<StickTrack, String> {
         file_path: track_string(&b, STR_FILE_PATH)?,
         analyze_path: track_string(&b, STR_ANALYZE_PATH)?,
         track_id: None,
+        divider: false,
     })
 }
 

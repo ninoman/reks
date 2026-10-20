@@ -64,6 +64,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   skipUnsupported: false,
   history: "backUp",
   discardHistoryConfirmed: false,
+  dividers: false,
 };
 
 interface ExportWizardState {

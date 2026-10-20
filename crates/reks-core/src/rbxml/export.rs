@@ -5,6 +5,10 @@
 //! they reference, and [`XmlExport::baken_playlists`] gives the matching
 //! `Options.playlists`. `TrackID` is our track id.
 //!
+//! Playlist dividers (D22) are left out, except those passed to
+//! [`export_with_dividers`]: the legacy writer turns each into a track row
+//! for a generated silent file, placed at the divider's entry position.
+//!
 //! [`import`]: super::import()
 
 use std::collections::{HashMap, HashSet};
@@ -17,6 +21,7 @@ use super::colour::colour_rgb;
 use super::{path_to_location, Collection, PositionMark, Product, Tempo, XmlNode, XmlTrack};
 use crate::db::Library;
 use crate::error::{Error, Result};
+use crate::playlist::Entry;
 use crate::query::PlaylistId;
 use crate::scan::TrackId;
 
@@ -55,11 +60,57 @@ impl XmlExport {
     }
 }
 
+/// A playlist divider written as a track row (legacy USB export, D22): Name
+/// is the label; no artist, album, genre, key, BPM, `TEMPO` or
+/// `POSITION_MARK`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DividerTrack {
+    pub playlist_id: PlaylistId,
+    /// 1-based among the playlist's dividers, in entry order.
+    pub ordinal: u32,
+    /// `TrackID`; must not be a library track id in the file.
+    pub track_id: u32,
+    pub label: String,
+    /// The generated WAV.
+    pub path: std::path::PathBuf,
+    pub size: u64,
+    pub duration_ms: u64,
+    pub sample_rate: u32,
+    pub bit_rate_kbps: u32,
+}
+
+impl DividerTrack {
+    fn xml(&self) -> Result<XmlTrack> {
+        Ok(XmlTrack {
+            track_id: self.track_id,
+            name: Some(self.label.clone()),
+            kind: xml_kind("wav").map(str::to_owned),
+            size: Some(self.size),
+            total_time: u32::try_from(self.duration_ms / 1000).ok(),
+            sample_rate: Some(self.sample_rate),
+            bit_rate: Some(self.bit_rate_kbps),
+            location: Some(path_to_location(&self.path)?),
+            ..XmlTrack::default()
+        })
+    }
+}
+
 /// Builds the collection for `sel`.
 ///
 /// Errors: an id that is not in the library ([`Error::PlaylistNotFound`]),
 /// or a selection with no playlist in it ([`Error::EmptySelection`]).
 pub fn export(lib: &Library, sel: &Selection) -> Result<XmlExport> {
+    export_with_dividers(lib, sel, &[])
+}
+
+/// [`export`], plus `dividers` as track rows at their playlist positions.
+/// Dividers not listed stay out; a listed divider whose playlist is not
+/// exported or has fewer dividers is ignored.
+pub fn export_with_dividers(
+    lib: &Library,
+    sel: &Selection,
+    dividers: &[DividerTrack],
+) -> Result<XmlExport> {
     let conn = lib.conn()?;
     let nodes = load_nodes(&conn)?;
 
@@ -86,20 +137,29 @@ pub fn export(lib: &Library, sel: &Selection) -> Result<XmlExport> {
         }
     }
 
+    let by_slot: HashMap<(PlaylistId, u32), &DividerTrack> = dividers
+        .iter()
+        .map(|d| ((d.playlist_id, d.ordinal), d))
+        .collect();
     let mut b = Builder {
         conn: &conn,
         nodes: &nodes,
         keep: &keep,
+        dividers: &by_slot,
         playlists: Vec::new(),
         tracks: Vec::new(),
         seen: HashSet::new(),
+        divider_rows: Vec::new(),
     };
     let children = b.children(None, "")?;
-    let tracks = b
+    let mut tracks = b
         .tracks
         .iter()
         .map(|&id| xml_track(&conn, id))
-        .collect::<Result<_>>()?;
+        .collect::<Result<Vec<_>>>()?;
+    for d in &b.divider_rows {
+        tracks.push(d.xml()?);
+    }
     Ok(XmlExport {
         collection: Collection {
             product: Product {
@@ -118,7 +178,17 @@ pub fn export(lib: &Library, sel: &Selection) -> Result<XmlExport> {
 
 /// [`export`], written to `path` with [`super::write`].
 pub fn export_file(lib: &Library, sel: &Selection, path: &Path) -> Result<XmlExport> {
-    let out = export(lib, sel)?;
+    export_file_with_dividers(lib, sel, &[], path)
+}
+
+/// [`export_with_dividers`], written to `path` with [`super::write`].
+pub fn export_file_with_dividers(
+    lib: &Library,
+    sel: &Selection,
+    dividers: &[DividerTrack],
+    path: &Path,
+) -> Result<XmlExport> {
+    let out = export_with_dividers(lib, sel, dividers)?;
     let file = std::fs::File::create(path).map_err(|source| Error::Io {
         path: path.to_path_buf(),
         source,
@@ -184,10 +254,13 @@ struct Builder<'a> {
     conn: &'a Connection,
     nodes: &'a Nodes,
     keep: &'a HashSet<PlaylistId>,
+    dividers: &'a HashMap<(PlaylistId, u32), &'a DividerTrack>,
     playlists: Vec<(PlaylistId, String)>,
     /// Referenced tracks, in order of first appearance.
     tracks: Vec<TrackId>,
     seen: HashSet<TrackId>,
+    /// Dividers written, in order of appearance.
+    divider_rows: Vec<&'a DividerTrack>,
 }
 
 impl Builder<'_> {
@@ -212,29 +285,30 @@ impl Builder<'_> {
                 let children = self.children(Some(id), &path)?;
                 out.push(XmlNode::folder(node.name.clone(), children));
             } else {
-                let entries = self.entries(id)?;
-                for &t in &entries {
-                    if self.seen.insert(t) {
-                        self.tracks.push(t);
+                let mut keys = Vec::new();
+                let mut ordinal = 0u32;
+                for entry in crate::playlist::entries(self.conn, id)? {
+                    match entry {
+                        Entry::Track(t) => {
+                            if self.seen.insert(t) {
+                                self.tracks.push(t);
+                            }
+                            keys.push(t.to_string());
+                        }
+                        Entry::Divider(_) => {
+                            ordinal += 1;
+                            if let Some(&d) = self.dividers.get(&(id, ordinal)) {
+                                self.divider_rows.push(d);
+                                keys.push(d.track_id.to_string());
+                            }
+                        }
                     }
                 }
-                let keys = entries.iter().map(|t| t.to_string()).collect();
                 out.push(XmlNode::playlist(node.name.clone(), 0, keys));
                 self.playlists.push((id, path));
             }
         }
         Ok(out)
-    }
-
-    fn entries(&self, playlist: PlaylistId) -> Result<Vec<TrackId>> {
-        let mut stmt = self.conn.prepare_cached(
-            "SELECT track_id FROM playlist_track
-             WHERE playlist_id = ?1 AND item_kind = 'track' ORDER BY position",
-        )?;
-        let ids = stmt
-            .query_map([playlist], |r| r.get(0))?
-            .collect::<rusqlite::Result<Vec<TrackId>>>()?;
-        Ok(ids)
     }
 }
 

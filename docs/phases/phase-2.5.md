@@ -2,7 +2,7 @@
 
 Status: started 2026-10-20 ahead of the Phase 2 hardware campaign with the
 maintainer's approval (software only; anything that needs a player stays
-UNVERIFIED); tasks 1–3 and 5 done. Depends on: Phase 2 done, including its hardware campaign,
+UNVERIFIED); tasks 1–6 done. Depends on: Phase 2 done, including its hardware campaign,
 history safeguard and `export_manifest` (tasks 12–14). Runs before Phase 3.
 Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
@@ -158,8 +158,10 @@ Divider rules
   PCM 16-bit, 44.1 kHz, stereo, `DIVIDER_SECONDS` = 4, header written by hand
   (no new dependency). Temp XML row: Name = label; Artist, Album, Genre empty;
   no Tonality, AverageBpm, TEMPO or POSITION_MARK.
-- baken places the file under `/Contents/<Artist>/<Album>/` itself; we don't
-  choose the folder (R§10). Stale dividers go with `prune` like any file.
+- The planner gives it the stick path any track with no artist or album gets,
+  `/Contents/Unknown Artist/Unknown Album/div-<playlist_id>-<n>.wav` (our
+  planner decides paths, not baken's layout). Stale dividers go with `prune`
+  like any file.
 - ANLZ: the planner sets `generate_analysis` when the plan has dividers. baken
   applies it only to tracks rekordbox never analysed, and the planner already
   leaves other unanalysed tracks out unless the user opted in. If baken can't
@@ -198,13 +200,36 @@ Divider rules
    characters with an UNVERIFIED badge (DIV2). The `#` column is the entry
    position, so it counts dividers. Edits of the shown playlist keep the
    table's scroll position.
-4. **Divider export**: WAV generator (round-trip through Symphonia probe and
+4. [x] **Divider export**: WAV generator (round-trip through Symphonia probe and
    `audiocheck`), planner expansion, temp XML rows, `generate_analysis`,
    manifest kind, dry-run group, `export.dividers` flag (off with an UNVERIFIED
    badge until task 11 passes). Temp-dir test: 30 tracks and 3 dividers →
    33 playlist entries in order (rekordcrate), 3 WAVs with ANLZ, zero validator
    findings; a second identical export copies nothing; removing a divider and
    re-exporting deletes exactly its WAV and ANLZ.
+   Done in [`divider.rs`](../../crates/reks-export-rb/src/divider.rs)
+   (`wav_bytes`, `ensure_wav`, `expand`); the flag is
+   `ExportOptions::dividers` (UI: "Playlist dividers" switch with an
+   UNVERIFIED badge; CLI: `reks rb plan|export --dividers`). `plan()` expands
+   dividers into `PlannedTrack`s with `divider: Some(DividerInfo)` and synthetic
+   track ids counting down from `u32::MAX` (refused if they would meet a
+   library id); their ANLZ is always `Generated`, whatever
+   `missing_analysis` says. `BakenWriter::prepare` now takes the plan and
+   writes the dividers' rows into the temp XML
+   (`rbxml::export_with_dividers`). The validator marks divider rows
+   (`StickTrack::divider`), so the manifest stores them as `divider` with no
+   track, and stick profiles leave them out of synced entries. The dry run
+   shows a "Dividers" fact ("3 dividers, 2.1 MB: …") and "12 tracks,
+   3 dividers" per playlist, and labels them `Divider "<label>"`. A file is
+   written only when missing or different, so its time stays and the stick
+   copy is reused. `n` counts the playlist's dividers in entry order, so
+   removing one frees the playlist's last file (the test removes the middle
+   divider and checks exactly that WAV and its ANLZ go). Software result for
+   DIV3: baken 4.6.1 generates `.DAT`/`.EXT` for the silent file with no
+   `TEMPO`, and the validator reads them back (PPTH right, no cues); what
+   players do with them is still open. Tests: `divider::tests`,
+   `dryrun::tests::dividers_are_their_own_group`,
+   [tests/dividers.rs](../../crates/reks-export-rb/tests/dividers.rs).
 5. [x] **History reader**: `HistoryPlaylist` / `HistoryEntry` rows via rekordcrate;
    resolve each entry to its PDB track row (stick path, title, artist,
    duration); dates from table 19 when decodable (HIST1), else NULL; works on a
@@ -308,8 +333,10 @@ Divider rules
 
 - DIV1 Minimum safe divider length: try 1 s against 4 s.
 - DIV2 Visible title length per player.
-- DIV3 Whether two PDB rows can share one file; baken's folder and file name for
-  empty artist/album; baken's generated analysis of a silent file with no TEMPO.
+- DIV3 Whether two PDB rows can share one file; how players treat baken's
+  generated analysis of a silent file with no TEMPO (software: it generates
+  and reads back cleanly, task 4). The folder for empty artist/album is ours:
+  `Unknown Artist/Unknown Album`.
 - DIV4 Whether the divider's artist should stay empty or carry the playlist name
   (changes how it looks in All Tracks and search).
 - HIST1 History dates (PDB table 19): rows reported with ascending id and ASCII

@@ -8,7 +8,7 @@
 //! [`plan_at`] is the UI's entry point: the volume mounted exactly at a mount
 //! point, rekordbox's analysis from its default folders, then [`plan`].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use reks_core::{Library, PlaylistId, TrackId};
@@ -191,18 +191,37 @@ pub type TrackLabels = HashMap<TrackId, String>;
 /// Labels for every track a warning or problem of `plan` names, from `lib`.
 /// Tracks no longer in the library are left out (shown as `track <id>`).
 pub fn track_labels(lib: &Library, plan: &ExportPlan) -> TrackLabels {
-    labels_for(
+    let mut labels = labels_for(
         lib,
         plan.warnings
             .iter()
             .filter_map(warning_track)
             .chain(plan.errors.iter().filter_map(problem_track)),
-    )
+    );
+    labels.extend(divider_labels(plan));
+    labels
 }
 
 /// Labels for every track of `plan`, for the export's progress and report.
 pub fn plan_track_labels(lib: &Library, plan: &ExportPlan) -> TrackLabels {
-    labels_for(lib, plan.tracks.iter().map(|t| t.track_id))
+    let mut labels = labels_for(
+        lib,
+        plan.tracks
+            .iter()
+            .filter(|t| !t.is_divider())
+            .map(|t| t.track_id),
+    );
+    labels.extend(divider_labels(plan));
+    labels
+}
+
+/// `Divider "<label>"` for the plan's dividers, which are not library tracks.
+fn divider_labels(plan: &ExportPlan) -> impl Iterator<Item = (TrackId, String)> + '_ {
+    plan.tracks.iter().filter_map(|t| {
+        t.divider
+            .as_ref()
+            .map(|d| (t.track_id, format!("Divider \"{}\"", d.label)))
+    })
 }
 
 fn labels_for(lib: &Library, ids: impl Iterator<Item = TrackId>) -> TrackLabels {
@@ -360,7 +379,14 @@ fn summary(plan: &ExportPlan) -> Vec<Fact> {
         label: label.to_owned(),
         value,
     };
-    let on_stick = plan.tracks.iter().filter(|t| t.on_stick).count();
+    let (dividers, tracks): (Vec<_>, Vec<_>) = plan.tracks.iter().partition(|t| t.is_divider());
+    let divider_ids: HashSet<TrackId> = dividers.iter().map(|t| t.track_id).collect();
+    let on_stick = tracks.iter().filter(|t| t.on_stick).count();
+    let copies = plan
+        .copies
+        .iter()
+        .filter(|c| !c.track_id.is_some_and(|id| divider_ids.contains(&id)))
+        .count();
     let lists = plan.playlists.iter().filter(|p| !p.is_folder).count();
     let folders = plan.playlists.len() - lists;
     let (mut cached, mut cached_bytes, mut generated, mut without) = (0, 0u64, 0, 0);
@@ -370,7 +396,8 @@ fn summary(plan: &ExportPlan) -> Vec<Fact> {
                 cached += 1;
                 cached_bytes += bytes;
             }
-            AnlzOp::Generate { .. } => generated += 1,
+            AnlzOp::Generate { track_id } if !divider_ids.contains(track_id) => generated += 1,
+            AnlzOp::Generate { .. } => {}
             AnlzOp::Missing { .. } => without += 1,
         }
     }
@@ -384,15 +411,30 @@ fn summary(plan: &ExportPlan) -> Vec<Fact> {
     if without > 0 {
         analysis.push(format!("{without} without (no waveform, grid or cues)"));
     }
-    vec![
-        fact(
-            "Tracks",
-            format!(
-                "{}: {} to copy, {on_stick} already on the stick",
-                plan.tracks.len(),
-                plan.copies.len()
-            ),
+    let mut facts = vec![fact(
+        "Tracks",
+        format!(
+            "{}: {copies} to copy, {on_stick} already on the stick",
+            tracks.len()
         ),
+    )];
+    if !dividers.is_empty() {
+        let bytes: u64 = dividers
+            .iter()
+            .filter_map(|t| std::fs::metadata(&t.src).ok())
+            .map(|m| m.len())
+            .sum();
+        facts.push(fact(
+            "Dividers",
+            format!(
+                "{}, {}: silent tracks titled with the label, analysis generated \
+                 (UNVERIFIED on players)",
+                count(dividers.len(), "divider", "dividers"),
+                human_bytes(bytes)
+            ),
+        ));
+    }
+    facts.extend([
         fact(
             "Playlists",
             if folders > 0 {
@@ -404,10 +446,17 @@ fn summary(plan: &ExportPlan) -> Vec<Fact> {
         fact("Analysis", analysis.join(", ")),
         fact("Copy", total_text(plan.copies.len(), sum(&plan.copies))),
         fact("Delete", total_text(plan.deletes.len(), sum(&plan.deletes))),
-    ]
+    ]);
+    facts
 }
 
 fn playlist_rows(plan: &ExportPlan) -> Vec<PlaylistRow> {
+    let dividers: HashSet<TrackId> = plan
+        .tracks
+        .iter()
+        .filter(|t| t.is_divider())
+        .map(|t| t.track_id)
+        .collect();
     let mut depth: HashMap<PlaylistId, usize> = HashMap::new();
     plan.playlists
         .iter()
@@ -425,7 +474,17 @@ fn playlist_rows(plan: &ExportPlan) -> Vec<PlaylistRow> {
                 detail: if p.is_folder {
                     String::new()
                 } else {
-                    count(p.track_ids.len(), "track", "tracks")
+                    let d = p
+                        .track_ids
+                        .iter()
+                        .filter(|id| dividers.contains(id))
+                        .count();
+                    let tracks = count(p.track_ids.len() - d, "track", "tracks");
+                    if d == 0 {
+                        tracks
+                    } else {
+                        format!("{tracks}, {}", count(d, "divider", "dividers"))
+                    }
                 },
             }
         })

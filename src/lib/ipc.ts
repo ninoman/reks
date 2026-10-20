@@ -692,6 +692,8 @@ export interface ExportOptions {
   history: HistoryPolicy;
   /** Required for `discard` on a stick that holds history. */
   discardHistoryConfirmed: boolean;
+  /** The `export.dividers` flag: playlist dividers as silent tracks (UNVERIFIED, D22). */
+  dividers: boolean;
 }
 
 /** Playlists and folders (= everything under them) to export (`plan::Selection`). */
