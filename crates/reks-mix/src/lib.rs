@@ -4,10 +4,12 @@
 //! Phase 1 ships one deck as the preview player (docs/decisions.md D5); the
 //! mixer is Phase 5 (D21, `docs/phases/phase-5.md`).
 
+pub mod dsp;
 pub mod engine;
 pub mod error;
 pub mod graph;
 pub mod player;
+pub mod taper;
 
 pub use engine::{output_devices, Engine, EngineConfig, StreamInfo, PREFERRED_RATE};
 pub use error::{Error, Result};

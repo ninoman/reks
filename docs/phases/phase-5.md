@@ -113,10 +113,12 @@ pub enum Control {
    correction on dynamic grids. Tests: 128 and 125 BPM click fixtures synced
    keep onsets within 1 ms for 64 bars; a tempo-change fixture stays within 2 ms
    across the change.
-4. **EQ**: 4-band asymmetric EQ with tapers. Sine-sweep tests: knobs at noon
+4. [x] **EQ**: 4-band asymmetric EQ with tapers. Sine-sweep tests: knobs at noon
    flat within ±0.1 dB; full boost +6 dB ±0.5 dB; mids full cut −30 dB ±1 dB;
    HI/LO full cut fall at 12 dB/oct ±1 dB past the turning point; silence in,
-   silence out (no NaN or denormals).
+   silence out (no NaN or denormals). Done: `reks-mix::taper` and
+   `dsp::eq::ChannelEq`, standalone (not yet in the graph); laws and
+   tolerances in [`../mixer-dsp.md`](../mixer-dsp.md).
 5. **Filters**: two state-variable filters (trapezoidal SVF from the
    published papers, our own code), mode combinations, resonance taper,
    VCF TO XFADER, LINK. Tests: −3 dB at the set
