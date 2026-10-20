@@ -15,7 +15,8 @@
 //! dates. Anything else leaves every date `None`.
 //!
 //! reks-core can't depend on this crate (this crate depends on it), so
-//! `reks-core::history::scan` (task 6) takes a [`PlayHistory`] read here.
+//! `reks-core::history::scan` (task 6) takes a [`PlayHistory`] read here,
+//! converted by [`PlayHistory::to_source_history`].
 
 use std::collections::HashMap;
 use std::fs;
@@ -25,6 +26,7 @@ use std::path::{Path, PathBuf};
 use binrw::{BinRead, BinWrite};
 use rekordcrate::pdb::string::DeviceSQLString;
 use rekordcrate::pdb::{Page, PageType, Row};
+use reks_core::history::{SourceEntry, SourceHistory, SourceSession};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -115,6 +117,40 @@ pub struct PdbTrack {
     pub artist: Option<String>,
     /// From the row's whole seconds; `None` when 0.
     pub duration_ms: Option<i64>,
+}
+
+impl PlayHistory {
+    /// The input of `reks_core::history::scan` (Phase 2.5 task 6). A
+    /// session whose playlist row is missing is named `HISTORY #<id>`.
+    pub fn to_source_history(&self) -> SourceHistory {
+        SourceHistory {
+            volume_serial: self.volume_serial.clone(),
+            sessions: self
+                .sessions
+                .iter()
+                .map(|s| SourceSession {
+                    source_name: s
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| format!("HISTORY #{}", s.id)),
+                    played_on: s.played_on.clone(),
+                    entries: s
+                        .entries
+                        .iter()
+                        .map(|e| match &e.track {
+                            Some(t) => SourceEntry {
+                                stick_path: Some(t.stick_path.clone()),
+                                title: Some(t.title.clone()),
+                                artist: t.artist.clone(),
+                                duration_ms: t.duration_ms,
+                            },
+                            None => SourceEntry::default(),
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
 }
 
 /// Reads the history in `src`'s `export.pdb`. No `export.pdb` → no
@@ -841,6 +877,98 @@ mod tests {
         assert_eq!(back, h);
     }
 
+    /// Task 6 end to end on a synthetic stick: read, convert, scan, import;
+    /// the stick is unchanged and a second import adds nothing.
+    #[test]
+    fn synthetic_stick_imports_once() {
+        use reks_core::history::{self, EntryKind, ImportChoices, MatchKind, SessionAction};
+        use reks_core::{Library, ManifestItemKind, ManifestRow};
+
+        let s = stick(&[(PDB, &played(None))]);
+        let before = snapshot(s.path());
+        let music = tempfile::tempdir().unwrap();
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/audio");
+        for (fixture, rel) in [
+            ("sine-click-128.mp3", "a.mp3"),
+            ("sine-click-128.flac", "B/y/Beta.flac"),
+        ] {
+            let dst = music.path().join(rel);
+            fs::create_dir_all(dst.parent().unwrap()).unwrap();
+            fs::copy(fixtures.join(fixture), dst).unwrap();
+        }
+        let lib = Library::open_in_memory(&music.path().join("cache")).unwrap();
+        reks_core::scan(
+            &[music.path().to_path_buf()],
+            &lib,
+            &reks_core::CancelToken::new(),
+            |_| {},
+        )
+        .unwrap();
+        let id_of = |kind: &str| {
+            lib.tracks(&reks_core::TrackQuery::default())
+                .unwrap()
+                .rows
+                .iter()
+                .find(|r| r.kind == kind)
+                .map(|r| r.id)
+                .unwrap()
+        };
+        let ids = [id_of("mp3"), id_of("flac")];
+        lib.replace_manifest(
+            Some("4993-1CFB"),
+            &[
+                ManifestRow {
+                    stick_path: "/Contents/A/x/01 Alpha.mp3".into(),
+                    item_kind: ManifestItemKind::Track,
+                    track_id: Some(ids[0]),
+                },
+                ManifestRow {
+                    stick_path: "/Contents/UnknownArtist/z/Gamma.wav".into(),
+                    item_kind: ManifestItemKind::Divider,
+                    track_id: None,
+                },
+            ],
+        )
+        .unwrap();
+
+        let h = read_play_history(&HistorySource::Stick(s.path().into()), &opts(false))
+            .unwrap()
+            .to_source_history();
+        let plan = history::scan(&h, &lib).unwrap();
+        let got: Vec<Vec<_>> = plan
+            .sessions
+            .iter()
+            .map(|s| {
+                s.entries
+                    .iter()
+                    .map(|e| (e.kind, e.track_id, e.matched_by))
+                    .collect()
+            })
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                vec![
+                    (EntryKind::Track, Some(ids[0]), Some(MatchKind::Manifest)),
+                    (EntryKind::Track, Some(ids[1]), Some(MatchKind::PathSuffix)),
+                ],
+                vec![
+                    (EntryKind::Divider, None, Some(MatchKind::Manifest)),
+                    (EntryKind::Track, None, None),
+                ],
+            ]
+        );
+        let report = history::import(&plan, &ImportChoices::default(), &lib).unwrap();
+        assert_eq!((report.created.len(), report.unmatched), (2, 1));
+
+        let again = history::scan(&h, &lib).unwrap();
+        assert!(again
+            .sessions
+            .iter()
+            .all(|s| matches!(s.action, SessionAction::Skip(_))));
+        assert_eq!(snapshot(s.path()), before, "import touched the stick");
+    }
+
     /// Golden test on a real played stick (hardware checklist step 7),
     /// sanitised, at `fixtures/rekordbox/played-<ver>/` with
     /// `PIONEER/rekordbox/export.pdb` and the expected `history.json` (a
@@ -863,5 +991,33 @@ mod tests {
         .unwrap();
         assert!(h.sessions.len() >= 2);
         assert_eq!(h, expected);
+    }
+
+    /// Task 6 on the same fixture: one session per history playlist, entries
+    /// in player order, and a second import adds nothing. With the export
+    /// manifest of a reks-made stick, every entry should match (acceptance
+    /// criteria); that needs the library the stick came from, so it is not
+    /// asserted here.
+    #[test]
+    #[ignore = "needs fixtures/rekordbox/played-<ver>/ from the hardware checklist (step 7)"]
+    fn played_stick_fixture_imports_once() {
+        use reks_core::history::{self, ImportChoices};
+        let root = PathBuf::from(std::env::var("REKS_PLAYED_FIXTURE").unwrap());
+        let h = read_play_history(&HistorySource::Stick(root.clone()), &opts(false))
+            .unwrap()
+            .to_source_history();
+        let before = snapshot(&root);
+        let lib = reks_core::Library::open_in_memory(Path::new("cache-unused")).unwrap();
+        let plan = history::scan(&h, &lib).unwrap();
+        let report = history::import(&plan, &ImportChoices::default(), &lib).unwrap();
+        assert_eq!(report.created.len(), h.sessions.len());
+        let again = history::import(
+            &history::scan(&h, &lib).unwrap(),
+            &ImportChoices::default(),
+            &lib,
+        )
+        .unwrap();
+        assert_eq!((again.created.len(), again.extended.len()), (0, 0));
+        assert_eq!(snapshot(&root), before);
     }
 }

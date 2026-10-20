@@ -123,7 +123,9 @@ pub enum PlaylistOp { /* existing ops */ InsertDivider { playlist_id, position: 
 
 pub mod history {
     pub enum HistorySource { Stick(PathBuf), Backup(PathBuf) }   // Backup = a Phase 2 stick-backups/<serial>/<ts>/ folder
-    pub fn scan(src: &HistorySource, lib: &Library) -> Result<HistoryImportPlan>;      // read-only
+    // The PDB reader is reks_export_rb::history::read_play_history (task 5);
+    // PlayHistory::to_source_history() gives scan its input.
+    pub fn scan(history: &SourceHistory, lib: &Library) -> Result<HistoryImportPlan>;  // read-only
     pub fn import(plan: &HistoryImportPlan, choices: &ImportChoices, lib: &Library) -> Result<ImportReport>;
 }
 impl Library {
@@ -211,9 +213,26 @@ Divider rules
    The golden JSON test (`played_stick_fixture_golden_json`) is `#[ignore]`
    until `fixtures/rekordbox/played-<ver>/` (with `history.json`) exists from
    the hardware session.
-6. **Matching, fingerprint, import plan**: as above. Tests: manifest hit,
+6. [x] **Matching, fingerprint, import plan**: as above. Tests: manifest hit,
    divider entry, suffix fallback, metadata fallback (unique only), unmatched
    kept and linkable; fingerprint skip, extend, different serial.
+   Done in `reks_core::history` ([mod.rs](../../crates/reks-core/src/history/mod.rs),
+   [matcher.rs](../../crates/reks-core/src/history/matcher.rs)); tests in
+   [tests.rs](../../crates/reks-core/src/history/tests.rs) and an end-to-end
+   synthetic stick in `reks_export_rb::history::read`. Choices made here:
+   a manifest row whose track was deleted falls through to the fallbacks;
+   the suffix fallback compares whole path components (NFC, case-folded),
+   needs the file name to match, picks the strictly longest suffix and drops
+   a candidate whose known duration is off by more than 1 s; the metadata
+   fallback needs both durations. Fingerprint fields are length-prefixed;
+   extend also applies when both serials are absent and takes the longest
+   stored prefix; extending replaces the session's fingerprint. A plan entry
+   whose `Extend` no longer fits fails the whole import (`StaleHistoryPlan`);
+   a `New` imported meanwhile is skipped. New sessions dated on or before
+   the baseline date, or undated, default to excluded (`pre_baseline`); an
+   explicit Practice choice stores `user`. `Library::session_link_entry`
+   ("Locate…") is here; counts are not recomputed until task 7. The fixture
+   test (`played_stick_fixture_imports_once`) is `#[ignore]` like task 5's.
 7. **Derived counts**: `recompute_play_stats`, pre-baseline rule, frozen
    baseline on XML re-import. Property test: count = baseline + included
    track entries for random session sets and toggles. Deleting all sessions
