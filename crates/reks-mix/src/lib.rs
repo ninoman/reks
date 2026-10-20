@@ -7,12 +7,14 @@
 pub mod beatmap;
 pub mod control;
 mod deck;
+pub mod dsp;
 pub mod engine;
 pub mod error;
 pub mod graph;
 pub mod player;
 mod source;
 mod sync;
+pub mod taper;
 mod varispeed;
 
 pub use beatmap::{BeatMap, GridAnchor};

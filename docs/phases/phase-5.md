@@ -138,19 +138,27 @@ pub enum Control {
    stopped leader passes on its tempo, not its phase. Measured worst gaps:
    128/125 over 64 bars 0.0005 ms; tempo change in the follower 0.043 ms, in
    the leader 0.025 ms.
-4. **EQ**: 4-band asymmetric EQ with tapers. Sine-sweep tests: knobs at noon
+4. [x] **EQ**: 4-band asymmetric EQ with tapers. Sine-sweep tests: knobs at noon
    flat within ±0.1 dB; full boost +6 dB ±0.5 dB; mids full cut −30 dB ±1 dB;
    HI/LO full cut fall at 12 dB/oct ±1 dB past the turning point; silence in,
-   silence out (no NaN or denormals).
-5. **Filters**: two state-variable filters (trapezoidal SVF from the
+   silence out (no NaN or denormals). Done: `reks-mix::taper` and
+   `dsp::eq::ChannelEq`, standalone (not yet in the graph); laws and
+   tolerances in [`../mixer-dsp.md`](../mixer-dsp.md).
+5. [x] **Filters**: two state-variable filters (trapezoidal SVF from the
    published papers, our own code), mode combinations, resonance taper,
    VCF TO XFADER, LINK. Tests: −3 dB at the set
    cutoff for LP and HP at minimum resonance; stable at maximum resonance across
-   30 Hz–20 kHz at 44.1, 48 and 96 kHz.
+   30 Hz–20 kHz at 44.1, 48 and 96 kHz. Done: `dsp::filter` (`Filter`, `FilterPanel`
+   for VCF TO XFADER and LINK), standalone; MILD is Butterworth, not the
+   hardware's likely overdamped setting ([`../mixer-dsp.md`](../mixer-dsp.md)).
 6. **Channels, crossfader, master**: trim, fader taper, X/off/Y assign,
    crossfader curve law, master level, meters, limiter. Tests: crossfader gain
    at 0, 0.5 and 1 for both curve extremes (−4 dB at centre on progressive);
-   limiter ceiling holds with resonance at maximum.
+   limiter ceiling holds with resonance at maximum. Partial: the DSP blocks
+   are done and tested (`dsp::level`, `dsp::xfader`, `dsp::meter`,
+   `dsp::limiter`, [`../mixer-dsp.md`](../mixer-dsp.md)). Still to do: wire
+   channel strips, EQ, filter and crossfader assigns, master and limiter into
+   `graph.rs`, with `Control::Channel`/`Filter`/`Crossfader`/`Master`.
 7. **Cue system**: cue bus, pre/post EQ, cue/mix balance, split cue, routing.
    Test: each routing mode puts the expected signal on each output channel.
 8. **Tauri commands and IPC**: thin `mix_*` commands, typed wrappers in

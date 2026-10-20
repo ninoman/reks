@@ -52,6 +52,7 @@ Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
 | [`docs/hw-test-log.md`](docs/hw-test-log.md) | Real-player test results |
 | [`docs/analysis-parity/`](docs/analysis-parity/waveforms.md) | Analysis vs rekordbox: waveform calibration (method, error, pictures) |
 | [`docs/ui.md`](docs/ui.md) | UI design system: tokens, size scale, components |
+| [`docs/mixer-dsp.md`](docs/mixer-dsp.md) | Mix-prep mixer DSP: EQ, filter, crossfader and limiter laws, sources, test tolerances |
 | [`fixtures/README.md`](fixtures/README.md) | Test fixtures: generated audio signal, ffmpeg commands, sample rekordbox XML |
 
 ## Building from source
