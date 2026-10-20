@@ -51,10 +51,31 @@ fn lossless_fixtures_decode_to_the_wav_samples() {
 
 #[test]
 fn lossy_fixtures_decode_to_about_thirty_seconds() {
-    // The MP3's LAME header trims delay/padding; AAC priming stays (~23 ms).
-    for (ext, ms) in [("mp3", 30_000..=30_001), ("m4a", 30_000..=30_030)] {
+    // The MP3's Info header trims delay/padding, then rekordbox's timeline
+    // puts the 1105-frame delay back as silence (25 ms); AAC priming stays
+    // (~23 ms).
+    for (ext, ms) in [("mp3", 30_025..=30_026), ("m4a", 30_000..=30_030)] {
         let d = decode_stereo(&fixture(ext), None).unwrap();
         assert!(ms.contains(&d.pcm.duration_ms()), "{ext}: {:?}", d.pcm);
+    }
+}
+
+#[test]
+fn mp3_clicks_sit_one_lead_later_than_the_wav() {
+    let wav = decode_stereo(&fixture("wav"), None).unwrap();
+    let mp3 = decode_stereo(&fixture("mp3"), None).unwrap();
+    let lead = mp3.timeline.lead_frames as usize;
+    assert_eq!(lead, 1105);
+    assert!(mp3.pcm.samples[..lead * 2].iter().all(|&s| s == 0));
+    for beat in [1usize, 32, 63] {
+        let at = (beat * 2_646_000 + 64) / 128;
+        let w = onset(&wav.pcm.samples, at - 50);
+        let m = onset(&mp3.pcm.samples, at + lead - 50);
+        assert!(
+            m.abs_diff(w + lead) <= 3,
+            "beat {beat}: {m} vs {}",
+            w + lead
+        );
     }
 }
 

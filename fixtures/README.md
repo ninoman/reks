@@ -21,6 +21,7 @@ One signal in five formats. Source of truth: [`gen/src/lib.rs`](gen/src/lib.rs).
 | --- | --- | --- |
 | `sine-click-128.wav` | 2,646,044 | `cargo run -p reks-fixtures-gen` |
 | `sine-click-128.mp3` | 240,605 | ffmpeg, libmp3lame 64 kb/s CBR |
+| `sine-click-128-lame.mp3` | 240,534 | LAME 3.100 CLI, 64 kb/s CBR (LAME's own Info tag) |
 | `sine-click-128.flac` | 480,894 | ffmpeg, FLAC level 8 |
 | `sine-click-128.aiff` | 2,646,076 | ffmpeg, PCM s16be |
 | `sine-click-128.m4a` | 248,357 | ffmpeg, native AAC-LC 64 kb/s |
@@ -44,7 +45,12 @@ eval ffmpeg -y -i sine-click-128.wav -c:a pcm_s16be $C sine-click-128.aiff
 eval ffmpeg -y -i sine-click-128.wav -c:a aac -b:a 64k $C sine-click-128.m4a
 cargo run -p reks-fixtures-gen -- hires /tmp/hires.wav
 eval ffmpeg -y -i /tmp/hires.wav -t 1 -c:a alac $C sine-click-128-hires.m4a
+lame --quiet -b 64 sine-click-128.wav sine-click-128-lame.mp3   # LAME 3.100 (Homebrew)
 ```
+
+The two MP3s differ only in who wrote the Info tag (ffmpeg writes `Lavf`
+even when it encodes with libmp3lame): rekordbox times them differently
+(`reks_audio::timing`, docs/decisions.md D4). The LAME one has no tags.
 
 `sine-click-128-hires.m4a` (270,155 bytes) is not the 30 s signal: it is the
 converter's ALAC source, the first second of `write_wav_hires` (below), 24-bit

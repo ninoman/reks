@@ -4,8 +4,9 @@
 //! Unlike [`crate::decode_stereo`] nothing is quantised or resampled here;
 //! [`Layout::Mono`] mixes down while decoding so a long stereo track never
 //! sits in memory twice. Symphonia's gapless decode trims the encoder delay
-//! and padding; [`FloatPcm`] reports both as the container stated them, so
-//! the delay convention can be calibrated against rekordbox (phase 3 task 4).
+//! and padding; [`FloatPcm`] reports both as the container stated them.
+//! Sample 0 is on rekordbox's timeline ([`crate::timing`]): MP3s may start
+//! with [`FloatPcm::timeline`]'s lead of silence.
 
 use std::path::Path;
 
@@ -15,6 +16,7 @@ use symphonia::core::errors::Error as SymErr;
 use crate::decode::{open_track, too_long, OpenTrack, MAX_DECODE_MS};
 use crate::error::{Error, Result};
 use crate::probe::decode_err;
+use crate::timing::Timeline;
 
 /// Channel layout [`decode_f32`] returns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +42,8 @@ pub struct FloatPcm {
     pub encoder_delay: Option<u32>,
     /// Trailing padding frames the container reported (already trimmed).
     pub encoder_padding: Option<u32>,
+    /// The silence put before the decoded audio ([`crate::timing`]).
+    pub timeline: Timeline,
 }
 
 impl FloatPcm {
@@ -58,6 +62,7 @@ impl std::fmt::Debug for FloatPcm {
             .field("source_channels", &self.source_channels)
             .field("encoder_delay", &self.encoder_delay)
             .field("encoder_padding", &self.encoder_padding)
+            .field("timeline", &self.timeline)
             .finish()
     }
 }
@@ -73,6 +78,7 @@ pub fn decode_f32(path: &Path, layout: Layout) -> Result<FloatPcm> {
         num_frames,
         delay,
         padding,
+        timeline,
     } = open_track(path)?;
     let max_frames = MAX_DECODE_MS * u64::from(sample_rate) / 1000;
     if let Some(frames) = num_frames.filter(|&f| f > max_frames) {
@@ -98,6 +104,7 @@ pub fn decode_f32(path: &Path, layout: Layout) -> Result<FloatPcm> {
 
     let capacity = num_frames.unwrap_or(0).min(max_frames) as usize * usize::from(channels);
     let mut samples: Vec<f32> = Vec::with_capacity(capacity);
+    samples.resize(timeline.lead_frames as usize * usize::from(channels), 0.0);
     let mut scratch: Vec<f32> = Vec::new();
     let mut frame_count: u64 = 0;
     loop {
@@ -153,12 +160,14 @@ pub fn decode_f32(path: &Path, layout: Layout) -> Result<FloatPcm> {
         source_channels,
         encoder_delay: delay,
         encoder_padding: padding,
+        timeline,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::timing::Rule;
     use std::path::PathBuf;
 
     fn fixture(name: &str) -> PathBuf {
@@ -200,11 +209,40 @@ mod tests {
     #[test]
     fn mp3_reports_encoder_delay_and_trims_it() {
         let pcm = decode_f32(&fixture("sine-click-128.mp3"), Layout::Mono).unwrap();
-        // LAME's header states the delay (576 + decoder delay 529 = 1105)
-        // and the padding; gapless decode removes both.
+        // The Info header states the delay (576 + decoder delay 529 = 1105)
+        // and the padding; gapless decode removes both, then rekordbox's
+        // timeline puts the delay back as silence (ffmpeg's tag, not LAME's).
         assert_eq!(pcm.encoder_delay, Some(1105));
         assert!(pcm.encoder_padding.is_some());
-        assert_eq!(pcm.frames(), reks_fixtures_gen::DURATION_SAMPLES);
+        assert_eq!(
+            pcm.timeline,
+            Timeline {
+                rule: Rule::Mp3UntrimmedDelay,
+                lead_frames: 1105
+            }
+        );
+        assert_eq!(pcm.frames(), reks_fixtures_gen::DURATION_SAMPLES + 1105);
+        assert!(pcm.samples[..1105].iter().all(|&s| s == 0.0));
+    }
+
+    #[test]
+    fn lame_mp3_also_counts_the_info_frame() {
+        let pcm = decode_f32(&fixture("sine-click-128-lame.mp3"), Layout::Mono).unwrap();
+        assert_eq!(pcm.encoder_delay, Some(1105));
+        assert_eq!(pcm.timeline.rule, Rule::Mp3LameInfoFrame);
+        assert_eq!(pcm.timeline.lead_frames, 1105 + 1152);
+        assert_eq!(
+            pcm.frames(),
+            reks_fixtures_gen::DURATION_SAMPLES + 1105 + 1152
+        );
+    }
+
+    #[test]
+    fn lossless_and_aac_are_as_decoded() {
+        for name in ["sine-click-128.flac", "sine-click-128.m4a"] {
+            let pcm = decode_f32(&fixture(name), Layout::Mono).unwrap();
+            assert_eq!(pcm.timeline, Timeline::NONE, "{name}");
+        }
     }
 
     #[test]

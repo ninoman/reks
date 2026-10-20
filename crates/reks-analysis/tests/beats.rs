@@ -20,18 +20,19 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 /// Index of the generated beat each tracked beat is nearest to, and the
-/// worst distance in ms.
-fn match_beats(list: &BeatList, beats: usize) -> (Vec<usize>, f64) {
+/// worst distance in ms; `lead` is the timeline's lead in samples (MP3).
+fn match_beats(list: &BeatList, beats: usize, lead: i64) -> (Vec<usize>, f64) {
     assert_eq!(list.sample_rate, 44_100);
     let mut worst = 0.0f64;
+    let onset = |n: usize| beat_onset_at(44_100, n) as i64 + lead;
     let indices = list
         .beats
         .iter()
         .map(|b| {
             let n = (0..=beats)
-                .min_by_key(|&n| (b.sample - beat_onset_at(44_100, n) as i64).abs())
+                .min_by_key(|&n| (b.sample - onset(n)).abs())
                 .unwrap();
-            let err = (b.sample - beat_onset_at(44_100, n) as i64).abs() as f64 / 44.1;
+            let err = (b.sample - onset(n)).abs() as f64 / 44.1;
             worst = worst.max(err);
             n
         })
@@ -40,8 +41,8 @@ fn match_beats(list: &BeatList, beats: usize) -> (Vec<usize>, f64) {
 }
 
 /// Every generated beat found once, each within 10 ms.
-fn assert_beats_on_time(list: &BeatList, beats: usize) -> Vec<usize> {
-    let (indices, worst) = match_beats(list, beats);
+fn assert_beats_on_time(list: &BeatList, beats: usize, lead: i64) -> Vec<usize> {
+    let (indices, worst) = match_beats(list, beats, lead);
     // Beat `beats` falls on the last sample; the tracker may or may not mark it.
     let found: Vec<usize> = indices.iter().copied().filter(|&n| n < beats).collect();
     assert_eq!(found, (0..beats).collect::<Vec<_>>(), "beats found");
@@ -55,7 +56,10 @@ fn click_track_beats_within_10_ms() {
     for name in ["sine-click-128.wav", "sine-click-128.mp3"] {
         let input = AnalysisInput::from_file(&fixture(name)).unwrap();
         let list = tracker.track(&input).unwrap();
-        assert_beats_on_time(&list, reks_fixtures_gen::BEATS);
+        // The MP3 is on rekordbox's timeline: 1105 frames of lead (44.1 kHz).
+        let lead = i64::from(input.timeline.lead_frames);
+        assert_eq!(lead, if name.ends_with("mp3") { 1105 } else { 0 });
+        assert_beats_on_time(&list, reks_fixtures_gen::BEATS, lead);
         assert!(
             list.confidence > 0.9,
             "{name}: confidence {}",
@@ -72,7 +76,7 @@ fn four_four_pattern_has_downbeats_on_bar_starts() {
         .collect();
     let input = AnalysisInput::from_mono(mix, 44_100).unwrap();
     let list = tracker().track(&input).unwrap();
-    let found = assert_beats_on_time(&list, 64);
+    let found = assert_beats_on_time(&list, 64, 0);
     for (beat, n) in list.beats.iter().zip(found) {
         assert_eq!(beat.downbeat, n % 4 == 0, "beat {n}");
     }
@@ -92,7 +96,7 @@ fn tracker_runs_on_a_worker_thread() {
         .join()
         .unwrap()
         .unwrap();
-    assert_beats_on_time(&list, reks_fixtures_gen::BEATS);
+    assert_beats_on_time(&list, reks_fixtures_gen::BEATS, 0);
 }
 
 #[test]

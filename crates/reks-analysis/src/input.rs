@@ -7,14 +7,14 @@
 //!
 //! Both are resampled from the file's own rate with `rubato` (through
 //! [`reks_audio::StreamResampler`], which removes the resampler's delay), so
-//! sample 0 at either rate is the same instant: the first sample Symphonia's
-//! gapless decode returns, after the encoder delay is trimmed. The delay and
-//! padding the container reported are kept for the per-codec offset
-//! calibration (phase 3 task 4, docs/decisions.md D4).
+//! sample 0 at either rate is the same instant: sample 0 of rekordbox's
+//! timeline for the file. `reks-audio` puts it there (gapless decode, then
+//! the per-codec lead of [`reks_audio::timing`], docs/decisions.md D4), so
+//! every position reks-analysis returns is a rekordbox/Pioneer position.
 
 use std::path::Path;
 
-use reks_audio::{decode_f32, Layout, StreamResampler};
+use reks_audio::{decode_f32, Layout, StreamResampler, Timeline};
 
 /// Rate of [`AnalysisInput::mono`], and of all sample positions in this crate.
 pub const ANALYSIS_RATE: u32 = 44_100;
@@ -47,6 +47,9 @@ pub struct AnalysisInput {
     pub encoder_delay: Option<u32>,
     /// Encoder padding in source frames; already trimmed.
     pub encoder_padding: Option<u32>,
+    /// Silence `reks-audio` put first to match rekordbox's timeline
+    /// (source frames).
+    pub timeline: Timeline,
 }
 
 impl AnalysisInput {
@@ -66,6 +69,7 @@ impl AnalysisInput {
         input.source_channels = pcm.source_channels;
         input.encoder_delay = pcm.encoder_delay;
         input.encoder_padding = pcm.encoder_padding;
+        input.timeline = pcm.timeline;
         Ok(input)
     }
 
@@ -88,6 +92,7 @@ impl AnalysisInput {
             source_channels: 1,
             encoder_delay: None,
             encoder_padding: None,
+            timeline: Timeline::NONE,
         })
     }
 
@@ -106,6 +111,7 @@ impl std::fmt::Debug for AnalysisInput {
             .field("source_channels", &self.source_channels)
             .field("encoder_delay", &self.encoder_delay)
             .field("encoder_padding", &self.encoder_padding)
+            .field("timeline", &self.timeline)
             .finish()
     }
 }
@@ -145,16 +151,18 @@ mod tests {
             .unwrap()
     }
 
-    /// Clicks stay where they are in the generated signal, at both rates:
-    /// the loudest sample near each onset matches the reference's.
+    /// Clicks stay where they are in the generated signal (moved by the
+    /// timeline's lead), at both rates: the loudest sample near each onset
+    /// matches the reference's.
     fn assert_clicks_aligned(input: &AnalysisInput, tolerance_ms: f64) {
+        let lead_s = input.timeline.lead_ms(input.source_rate) / 1000.0;
         let reference: Vec<f32> = reks_fixtures_gen::render()
             .into_iter()
             .map(|s| f32::from(s) / 32_768.0)
             .collect();
         for n in [1, 16, 63] {
             let onset = reks_fixtures_gen::beat_onset(n);
-            let want = peak(&reference, onset, onset + 441) as f64 / 44_100.0;
+            let want = peak(&reference, onset, onset + 441) as f64 / 44_100.0 + lead_s;
             for (signal, rate) in [(&input.mono, ANALYSIS_RATE), (&input.beat_mono, BEAT_RATE)] {
                 let at = (want * f64::from(rate)) as usize;
                 let window = (rate / 200) as usize; // 5 ms either side
@@ -218,8 +226,11 @@ mod tests {
         let input = AnalysisInput::from_file(&fixture("sine-click-128.mp3")).unwrap();
         assert_eq!(input.encoder_delay, Some(1105));
         assert!(input.encoder_padding.is_some());
-        assert_eq!(input.mono.len(), reks_fixtures_gen::DURATION_SAMPLES);
-        // Gapless trim puts the clicks where the WAV has them.
+        // Gapless trim, then rekordbox's timeline puts the delay back
+        // (ffmpeg's Info tag: delay only): the clicks are 1105 frames later
+        // than in the WAV.
+        assert_eq!(input.timeline.lead_frames, 1105);
+        assert_eq!(input.mono.len(), reks_fixtures_gen::DURATION_SAMPLES + 1105);
         assert_clicks_aligned(&input, 0.15);
     }
 

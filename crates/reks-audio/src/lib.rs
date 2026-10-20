@@ -5,7 +5,8 @@
 //! and the overview waveform ([`overview`]). See `docs/phases/phase-1.md`.
 //!
 //! Phase 3: whole-track `f32` decode for analysis ([`decode_f32`]), with the
-//! encoder delay and padding the container reports.
+//! encoder delay and padding the container reports, and the per-codec
+//! timing convention every decoder here follows ([`timing`]).
 //!
 //! Phase 2.6 converter building blocks: streaming decode at the source's
 //! precision ([`NativeStream`]), streaming resampling ([`resample`]),
@@ -23,6 +24,7 @@ pub mod overview;
 pub mod probe;
 pub mod resample;
 pub mod tags;
+pub mod timing;
 pub mod write;
 
 pub use convert::{convert, pcm_hash, CancelToken, ConvertSpec, Depth, Output, Rate, Target};
@@ -34,6 +36,7 @@ pub use native::{NativeFormat, NativeStream};
 pub use probe::{probe, Kind, Probe};
 pub use resample::StreamResampler;
 pub use tags::{embedded_artwork, tags, Picture, Tags};
+pub use timing::{Rule as TimingRule, Timeline};
 pub use write::{AiffWriter, FlacWriter, PcmSpec, PcmWriter, WavWriter, WriteError};
 
 /// Crate version, from Cargo metadata.

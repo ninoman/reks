@@ -19,7 +19,9 @@ use crate::waveform::{columns_from_interleaved, WaveformColumns, WaveformError};
 /// Version of the whole analyser. Bump it whenever a change alters results
 /// (model, constants, grid rules, waveform filters): every track is then
 /// re-analysed and every cache entry is stale.
-pub const ANALYSER_VERSION: u32 = 1;
+///
+/// 2: MP3 positions on rekordbox's timeline (`reks_audio::timing`, task 4).
+pub const ANALYSER_VERSION: u32 = 2;
 
 /// A dynamic grid's beats are merged into one tempo anchor while each stays
 /// within this distance of where the anchor's rounded tempo puts it.
