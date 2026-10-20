@@ -3,7 +3,15 @@
 use super::smooth::Smoother;
 use crate::taper;
 
-/// A channel's trim and fader. Both knobs ramp; the gain is their product.
+/// A channel's trim and fader gains for one frame. They are separate
+/// because the cue taps the channel between them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LevelGains {
+    pub trim: f32,
+    pub fader: f32,
+}
+
+/// A channel's trim and fader. Both knobs ramp.
 #[derive(Debug, Clone)]
 pub struct ChannelLevel {
     trim: Smoother,
@@ -11,11 +19,11 @@ pub struct ChannelLevel {
 }
 
 impl ChannelLevel {
-    /// Trim at noon (0 dB), fader closed.
-    pub fn new(sample_rate: u32) -> Self {
+    /// Trim at noon (0 dB), fader at `fader` with no ramp.
+    pub fn new(fader: f32, sample_rate: u32) -> Self {
         Self {
             trim: Smoother::new(0.5, sample_rate),
-            fader: Smoother::new(0.0, sample_rate),
+            fader: Smoother::new(taper::unit(fader, 0.0), sample_rate),
         }
     }
 
@@ -27,11 +35,13 @@ impl ChannelLevel {
         self.fader.set(taper::unit(value, 0.0));
     }
 
-    /// Advances one frame and returns the channel gain.
+    /// Advances one frame and returns both gains.
     #[inline]
-    pub fn tick(&mut self) -> f32 {
-        let trim = taper::db_to_gain(taper::trim_db(self.trim.tick()));
-        trim * taper::fader_gain(self.fader.tick())
+    pub fn tick(&mut self) -> LevelGains {
+        LevelGains {
+            trim: taper::db_to_gain(taper::trim_db(self.trim.tick())),
+            fader: taper::fader_gain(self.fader.tick()),
+        }
     }
 }
 
@@ -72,17 +82,26 @@ mod tests {
     }
 
     #[test]
-    fn channel_gain_is_trim_times_fader() {
-        let mut c = ChannelLevel::new(48_000);
-        assert_eq!(c.tick(), 0.0);
+    fn channel_gains_follow_trim_and_fader() {
+        let mut c = ChannelLevel::new(0.0, 48_000);
+        assert_eq!(
+            c.tick(),
+            LevelGains {
+                trim: 1.0,
+                fader: 0.0
+            }
+        );
         c.set_fader(1.0);
-        assert!((settle(|| c.tick()) - 1.0).abs() < 1e-6);
+        assert!((settle(|| c.tick().fader) - 1.0).abs() < 1e-6);
         c.set_trim(1.0);
-        let g = settle(|| c.tick());
+        let g = settle(|| c.tick().trim);
         assert!((20.0 * g.log10() - 10.0).abs() < 1e-3);
         c.set_trim(0.0);
         c.set_fader(0.5);
-        let g = settle(|| c.tick());
+        let g = settle(|| {
+            let g = c.tick();
+            g.trim * g.fader
+        });
         assert!((20.0 * g.log10() + 10.0 + 18.06).abs() < 0.01);
     }
 

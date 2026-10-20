@@ -11,8 +11,10 @@ pub mod dsp;
 pub mod engine;
 pub mod error;
 pub mod graph;
+mod mixer;
 pub mod player;
 mod source;
+mod strip;
 mod sync;
 pub mod taper;
 mod varispeed;
@@ -25,7 +27,7 @@ pub use engine::{
 };
 pub use error::{Error, Result};
 pub use graph::{
-    render, volume_gain, DeckSource, DeckState, EngineState, Graph, DECKS, RAMP_MS, TEMPO_MAX,
-    TEMPO_MIN,
+    render, volume_gain, DeckSource, DeckState, EngineState, Graph, MeterState, DECKS, RAMP_MS,
+    TEMPO_MAX, TEMPO_MIN,
 };
 pub use player::{Player, PlayerState, Reopened};

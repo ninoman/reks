@@ -127,6 +127,13 @@ impl Filter {
         self.update_coeffs();
     }
 
+    /// Settles every parameter and clears the filter state, for a unit copy
+    /// that starts again after sitting idle.
+    pub fn reset(&mut self) {
+        self.settle();
+        self.state = [SvfState::default(); 2];
+    }
+
     fn smoothers(&mut self) -> [&mut Smoother; 7] {
         [
             &mut self.freq,

@@ -1,15 +1,19 @@
-//! The audio graph: decks and master gain, rendered in short blocks.
+//! The audio graph: four decks into the mixer ([`crate::mixer`]), rendered
+//! in short blocks.
 //!
 //! Everything here runs on the audio thread: no allocation, locks or I/O.
 //! [`render`] runs the same graph without a device, for tests (D21).
-//! Until the mixer's channel strips are wired in, the decks are summed.
 
 use std::sync::Arc;
 
 use crate::control::Control;
 use crate::deck::Deck;
 use crate::error::{Error, Result};
+pub use crate::mixer::MeterState;
+use crate::mixer::Mixer;
+// Deck speeds are set once per block, and the mixer runs a block at a time.
 pub use crate::source::DeckSource;
+use crate::strip::{Block, BLOCK};
 use crate::sync;
 
 /// Deck slots in the graph. The UI shows 2 or 4; idle decks cost nothing.
@@ -27,9 +31,6 @@ pub const RAMP_MS: u32 = 5;
 /// playing. Long enough to hide the jump in the bass, short enough to feel
 /// instant; a listening choice, not a measured rekordbox value.
 pub const SEEK_XFADE_MS: u32 = 20;
-
-/// Frames per block: deck speeds are set once per block.
-const BLOCK: usize = crate::varispeed::CHUNK;
 
 /// One deck as the UI sees it.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -99,6 +100,10 @@ pub struct EngineState {
     /// The leader was chosen with [`Control::Leader`].
     pub leader_chosen: bool,
     pub volume: f32,
+    /// Channel meters, after EQ and filter, before the fader.
+    pub channels: [MeterState; DECKS],
+    /// Master meter, after the master level, before the limiter.
+    pub master: MeterState,
 }
 
 /// Knob position to gain: squared, so the top of the travel is finer.
@@ -154,8 +159,9 @@ pub struct Graph {
     engine_rate: f64,
     /// Counts play starts, for the automatic leader.
     clock: u64,
-    master: Ramp,
-    volume: f32,
+    mixer: Mixer,
+    /// One block per deck, the mixer's input.
+    inputs: [Block; DECKS],
 }
 
 impl Graph {
@@ -171,25 +177,20 @@ impl Graph {
             auto_leader: None,
             engine_rate: f64::from(sample_rate.max(1)),
             clock: 0,
-            master: Ramp::new(volume_gain(1.0), sample_rate),
-            volume: 1.0,
+            mixer: Mixer::new(sample_rate),
+            inputs: [[0.0; BLOCK * 2]; DECKS],
         })
     }
 
     /// Applies one control. A replaced source comes back so the caller can
     /// drop it off the audio thread. Out-of-range decks are ignored.
     pub fn apply(&mut self, c: Control) -> Option<Arc<DeckSource>> {
-        match &c {
-            Control::Volume { value } => {
-                self.volume = value.clamp(0.0, 1.0);
-                self.master.target = volume_gain(*value);
-                return None;
-            }
-            Control::Leader { deck } => {
-                self.leader = deck.map(usize::from).filter(|&d| d < DECKS);
-                return None;
-            }
-            _ => {}
+        if self.mixer.apply(&c) {
+            return None;
+        }
+        if let Control::Leader { deck } = &c {
+            self.leader = deck.map(usize::from).filter(|&d| d < DECKS);
+            return None;
         }
         let deck = c.deck()?;
         self.clock += 1;
@@ -202,13 +203,23 @@ impl Graph {
         }
     }
 
-    pub fn state(&self) -> EngineState {
+    /// A snapshot; clears the meters' clip latches.
+    pub fn state(&mut self) -> EngineState {
+        let (channels, master) = self.mixer.meters();
         EngineState {
             decks: std::array::from_fn(|i| self.decks[i].state()),
             leader: self.current_leader().map(|d| d as u8),
             leader_chosen: self.leader.is_some(),
-            volume: self.volume,
+            volume: self.mixer.volume(),
+            channels,
+            master,
         }
+    }
+
+    /// Frames between a deck sample and its output: the safety limiter's
+    /// look-ahead.
+    pub fn latency(&self) -> usize {
+        self.mixer.latency()
     }
 
     fn current_leader(&self) -> Option<usize> {
@@ -282,22 +293,18 @@ impl Graph {
     pub fn render_with(&mut self, out: &mut [f32], mut retire: impl FnMut(Arc<DeckSource>)) {
         for block in out.chunks_mut(BLOCK * 2) {
             self.plan();
-            for frame in block.as_chunks_mut::<2>().0 {
-                let mut l = 0.0;
-                let mut r = 0.0;
-                for deck in &mut self.decks {
+            let n = block.len();
+            for (deck, input) in self.decks.iter_mut().zip(&mut self.inputs) {
+                for frame in input[..n].as_chunks_mut::<2>().0 {
                     let mut retired = None;
-                    let (dl, dr) = deck.next(&mut retired);
+                    let (l, r) = deck.next(&mut retired);
                     if let Some(old) = retired {
                         retire(old);
                     }
-                    l += dl;
-                    r += dr;
+                    *frame = [l, r];
                 }
-                let gain = self.master.next();
-                frame[0] = l * gain;
-                frame[1] = r * gain;
             }
+            self.mixer.process(&mut self.inputs, block);
         }
     }
 }
@@ -345,14 +352,18 @@ mod tests {
             src: ramp_source(10_000),
         });
         g.apply(Control::Play { deck: 0 });
-        let out = render_frames(&mut g, 1_000);
+        let lat = g.latency();
+        let out = render_frames(&mut g, 1_000 + lat);
+        // The limiter's look-ahead delays everything by `lat` frames.
+        assert!(out[..2 * lat].iter().all(|&s| s == 0.0));
+        let out = &out[2 * lat..];
         // Fade-in: rising, never above the source.
         assert!(sample(out[2 * 10]) <= 10);
         for f in RAMP..1_000 {
             assert_eq!(sample(out[2 * f]), f as i32, "frame {f}");
             assert_eq!(sample(out[2 * f + 1]), -(f as i32), "frame {f}");
         }
-        assert_eq!(g.state().decks[0].position, 1_000);
+        assert_eq!(g.state().decks[0].position, (1_000 + lat) as i64);
     }
 
     #[test]
@@ -386,7 +397,8 @@ mod tests {
         g.apply(Control::Pause { deck: 0 });
         assert!(g.state().decks[0].playing, "still fading");
         assert_eq!(g.state().decks[0].transports, 2, "play and pause counted");
-        let out = render_frames(&mut g, RAMP + 10);
+        let lat = g.latency();
+        let out = render_frames(&mut g, RAMP + 10 + lat);
         assert!(!g.state().decks[0].playing);
         let pos = g.state().decks[0].position;
         // One extra frame is float rounding in the ramp.
@@ -395,6 +407,7 @@ mod tests {
             "{pos}"
         );
         // Gain falls through the fade and ends silent.
+        let out = &out[2 * lat..];
         assert!(out[2].abs() > out[2 * (RAMP - 10)].abs());
         assert!(out[2 * (RAMP + 5)..].iter().all(|&s| s == 0.0));
     }
@@ -432,7 +445,9 @@ mod tests {
         // The position moves at once.
         assert_eq!(g.state().decks[0].position, 12_000);
         assert_eq!(g.state().decks[0].seeks, 1);
-        let out = render_frames(&mut g, XFADE + 3);
+        let lat = g.latency();
+        let out = render_frames(&mut g, XFADE + 3 + lat);
+        let out = &out[2 * lat..];
         // First frame is still the old head at full level: no gap, no step.
         assert_eq!(sample(out[0]), 1_000);
         // Halfway, both heads at equal power (cos 45° each).
@@ -458,7 +473,9 @@ mod tests {
             frame: 5_000,
         });
         g.apply(Control::Play { deck: 0 });
-        let out = render_frames(&mut g, RAMP + 2);
+        let lat = g.latency();
+        let out = render_frames(&mut g, RAMP + 2 + lat);
+        let out = &out[2 * lat..];
         // Only the fade-in of the new position, nothing from frame 0.
         assert_eq!(sample(out[2 * (RAMP + 1)]), 5_000 + RAMP as i32 + 1);
     }
@@ -686,11 +703,12 @@ mod tests {
         // Playing: CUE fades out, then jumps back and stops.
         g.apply(Control::Cue { deck: 0 });
         assert!(g.state().decks[0].playing, "still fading");
-        let out = render_frames(&mut g, RAMP + 10);
+        let lat = g.latency();
+        let out = render_frames(&mut g, RAMP + 10 + lat);
         let st = g.state().decks[0];
         assert!(!st.playing);
         assert_eq!((st.position, st.cue), (5_000, 5_000));
-        assert!(out[2 * (RAMP + 5)..].iter().all(|&s| s == 0.0));
+        assert!(out[2 * (lat + RAMP + 5)..].iter().all(|&s| s == 0.0));
         // A play during the fade cancels the cue.
         g.apply(Control::Play { deck: 0 });
         render_frames(&mut g, 100);
@@ -780,8 +798,9 @@ mod tests {
         });
         render_frames(&mut g, 2_000);
         let at = g.state().decks[0].position;
-        let out = render_frames(&mut g, 100);
-        for (f, pair) in out.as_chunks::<2>().0.iter().enumerate() {
+        let lat = g.latency();
+        let out = render_frames(&mut g, 100 + lat);
+        for (f, pair) in out[2 * lat..].as_chunks::<2>().0.iter().enumerate() {
             assert_eq!(sample(pair[0]), (at + f as i64) as i32);
         }
     }

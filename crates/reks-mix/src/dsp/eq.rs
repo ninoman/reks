@@ -70,7 +70,10 @@ impl Shelf {
     fn tick(&mut self, ch: usize, x: f64, g: f64) -> f64 {
         let kill = self.kill.tick(ch, x);
         let boost = self.boost.tick(ch, x);
-        if g <= 1.0 {
+        // Exact at noon, so a flat channel passes its deck bit for bit.
+        if g == 1.0 {
+            x
+        } else if g < 1.0 {
             kill + g * (x - kill)
         } else {
             x + (g - 1.0) * (x - boost)

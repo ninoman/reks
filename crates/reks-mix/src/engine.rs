@@ -537,6 +537,66 @@ mod tests {
         });
         assert_eq!(n, 0, "seek, volume, formats");
 
+        // Every mixer control (50 a step, inside the queue), with both
+        // filter units in use and assigns moving.
+        use crate::control::{ChannelParam as C, FilterParam as F, FilterUnit, MasterParam};
+        for step in 0..6u8 {
+            let v = f32::from(step) / 5.0;
+            for ch in 0..4 {
+                for param in [
+                    C::Trim,
+                    C::EqHi,
+                    C::EqMid1,
+                    C::EqMid2,
+                    C::EqLo,
+                    C::Fader,
+                    C::FilterAssign,
+                    C::XfadeAssign,
+                ] {
+                    let value = if ch % 2 == 0 { v } else { 1.0 - v };
+                    r.controls
+                        .push(Control::Channel { ch, param, value })
+                        .unwrap();
+                }
+            }
+            for unit in [FilterUnit::X, FilterUnit::Y] {
+                for param in [
+                    F::Freq,
+                    F::Resonance,
+                    F::HighPass,
+                    F::BandPass,
+                    F::LowPass,
+                    F::On,
+                    F::VcfToXfader,
+                    F::Link,
+                ] {
+                    r.controls
+                        .push(Control::Filter {
+                            unit,
+                            param,
+                            value: v,
+                        })
+                        .unwrap();
+                }
+            }
+            r.controls
+                .push(Control::Crossfader { pos: v, curve: v })
+                .unwrap();
+            r.controls
+                .push(Control::Master {
+                    param: MasterParam::Level,
+                    value: 1.0 - v,
+                })
+                .unwrap();
+            let n = realtime(|| {
+                for _ in 0..4 {
+                    r.p.process(&mut out_f32, 2);
+                }
+                let _ = r.p.graph.state();
+            });
+            assert_eq!(n, 0, "mixer controls, step {step}");
+        }
+
         // Varispeed, nudge, cue, hot cue and quantised jumps.
         let gridded = Arc::new(
             DeckSource::new(vec![500; RATE as usize * 4], 44_100)

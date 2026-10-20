@@ -106,10 +106,10 @@ pub enum Control {
    selection, more than one deck, and the `Control`/`EngineState` variants below.
    Done 2026-10-21: `EngineConfig { sample_rate, buffer_frames, cue }` (an
    explicit rate or buffer the device lacks is an error; `device_options()`
-   lists what it offers), 4 deck slots summed until the channel strips land,
+   lists what it offers), 4 deck slots (into the mixer since task 6),
    `Control` in `control.rs` with every variant above plus `Quantise`;
    `Leader` takes `Option<u8>` (`None` = automatic) and `Seek` keeps its
-   `frame` field. Mixer variants are accepted and ignored until tasks 4–7.
+   `frame` field.
 2. [x] **Deck**: `DeckSource` loading, play/pause/cue/seek/hot cue, varispeed with
    `rubato`, nudge, quantise. Tests: at ratio 1.0 the render equals the decode
    sample for sample; at 1.05 click spacing is 1/1.05 of the original within 1 sample.
@@ -142,23 +142,27 @@ pub enum Control {
    flat within ±0.1 dB; full boost +6 dB ±0.5 dB; mids full cut −30 dB ±1 dB;
    HI/LO full cut fall at 12 dB/oct ±1 dB past the turning point; silence in,
    silence out (no NaN or denormals). Done: `reks-mix::taper` and
-   `dsp::eq::ChannelEq`, standalone (not yet in the graph); laws and
+   `dsp::eq::ChannelEq`, in every channel strip since task 6; laws and
    tolerances in [`../mixer-dsp.md`](../mixer-dsp.md).
 5. [x] **Filters**: two state-variable filters (trapezoidal SVF from the
    published papers, our own code), mode combinations, resonance taper,
    VCF TO XFADER, LINK. Tests: −3 dB at the set
    cutoff for LP and HP at minimum resonance; stable at maximum resonance across
    30 Hz–20 kHz at 44.1, 48 and 96 kHz. Done: `dsp::filter` (`Filter`, `FilterPanel`
-   for VCF TO XFADER and LINK), standalone; MILD is Butterworth, not the
+   for VCF TO XFADER and LINK), wired in task 6; MILD is Butterworth, not the
    hardware's likely overdamped setting ([`../mixer-dsp.md`](../mixer-dsp.md)).
-6. **Channels, crossfader, master**: trim, fader taper, X/off/Y assign,
+6. [x] **Channels, crossfader, master**: trim, fader taper, X/off/Y assign,
    crossfader curve law, master level, meters, limiter. Tests: crossfader gain
    at 0, 0.5 and 1 for both curve extremes (−4 dB at centre on progressive);
-   limiter ceiling holds with resonance at maximum. Partial: the DSP blocks
-   are done and tested (`dsp::level`, `dsp::xfader`, `dsp::meter`,
-   `dsp::limiter`, [`../mixer-dsp.md`](../mixer-dsp.md)). Still to do: wire
-   channel strips, EQ, filter and crossfader assigns, master and limiter into
-   `graph.rs`, with `Control::Channel`/`Filter`/`Crossfader`/`Master`.
+   limiter ceiling holds with resonance at maximum. Done 2026-10-21: DSP in
+   `dsp::level`, `dsp::xfader`, `dsp::meter`, `dsp::limiter`; wired in
+   `strip.rs` (trim → EQ → FILTER assign → fader → XFADE assign) and
+   `mixer.rs` (filter units, crossfader, master level → meter → limiter),
+   driven by `Control::Channel`/`Filter`/`Crossfader`/`Master`. Channel and
+   master meters are in `EngineState`. The limiter delays the output by
+   1.5 ms (`Graph::latency()`). A flat strip passes a deck bit for bit.
+   Render tests in `crates/reks-mix/tests/mixer.rs`
+   ([`../mixer-dsp.md`](../mixer-dsp.md)).
 7. **Cue system**: cue bus, pre/post EQ, cue/mix balance, split cue, routing.
    Test: each routing mode puts the expected signal on each output channel.
 8. **Tauri commands and IPC**: thin `mix_*` commands, typed wrappers in

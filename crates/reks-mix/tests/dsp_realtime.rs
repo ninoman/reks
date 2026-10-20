@@ -45,7 +45,7 @@ fn dsp_processing_never_allocates_or_frees() {
     let rate = 48_000;
     let mut eq = ChannelEq::new(rate);
     let mut filter = Filter::new(rate);
-    let mut level = ChannelLevel::new(rate);
+    let mut level = ChannelLevel::new(1.0, rate);
     let mut master = MasterLevel::new(1.0, rate);
     let mut xfader = Crossfader::new(rate);
     let mut assign = AssignSwitch::new(Assign::X, rate);
@@ -82,7 +82,8 @@ fn dsp_processing_never_allocates_or_frees() {
         eq.process(&mut buf);
         filter.process(&mut buf);
         for frame in buf.as_chunks_mut::<2>().0 {
-            let g = level.tick() * assign.tick(xfader.tick()) * master.tick();
+            let l = level.tick();
+            let g = l.trim * l.fader * assign.tick(xfader.tick()) * master.tick();
             frame[0] *= g;
             frame[1] *= g;
         }

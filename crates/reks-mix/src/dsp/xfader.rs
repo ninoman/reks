@@ -90,8 +90,16 @@ impl Crossfader {
     }
 }
 
-/// A channel's XFADE assign switch. Moving it crossfades between the old and
-/// new routing instead of stepping.
+/// The three routing weights of an assign switch; they sum to 1.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AssignWeights {
+    pub x: f32,
+    pub off: f32,
+    pub y: f32,
+}
+
+/// A channel's XFADE or FILTER assign switch. Moving it crossfades between
+/// the old and new routing instead of stepping.
 #[derive(Debug, Clone)]
 pub struct AssignSwitch {
     x: Smoother,
@@ -120,10 +128,32 @@ impl AssignSwitch {
         self.y.set(w(Assign::Y));
     }
 
+    /// Advances one frame and returns the weights.
+    #[inline]
+    pub fn tick_weights(&mut self) -> AssignWeights {
+        AssignWeights {
+            x: self.x.tick(),
+            off: self.off.tick(),
+            y: self.y.tick(),
+        }
+    }
+
     /// Advances one frame; the channel's crossfader gain for `gains`.
     #[inline]
     pub fn tick(&mut self, gains: XfadeGains) -> f32 {
-        self.x.tick() * gains.x + self.off.tick() + self.y.tick() * gains.y
+        let w = self.tick_weights();
+        w.x * gains.x + w.off + w.y * gains.y
+    }
+
+    /// Whether side X or Y is heard now or is ramping in, so its processing
+    /// must run.
+    pub fn uses(&self, side: Assign) -> bool {
+        let s = match side {
+            Assign::X => &self.x,
+            Assign::Off => &self.off,
+            Assign::Y => &self.y,
+        };
+        s.value() > 0.0 || s.target() > 0.0
     }
 }
 
