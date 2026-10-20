@@ -8,6 +8,8 @@ pub mod input;
 pub use beats::{Beat, BeatError, BeatList, BeatTracker, ModelPaths};
 pub use input::{AnalysisInput, InputError, ANALYSIS_RATE, BEAT_RATE};
 
+pub mod grid;
+
 /// Crate version, from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

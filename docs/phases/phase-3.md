@@ -54,9 +54,9 @@ pub struct BeatAnalysis {
     pub grid: Grid,
     pub confidence: f32,
 }
-pub enum Grid {
-    Constant { first_beat_s: f64, bpm: f64, first_beat_in_bar: u8 },        // bpm snapped per BeatUtils rules
-    Dynamic  { anchors: Vec<Anchor> },                                        // Anchor { time_s, bpm, beat_in_bar }
+pub enum Grid {                    // reks_analysis::grid; positions are i64 samples
+    Constant { bpm: f64, first_beat: i64, first_beat_in_bar: u8 },          // bpm snapped per BeatUtils rules
+    Dynamic  { beats: Vec<GridBeat> },                                        // GridBeat { position, beat_in_bar }
 }
 pub struct KeyAnalysis { pub key: Key, pub confidence: f32, pub chroma: [f32; 12] }
 
@@ -73,10 +73,12 @@ pub struct Waveforms {             // encoded Pioneer forms
 pub fn analyse(input: &AnalysisInput, opts: &AnalysisOptions, progress: impl Fn(f32)) -> Result<Analysis>;
 pub struct Analysis { pub beats: BeatAnalysis, pub key: KeyAnalysis, pub waves: Waveforms, pub duration_ms: u64 }
 
-pub mod grid {   // Mixxx BeatUtils port (GPL-2.0-or-later origin, attributed)
-    pub fn const_regions(beats: &[f64], max_phase_err_s: f64 /*0.025*/, min_beats: usize /*16*/) -> Vec<Region>;
-    pub fn make_const_bpm(regions: &[Region], downbeats: &[f64]) -> Option<(f64 /*bpm*/, f64 /*first beat*/, u8)>;
-    pub fn round_bpm_within_range(bpm: f64, region_len_beats: usize, tol_s: f64) -> f64;   // integer → 0.5 → 0.1 → 0.01
+pub mod grid {   // Mixxx BeatUtils port (GPL-2.0-or-later origin, attributed); see crates/reks-analysis/src/grid.rs
+    pub struct BeatList { pub sample_rate: u32, pub beats: Vec<TrackedBeat> }  // TrackedBeat { position: i64, downbeat: bool }
+    pub fn build_grid(input: &BeatList, opts: &GridOptions) -> Result<Grid, GridError>;
+    pub fn retrieve_const_regions(beats: &[i64], sample_rate: u32) -> Vec<ConstRegion>;   // 25 ms phase tolerance
+    pub fn make_const_bpm(regions: &[ConstRegion], sample_rate: u32) -> Option<ConstTempo>;  // merges regions ≥ 16 beats
+    pub fn round_bpm_within_range(min: f64, center: f64, max: f64) -> f64;   // integer → 0.5 → 0.1 → 0.01
 }
 
 // reks-anlz
@@ -143,12 +145,20 @@ stores the grid, key, confidence and `analysis_version` on the track row
    right; silence gives no beats. The plain click fixture has no accents, so
    its downbeats are not tested. Tests in
    [tests/beats.rs](../../crates/reks-analysis/tests/beats.rs).
-3. **Grid builder**: port Mixxx `BeatUtils::retrieveConstRegions` /
+3. [x] **Grid builder**: port Mixxx `BeatUtils::retrieveConstRegions` /
    `makeConstBpm` / `roundBpmWithinRange` with attribution; choose the
    downbeat nearest the start of the longest constant region as beat 1;
    fall back to `Dynamic` when no region covers ≥ 80% of beats; tests:
    synthetic beat lists with jitter, tempo change at 2:00, half/double
    tempo ambiguity (prefer 70–180 BPM range by genre-agnostic octave rule).
+   Done: [`grid.rs`](../../crates/reks-analysis/src/grid.rs). Coverage is the
+   share of all beats within 25 ms of the constant grid; the octave rule
+   doubles below 70 and halves above 180 BPM (dynamic grids by their median
+   tempo), so 80–90 and 160–180 BPM stay as tracked. Every BPM rounding rung
+   is range-checked (Mixxx's unchecked 1/2 and 2/3 guesses and 1/12 rung are
+   dropped). The constant grid's `first_beat` is extrapolated back to the
+   earliest beat ≥ 0; the PQTZ writer decides whether to emit beats before
+   the first tracked one.
 4. **Decoder-delay calibration**: export a reference set from rekordbox
    (same MP3/AAC/FLAC files) and compare rekordbox cue/grid times with ours;
    determine the per-codec offset convention (Mixxx saw 26/52 ms on MP3);
