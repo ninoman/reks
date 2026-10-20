@@ -1,0 +1,201 @@
+//! Seam to the OneLibrary writer (Phase 4 task 8, D14): the planner asks a
+//! [`OneLibraryExport`] what writing `PIONEER/rekordbox/exportLibrary.db`
+//! next to the legacy export would do, so the dry run lists it.
+//!
+//! The writer lives in `reks-export-onelibrary`, which depends on this crate
+//! for [`ExportPlan`]; so this crate holds only the trait, and the app picks
+//! the implementation. Until the writer lands the app uses [`NoWriter`]
+//! (feature `onelibrary-stub`), which plans the file but blocks the export.
+//!
+//! The key comes from [`resolve_key`]: the `setting` table first, then
+//! `REKS_ONELIBRARY_KEY` (Phase 4 key policy). It is never logged and never
+//! part of a plan.
+
+use std::path::Path;
+
+use reks_core::{Library, OneLibraryKey};
+use serde::{Deserialize, Serialize};
+
+use crate::plan::{on_stick, ExportPlan, FileOp, OpReason, PlanError, Problem, Warning};
+
+/// The OneLibrary database, from the stick root.
+pub const DB_PATH: &str = "/PIONEER/rekordbox/exportLibrary.db";
+
+/// The environment variable read when no key is stored (CI, testing).
+pub const KEY_ENV: &str = "REKS_ONELIBRARY_KEY";
+
+/// What the OneLibrary step of an export does. Part of the dry run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OneLibraryPlan {
+    /// `exportLibrary.db` itself: `dst_rel` [`DB_PATH`], `bytes` an estimate
+    /// (not counted in [`ExportPlan::bytes_to_write`], like `export.pdb`),
+    /// reason [`OpReason::OneLibrary`].
+    pub write: FileOp,
+    /// rekordbox's auxiliary files on the stick that the write removes
+    /// ([`auxiliary_files`]), reason [`OpReason::OneLibraryAuxiliary`].
+    pub removes: Vec<FileOp>,
+    /// The `exportLibrary.db` already on the stick, which the write replaces.
+    pub existing: ExistingLibrary,
+    pub warnings: Vec<Warning>,
+    /// Blockers; the planner adds them to [`ExportPlan::errors`].
+    pub errors: Vec<Problem>,
+}
+
+/// The `exportLibrary.db` on the stick before the export.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ExistingLibrary {
+    Absent,
+    /// Opened with the key: the play history players logged in it. Sessions
+    /// make the export guard ask for a choice (reks cannot import them
+    /// before Phase 4 task 11).
+    Read {
+        sessions: u32,
+        entries: u32,
+    },
+    /// Present but not read (no reader, wrong key, corrupt). It may hold
+    /// history: the Phase 2 safeguard backs it up by default.
+    NotRead {
+        reason: String,
+    },
+}
+
+/// Plans the OneLibrary database for an export. Implemented by the
+/// `reks-export-onelibrary` writer and by [`NoWriter`].
+pub trait OneLibraryExport: Send + Sync {
+    /// What writing `exportLibrary.db` for `plan` would do. Reads the stick
+    /// only; `key` opens the existing database, if any.
+    fn plan(&self, plan: &ExportPlan, key: &OneLibraryKey) -> Result<OneLibraryPlan, PlanError>;
+}
+
+/// The key the export uses: the stored one, else `REKS_ONELIBRARY_KEY`.
+pub fn resolve_key(lib: &Library) -> Result<Option<OneLibraryKey>, reks_core::Error> {
+    let env = std::env::var(KEY_ENV).ok().map(zeroize::Zeroizing::new);
+    Ok(pick_key(
+        lib.onelibrary_key()?,
+        env.as_deref().map(String::as_str),
+    ))
+}
+
+/// [`resolve_key`]'s order, on values already read.
+pub fn pick_key(stored: Option<OneLibraryKey>, env: Option<&str>) -> Option<OneLibraryKey> {
+    stored.or_else(|| env.and_then(OneLibraryKey::new))
+}
+
+/// rekordbox's files next to `exportLibrary.db` that a new one must not sit
+/// beside ([`baken_export::ONELIBRARY_FILES`] without the database itself:
+/// its `-wal`/`-shm`, which SQLite would replay into ours, and
+/// `exportExt.pdb`), as found on the stick under `root`.
+pub fn auxiliary_files(root: &Path) -> Result<Vec<FileOp>, PlanError> {
+    let rb_dir = DB_PATH.rsplit_once('/').map_or("", |(dir, _)| dir);
+    let mut found = Vec::new();
+    for name in baken_export::ONELIBRARY_FILES {
+        let rel = format!("{rb_dir}/{name}");
+        if rel == DB_PATH {
+            continue;
+        }
+        let path = on_stick(root, &rel);
+        match std::fs::metadata(&path) {
+            Ok(meta) if meta.is_file() => found.push(FileOp {
+                src: None,
+                dst_rel: rel,
+                bytes: meta.len(),
+                track_id: None,
+                reason: OpReason::OneLibraryAuxiliary,
+            }),
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(source) => return Err(PlanError::Stick { path, source }),
+        }
+    }
+    Ok(found)
+}
+
+/// The planned `exportLibrary.db` write for `plan`, with `bytes` as given.
+pub fn db_write(bytes: u64) -> FileOp {
+    FileOp {
+        src: None,
+        dst_rel: DB_PATH.to_owned(),
+        bytes,
+        track_id: None,
+        reason: OpReason::OneLibrary,
+    }
+}
+
+/// Stand-in until the writer lands: lists the file and what it would remove,
+/// and blocks the export with [`Problem::OneLibraryUnavailable`].
+#[cfg(any(test, feature = "onelibrary-stub"))]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoWriter;
+
+#[cfg(any(test, feature = "onelibrary-stub"))]
+impl OneLibraryExport for NoWriter {
+    fn plan(&self, plan: &ExportPlan, _key: &OneLibraryKey) -> Result<OneLibraryPlan, PlanError> {
+        let root = plan.device.mount_point.as_path();
+        let existing = if plan.history.onelibrary_db {
+            ExistingLibrary::NotRead {
+                reason: "this build has no OneLibrary reader".to_owned(),
+            }
+        } else {
+            ExistingLibrary::Absent
+        };
+        Ok(OneLibraryPlan {
+            write: db_write(0),
+            removes: auxiliary_files(root)?,
+            existing,
+            warnings: Vec::new(),
+            errors: vec![Problem::OneLibraryUnavailable],
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stored_key_wins_over_the_environment() {
+        let stored = OneLibraryKey::new("stored");
+        assert_eq!(pick_key(stored, Some("env")).unwrap().expose(), "stored");
+        assert_eq!(pick_key(None, Some(" env ")).unwrap().expose(), "env");
+        assert!(pick_key(None, Some("  ")).is_none());
+        assert!(pick_key(None, None).is_none());
+    }
+
+    #[test]
+    fn auxiliary_files_lists_what_is_there_but_not_the_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let rb = dir.path().join("PIONEER/rekordbox");
+        std::fs::create_dir_all(&rb).unwrap();
+        for (name, body) in [
+            ("exportLibrary.db", &b"db"[..]),
+            ("exportLibrary.db-wal", b"wal!"),
+            ("exportExt.pdb", b"ext"),
+        ] {
+            std::fs::write(rb.join(name), body).unwrap();
+        }
+        let found = auxiliary_files(dir.path()).unwrap();
+        let rels: Vec<(&str, u64)> = found
+            .iter()
+            .map(|f| (f.dst_rel.as_str(), f.bytes))
+            .collect();
+        assert_eq!(
+            rels,
+            [
+                ("/PIONEER/rekordbox/exportLibrary.db-wal", 4),
+                ("/PIONEER/rekordbox/exportExt.pdb", 3)
+            ]
+        );
+        assert!(found
+            .iter()
+            .all(|f| f.reason == OpReason::OneLibraryAuxiliary));
+        assert!(auxiliary_files(&dir.path().join("empty"))
+            .unwrap()
+            .is_empty());
+    }
+}

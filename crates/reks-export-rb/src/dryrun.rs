@@ -798,6 +798,7 @@ fn warning_kind(w: &Warning) -> &'static str {
         Warning::EmptyPlaylist { .. } => "emptyPlaylist",
         Warning::StickHistory { .. } => "stickHistory",
         Warning::NoVolumeSerial => "noVolumeSerial",
+        Warning::OneLibraryExperimental => "oneLibraryExperimental",
     }
 }
 
@@ -853,6 +854,9 @@ fn problem_kind(p: &Problem) -> &'static str {
         Problem::DiscardNotConfirmed => "discardNotConfirmed",
         Problem::HistoryNotImported { .. } => "historyNotImported",
         Problem::HistoryImportUnavailable { .. } => "historyImportUnavailable",
+        Problem::OneLibraryKeyMissing => "oneLibraryKeyMissing",
+        Problem::OneLibraryUnavailable => "oneLibraryUnavailable",
+        Problem::OneLibraryHistoryNotImported { .. } => "oneLibraryHistoryNotImported",
     }
 }
 

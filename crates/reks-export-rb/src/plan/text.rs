@@ -84,6 +84,10 @@ impl fmt::Display for Warning {
                 "the OS gave no volume serial: backups go under \"unknown-serial\" and no \
                  export manifest is kept for this stick",
             ),
+            Self::OneLibraryExperimental => f.write_str(
+                "OneLibrary (exportLibrary.db) is experimental: no player has been tested with \
+                 reks's file, and AlphaTheta does not support third-party OneLibrary exports",
+            ),
         }
     }
 }
@@ -136,6 +140,22 @@ impl fmt::Display for Problem {
             Self::HistoryImportUnavailable { message } => write!(
                 f,
                 "cannot import the stick's play history ({message}); back it up or discard it"
+            ),
+            Self::OneLibraryKeyMissing => f.write_str(
+                "the OneLibrary export needs its key: paste it in Settings → Experimental \
+                 or set REKS_ONELIBRARY_KEY",
+            ),
+            Self::OneLibraryUnavailable => f.write_str(
+                "this build of reks cannot write exportLibrary.db yet; turn the OneLibrary \
+                 export off",
+            ),
+            Self::OneLibraryHistoryNotImported { sessions } => write!(
+                f,
+                "exportLibrary.db on the stick holds {sessions} play history session{} that \
+                 reks cannot import yet; back {} up or discard {}",
+                if *sessions == 1 { "" } else { "s" },
+                if *sessions == 1 { "it" } else { "them" },
+                if *sessions == 1 { "it" } else { "them" },
             ),
         }
     }

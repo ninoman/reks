@@ -78,6 +78,8 @@ tracing = "0.1"
 trash = "5"
 unicode-normalization = "0.1"
 walkdir = "2.5"
+# Wipes the OneLibrary key from memory on drop (Phase 4 key policy). Apache-2.0 OR MIT.
+zeroize = "1.8"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Ioctl"] }
 
 # Lints shared by the library crates (`[lints] workspace = true`).

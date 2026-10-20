@@ -26,6 +26,7 @@ tracing = { workspace = true }
 trash = { workspace = true }
 unicode-normalization = { workspace = true }
 walkdir = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 baken-export = { workspace = true }
