@@ -121,6 +121,12 @@ https://github.com/dylanljones/pyrekordbox · https://github.com/kimtore/rex
   the passphrase alone; DjManager #300 reports the standard profiles failed
   and loaded rekordbox's own `sqlite3.dll`. Likely a passphrase-vs-raw-key
   difference. **UNVERIFIED** until tested against a real 7.2.13+ export.
+  Tested 2026-10-20 (Phase 4 task 2) on rekordbox 7.2.19.0342's export of
+  the fixture tracks (`fixtures/onelibrary/ref-7.2.19/`): stock SQLCipher 4
+  with the passphrase opens it, `integrity_check` ok. rekordbox leaves the
+  file in WAL mode with a 910 KiB `-wal` beside a 118 KiB `.db`.
+  `property.dbVersion` is `"1000"`; every `content` value equals the
+  `export.pdb` track row's (D14).
 - Schema (22 tables, 4 indexes): `property`, `content` (~40 columns incl.
   `path`, `fileName`, `analysisDataFilePath`, `analysedBits`, `contentLink`,
   `masterDbId`, `masterContentId`, `bpmx100`, `length`, `key_id`…), lookups
@@ -492,8 +498,10 @@ Track these; each should be resolved by a test, a reference export, or a
 hardware run, and the result recorded in `docs/decisions.md` or
 `docs/hw-test-log.md`.
 
-1. OneLibrary cipher parameters (stock SQLCipher 4 vs non-default) and
-   `property.dbVersion` value; seed table contents.
+1. ~~OneLibrary cipher parameters (stock SQLCipher 4 vs non-default) and
+   `property.dbVersion` value; seed table contents.~~ Resolved 2026-10-20 for
+   rekordbox 7.2.19 (§2, D14). Default `myTag` names and folder `attribute`
+   still UNVERIFIED (not in the reference).
 2. Whether any third-party `exportLibrary.db` loads on a real OneLibrary
    player; whether the CDJ-3000X "flexible loading" firmware shipped.
 3. USBANLZ folder hash algorithm and whether players recompute it or trust

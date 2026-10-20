@@ -12,9 +12,6 @@ workspace = true
 [features]
 # Synthetic export.pdb / ANLZ builders for other crates' tests (reks-cli).
 test-util = []
-# `onelibrary::NoWriter`: the OneLibrary step's stand-in until the
-# reks-export-onelibrary writer lands (Phase 4 task 8).
-onelibrary-stub = []
 
 [dependencies]
 baken-core = { workspace = true }

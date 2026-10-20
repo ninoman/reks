@@ -1127,7 +1127,7 @@ fn entry_row(row: &Row) -> Result<(u32, u32, u32), String> {
 /// The file at stick path `rel` (`/`-separated), each component matched
 /// ignoring ASCII case when the exact name is absent (FAT is
 /// case-insensitive, a temp dir on Linux is not).
-pub(crate) fn locate(root: &Path, rel: &str) -> io::Result<Option<PathBuf>> {
+pub fn locate(root: &Path, rel: &str) -> io::Result<Option<PathBuf>> {
     let mut path = root.to_path_buf();
     for part in rel.split('/').filter(|p| !p.is_empty()) {
         let exact = path.join(part);

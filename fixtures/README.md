@@ -2,7 +2,8 @@
 
 Test inputs for the reks crates. Everything here is generated or synthetic,
 except `rekordbox/ref-rb6-demo/` (rekordbox's analysis of its own demo tracks,
-from rekordcrate's MPL-2.0 test data; no audio). Never commit commercial audio
+from rekordcrate's MPL-2.0 test data; no audio) and `onelibrary/ref-7.2.19/`
+(rekordbox's export of our `audio/` files; no audio). Never commit commercial audio
 or a real user's library (CLAUDE.md "Testing rules").
 
 ## `audio/` — sine + click test signal
@@ -116,6 +117,28 @@ rekordbox 6's `USBANLZ` for its two demo tracks, unchanged from rekordcrate
 0.3.0's test data (MPL-2.0). Golden reference for the ANLZ builder
 (`crates/reks-anlz/tests/golden.rs`); provenance and contents in its
 [README](rekordbox/ref-rb6-demo/README.md).
+
+## `onelibrary/ref-7.2.19/` — rekordbox 7.2.19 export (OneLibrary reference)
+
+Phase 4 task 1, captured 2026-10-20 by the maintainer: rekordbox 7.2.19.0342
+(macOS) exported one playlist, `reks-test`, holding the seven `audio/` files,
+to a freshly erased FAT32 (MBR) stick. Copied from the stick:
+`PIONEER/rekordbox/export.pdb`, `exportLibrary.db` and `PIONEER/USBANLZ/`.
+Left out: `Contents/` (audio), `exportExt.pdb` (it holds the maintainer's My
+Tag tags), `PIONEER/djprofile.nxs` (the DJ's name),
+`PIONEER/extracted/gcred.dat` (a credential file), and the `*SETTING.DAT`
+files.
+
+`exportLibrary.db` is sanitised: rekordbox copies the exporting user's My
+Tag tags into `myTag`; those 45 rows were deleted with the key, then the
+database was vacuumed and checkpointed, which folded rekordbox's 910 KiB
+`-wal` into the file. Everything else is as rekordbox wrote it; the four My
+Tag columns keep the maintainer's names (Genre, Groove, Vibe, Mood).
+
+`dump.json` is the decrypted `exportLibrary.db` (`reks onelibrary dump`), so
+tests compare against it without the key; an ignored test checks it against
+the encrypted file with `REKS_ONELIBRARY_KEY`. The tracks carry no album,
+genre, label or artwork.
 
 ## `device/diskutil-info-fat32.plist`
 

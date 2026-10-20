@@ -41,6 +41,7 @@ mod analyse;
 mod anlz;
 mod convert;
 mod history;
+mod onelibrary;
 mod parity;
 mod rb;
 
@@ -83,6 +84,7 @@ fn main() -> anyhow::Result<()> {
             import_xml(Path::new(db), Path::new(xml), rest)
         }
         [cmd, rest @ ..] if cmd == "rb" => rb::run(rest),
+        [cmd, rest @ ..] if cmd == "onelibrary" => onelibrary::run(rest),
         [cmd, rest @ ..] if cmd == "convert" => convert::run(rest),
         [cmd, rest @ ..] if cmd == "history" => history::run(rest),
         [cmd, rest @ ..] if cmd == "adopt" => adopt::run(rest),
@@ -95,6 +97,7 @@ fn main() -> anyhow::Result<()> {
              | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run] \
              | rb plan|export|validate <stick> ... | rb history <stick> [--json] \
              | rb diff <ours-stick> <reference-stick> [--json] \
+             | onelibrary dump|diff|validate ... \
              | history scan|import <stick|backup> --library <library.sqlite> ... \
              | adopt scan <stick> --library <library.sqlite> [--json] \
              | convert plan|apply --library <library.sqlite> ... \

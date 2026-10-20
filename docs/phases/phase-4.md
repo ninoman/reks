@@ -3,10 +3,9 @@
 Status: in progress (started 2026-10-20 ahead of the Phase 3 close, with the
 maintainer's approval: Phase 3's ANLZ builder and export integration are in
 main; its accuracy tuning (12a) and hardware checks continue in parallel; no
-players available, so player behaviour stays UNVERIFIED). Task 8 done with a
-stub writer; task 1 (reference capture) pending. Depends on: Phase 2 (legacy
-export, ANLZ layout, planner)
-and Phase 3 (own analysis, so every exported track has ANLZ files). Read
+players available, so player behaviour stays UNVERIFIED). Tasks 1–8 and 10
+done (2026-10-20); 9 (hardware) and 11 (history import) open. Depends on:
+Phase 2 (legacy export, ANLZ layout, planner) and Phase 3 (own analysis, so every exported track has ANLZ files). Read
 `docs/decisions.md` §OneLibrary and `docs/research.md` §2 first.
 
 ## Goal
@@ -22,20 +21,20 @@ files, mirroring what rekordbox 7.2.11+ does on every export.
 - OneLibrary = "Device Library Plus", renamed in rekordbox 7.2.5. Official
   guidance: rekordbox writes **both** libraries; a stick needs both to work on
   every current player.
-- The file is a SQLite database encrypted with SQLCipher (v4-style profile).
-  The passphrase is static across all sticks and has been published by several
-  community projects. The exact KDF/cipher parameters are reported
-  inconsistently (stock SQLCipher 4 profile vs. "standard params failed");
-  **UNVERIFIED** until we open a real rekordbox 7.2.13+ export ourselves.
+- The file is a SQLite database encrypted with SQLCipher. The passphrase is
+  static across all sticks and has been published by several community
+  projects. Verified 2026-10-20 on rekordbox 7.2.19's export (task 2): stock
+  SQLCipher 4 with the key as a passphrase opens it (decisions.md D14).
+  rekordbox leaves it in WAL mode with most rows in `exportLibrary.db-wal`.
 - Schema: 22 tables (`property`, `content`, `artist`, `album`, `genre`,
   `label`, `key`, `color`, `image`, `playlist`, `playlist_content`, `cue`,
   `history`, `history_content`, `hotCueBankList`, `hotCueBankList_cue`,
   `myTag`, `myTag_content`, `menuItem`, `category`, `sort`, `recommendedLike`)
   plus 4 indexes. rekordbox exports `cue` empty; grids, waveforms and cues
   stay in ANLZ. `content.analysisDataFilePath` must match the ANLZ path.
-- Seed rows (`menuItem`, `category`, `sort`, `color`, default `myTag`) and
-  `property.dbVersion` must be copied from a real export; published values
-  conflict (`1000` vs `'10000'`).
+- Seed rows (`menuItem`, `category`, `sort`) come from the reference;
+  `property.dbVersion` is the string `"1000"` on 7.2.19. `color` holds the
+  same 8 rows as `export.pdb`'s colour table.
 - **No open-source writer has a published success on a real OneLibrary player**
   as of 2026-10-18 (baken: "No OneLibrary player has read the --onelibrary
   output yet"). AlphaTheta is "reviewing the specifications" and has withdrawn
@@ -79,64 +78,76 @@ files, mirroring what rekordbox 7.2.11+ does on every export.
 
 ## Data structures and interfaces
 
-```rust
-pub struct OneLibraryTarget { pub rekordbox_version: RbVersion /* e.g. 7.2.19 */ }
+As built (tasks 2–7, 10); code in
+[`reks-export-onelibrary`](../../crates/reks-export-onelibrary/src/lib.rs):
 
-pub struct OneLibraryWriter<'a> { plan: &'a ExportPlan, key: Zeroizing<String>, target: OneLibraryTarget }
-impl OneLibraryWriter<'_> {
-    /// Builds the DB in a temp file, verifies it, then moves it into place.
-    pub fn write(&self, usb_root: &Path, progress: impl Fn(Progress)) -> Result<WriteReport>;
-}
+- `OneLibraryWriter { version: RbVersion }` implements the planner's
+  `OneLibraryExport` (task 8): `plan` estimates the file, lists the auxiliary
+  files and reads the existing database's history counts with the key;
+  `write(plan, key, device_root)` builds and replaces the file (task 6).
+- `build::from_pdb(&PdbLibrary, created_date) -> OneLibrary`: pure mapping
+  from the `export.pdb` baken just wrote (read by
+  [`reks_export_rb::pdbread`](../../crates/reks-export-rb/src/pdbread.rs))
+  to typed rows (`rows.rs`); `store` inserts and reads them.
+- `schema::RbVersion` (`V7_2_19`): DDL and seed SQL in
+  `crates/reks-export-onelibrary/data/<version>/`, `create_empty`.
+- `OneLibraryReader::open(path, key)`: opens a temp copy of the database and
+  its `-wal`/`-shm` (never the stick's file); `integrity_check`, `library`,
+  `dump`, `history_counts`.
+- `validate::validate(device_root, key)`, and `diff::diff(ours, theirs,
+  DiffOptions)` over `dump::Dump` (the fixtures' `dump.json` format).
 
-pub struct OneLibraryReader { conn: rusqlite::Connection }
-impl OneLibraryReader {
-    pub fn open(path: &Path, key: &str) -> Result<Self>;           // PRAGMA key, cipher_compatibility=4 (to verify)
-    pub fn property(&self) -> Result<Property>;
-    pub fn contents(&self) -> Result<Vec<Content>>;
-    pub fn playlists(&self) -> Result<Vec<Playlist>>;
-    pub fn dump_seed_tables(&self) -> Result<SeedTables>;            // menuItem, category, sort, color, myTag
-}
-
-pub struct SeedTables { /* rows captured from a real export; serialised to fixtures/onelibrary/seed-<ver>.json */ }
-```
-
-Mapping from the export plan (same source as Phase 2's PDB):
-- `content`: one row per planned track. `path` = absolute-from-root
-  `/Contents/<Artist>/<Album>/<file>` (confirm separator and leading slash
-  against reference), `fileName`, `fileSize`, `fileType` (same codes as PDB),
-  `bpmx100`, `length` (s), `key_id` → `key.name` written in the user's notation
-  (reference stores "as written"), `analysisDataFilePath` =
-  `/PIONEER/USBANLZ/.../ANLZ0000.DAT` (verify whether DAT or folder),
-  `analysedBits` (reference shows 41 for fully analysed; UNVERIFIED meaning),
-  `contentLink` (reference constant; UNVERIFIED), `masterDbId`/`masterContentId`
-  (our library UUID and track id), dates in rekordbox's string format.
-- Lookups `artist/album/genre/label/key/color` de-duplicated by name;
-  `album.isComplation` spelled as in the reference schema.
-- `playlist` with `playlist_id_parent`, `sequenceNo`, `attribute` (folder vs
-  playlist code from reference); `playlist_content` ordered by `sequenceNo`.
-- `image`: only when Phase 2 artwork is enabled; paths under `PIONEER/Artwork`.
-- `property`: `deviceName`, `dbVersion`, `numberOfContents`, `createdDate`,
-  `backGroundColorType`, `myTagMasterDBID` copied from reference semantics.
+Mapping (verified against the reference, where rekordbox's `content` values
+equal its `export.pdb` track rows): ids are the PDB row ids; `path`,
+`fileName`, `analysisDataFilePath` (`.../ANLZ0000.DAT`) are the PDB strings;
+`masterDbId` = track row 0x18, `masterContentId` = 0x14, `contentLink` = the
+row bitmask (0xC0700), `analysedBits` = 0x56 (41); `isHotCueAutoLoadOn` /
+`isKuvoDeliverStatusOn` are the PDB's `"ON"` strings; unset ids are NULL
+except `artist_id_lyricist` and `color_id` (0); dates are `YYYY-MM-DD`
+(`dateCreated` = `dateAdded`); `titleForSearch`/`nameForSearch` NULL.
+Playlists keep the PDB tree: `sequenceNo` = sort order, `attribute` 0 for a
+playlist, 1 for a folder (UNVERIFIED: the reference has no folder),
+`playlist_content.sequenceNo` 1-based. `property`: `deviceName` empty,
+`dbVersion` `"1000"`, `createdDate` the export date, `myTagMasterDBID` 0.
+`myTag`: the four default columns (Genre, Components, Situation, Untitled
+Column, from baken's reference); the maintainer's reference holds their
+renamed columns (and held their tags, removed from the fixture). Albums, genres, labels and artwork are
+empty in the reference, so their rows are UNVERIFIED (mapped like baken).
 
 ## Tasks
 
-1. **Reference capture**: on the maintainer's machine, export a 5-track test
+1. [x] **Reference capture**: on the maintainer's machine, export a 5-track test
    playlist from rekordbox 7.2.x to a fresh stick; copy `exportLibrary.db`,
    `export.pdb`, `exportExt.pdb`, ANLZ into `fixtures/onelibrary/ref-<ver>/`
-   (audio excluded). Record rekordbox version and date.
-2. **Open the reference**: using `rusqlite` with `bundled-sqlcipher`, try the
+   (audio excluded). Record rekordbox version and date. Done 2026-10-20:
+   rekordbox 7.2.19.0342, the 7 `fixtures/audio` files in one playlist on a
+   freshly erased FAT32 stick. The maintainer's My Tag tags were removed and
+   `exportExt.pdb` left out; see `fixtures/README.md`.
+2. [x] **Open the reference**: using `rusqlite` with `bundled-sqlcipher`, try the
    stock SQLCipher 4 profile with the user-supplied key; if it fails, try the
    parameter variants reported in research.md; record what works in
    `docs/decisions.md`. Dump schema DDL and all rows (metadata only) to
-   fixtures. This task resolves the UNVERIFIED cipher question.
-3. **Schema + seed module**: embed DDL and seed JSON per rekordbox version;
+   fixtures. This task resolves the UNVERIFIED cipher question. Done: stock
+   SQLCipher 4 opens it (D14); `reks onelibrary dump` wrote
+   `fixtures/onelibrary/ref-7.2.19/dump.json`. SQLCipher replaces the bundled
+   SQLite workspace-wide; the library DB is unaffected (D14). An ignored test
+   (`REKS_ONELIBRARY_KEY`) checks the dump against the encrypted file.
+3. [x] **Schema + seed module**: embed DDL and seed JSON per rekordbox version;
    `create_empty(version)` test that produces a DB whose schema diff against
-   the reference is empty (`sqlite3 .schema` comparison).
-4. **Content/lookup writer**: fill `content` and lookups from an `ExportPlan`;
+   the reference is empty (`sqlite3 .schema` comparison). Done: SQL files
+   instead of JSON (`data/7.2.19/schema.sql`, `seed.sql`, generated from the
+   dump); `tests/reference.rs` checks schema and seed rows equal the reference.
+4. [x] **Content/lookup writer**: fill `content` and lookups from an `ExportPlan`;
    unit tests comparing a 5-track plan to the reference rows field by field
-   (ignoring ids and timestamps), listing every differing column.
-5. **Playlists writer**: tree + ordering; compare to reference.
-6. **Encryption + atomic write**: build in temp, `PRAGMA integrity_check`,
+   (ignoring ids and timestamps), listing every differing column. Done:
+   rows come from the stick's `export.pdb` (the plan carries no metadata;
+   baken builds the PDB from it), so both libraries agree by construction.
+   Built from the reference's own `export.pdb`, every row equals
+   rekordbox's, ids and dates included, except the `myTag` defaults
+   (strict diff in `tests/reference.rs`).
+5. [x] **Playlists writer**: tree + ordering; compare to reference. Done in
+   the same mapping and test; folders UNVERIFIED (none in the reference).
+6. [x] **Encryption + atomic write**: build in temp, `PRAGMA integrity_check`,
    encrypt (or build encrypted from the start), fsync, rename into place;
    remove rekordbox's auxiliary OneLibrary files if present (list them from
    the reference stick; baken's `ONELIBRARY_FILES` constant is a hint).
@@ -144,9 +155,22 @@ Mapping from the export plan (same source as Phase 2's PDB):
    ([onelibrary.rs](../../crates/reks-export-rb/src/onelibrary.rs)); `apply`
    calls it and already removes the auxiliary files first (see task 8). The
    writer touches only `exportLibrary.db` and a temp file beside it, and
-   leaves no macOS `._` file (baken #192, #196).
-7. **Reader + validator**: open what we wrote, cross-check counts and paths
+   leaves no macOS `._` file (baken #192, #196). Done
+   ([writer.rs](../../crates/reks-export-onelibrary/src/writer.rs)): built
+   encrypted in a local temp dir in WAL mode (as rekordbox's header says),
+   checkpointed to one file, reopened for `integrity_check` and a row-by-row
+   read-back, then written with a plain `write` (no `fs::copy`, so no `._`
+   file), fsynced and renamed over `exportLibrary.db` beside `export.pdb`.
+   The reference stick's auxiliary files are `-wal`, `-shm` and
+   `exportExt.pdb`, baken's `ONELIBRARY_FILES`. The app uses this writer;
+   the `onelibrary-stub` feature is gone (`NoWriter` stays for tests).
+   UNVERIFIED on players: a checkpointed file without `-wal` (rekordbox
+   leaves one).
+7. [x] **Reader + validator**: open what we wrote, cross-check counts and paths
    against `export.pdb` (parsed by rekordcrate) and ANLZ file existence.
+   Done: `validate` (counts, paths, `analysisDataFilePath` vs PDB and on
+   disk, `property.numberOfContents`, playlist orphans); `reks onelibrary
+   validate <stick>`. rekordbox's own reference stick validates clean.
 8. [x] **Planner integration + UI**: experimental toggle, key entry in Settings,
    warnings, dry-run shows the extra file. Done (stub until the writer lands):
    the seam is [`onelibrary.rs`](../../crates/reks-export-rb/src/onelibrary.rs)
@@ -182,11 +206,13 @@ Mapping from the export plan (same source as Phase 2's PDB):
    "OneLibrary (experimental)" line say what was written. The app resolves
    the key at export time and passes the stub, whose `write` refuses. Left
    for the writer's landing: src-tauri swaps `NoWriter` for the writer and
-   drops the `onelibrary-stub` feature.
+   drops the `onelibrary-stub` feature (done with task 6).
 9. **Hardware test**: checklist below on a OneLibrary-only player (borrow or
    rent an OPUS-QUAD/XDJ-AZ/CDJ-3000X). Log results in `docs/hw-test-log.md`.
-10. **Diff tool**: `reks-cli onelibrary diff <ref.db> <ours.db>` to speed up
-    iteration after hardware failures.
+10. [x] **Diff tool**: `reks-cli onelibrary diff <ref.db> <ours.db>` to speed up
+    iteration after hardware failures. Done: `reks onelibrary diff <ours>
+    <theirs> [--strict]` (databases or `dump.json`; ids, master ids and dates
+    ignored unless `--strict`) and `reks onelibrary dump`.
 11. **History (H2, D23)**: read `history` / `history_content` from an existing
     `exportLibrary.db` (key supplied at runtime, as above) into Phase 2.5
     sessions with `source = 'onelibrary'`, from a stick or a Phase 2 backup.
@@ -242,8 +268,8 @@ Mapping from the export plan (same source as Phase 2's PDB):
 - **Hardware rejection with no diagnostics**. Mitigation: start from a byte-
   level diff against a reference export; change one thing at a time; keep the
   diff tool.
-- **Cipher parameter uncertainty**. Mitigation: task 2 is first and blocks
-  everything.
+- **Cipher parameter uncertainty**. Resolved for 7.2.19 (task 2); a new
+  rekordbox version needs a new reference before `RbVersion` gains it.
 - **Format churn** (AlphaTheta "reviewing specifications", CDJ-3000X firmware
   "more flexible library loading" promised). Mitigation: version-tagged
   schema/seed fixtures; refuse to write for an unknown reference version.
