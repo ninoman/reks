@@ -5,8 +5,9 @@ maintainer's approval: Phase 3's ANLZ builder and export integration are in
 main; its accuracy tuning (12a) and hardware checks continue in parallel; no
 players available, so player behaviour stays UNVERIFIED). Tasks 1–8 and 10
 done (2026-10-20); 9 (hardware) and 11 (history import) open. Depends on:
-Phase 2 (legacy export, ANLZ layout, planner) and Phase 3 (own analysis, so every exported track has ANLZ files). Read
-`docs/decisions.md` §OneLibrary and `docs/research.md` §2 first.
+Phase 2 (legacy export, ANLZ layout, planner) and Phase 3 (own analysis, so
+every exported track has ANLZ files). Read `docs/decisions.md` §OneLibrary
+and `docs/research.md` §2 first.
 
 ## Goal
 
@@ -172,16 +173,14 @@ empty in the reference, so their rows are UNVERIFIED (mapped like baken).
    disk, `property.numberOfContents`, playlist orphans); `reks onelibrary
    validate <stick>`. rekordbox's own reference stick validates clean.
 8. [x] **Planner integration + UI**: experimental toggle, key entry in Settings,
-   warnings, dry-run shows the extra file. Done (stub until the writer lands):
-   the seam is [`onelibrary.rs`](../../crates/reks-export-rb/src/onelibrary.rs)
-   in reks-export-rb: the trait `OneLibraryExport::plan(&ExportPlan,
+   warnings, dry-run shows the extra file. Done: the seam is
+   [`onelibrary.rs`](../../crates/reks-export-rb/src/onelibrary.rs) in
+   reks-export-rb: the trait `OneLibraryExport::plan(&ExportPlan,
    &OneLibraryKey) -> OneLibraryPlan` (planned write, auxiliary files
    removed, existing database's history, warnings/problems). The writer
    crate depends on reks-export-rb, so it implements the trait and the app
-   picks the implementation; until then the app uses `NoWriter` (feature
-   `onelibrary-stub`), which lists the file and blocks with "this build cannot
-   write exportLibrary.db". `ExportOptions::onelibrary` (off by default,
-   labelled Experimental) runs
+   picks the implementation (`OneLibraryWriter`, tasks 4–6).
+   `ExportOptions::onelibrary` (off by default, labelled Experimental) runs
    [`plan_onelibrary`](../../crates/reks-export-rb/src/plan/onelibrary.rs)
    after the export guard. It adds an experimental warning, blocks on a
    missing key, and lists `exportLibrary.db` plus the auxiliary files
@@ -204,9 +203,12 @@ empty in the reference, so their rows are UNVERIFIED (mapped like baken).
    so it is skipped. A skip or a failure is an error in the report (status
    Problems, no manifest); `ExportReport::onelibrary` and the report's
    "OneLibrary (experimental)" line say what was written. The app resolves
-   the key at export time and passes the stub, whose `write` refuses. Left
-   for the writer's landing: src-tauri swaps `NoWriter` for the writer and
-   drops the `onelibrary-stub` feature (done with task 6).
+   the key at export time and passes `OneLibraryWriter` to the dry run and
+   to `apply`. End to end:
+   [tests/apply.rs](../../crates/reks-export-onelibrary/tests/apply.rs)
+   plans and applies with the real writer on a temp-dir stick that holds
+   rekordbox's OneLibrary files, then reads the database back with the key
+   and validates it against `export.pdb` (no player has read it: task 9).
 9. **Hardware test**: checklist below on a OneLibrary-only player (borrow or
    rent an OPUS-QUAD/XDJ-AZ/CDJ-3000X). Log results in `docs/hw-test-log.md`.
 10. [x] **Diff tool**: `reks-cli onelibrary diff <ref.db> <ours.db>` to speed up

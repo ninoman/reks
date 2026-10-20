@@ -374,9 +374,8 @@ Date of decisions: 2026-10-18.
   OneLibrary file. The key reaches `apply` in `ApplyEnv` (`OneLibraryEnv`),
   not in the serialisable plan. The writer writes the file in place
   atomically itself (task 6), like `RekordboxWriter`; `apply` stays the only
-  caller, so every stick write still happens inside `apply()`. If the
-  writer wants a different shape (for example build, then commit), change
-  the trait here.
+  caller, so every stick write still happens inside `apply()`. The writer
+  (tasks 4–6) implements this shape as is; the app has no stub any more.
 - Cipher profile (2026-10-20, task 2): rekordbox 7.2.19's `exportLibrary.db`
   opens with stock SQLCipher 4 (AES-256-CBC, PBKDF2-HMAC-SHA512 256 000
   rounds, HMAC-SHA512, 4096-byte pages), the key used as a passphrase
