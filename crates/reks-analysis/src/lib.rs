@@ -9,13 +9,19 @@ pub mod columns;
 pub mod grid;
 pub mod input;
 pub mod key;
+pub mod onset;
 pub mod pipeline;
 pub mod queue;
 pub mod waveform;
 
-pub use beats::{Beat, BeatError, BeatList, BeatTracker, ModelPaths};
+pub use beats::{
+    beat_candidates, place_beats, Beat, BeatCandidates, BeatError, BeatList, BeatPlacement,
+    BeatTracker, ModelPaths,
+};
 pub use input::{AnalysisInput, InputError, ANALYSIS_RATE, BEAT_RATE};
-pub use pipeline::{analyse_file, analyse_input, AnalyseError, TrackAnalysis, ANALYSER_VERSION};
+pub use pipeline::{
+    analyse_file, analyse_input, analyse_tracked, AnalyseError, TrackAnalysis, ANALYSER_VERSION,
+};
 pub use queue::{AnalysisQueue, QueueError, QueueEvent, QueueOptions, QueueStatus};
 
 /// Crate version, from Cargo metadata.

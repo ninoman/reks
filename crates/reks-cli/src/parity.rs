@@ -5,7 +5,9 @@
 //! reks parity run    [--xml <collection.xml>] [--out <dir>] [--jobs N] [--every N]
 //!                    [--limit N] [--only mp3,m4a,...] [--remap FROM=TO]... [--models <dir>]
 //! reks parity report [--xml <collection.xml>] [--out <dir>] [--md <file>] [--tracks <file.tsv>]
-//!                    [--min-coverage <0..1>]
+//!                    [--min-coverage <0..1>] [--placement <name>] [--analyser N]
+//!                    [--change-beats N] [--change-ratio x] [--kick-phase <ms>]
+//!                    [--kick-gain x]
 //! ```
 //!
 //! `--xml` and `--out` default to `$REKS_PARITY_XML` and `$REKS_PARITY_OUT`.
@@ -26,7 +28,10 @@
 //! from the stored raw beats with [`reks_analysis::grid::build_grid`] (what
 //! the pipeline does), so grid-builder tuning is re-measured without
 //! decoding again (`--min-coverage` overrides [`GridOptions::min_coverage`]
-//! for a what-if); key changes need a new `run`.
+//! for a what-if); so is beat placement, from every placement of each beat
+//! stored by `run` (`--placement`, one of [`BeatPlacement::name`]). `run`
+//! also writes each track's low-band onset curve to `<out>/kick/` for
+//! tuning the grid on the kick. Key changes need a new `run`.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write as _;
@@ -38,8 +43,12 @@ use std::sync::Mutex;
 use std::time::{Instant, UNIX_EPOCH};
 
 use anyhow::{bail, Context};
-use reks_analysis::grid::{self, build_grid, Grid, GridOptions, TrackedBeat};
-use reks_analysis::{analyse_input, AnalysisInput, BeatTracker, ModelPaths, ANALYSER_VERSION};
+use reks_analysis::grid::{self, build_grid_with_pulse, Grid, GridOptions, TrackedBeat};
+use reks_analysis::onset::{KickOnsets, KickPulse, PULSE_RATE};
+use reks_analysis::{
+    analyse_tracked, beat_candidates, place_beats, AnalysisInput, Beat, BeatCandidates,
+    BeatPlacement, BeatTracker, ModelPaths, ANALYSER_VERSION,
+};
 use reks_analysis::{queue::default_workers, ANALYSIS_RATE};
 use reks_core::rbxml::{self, XmlTrack};
 use reks_core::Key;
@@ -47,6 +56,7 @@ use serde::{Deserialize, Serialize};
 
 const RESULTS: &str = "results.jsonl";
 const RUNS: &str = "runs.jsonl";
+const KICK_DIR: &str = "kick";
 
 /// Acceptance thresholds (phase 3 "Acceptance criteria").
 const BPM_TOLERANCE: f64 = 0.05;
@@ -75,6 +85,10 @@ struct Flags {
     md: Option<PathBuf>,
     tracks: Option<PathBuf>,
     grid: GridOptions,
+    /// `report`: rebuild beats with this placement (what-if).
+    placement: Option<BeatPlacement>,
+    /// `report`: the results of this analyser version (default: current).
+    analyser: Option<u32>,
 }
 
 impl Flags {
@@ -110,6 +124,28 @@ impl Flags {
                 "--min-coverage" => {
                     f.grid.min_coverage = value()?.parse().context("--min-coverage")?
                 }
+                "--placement" => {
+                    let name = value()?;
+                    f.placement = Some(
+                        BeatPlacement::ALL
+                            .into_iter()
+                            .find(|p| p.name() == name)
+                            .with_context(|| format!("unknown placement {name}"))?,
+                    )
+                }
+                "--change-beats" => {
+                    f.grid.change_beats = value()?.parse().context("--change-beats")?
+                }
+                "--change-ratio" => {
+                    f.grid.change_ratio = value()?.parse().context("--change-ratio")?
+                }
+                "--kick-phase" => {
+                    f.grid.kick_phase_ms = value()?.parse().context("--kick-phase")?
+                }
+                "--kick-gain" => {
+                    f.grid.kick_phase_gain = value()?.parse().context("--kick-gain")?
+                }
+                "--analyser" => f.analyser = Some(value()?.parse().context("--analyser")?),
                 other => bail!("unknown flag {other}"),
             }
         }
@@ -172,11 +208,27 @@ struct Record {
     analyse_ms: u64,
     #[serde(default)]
     beat_confidence: f32,
-    /// Raw tracker beats, samples at [`ANALYSIS_RATE`] on rekordbox's
-    /// timeline (the decoder's lead included).
+    /// Tracker beats placed with `BeatPlacement::DEFAULT`, samples at
+    /// [`ANALYSIS_RATE`] on rekordbox's timeline (the decoder's lead
+    /// included).
     #[serde(default)]
     beats: Vec<i64>,
-    /// Indices into `beats` the tracker marked as downbeats.
+    /// Every placement of each beat (`reks_analysis::BeatCandidates`), so
+    /// beat placement is re-measured without decoding (`--placement`):
+    /// the model's beat, the broadband onset, the low-band kick (−1: none)
+    /// with its rise in whole dB, and the kick's attack (−1: none).
+    #[serde(default)]
+    model_beats: Vec<i64>,
+    #[serde(default)]
+    onset_beats: Vec<i64>,
+    #[serde(default)]
+    kick_beats: Vec<i64>,
+    #[serde(default)]
+    kick_db: Vec<u8>,
+    #[serde(default)]
+    kick_attack_beats: Vec<i64>,
+    /// Indices into `model_beats` (and `beats` for records without them)
+    /// the tracker marked as downbeats.
     #[serde(default)]
     downbeats: Vec<u32>,
     #[serde(default)]
@@ -267,7 +319,8 @@ fn load_results(out: &Path) -> anyhow::Result<HashMap<String, Record>> {
 fn analyse(flags: &Flags) -> anyhow::Result<()> {
     let xml = flags.xml()?;
     let out = flags.out()?;
-    fs::create_dir_all(&out).with_context(|| format!("creating {}", out.display()))?;
+    fs::create_dir_all(out.join(KICK_DIR))
+        .with_context(|| format!("creating {}", out.display()))?;
     let collection = rbxml::parse_file(&xml)?;
     let done = load_results(&out)?;
 
@@ -340,7 +393,8 @@ fn analyse(flags: &Flags) -> anyhow::Result<()> {
                     let Some((loc, path, size, mtime)) = todo.get(i) else {
                         return Ok(());
                     };
-                    let rec = pool.install(|| analyse_one(&mut tracker, loc, path, *size, *mtime));
+                    let rec =
+                        pool.install(|| analyse_one(&mut tracker, &out, loc, path, *size, *mtime));
                     if rec.error.is_some() {
                         failed.fetch_add(1, Ordering::Relaxed);
                     }
@@ -404,7 +458,24 @@ fn analyse(flags: &Flags) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn analyse_one(tracker: &mut BeatTracker, loc: &str, path: &Path, size: u64, mtime: i64) -> Record {
+/// Sidecar with a track's low-band onset curve: a [`KickPulse`] in quarter
+/// dB, one byte per frame.
+fn kick_file(out: &Path, location: &str) -> PathBuf {
+    // FNV-1a: a stable file name per location.
+    let hash = location.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    });
+    out.join(KICK_DIR).join(format!("{hash:016x}.u8"))
+}
+
+fn analyse_one(
+    tracker: &mut BeatTracker,
+    out: &Path,
+    loc: &str,
+    path: &Path,
+    size: u64,
+    mtime: i64,
+) -> Record {
     let mut rec = Record {
         location: loc.to_owned(),
         size,
@@ -421,6 +492,11 @@ fn analyse_one(tracker: &mut BeatTracker, loc: &str, path: &Path, size: u64, mti
         analyse_ms: 0,
         beat_confidence: 0.0,
         beats: Vec::new(),
+        model_beats: Vec::new(),
+        onset_beats: Vec::new(),
+        kick_beats: Vec::new(),
+        kick_db: Vec::new(),
+        kick_attack_beats: Vec::new(),
         downbeats: Vec::new(),
         key: None,
         key_confidence: 0.0,
@@ -443,19 +519,50 @@ fn analyse_one(tracker: &mut BeatTracker, loc: &str, path: &Path, size: u64, mti
     rec.lead_ms = input.timeline.lead_ms(input.source_rate);
     rec.duration_ms = input.duration_ms();
     let t1 = Instant::now();
-    match analyse_input(tracker, &input) {
+    let tracked = tracker.track_model(&input).map(|mut list| {
+        let kicks = KickOnsets::from_mono(&input.mono);
+        let candidates: Vec<BeatCandidates> = list
+            .beats
+            .iter()
+            .map(|b| beat_candidates(&input.mono, &kicks, b.sample))
+            .collect();
+        rec.downbeats = list
+            .beats
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.downbeat)
+            .map(|(i, _)| i as u32)
+            .collect();
+        place_beats(&mut list.beats, &candidates, BeatPlacement::DEFAULT);
+        rec.model_beats = candidates.iter().map(|c| c.model).collect();
+        rec.onset_beats = candidates.iter().map(|c| c.onset).collect();
+        rec.kick_beats = candidates
+            .iter()
+            .map(|c| c.kick.map_or(-1, |k| k.0))
+            .collect();
+        rec.kick_db = candidates
+            .iter()
+            .map(|c| c.kick.map_or(0, |k| k.1.round().clamp(1.0, 255.0) as u8))
+            .collect();
+        rec.kick_attack_beats = candidates
+            .iter()
+            .map(|c| c.kick_onset.unwrap_or(-1))
+            .collect();
+        let curve = KickPulse::quantise(&kicks.downsample(PULSE_RATE));
+        let pulse = KickPulse::from_quarter_db(curve.clone());
+        if let Err(e) = fs::write(kick_file(out, loc), curve) {
+            eprintln!("{loc}: cannot write the kick curve: {e}");
+        }
+        (list, pulse)
+    });
+    match tracked
+        .map_err(reks_analysis::AnalyseError::from)
+        .and_then(|(list, pulse)| analyse_tracked(&input, list, Some(&pulse)))
+    {
         Ok(a) => {
             rec.analyse_ms = t1.elapsed().as_millis() as u64;
             rec.beat_confidence = a.beats.confidence;
             rec.beats = a.beats.beats.iter().map(|b| b.sample).collect();
-            rec.downbeats = a
-                .beats
-                .beats
-                .iter()
-                .enumerate()
-                .filter(|(_, b)| b.downbeat)
-                .map(|(i, _)| i as u32)
-                .collect();
             rec.key = a.key.key.map(|k| k.canonical().to_owned());
             rec.key_confidence = a.key.confidence;
             rec.chroma = a.key.chroma.to_vec();
@@ -782,24 +889,79 @@ fn raw_offset(rb: &RbGrid, beats: &[i64]) -> Option<f64> {
     median(&mut d)
 }
 
-fn compare(t: &XmlTrack, rec: &Record, opts: &GridOptions) -> Option<Row> {
-    if rec.error.is_some() {
-        return None;
-    }
-    let rb = RbGrid::from_track(t)?;
-    let tracked = grid::BeatList {
-        sample_rate: ANALYSIS_RATE,
-        beats: rec
-            .beats
+/// The record's beats placed with `placement` (default: the pipeline's,
+/// `BeatPlacement::DEFAULT`); the stored beats when it has no candidates.
+fn placed_beats(rec: &Record, placement: Option<BeatPlacement>) -> Vec<TrackedBeat> {
+    let n = rec.model_beats.len();
+    let stored = || {
+        rec.beats
             .iter()
             .enumerate()
             .map(|(i, &position)| TrackedBeat {
                 position,
                 downbeat: rec.downbeats.binary_search(&(i as u32)).is_ok(),
             })
-            .collect(),
+            .collect()
     };
-    let g = build_grid(&tracked, opts).ok();
+    let complete = [
+        rec.model_beats.len(),
+        rec.onset_beats.len(),
+        rec.kick_beats.len(),
+        rec.kick_db.len(),
+        rec.kick_attack_beats.len(),
+    ]
+    .iter()
+    .all(|&l| l == n && n > 0);
+    let Some(placement) = placement
+        .or(Some(BeatPlacement::DEFAULT))
+        .filter(|_| complete)
+    else {
+        return stored();
+    };
+    let some = |v: i64| (v >= 0).then_some(v);
+    let candidates: Vec<BeatCandidates> = (0..n)
+        .map(|i| BeatCandidates {
+            model: rec.model_beats[i],
+            onset: rec.onset_beats[i],
+            kick: some(rec.kick_beats[i]).map(|k| (k, f32::from(rec.kick_db[i]))),
+            kick_onset: some(rec.kick_attack_beats[i]),
+        })
+        .collect();
+    // Downbeat flags index the model's beats (`run` stores them before
+    // placement drops any).
+    let mut beats: Vec<Beat> = (0..n)
+        .map(|i| Beat {
+            sample: rec.model_beats[i],
+            downbeat: rec.downbeats.binary_search(&(i as u32)).is_ok(),
+        })
+        .collect();
+    place_beats(&mut beats, &candidates, placement);
+    beats
+        .iter()
+        .map(|b| TrackedBeat {
+            position: b.sample,
+            downbeat: b.downbeat,
+        })
+        .collect()
+}
+
+fn compare(
+    t: &XmlTrack,
+    rec: &Record,
+    pulse: Option<&KickPulse>,
+    opts: &GridOptions,
+    placement: Option<BeatPlacement>,
+) -> Option<Row> {
+    if rec.error.is_some() {
+        return None;
+    }
+    let rb = RbGrid::from_track(t)?;
+    let tracked = grid::BeatList {
+        sample_rate: ANALYSIS_RATE,
+        beats: placed_beats(rec, placement),
+    };
+    let beats: Vec<i64> = tracked.beats.iter().map(|b| b.position).collect();
+    let g = build_grid_with_pulse(&tracked, pulse, opts).ok();
     let rb_bpm = rb
         .constant_bpm()
         .or(t.average_bpm)
@@ -825,7 +987,7 @@ fn compare(t: &XmlTrack, rec: &Record, opts: &GridOptions) -> Option<Row> {
         beat_ms: first.and_then(|f| rb.nearest_beat(f)),
         key,
         raw_offset_ms: (bpm == BpmClass::Match)
-            .then(|| raw_offset(&rb, &rec.beats))
+            .then(|| raw_offset(&rb, &beats))
             .flatten(),
     })
 }
@@ -871,6 +1033,7 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
     let out = flags.out()?;
     let collection = rbxml::parse_file(&xml)?;
     let results = load_results(&out)?;
+    let version = flags.analyser.unwrap_or(ANALYSER_VERSION);
     let runs: Vec<RunRecord> = fs::read_to_string(out.join(RUNS))
         .unwrap_or_default()
         .lines()
@@ -893,7 +1056,7 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
         if !seen.insert(loc) {
             continue;
         }
-        if rec.analyser != ANALYSER_VERSION {
+        if rec.analyser != version {
             stale += 1;
             continue;
         }
@@ -902,7 +1065,11 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
             failed += 1;
             continue;
         }
-        let Some(row) = compare(t, rec, &flags.grid) else {
+        let pulse = (flags.grid.kick_phase_ms > 0)
+            .then(|| fs::read(kick_file(&out, loc)).ok())
+            .flatten()
+            .map(KickPulse::from_quarter_db);
+        let Some(row) = compare(t, rec, pulse.as_ref(), &flags.grid, flags.placement) else {
             no_grid_rb += 1;
             continue;
         };
@@ -929,12 +1096,15 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
     }
 
     let mut md = String::new();
+    if let Some(p) = flags.placement {
+        let _ = writeln!(md, "What-if beat placement: {}.\n", p.name());
+    }
     if flags.grid != GridOptions::default() {
         let _ = writeln!(md, "What-if grid options: {:?}.\n", flags.grid);
     }
     let _ = writeln!(
         md,
-        "Analyser version {ANALYSER_VERSION}; {} tracks in the XML, {analysed} analysed \
+        "Analyser version {version}; {} tracks in the XML, {analysed} analysed \
          ({failed} failed to decode or analyse), {} compared ({no_grid_rb} without a rekordbox \
          grid){}.\n",
         collection.tracks.len(),
@@ -962,7 +1132,7 @@ fn report(flags: &Flags) -> anyhow::Result<()> {
     key_table(&mut md, &scored);
     genre_table(&mut md, &scored);
     offset_table(&mut md, &rows);
-    throughput(&mut md, &runs);
+    throughput(&mut md, &runs, version);
 
     match &flags.md {
         Some(path) => {
@@ -1212,11 +1382,11 @@ fn offset_table(md: &mut String, rows: &[Row]) {
     md.push('\n');
 }
 
-fn throughput(md: &mut String, runs: &[RunRecord]) {
+fn throughput(md: &mut String, runs: &[RunRecord], version: u32) {
     let _ = writeln!(md, "### Throughput\n");
     let runs: Vec<&RunRecord> = runs
         .iter()
-        .filter(|r| r.analyser == ANALYSER_VERSION && r.tracks > 0)
+        .filter(|r| r.analyser == version && r.tracks > 0)
         .collect();
     let audio: u64 = runs.iter().map(|r| r.audio_ms).sum();
     let cpu: u64 = runs.iter().filter_map(|r| r.cpu_ms).sum();

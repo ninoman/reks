@@ -17,6 +17,8 @@
 //! [`build_grid`] adds what Mixxx does elsewhere or not at all: the downbeat
 //! anchor, the fallback to a dynamic grid and the half/double tempo rule.
 
+use crate::onset::KickPulse;
+
 /// Phase error inaudible in a mix; also the snapping tolerance (Mixxx: 25 ms).
 pub const MAX_PHASE_ERROR_S: f64 = 0.025;
 /// A region drifting further than this in one direction is not constant.
@@ -85,6 +87,10 @@ pub struct GridOptions {
     /// ... whose tempo differs from the constant grid's by at least this
     /// fraction (and is not a 2:1 or 3:2 tracker error).
     pub change_ratio: f64,
+    /// [`kick_phase`] search radius, ms; 0 turns it off.
+    pub kick_phase_ms: u32,
+    /// [`kick_phase`] moves the grid only for this much more kick attack.
+    pub kick_phase_gain: f64,
     /// Preferred tempo range; tempos outside it are doubled or halved.
     pub min_bpm: f64,
     pub max_bpm: f64,
@@ -96,6 +102,8 @@ impl Default for GridOptions {
             min_coverage: 0.3,
             change_beats: 32,
             change_ratio: 0.005,
+            kick_phase_ms: 60,
+            kick_phase_gain: 1.5,
             min_bpm: 70.0,
             max_bpm: 180.0,
         }
@@ -453,6 +461,55 @@ fn best_phase(beats: &[i64], beat_len: f64, sr: f64) -> (f64, usize) {
     (phase, best.1)
 }
 
+/// Smallest move [`kick_phase`] makes: below it the placed beats already
+/// sit on the attack; above it the grid was on another cluster of beats
+/// (hi-hats, bass notes).
+const KICK_PHASE_MIN_MS: i64 = 15;
+
+/// Moves a constant grid (`origin`, `bpm`) by [`KICK_PHASE_MIN_MS`] to
+/// `radius_ms` either way when its lines, over the whole track, then sit
+/// on at least `gain` times as much kick attack ([`KickPulse::at`]); then
+/// [`adjust_phase`] centres it on the beats there. Unchanged otherwise.
+pub fn kick_phase(
+    origin: f64,
+    bpm: f64,
+    sample_rate: u32,
+    beats: &[i64],
+    pulse: &KickPulse,
+    radius_ms: u32,
+    gain: f64,
+) -> f64 {
+    let sr = f64::from(sample_rate);
+    let beat_len = 60.0 * sr / bpm;
+    let end = pulse.len_samples();
+    let score = |o: f64| -> f64 {
+        let mut line = o.rem_euclid(beat_len);
+        let mut sum = 0.0;
+        while line < end {
+            sum += f64::from(pulse.at(line));
+            line += beat_len;
+        }
+        sum
+    };
+    let ms = sr / 1000.0;
+    let radius = i64::from(radius_ms);
+    // The current phase, allowing for the pulse's 5 ms frames.
+    let here = (-KICK_PHASE_MIN_MS + 1..KICK_PHASE_MIN_MS)
+        .map(|shift| score(origin + shift as f64 * ms))
+        .fold(0.0, f64::max);
+    let (mut best_shift, mut best) = (0i64, here * gain);
+    for shift in (-radius..=-KICK_PHASE_MIN_MS).chain(KICK_PHASE_MIN_MS..=radius) {
+        let s = score(origin + shift as f64 * ms);
+        if s > best || (s == best && best_shift != 0 && shift.abs() < best_shift.abs()) {
+            (best_shift, best) = (shift, s);
+        }
+    }
+    if best_shift == 0 || best <= 0.0 {
+        return origin;
+    }
+    adjust_phase(origin + best_shift as f64 * ms, bpm, sample_rate, beats)
+}
+
 /// Tempo of the median gap between beats, BPM.
 fn median_gap_bpm(beats: &[i64], sample_rate: u32) -> Option<f64> {
     let mut gaps: Vec<i64> = beats.windows(2).map(|w| w[1] - w[0]).collect();
@@ -475,6 +532,16 @@ fn median_gap_bpm(beats: &[i64], sample_rate: u32) -> Option<f64> {
 /// dynamic, numbered from the downbeat flags. Either way a tempo outside
 /// `opts.min_bpm..=opts.max_bpm` is doubled or halved into it.
 pub fn build_grid(input: &BeatList, opts: &GridOptions) -> Result<Grid, GridError> {
+    build_grid_with_pulse(input, None, opts)
+}
+
+/// [`build_grid`], then a constant grid's phase is lined up with the kicks
+/// ([`kick_phase`]) when `pulse` is given and `opts.kick_phase_ms > 0`.
+pub fn build_grid_with_pulse(
+    input: &BeatList,
+    pulse: Option<&KickPulse>,
+    opts: &GridOptions,
+) -> Result<Grid, GridError> {
     if input.sample_rate == 0 {
         return Err(GridError::ZeroSampleRate);
     }
@@ -513,6 +580,18 @@ pub fn build_grid(input: &BeatList, opts: &GridOptions) -> Result<Grid, GridErro
         // off the beat too); the whole-track best phase without one.
         let start = mixxx.map_or(fit.phase, |t| t.region_start as f64);
         let origin = adjust_phase(start, tempo.bpm, input.sample_rate, &positions);
+        let origin = match pulse {
+            Some(p) if opts.kick_phase_ms > 0 => kick_phase(
+                origin,
+                tempo.bpm,
+                input.sample_rate,
+                &positions,
+                p,
+                opts.kick_phase_ms,
+                opts.kick_phase_gain,
+            ),
+            _ => origin,
+        };
         // How steady the beat is, at the tempo's best phase.
         let best = adjust_phase(fit.phase, tempo.bpm, input.sample_rate, &positions);
         let coverage = on_grid_fraction(&positions, best, beat_len, MAX_PHASE_ERROR_S * sr);
@@ -693,6 +772,7 @@ fn number_beats(beats: &[TrackedBeat]) -> Vec<GridBeat> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::onset::PULSE_RATE;
 
     const SR: u32 = 44_100;
 
@@ -1145,6 +1225,52 @@ mod tests {
         let beats: Vec<i64> = input.beats.iter().map(|b| b.position).collect();
         assert_eq!(fit_tempo(&beats, SR, &[126.2]).unwrap().bpm, 126.37);
         assert_eq!(fit_tempo(&beats, SR, &[]), None);
+    }
+
+    #[test]
+    fn kick_phase_moves_the_grid_onto_the_kicks() {
+        // 140 BPM; the tracker took a hi-hat 45 ms after the kick for 60% of
+        // the beats (in runs of 24), so the grid lands on the hats.
+        let kicks = synth(&one(140.0, 0.5, 300.0), 0.0, 4, 0);
+        let input = displace(kicks.clone(), 45.0, |i| i % 40 < 24);
+        let first_line = |g: &Grid| match g {
+            Grid::Constant {
+                bpm, first_beat, ..
+            } => (*bpm, *first_beat),
+            other => panic!("expected constant, got {other:?}"),
+        };
+        let len = 60.0 * f64::from(SR) / 140.0;
+        let off_kick = |first: i64| {
+            let d = (first - kicks.beats[0].position) as f64;
+            let d = d.rem_euclid(len);
+            d.min(len - d) / f64::from(SR) * 1000.0
+        };
+        let opts = GridOptions::default();
+        let (bpm, first) = first_line(&build_grid(&input, &opts).unwrap());
+        assert_eq!(bpm, 140.0);
+        assert!((off_kick(first) - 45.0).abs() < 2.0, "{}", off_kick(first));
+
+        // A rise curve with a 12 dB attack at every kick (5 ms frames).
+        let frames = (300.5 * f64::from(PULSE_RATE)) as usize;
+        let mut q = vec![0u8; frames];
+        for b in &kicks.beats {
+            let f = (b.position as f64 * f64::from(PULSE_RATE) / f64::from(SR)) as usize;
+            for (k, slot) in q.iter_mut().skip(f).take(5).enumerate() {
+                *slot = (48 - 8 * k) as u8;
+            }
+        }
+        let pulse = KickPulse::from_quarter_db(q);
+        let grid = build_grid_with_pulse(&input, Some(&pulse), &opts).unwrap();
+        let (bpm, first) = first_line(&grid);
+        assert_eq!(bpm, 140.0);
+        assert!(off_kick(first) < 2.0, "{}", off_kick(first));
+        // Off: unchanged.
+        let off = GridOptions {
+            kick_phase_ms: 0,
+            ..opts
+        };
+        let (_, first) = first_line(&build_grid_with_pulse(&input, Some(&pulse), &off).unwrap());
+        assert!((off_kick(first) - 45.0).abs() < 2.0);
     }
 
     #[test]

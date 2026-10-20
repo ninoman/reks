@@ -8,10 +8,12 @@
 //! The model emits beat and downbeat activations at 50 frames/s (20 ms), and
 //! its peaks sit 5–15 ms after the transient on our fixtures. Each beat is
 //! refined in two steps: a parabola through the activation at the peak frame
-//! and its neighbours gives a sub-frame time, then [`snap_to_onset`] moves it
-//! to the sharpest energy rise in the 44.1 kHz signal within ±30 ms, which is
-//! where a DJ expects the grid line. Beats with no clear transient there keep
-//! the model's time. Positions are samples at [`ANALYSIS_RATE`].
+//! and its neighbours gives a sub-frame time, then the beat is placed on the
+//! audio ([`BeatPlacement::DEFAULT`]): on the sharpest broadband rise within
+//! ±30 ms ([`snap_to_onset`], task 2), which is where a DJ expects the grid
+//! line; without one, the model's time. [`BeatCandidates`] also has the
+//! low-band kick ([`KickOnsets`]) for each beat (task 12a, measured, not the
+//! default). Positions are samples at [`ANALYSIS_RATE`].
 //!
 //! [`BeatTracker::track`] blocks for about real time / 5 to real time / 60
 //! depending on the CPU (rten uses its own rayon pool); run it in
@@ -22,6 +24,7 @@ use std::path::{Path, PathBuf};
 use beat_this::{BeatThis, RtenRuntime, Runtime};
 
 use crate::input::{AnalysisInput, ANALYSIS_RATE, BEAT_RATE};
+use crate::onset::{KickOnsets, MIN_KICK_DB};
 
 /// Activation frames per second of the Beat This! model.
 const FPS: f64 = 50.0;
@@ -155,19 +158,25 @@ impl BeatTracker {
         Ok(Self { model })
     }
 
-    /// Tracks beats and downbeats in `input`. Blocking.
+    /// Tracks beats and downbeats in `input` and places each beat with
+    /// [`BeatPlacement::DEFAULT`]. Blocking.
     pub fn track(&mut self, input: &AnalysisInput) -> Result<BeatList, BeatError> {
-        if input.beat_mono.is_empty() {
-            return Ok(to_beat_list(&[], &[], &[]));
-        }
-        let analysis = self
-            .model
-            .analyze_audio(&input.beat_mono, BEAT_RATE)
-            .map_err(|e| BeatError::Inference(format!("{e:#}")))?;
-        let mut list = to_beat_list(&analysis.beats, &analysis.downbeats, &analysis.beat_logits);
-        for beat in &mut list.beats {
-            beat.sample = snap_to_onset(&input.mono, beat.sample);
-        }
+        self.track_with(input, &KickOnsets::from_mono(&input.mono))
+    }
+
+    /// [`BeatTracker::track`] with the track's [`KickOnsets`] already made.
+    pub fn track_with(
+        &mut self,
+        input: &AnalysisInput,
+        kicks: &KickOnsets,
+    ) -> Result<BeatList, BeatError> {
+        let mut list = self.track_model(input)?;
+        let candidates: Vec<BeatCandidates> = list
+            .beats
+            .iter()
+            .map(|b| beat_candidates(&input.mono, kicks, b.sample))
+            .collect();
+        place_beats(&mut list.beats, &candidates, BeatPlacement::DEFAULT);
         tracing::debug!(
             beats = list.beats.len(),
             downbeats = list.beats.iter().filter(|b| b.downbeat).count(),
@@ -175,6 +184,134 @@ impl BeatTracker {
             "beats tracked"
         );
         Ok(list)
+    }
+
+    /// The model's beats, refined on the activation only (not placed on
+    /// the audio): what [`beat_candidates`] starts from. Blocking.
+    pub fn track_model(&mut self, input: &AnalysisInput) -> Result<BeatList, BeatError> {
+        if input.beat_mono.is_empty() {
+            return Ok(to_beat_list(&[], &[], &[]));
+        }
+        let analysis = self
+            .model
+            .analyze_audio(&input.beat_mono, BEAT_RATE)
+            .map_err(|e| BeatError::Inference(format!("{e:#}")))?;
+        Ok(to_beat_list(
+            &analysis.beats,
+            &analysis.downbeats,
+            &analysis.beat_logits,
+        ))
+    }
+}
+
+/// Where one beat could go (samples at [`ANALYSIS_RATE`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BeatCandidates {
+    /// The model's beat ([`BeatTracker::track_model`]).
+    pub model: i64,
+    /// [`snap_to_onset`]: sharpest broadband rise within ±30 ms (the model
+    /// beat when there is none).
+    pub onset: i64,
+    /// Strongest low-band ([`KickOnsets`]) rise within ±30 ms of the model
+    /// beat and its rise in dB, when it reaches [`MIN_KICK_DB`].
+    pub kick: Option<(i64, f32)>,
+    /// `kick` moved to the sharpest broadband rise from
+    /// [`KICK_REFINE_BEFORE_MS`] before to [`KICK_REFINE_AFTER_MS`] after it
+    /// (the attack; the band-pass smears it late), or `kick` itself.
+    pub kick_onset: Option<i64>,
+}
+
+/// How far before and after a low-band kick its attack is looked for.
+pub const KICK_REFINE_BEFORE_MS: u32 = 25;
+pub const KICK_REFINE_AFTER_MS: u32 = 5;
+
+/// Every placement of the beat the model put at `model`.
+pub fn beat_candidates(mono: &[f32], kicks: &KickOnsets, model: i64) -> BeatCandidates {
+    let kick = kicks.kick_near(model, SNAP_RADIUS_MS, MIN_KICK_DB);
+    BeatCandidates {
+        model,
+        onset: snap_to_onset(mono, model),
+        kick,
+        kick_onset: kick
+            .map(|(k, _)| snap_to_onset_in(mono, k, KICK_REFINE_BEFORE_MS, KICK_REFINE_AFTER_MS)),
+    }
+}
+
+/// Moves each of `beats` to `placement`'s choice of its `candidates`
+/// (same order and length). A beat that lands on or before the one before
+/// it (two beats snapped onto one transient) is dropped; its downbeat flag
+/// passes to the beat kept.
+pub fn place_beats(beats: &mut Vec<Beat>, candidates: &[BeatCandidates], placement: BeatPlacement) {
+    let mut out: Vec<Beat> = Vec::with_capacity(beats.len());
+    for (beat, c) in beats.iter().zip(candidates) {
+        let sample = placement.choose(c);
+        match out.last_mut() {
+            Some(prev) if sample <= prev.sample => prev.downbeat |= beat.downbeat,
+            _ => out.push(Beat {
+                sample,
+                downbeat: beat.downbeat,
+            }),
+        }
+    }
+    *beats = out;
+}
+
+/// Which of the [`BeatCandidates`] becomes the beat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BeatPlacement {
+    /// The model's beat.
+    Model,
+    /// The broadband onset (analyser version 2).
+    Onset,
+    /// The low-band kick, else the model's beat.
+    KickOrModel,
+    /// The low-band kick, else the broadband onset.
+    KickOrOnset,
+    /// The kick's attack, else the model's beat.
+    KickOnsetOrModel,
+    /// The kick's attack, else the broadband onset.
+    KickOnsetOrOnset,
+}
+
+impl BeatPlacement {
+    /// What [`BeatTracker::track`] uses.
+    ///
+    /// The broadband onset: on the parity library the kick placements put
+    /// more beats on rekordbox's grid (76% vs 74% within 10 ms) but fewer
+    /// grids in phase with it (91% vs 94% within 30 ms) (task 12a). The kick
+    /// is used for the grid's phase instead ([`crate::grid::kick_phase`]).
+    pub const DEFAULT: Self = Self::Onset;
+
+    pub const ALL: [Self; 6] = [
+        Self::Model,
+        Self::Onset,
+        Self::KickOrModel,
+        Self::KickOrOnset,
+        Self::KickOnsetOrModel,
+        Self::KickOnsetOrOnset,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Model => "model",
+            Self::Onset => "onset",
+            Self::KickOrModel => "kick-model",
+            Self::KickOrOnset => "kick-onset",
+            Self::KickOnsetOrModel => "kickattack-model",
+            Self::KickOnsetOrOnset => "kickattack-onset",
+        }
+    }
+
+    pub fn choose(self, c: &BeatCandidates) -> i64 {
+        let kick = c.kick.map(|(k, _)| k);
+        match self {
+            Self::Model => c.model,
+            Self::Onset => c.onset,
+            Self::KickOrModel => kick.unwrap_or(c.model),
+            Self::KickOrOnset => kick.unwrap_or(c.onset),
+            Self::KickOnsetOrModel => c.kick_onset.unwrap_or(c.model),
+            Self::KickOnsetOrOnset => c.kick_onset.unwrap_or(c.onset),
+        }
     }
 }
 
@@ -238,14 +375,19 @@ fn refine(frame: f64, logits: &[f32]) -> f64 {
 /// Energy is of the first difference of `mono` (a +6 dB/octave tilt), so the
 /// attack of a kick or snare counts, not the sustained bass under it. `mono`
 /// is at [`ANALYSIS_RATE`].
-fn snap_to_onset(mono: &[f32], sample: i64) -> i64 {
+pub fn snap_to_onset(mono: &[f32], sample: i64) -> i64 {
+    snap_to_onset_in(mono, sample, SNAP_RADIUS_MS, SNAP_RADIUS_MS)
+}
+
+/// [`snap_to_onset`] over `before_ms` before to `after_ms` after `sample`.
+fn snap_to_onset_in(mono: &[f32], sample: i64, before_ms: u32, after_ms: u32) -> i64 {
     let ms = |n: u32| (ANALYSIS_RATE / 1000 * n) as usize;
-    let (radius, after, before) = (ms(SNAP_RADIUS_MS), ms(AFTER_MS), ms(BEFORE_MS));
+    let (after, before) = (ms(AFTER_MS), ms(BEFORE_MS));
     let Ok(centre) = usize::try_from(sample) else {
         return sample;
     };
-    let lo = centre.saturating_sub(radius);
-    let hi = (centre + radius).min(mono.len().saturating_sub(after));
+    let lo = centre.saturating_sub(ms(before_ms));
+    let hi = (centre + ms(after_ms)).min(mono.len().saturating_sub(after));
     if lo > hi {
         return sample;
     }
@@ -349,6 +491,22 @@ mod tests {
         // Track end and silence: unchanged.
         assert_eq!(snap_to_onset(&mono, 19_999), 19_999);
         assert_eq!(snap_to_onset(&vec![0.0; 20_000], 10_000), 10_000);
+    }
+
+    #[test]
+    fn placement_keeps_beats_in_order() {
+        let beat = |sample, downbeat| Beat { sample, downbeat };
+        let cand = |model, onset| BeatCandidates {
+            model,
+            onset,
+            kick: None,
+            kick_onset: None,
+        };
+        let mut beats = vec![beat(100, false), beat(130, true), beat(500, false)];
+        // The second beat snaps back onto the first one's transient.
+        let c = [cand(100, 110), cand(130, 110), cand(500, 505)];
+        place_beats(&mut beats, &c, BeatPlacement::Onset);
+        assert_eq!(beats, [beat(110, true), beat(505, false)]);
     }
 
     #[test]
