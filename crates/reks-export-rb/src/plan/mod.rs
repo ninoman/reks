@@ -27,6 +27,11 @@
 //!   sessions against the library ([`guard_history`]); sessions not imported
 //!   yet block the plan until [`ExportOptions::history_chosen`].
 //!
+//! - OneLibrary (Phase 4 task 8, D14): with [`ExportOptions::onelibrary`],
+//!   [`plan_onelibrary`] asks a [`OneLibraryExport`] to plan
+//!   `exportLibrary.db` ([`ExportPlan::onelibrary`]). Experimental, off by
+//!   default; a missing key blocks, and history in the stick's existing
+//!   `exportLibrary.db` goes through the export guard.
 //! - Playlist dividers (D22) become planned tracks backed by a generated
 //!   silent WAV when [`ExportOptions::dividers`] is on ([`crate::divider`]);
 //!   otherwise they are left out.
@@ -39,6 +44,7 @@
 
 mod guard;
 mod locate;
+mod onelibrary;
 mod source;
 mod stick;
 mod text;
@@ -56,11 +62,13 @@ use crate::audiocheck::{self, Severity};
 use crate::device::{DeviceInfo, FsKind};
 use crate::divider::{self, DividerInfo};
 use crate::history::{self, BackupFile, BackupPlan, HistoryError, HistoryPolicy, StickHistory};
+use crate::onelibrary::OneLibraryPlan;
 use crate::reksanlz;
 use crate::TargetProfile;
 
 pub use guard::{guard_history, HistoryGuard, UnimportedSession};
 pub use locate::CacheLocator;
+pub use onelibrary::plan_onelibrary;
 pub use reksanlz::ReksCache;
 pub use source::{load, SourceTrack, Sources};
 pub use stick::anlz_dir;
@@ -118,6 +126,10 @@ pub struct ExportOptions {
     /// rekordbox's analysis or reks's first, when both have a track (the
     /// app setting of the same name, [`reks_core::settings::ANLZ_PREFERENCE`]).
     pub anlz_preference: AnlzPreference,
+    /// Also write `exportLibrary.db` for OneLibrary players
+    /// ([`plan_onelibrary`]). Off by default; experimental and UNVERIFIED
+    /// on players until a Phase 4 hardware test passes.
+    pub onelibrary: bool,
 }
 
 impl Default for ExportOptions {
@@ -133,6 +145,7 @@ impl Default for ExportOptions {
             history_chosen: false,
             dividers: false,
             anlz_preference: AnlzPreference::RekordboxFirst,
+            onelibrary: false,
         }
     }
 }
@@ -246,6 +259,10 @@ pub struct ExportPlan {
     /// in plan order: the dry run offers to convert them (Phase 2.6).
     #[serde(default)]
     pub convertible: Vec<TrackId>,
+    /// The OneLibrary step ([`plan_onelibrary`]); `None` when it is off or
+    /// has no key.
+    #[serde(default)]
+    pub onelibrary: Option<OneLibraryPlan>,
 }
 
 impl ExportPlan {
@@ -734,6 +751,7 @@ pub fn plan_sources(
         bytes_to_write,
         bytes_free_after,
         convertible,
+        onelibrary: None,
     })
 }
 
