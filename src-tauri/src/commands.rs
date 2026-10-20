@@ -16,10 +16,10 @@ use reks_core::{
 use reks_export_rb::device::{self, DeviceInfo};
 use reks_export_rb::devices::{self, Device, DeviceId, DeviceMatch, ProfileStatus};
 use reks_export_rb::dryrun::{self, DryRun};
-use reks_export_rb::onelibrary::NoWriter;
+use reks_export_rb::onelibrary::{self as one, NoWriter};
 use reks_export_rb::plan::{ExportOptions, Selection};
 use reks_export_rb::report::{self, ProgressView, ReportView};
-use reks_export_rb::{ApplyEnv, StickCheck, TargetProfile};
+use reks_export_rb::{ApplyEnv, OneLibraryEnv, StickCheck, TargetProfile};
 use reks_mix::{PlayerState, Reopened};
 use serde::Serialize;
 use tauri::ipc::{Channel, Response};
@@ -528,9 +528,9 @@ pub async fn profile_status(
 }
 
 /// A dry run and the id `export_apply` takes to write exactly that plan.
-/// Plans `exportLibrary.db` for exports with the OneLibrary option: the
-/// stub, which blocks such exports, until the reks-export-onelibrary writer
-/// lands (phase 4 task 8).
+/// Plans and writes `exportLibrary.db` for exports with the OneLibrary
+/// option: the stub, which blocks such exports, until the
+/// reks-export-onelibrary writer lands (phase 4 task 8).
 const ONELIBRARY: NoWriter = NoWriter;
 
 #[derive(Debug, Serialize)]
@@ -624,10 +624,24 @@ pub async fn export_apply(
     let data_dir = state.data_dir.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let labels = dryrun::plan_track_labels(&lib, &plan);
+        // Read again rather than kept from the dry run, so the key is in
+        // memory only while an export needs it. Without one, apply refuses.
+        let key = if plan.options.onelibrary {
+            one::resolve_key(&lib).unwrap_or_else(|err| {
+                tracing::warn!(%err, "OneLibrary key not read");
+                None
+            })
+        } else {
+            None
+        };
         let env = ApplyEnv {
             library: &lib,
             app_data_dir: &data_dir,
             stick: StickCheck::Mounted,
+            onelibrary: key.as_ref().map(|key| OneLibraryEnv {
+                export: &ONELIBRARY,
+                key,
+            }),
         };
         let progress = |v: ProgressView| {
             if let Err(err) = on_event.send(v) {

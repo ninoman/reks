@@ -172,6 +172,7 @@ fn export(args: &PlanArgs, st: &Stick) -> anyhow::Result<()> {
         library: &planned.lib,
         app_data_dir: &data_dir,
         stick: st.check,
+        onelibrary: None,
     };
     let report = reks_export_rb::apply(plan, &writer, &env, &print_event, &CancelToken::new())?;
     if args.json {
@@ -221,6 +222,7 @@ fn print_event(e: ApplyEvent) {
                 ApplyStage::ImportHistory => "importing the stick's play history",
                 ApplyStage::Backup => "backing up the stick's database",
                 ApplyStage::Write => "writing",
+                ApplyStage::OneLibrary => "writing exportLibrary.db (experimental)",
                 ApplyStage::Sync => "flushing to the stick",
                 ApplyStage::Validate => "reading the stick back",
                 ApplyStage::Manifest => "recording the export manifest",
@@ -1201,6 +1203,7 @@ mod tests {
             library: &planned.lib,
             app_data_dir: tmp.path(),
             stick: StickCheck::Directory,
+            onelibrary: None,
         };
         let report =
             reks_export_rb::apply(&planned.plan, &writer, &env, &|_| {}, &CancelToken::new())

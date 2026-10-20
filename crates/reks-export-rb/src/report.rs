@@ -195,6 +195,7 @@ fn stage_title(stage: ApplyStage) -> &'static str {
         ApplyStage::ImportHistory => "Importing the stick's play history into your library",
         ApplyStage::Backup => "Backing up the stick's play history",
         ApplyStage::Write => "Writing tracks",
+        ApplyStage::OneLibrary => "Writing exportLibrary.db (experimental)",
         ApplyStage::Sync => "Flushing the written files to the stick",
         ApplyStage::Validate => "Reading the stick back to check it",
         ApplyStage::Manifest => "Recording what is on the stick",
@@ -426,6 +427,19 @@ fn facts(plan: &ExportPlan, r: &ExportReport) -> Vec<Fact> {
     let mut out = Vec::new();
     if let Some(w) = &r.writer {
         out.extend(writer_facts(plan, w).into_iter().map(|(l, v)| fact(l, v)));
+    }
+    if plan.options.onelibrary {
+        out.push(fact(
+            "OneLibrary (experimental)",
+            match &r.onelibrary {
+                Some(o) => format!(
+                    "exportLibrary.db written: {}, {}",
+                    count(o.written.tracks, "track", "tracks"),
+                    human_bytes(o.written.bytes)
+                ),
+                None => "exportLibrary.db not written (see the problems)".to_owned(),
+            },
+        ));
     }
     out.push(fact(
         "Read back",

@@ -953,6 +953,7 @@ export type ApplyStage =
   | "importHistory"
   | "backup"
   | "write"
+  | "oneLibrary"
   | "sync"
   | "validate"
   | "manifest";

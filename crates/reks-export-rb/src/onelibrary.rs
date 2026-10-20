@@ -1,17 +1,21 @@
 //! Seam to the OneLibrary writer (Phase 4 task 8, D14): the planner asks a
 //! [`OneLibraryExport`] what writing `PIONEER/rekordbox/exportLibrary.db`
-//! next to the legacy export would do, so the dry run lists it.
+//! next to the legacy export would do, so the dry run lists it, and
+//! [`crate::apply`] has it write the file once the new `export.pdb` is in
+//! place ([`OneLibraryExport::write`]).
 //!
 //! The writer lives in `reks-export-onelibrary`, which depends on this crate
 //! for [`ExportPlan`]; so this crate holds only the trait, and the app picks
-//! the implementation. Until the writer lands the app uses [`NoWriter`]
-//! (feature `onelibrary-stub`), which plans the file but blocks the export.
+//! the implementation and hands it to `apply` with the key
+//! ([`crate::apply::OneLibraryEnv`]). Until the writer lands the app uses
+//! [`NoWriter`] (feature `onelibrary-stub`), which plans the file but blocks
+//! the export.
 //!
 //! The key comes from [`resolve_key`]: the `setting` table first, then
 //! `REKS_ONELIBRARY_KEY` (Phase 4 key policy). It is never logged and never
 //! part of a plan.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use reks_core::{Library, OneLibraryKey};
 use serde::{Deserialize, Serialize};
@@ -65,12 +69,57 @@ pub enum ExistingLibrary {
     },
 }
 
-/// Plans the OneLibrary database for an export. Implemented by the
-/// `reks-export-onelibrary` writer and by [`NoWriter`].
+/// Plans and writes the OneLibrary database for an export. Implemented by
+/// the `reks-export-onelibrary` writer and by [`NoWriter`].
 pub trait OneLibraryExport: Send + Sync {
     /// What writing `exportLibrary.db` for `plan` would do. Reads the stick
     /// only; `key` opens the existing database, if any.
     fn plan(&self, plan: &ExportPlan, key: &OneLibraryKey) -> Result<OneLibraryPlan, PlanError>;
+
+    /// Writes `exportLibrary.db` for `plan`, encrypted with `key`, at
+    /// [`DB_PATH`] under `device_root`. Only [`crate::apply`] calls it, after
+    /// the new `export.pdb` is in place and rekordbox's auxiliary files are
+    /// gone, so the two libraries describe the same tracks.
+    ///
+    /// Writes nothing else on the stick but a temp file beside [`DB_PATH`],
+    /// and replaces the file atomically: on `Err` the stick has no new
+    /// database (baken removed the old one with the new `export.pdb`). Like
+    /// baken for its own files, it leaves no macOS `._` AppleDouble file
+    /// beside it (baken issues #192, #196). Errors never contain the key.
+    fn write(
+        &self,
+        plan: &ExportPlan,
+        key: &OneLibraryKey,
+        device_root: &Path,
+    ) -> Result<OneLibraryWritten, OneLibraryWriteError>;
+}
+
+/// What [`OneLibraryExport::write`] put on the stick.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OneLibraryWritten {
+    /// Tracks in the new `exportLibrary.db`.
+    pub tracks: usize,
+    /// Size of the file.
+    pub bytes: u64,
+}
+
+/// Why [`OneLibraryExport::write`] wrote no database.
+#[derive(Debug, thiserror::Error)]
+pub enum OneLibraryWriteError {
+    /// This build has no OneLibrary writer ([`NoWriter`]).
+    #[error("this build cannot write exportLibrary.db")]
+    Unavailable,
+    /// Building the database failed (schema, rows, encryption, integrity check).
+    #[error("building exportLibrary.db failed: {0}")]
+    Build(String),
+    /// The stick refused the write.
+    #[error("cannot write {}: {source}", path.display())]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 /// The key the export uses: the stored one, else `REKS_ONELIBRARY_KEY`.
@@ -128,7 +177,8 @@ pub fn db_write(bytes: u64) -> FileOp {
 }
 
 /// Stand-in until the writer lands: lists the file and what it would remove,
-/// and blocks the export with [`Problem::OneLibraryUnavailable`].
+/// and blocks the export with [`Problem::OneLibraryUnavailable`]; `write`
+/// refuses.
 #[cfg(any(test, feature = "onelibrary-stub"))]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoWriter;
@@ -151,6 +201,15 @@ impl OneLibraryExport for NoWriter {
             warnings: Vec::new(),
             errors: vec![Problem::OneLibraryUnavailable],
         })
+    }
+
+    fn write(
+        &self,
+        _plan: &ExportPlan,
+        _key: &OneLibraryKey,
+        _device_root: &Path,
+    ) -> Result<OneLibraryWritten, OneLibraryWriteError> {
+        Err(OneLibraryWriteError::Unavailable)
     }
 }
 
