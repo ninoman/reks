@@ -30,17 +30,12 @@ const stick: DeviceInfo = {
   osName: "disk4s1",
 };
 
-function planned(
-  name: string,
-  action: PlannedSession["action"],
-  defaultExclusion: PlannedSession["defaultExclusion"] = null,
-): PlannedSession {
+function planned(name: string, action: PlannedSession["action"]): PlannedSession {
   return {
     sourceName: name,
     playedOn: "2026-10-11",
     fingerprint: `fp-${name}`,
     action,
-    defaultExclusion,
     entries:
       action.kind === "skip"
         ? []
@@ -66,7 +61,7 @@ const scan: HistoryScan = {
     sessions: [
       planned("HISTORY 004", { kind: "skip", reason: "alreadyImported", sessionId: 4 }),
       planned("HISTORY 006", { kind: "new" }),
-      planned("HISTORY 008", { kind: "new" }, "preBaseline"),
+      planned("HISTORY 008", { kind: "new" }),
     ],
   },
 };
@@ -91,7 +86,7 @@ afterEach(() => {
 });
 
 describe("HistoryImportDialog", () => {
-  it("scans a stick, shows Practice per new session and imports the choices", async () => {
+  it("scans a stick, Practice per new session starts unticked, imports every choice", async () => {
     render(<HistoryImportDialog />);
     fireEvent.click(await screen.findByRole("button", { name: "Read history" }));
     expect(ipc.historyScan).toHaveBeenCalledWith({ kind: "stick", device: stick });
@@ -99,7 +94,7 @@ describe("HistoryImportDialog", () => {
     const fresh = (await screen.findByLabelText("Practice: HISTORY 006")) as HTMLInputElement;
     const old = screen.getByLabelText("Practice: HISTORY 008") as HTMLInputElement;
     expect(fresh.checked).toBe(false);
-    expect(old.checked).toBe(true);
+    expect(old.checked).toBe(false);
     expect(screen.queryByLabelText("Practice: HISTORY 004")).toBeNull();
     expect(screen.getByText("Already imported")).toBeTruthy();
 
@@ -107,7 +102,7 @@ describe("HistoryImportDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import 2 sessions" }));
     await waitFor(() =>
       expect(ipc.historyImport).toHaveBeenCalledWith(7, {
-        excluded: { "fp-HISTORY 006": true },
+        excluded: { "fp-HISTORY 006": true, "fp-HISTORY 008": false },
       }),
     );
     expect(await screen.findByText(/Imported 2 new sessions/)).toBeTruthy();

@@ -1054,8 +1054,6 @@ export interface PlannedSession {
   /** Key of `ImportChoices.excluded`. */
   fingerprint: string;
   action: SessionAction;
-  /** Why a new session is preselected as Practice. */
-  defaultExclusion: "preBaseline" | null;
   entries: PlannedEntry[];
 }
 

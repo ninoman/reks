@@ -3,9 +3,8 @@
  * folder (a stick backup reks made before an export, or a copy of a stick),
  * see the dry run, then import. The dry run reads the stick and changes
  * nothing; every new session has a Practice checkbox (practice sessions are
- * kept but not counted). Sessions dated on or before the rekordbox baseline
- * start as practice because rekordbox may have counted them; undated ones
- * start counted.
+ * kept but not counted). All start unticked: every session counts unless the
+ * user marks it practice, here or later in the session header.
  */
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
@@ -45,11 +44,6 @@ export function HistoryImportDialog() {
   const isOpen = useHistory((s) => s.importOpen);
   if (!isOpen) return null;
   return <ImportDialog />;
-}
-
-/** Default Practice for a new session: the plan's preselection. */
-function defaultPractice(s: PlannedSession): boolean {
-  return s.defaultExclusion !== null;
 }
 
 function ImportDialog() {
@@ -92,7 +86,14 @@ function ImportDialog() {
     setError(null);
     setStep({ kind: "importing", scan: s });
     try {
-      const report = await historyImport(s.planId, { excluded: practice });
+      // Every new session explicitly: unticked means counted, whatever the
+      // core's default.
+      const excluded = Object.fromEntries(
+        s.plan.sessions
+          .filter((p) => p.action.kind === "new")
+          .map((p) => [p.fingerprint, practice[p.fingerprint] ?? false]),
+      );
+      const report = await historyImport(s.planId, { excluded });
       setStep({ kind: "done", report });
       await h().imported();
     } catch (e) {
@@ -271,7 +272,7 @@ function PlanTable({
               <PlanRow
                 key={s.fingerprint}
                 s={s}
-                practice={practice[s.fingerprint] ?? defaultPractice(s)}
+                practice={practice[s.fingerprint] ?? false}
                 disabled={disabled}
                 onPractice={(on) => onPractice(s.fingerprint, on)}
               />
@@ -298,10 +299,6 @@ function PlanRow({
   const unmatched = tracks.filter((e) => e.trackId === null).length;
   const dividers = s.entries.length - tracks.length;
   const skip = s.action.kind === "skip";
-  const why =
-    s.defaultExclusion === "preBaseline"
-      ? "On or before the baseline: rekordbox may have counted it"
-      : null;
   return (
     <tr
       className="align-top odd:bg-row-alt data-[skip]:text-fg-subtle [&>td]:px-2 [&>td]:py-1"
@@ -331,7 +328,6 @@ function PlanRow({
               aria-label={`Practice: ${s.sourceName}`}
               onChange={(e) => onPractice(e.target.checked)}
             />
-            {why !== null && <span className="text-xs text-fg-muted">{why}</span>}
           </label>
         ) : s.action.kind === "extend" ? (
           <span className="text-xs text-fg-muted">unchanged</span>

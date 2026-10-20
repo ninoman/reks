@@ -257,7 +257,6 @@ export function mockHistory(tracks: TrackRow[]) {
       playedOn,
       fingerprint: `${sourceName.replace(/\D/g, "")}f00dfeedbeef${playedOn ?? "undated"}`,
       action: { kind: "new" },
-      defaultExclusion: playedOn !== null && playedOn <= BASELINE_DATE ? "preBaseline" : null,
       entries: entries.map((e, position) => ({
         position,
         kind: e.kind,
@@ -285,7 +284,6 @@ export function mockHistory(tracks: TrackRow[]) {
       playedOn: "2026-09-05",
       fingerprint: "4c0ffee",
       action: { kind: "skip", reason: "alreadyImported", sessionId: 4 },
-      defaultExclusion: null,
       entries: [],
     };
     lastPlan = {
@@ -320,7 +318,7 @@ export function mockHistory(tracks: TrackRow[]) {
         report.skipped += 1;
         continue;
       }
-      const excluded = choices.excluded[p.fingerprint] ?? p.defaultExclusion !== null;
+      const excluded = choices.excluded[p.fingerprint] ?? false;
       const entries: MockEntry[] = p.entries.map((e) => ({
         kind: e.kind,
         trackId: e.trackId,
@@ -334,7 +332,7 @@ export function mockHistory(tracks: TrackRow[]) {
         playedOn: p.playedOn,
         venue: null,
         excluded,
-        excludedReason: excluded ? (p.defaultExclusion !== null ? "pre_baseline" : "user") : null,
+        excludedReason: excluded ? "user" : null,
         entries,
       });
       const s = sessions[sessions.length - 1] as MockSession;
