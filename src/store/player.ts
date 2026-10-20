@@ -65,6 +65,8 @@ let timer: ReturnType<typeof setInterval> | null = null;
 /** Newest seek not sent yet; a scrub sends only the latest target. */
 let seekTarget: number | null = null;
 let seeking = false;
+/** Bumped by every action; a poll sent before the latest one answers stale. */
+let actions = 0;
 
 function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -87,9 +89,12 @@ export const usePlayer = create<PlayerStore>((set, get) => {
     }
   }
 
-  async function run(action: () => Promise<PlayerStatus>) {
+  async function run(action: () => Promise<PlayerStatus>, poll = false) {
+    const seq = poll ? actions : ++actions;
     try {
-      apply(await action());
+      const status = await action();
+      if (poll && seq !== actions) return;
+      apply(status);
     } catch (e) {
       set({ error: message(e) });
     }
@@ -126,6 +131,8 @@ export const usePlayer = create<PlayerStore>((set, get) => {
     async toggle() {
       const { status } = get();
       if (!status.loaded) return;
+      // Flip the button now, so a second press right after sends the opposite.
+      set({ status: { ...status, playing: !status.playing } });
       await run(status.playing ? playerPause : playerPlay);
     },
 
@@ -159,6 +166,6 @@ export const usePlayer = create<PlayerStore>((set, get) => {
       }
     },
 
-    poll: () => run(playerState),
+    poll: () => run(playerState, true),
   };
 });

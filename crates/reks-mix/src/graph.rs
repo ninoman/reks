@@ -87,6 +87,8 @@ pub struct DeckState {
     /// Seek controls taken so far (wrapping), so the control side can tell
     /// whether a snapshot already includes its latest seek.
     pub seeks: u32,
+    /// Play and pause controls taken so far (wrapping), for the same reason.
+    pub transports: u32,
 }
 
 /// Graph snapshot, sent to the control side about 60 times a second.
@@ -177,6 +179,7 @@ struct Deck {
     gate: Ramp,
     pending: Pending,
     seeks: u32,
+    transports: u32,
     tail: Option<Tail>,
     /// [`SEEK_XFADE_MS`] in frames.
     xfade: u32,
@@ -191,6 +194,7 @@ impl Deck {
             gate: Ramp::new(0.0, sample_rate),
             pending: Pending::None,
             seeks: 0,
+            transports: 0,
             tail: None,
             xfade: (sample_rate * SEEK_XFADE_MS / 1000).max(1),
         }
@@ -207,6 +211,7 @@ impl Deck {
             Control::Load { src, .. } => self.change(Pending::Load(Some(src))),
             Control::Unload { .. } => self.change(Pending::Load(None)),
             Control::Play { .. } => {
+                self.transports = self.transports.wrapping_add(1);
                 if self.src.is_some() && self.position < self.frames() {
                     // Cancels a pending pause; a pending load still runs.
                     if matches!(self.pending, Pending::Pause) {
@@ -220,6 +225,7 @@ impl Deck {
                 None
             }
             Control::Pause { .. } => {
+                self.transports = self.transports.wrapping_add(1);
                 if self.audible() && matches!(self.pending, Pending::None) {
                     self.pending = Pending::Pause;
                     self.gate.target = 0.0;
@@ -349,6 +355,7 @@ impl Deck {
             position: self.position,
             frames: self.frames(),
             seeks: self.seeks,
+            transports: self.transports,
         }
     }
 }
@@ -506,6 +513,7 @@ mod tests {
         render_frames(&mut g, 1_000);
         g.apply(Control::Pause { deck: 0 });
         assert!(g.state().decks[0].playing, "still fading");
+        assert_eq!(g.state().decks[0].transports, 2, "play and pause counted");
         let out = render_frames(&mut g, RAMP + 10);
         assert!(!g.state().decks[0].playing);
         let pos = g.state().decks[0].position;

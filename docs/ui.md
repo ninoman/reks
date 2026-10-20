@@ -1,13 +1,16 @@
 # UI design system
 
 How the React UI is styled. Why this stack: [D26](decisions.md#d26-ui-styling-tailwind-v4--cva--radix).
-The look is adapted from a design analysis of Cursor's marketing site (warm
-cream canvas, warm ink, hairline depth, one scarce accent, 8px control radius)
-at desktop density, with system fonts and a derived dark theme. The accent is
-violet rather than the reference's orange: orange failed AA contrast for small
-text on the cream canvas (3.4:1), and red, pink, green, amber and aqua already
-mean something here (danger, success, rating/warning, track colours). Violet
-is 6.0:1 on cream and 6.6:1 on the dark background.
+The look is adapted from a design analysis of Cursor's marketing site (pale
+canvas, dark ink, hairline depth, one scarce accent, 8px control radius) at
+desktop density, with system fonts and a derived dark theme. The reference's
+warm cream and orange were swapped for an indigo accent on cool, faintly
+indigo-tinted neutrals ("mist"). Orange failed AA contrast for small text on
+cream (3.4:1). A violet accent on the warm cream looked muddy, because the two
+hues are nearly opposite, so the neutrals now lean towards the accent's hue.
+Red, pink, green, amber and aqua already mean something here (danger, success,
+rating/warning, track colours). Indigo is 5.9:1 on the light canvas and 6.9:1
+on the dark one, and white button text on it is 6.2:1.
 
 ## Where things live
 
@@ -30,7 +33,7 @@ No raw colours or one-off sizes outside `tokens.css`.
 
 Three layers in `tokens.css`:
 
-1. **Primitives** (`--warm-*`, `--violet-*`, `--red-*`, `--rb-*` …) in plain
+1. **Primitives** (`--mist-*`, `--indigo-*`, `--red-*`, `--rb-*` …) in plain
    `:root`. Raw values; no utilities. The only hex values in `src/`.
 2. **Semantic tokens** in `@theme static`. These become utilities:
    `--color-surface` → `bg-surface`, `--radius-md` → `rounded-md`,
@@ -47,7 +50,7 @@ filled controls) with `accent-fg` on it, `danger` (+ `-fg`), `success`,
 `warning`, `rating`, `focus-ring`, `overlay`, `waveform-*`, `track-*`
 (rekordbox colours: data, the same in both themes).
 
-The violet `accent` stays scarce: primary buttons, the loaded track, the played
+The indigo `accent` stays scarce: primary buttons, the loaded track, the played
 waveform, focus rings, drop indicators. Selection and toggles that are on
 use the neutral `selected` tint.
 
@@ -55,9 +58,10 @@ use the neutral `selected` tint.
 
 - Accent colour: `--color-accent` and `--color-accent-solid` (+ `-hover`,
   `-active`), in the light block and again in the dark block. They are the
-  same in light. In dark, `accent` is a light violet (readable as text on the
-  dark background) and `accent-solid` a deeper one, so white `accent-fg`
-  passes AA on primary buttons (5.3:1).
+  same in light. In dark, `accent` is a light indigo (readable as text on the
+  dark background) and `accent-solid` the deeper light-theme one, so white
+  `accent-fg` passes AA on primary buttons (6.2:1). Neutrals are tinted
+  towards the accent hue; if you change the accent's hue, re-tint `--mist-*`.
 - Control radius: `--radius-md: 8px;` (sizes `md`/`lg` read it via `--ctl-r-*`).
 - Height of `md` controls: `--ctl-h-md: 28px;`.
 - Row height: `--row-h: 26px;` and `ROW_HEIGHT` in `trackTableModel.ts`
