@@ -25,6 +25,7 @@ const node: PlaylistNode = {
   depth: 0,
   position: 0,
   entries: 3,
+  smart: false,
 };
 const done: PlaylistOutcome = { type: "done", createdId: null, added: 1, skipped: 0 };
 

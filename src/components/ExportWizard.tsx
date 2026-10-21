@@ -354,6 +354,8 @@ function PlaylistsStep({ nodes }: { nodes: PlaylistNode[] }) {
         Pick playlists and folders for {device?.name ?? "the stick"}. A folder exports every
         playlist under it, including ones you add later. Unticked playlists are removed from the
         stick. Next saves the ticks.
+        {nodes.some((n) => n.smart) &&
+          " Smart playlists are written as fixed lists of the tracks they match now."}
       </p>
       <Card role="group" aria-label="Playlists" divided={false} className="py-1">
         {nodes.map((n) => {
@@ -370,6 +372,11 @@ function PlaylistsStep({ nodes }: { nodes: PlaylistNode[] }) {
                 onChange={() => useExportWizard.getState().toggle(n.id)}
               />
               <span className="flex-1 truncate">{n.name}</span>
+              {n.smart && (
+                <Badge variant="muted" title="Written as a fixed list of its current tracks">
+                  Smart
+                </Badge>
+              )}
               <span className="text-xs text-fg-subtle tabular-nums">
                 {n.isFolder ? "folder" : n.entries}
               </span>
@@ -678,6 +685,9 @@ function DryRunView({ dryRun: d, nodes }: { dryRun: DryRun; nodes: PlaylistNode[
                 {p.name}
                 {p.isFolder ? "/" : ""}
                 {p.detail !== "" && <span className="text-fg-muted"> · {p.detail}</span>}
+                {p.smart && (
+                  <span className="text-fg-muted"> · smart, written as a fixed list</span>
+                )}
               </li>
             ))}
           </ul>

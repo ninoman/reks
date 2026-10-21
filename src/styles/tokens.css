@@ -282,6 +282,7 @@
   --z-menu: 30;
   --z-dialog: 40;
   --z-tooltip: 50;
+  --z-toast: 60;
 
   /* Splash (index.html): the wordmark and the light sweeping across it. */
   --splash-wordmark: 44px;

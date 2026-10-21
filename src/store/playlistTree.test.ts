@@ -17,7 +17,7 @@ function node(
   position: number,
   isFolder = false,
 ): PlaylistNode {
-  return { id, parentId, name: `n${id}`, isFolder, depth, position, entries: 0 };
+  return { id, parentId, name: `n${id}`, isFolder, depth, position, entries: 0, smart: false };
 }
 
 // 1 folder { 2, 3 folder { 4 } }, 5

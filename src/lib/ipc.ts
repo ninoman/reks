@@ -58,9 +58,20 @@ export interface Sort {
   descending: boolean;
 }
 
+/**
+ * A rule tree (`rule.rs`). A group matches all or any of its rules; `not`
+ * negates it ("none of these" = `match: "any"` with `not`). NOT of a filter
+ * keeps tracks where the field is empty. Core limits: depth 8, 200 nodes.
+ */
+export type RuleNode =
+  | { type: "group"; match: "all" | "any"; not?: boolean; rules?: RuleNode[] }
+  | { type: "filter"; not?: boolean; filter: Filter };
+
 export interface TrackQuery {
   text: string | null;
   filters: Filter[];
+  /** ANDed with `filters` and `text`. */
+  rule?: RuleNode;
   sort: Sort;
   offset: number;
   limit: number;
@@ -128,8 +139,10 @@ export interface PlaylistNode {
   depth: number;
   /** Index among its siblings. */
   position: number;
-  /** Number of entries (0 for folders). */
+  /** Number of entries (0 for folders); for a smart playlist, the tracks its rule matches now. */
   entries: number;
+  /** A smart playlist (D29): its tracks follow a saved rule. */
+  smart: boolean;
 }
 
 /** Depth first, siblings in order. */
@@ -161,7 +174,18 @@ export type PlaylistOp =
   | { type: "reorderEntries"; playlistId: number; positions: number[]; before: number }
   /** Before the entry at `position`; absent or null = appended. Label rules in reks-core. */
   | { type: "insertDivider"; playlistId: number; position?: number | null; label: string }
-  | { type: "renameDivider"; playlistId: number; position: number; label: string };
+  | { type: "renameDivider"; playlistId: number; position: number; label: string }
+  /** A smart playlist; `sort` absent = newest first (never `playlistPosition`). */
+  | {
+      type: "createSmart";
+      parentId?: number | null;
+      name: string;
+      rule: RuleNode;
+      sort?: Sort;
+      position?: number | null;
+    }
+  /** Replaces a smart playlist's rule; `sort` absent keeps its sort. */
+  | { type: "setRule"; id: number; rule: RuleNode; sort?: Sort };
 
 export type PlaylistOutcome =
   | { type: "done"; createdId: number | null; added: number; skipped: number }
@@ -453,6 +477,15 @@ export function artworkGet(id: number): Promise<ArrayBuffer> {
 
 export function playlistsGet(): Promise<PlaylistTree> {
   return invoke("playlists_get");
+}
+
+/**
+ * The saved rule of a smart playlist, to edit it. UNVERIFIED against the
+ * backend: `playlist_rule` does not exist in reks-core yet (the contract only
+ * has `PlaylistNode.smart`); core has to expose it, or put `rule` on the node.
+ */
+export function playlistRule(id: number): Promise<RuleNode> {
+  return invoke("playlist_rule", { id });
 }
 
 export function playlistsMutate(op: PlaylistOp): Promise<PlaylistOutcome> {
@@ -1131,7 +1164,15 @@ export interface DryRun {
   };
   target: string;
   summary: Fact[];
-  playlists: { id: number; name: string; depth: number; isFolder: boolean; detail: string }[];
+  playlists: {
+    id: number;
+    name: string;
+    depth: number;
+    isFolder: boolean;
+    /** Written as a fixed list of the tracks it matches now (D29). */
+    smart: boolean;
+    detail: string;
+  }[];
   copies: DryRunFileGroup;
   deletes: DryRunFileGroup;
   space: {

@@ -28,6 +28,7 @@ const folder: PlaylistNode = {
   depth: 0,
   position: 0,
   entries: 0,
+  smart: false,
 };
 const set: PlaylistNode = {
   id: 2,
@@ -37,6 +38,7 @@ const set: PlaylistNode = {
   depth: 1,
   position: 0,
   entries: 2,
+  smart: false,
 };
 const done: PlaylistOutcome = { type: "done", createdId: null, added: 0, skipped: 0 };
 

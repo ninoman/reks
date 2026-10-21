@@ -42,6 +42,7 @@ import { mockAdopt } from "./mockAdopt";
 import { mockGrid } from "./mockGrid";
 import { mockHistory } from "./mockHistory";
 import { mockMix } from "./mockMix";
+import { createMockSmart } from "./mockSmart";
 import { createMockTags } from "./mockTags";
 
 const CAMELOT: [string, string][] = [
@@ -152,9 +153,36 @@ const tags = createMockTags(TRACKS.length);
 const tagged = (r: TrackRow): TrackRow => ({ ...r, tags: tags.tagsOf(r.id) });
 
 const NODES: PlaylistNode[] = [
-  { id: 1, parentId: null, name: "Gigs", isFolder: true, depth: 0, position: 0, entries: 0 },
-  { id: 2, parentId: 1, name: "Warm-up", isFolder: false, depth: 1, position: 0, entries: 40 },
-  { id: 3, parentId: 1, name: "Peak time", isFolder: false, depth: 1, position: 1, entries: 55 },
+  {
+    id: 1,
+    parentId: null,
+    name: "Gigs",
+    isFolder: true,
+    depth: 0,
+    position: 0,
+    entries: 0,
+    smart: false,
+  },
+  {
+    id: 2,
+    parentId: 1,
+    name: "Warm-up",
+    isFolder: false,
+    depth: 1,
+    position: 0,
+    entries: 40,
+    smart: false,
+  },
+  {
+    id: 3,
+    parentId: 1,
+    name: "Peak time",
+    isFolder: false,
+    depth: 1,
+    position: 1,
+    entries: 55,
+    smart: false,
+  },
   {
     id: 4,
     parentId: null,
@@ -163,8 +191,18 @@ const NODES: PlaylistNode[] = [
     depth: 0,
     position: 1,
     entries: 120,
+    smart: false,
   },
-  { id: 5, parentId: null, name: "Closing", isFolder: false, depth: 0, position: 2, entries: 25 },
+  {
+    id: 5,
+    parentId: null,
+    name: "Closing",
+    isFolder: false,
+    depth: 0,
+    position: 2,
+    entries: 25,
+    smart: false,
+  },
 ];
 /** A playlist entry: a track id or a divider. */
 type MockEntry = number | { label: string };
@@ -181,8 +219,17 @@ function tracksIn(id: number): number[] {
   return (PLAYLISTS[id] ?? []).filter((e): e is number => typeof e === "number");
 }
 
+const smart = createMockSmart({
+  nodes: NODES,
+  staticTracks: tracksIn,
+  tracks: TRACKS,
+  hasAnyTag: tags.hasAny,
+});
+
 /** The playlist edits the UI can try out against the mock. */
 function mutate(op: PlaylistOp) {
+  const handled = smart.mutate(op);
+  if (handled !== undefined) return handled;
   const done = { type: "done", createdId: null, added: 0, skipped: 0 } as const;
   if (!("playlistId" in op)) return done;
   const list = PLAYLISTS[op.playlistId] ?? [];
@@ -269,14 +316,19 @@ const SORT: Partial<Record<SortColumn, keyof TrackRow>> = {
 
 function query(q: TrackQuery) {
   const playlist = q.filters.find((f) => f.type === "playlist");
+  const smartList = playlist !== undefined && smart.isSmart(playlist.id);
   const entries = playlist === undefined ? [] : (PLAYLISTS[playlist.id] ?? []);
   let rows: TrackRow[] =
     playlist === undefined
       ? TRACKS
-      : entries.flatMap((e, i) =>
-          typeof e === "number" ? [{ ...(TRACKS[e - 1] as TrackRow), entryPosition: i }] : [],
-        );
+      : smartList
+        ? smart.smartRows(playlist.id)
+        : entries.flatMap((e, i) =>
+            typeof e === "number" ? [{ ...(TRACKS[e - 1] as TrackRow), entryPosition: i }] : [],
+          );
   const dividerView =
+    !smartList &&
+    q.rule === undefined &&
     playlist !== undefined &&
     PLAYLISTS[playlist.id] !== undefined &&
     q.sort.column === "playlistPosition" &&
@@ -290,6 +342,8 @@ function query(q: TrackQuery) {
           : [{ position, label: e.label, ascii: /^[ -~]*$/.test(e.label) }],
       )
     : [];
+  const rule = q.rule;
+  if (rule !== undefined) rows = rows.filter((r) => smart.matches(rule, r));
   const text = q.text?.toLowerCase();
   if (text) rows = rows.filter((r) => `${r.title} ${r.artist}`.toLowerCase().includes(text));
   for (const f of q.filters) {
@@ -308,8 +362,16 @@ function query(q: TrackQuery) {
       rows = rows.filter((r) => r.lastPlayed !== null && r.lastPlayed >= f.date);
     if (f.type === "tagAny") rows = rows.filter((r) => tags.hasAny(r.id, f.ids));
   }
-  const col = SORT[q.sort.column] ?? "title";
-  const dir = q.sort.descending ? -1 : 1;
+  // A smart list has no positions: its own sort stands in for "playlist order".
+  const sort =
+    smartList && playlist !== undefined && q.sort.column === "playlistPosition"
+      ? {
+          ...smart.sortOf(playlist.id),
+          descending: smart.sortOf(playlist.id).descending !== q.sort.descending,
+        }
+      : q.sort;
+  const col = SORT[sort.column] ?? "title";
+  const dir = sort.descending ? -1 : 1;
   rows = [...rows].sort((a, b) => {
     const x = a[col] ?? "";
     const y = b[col] ?? "";
@@ -798,6 +860,7 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
       name: p.name,
       depth: 0,
       isFolder: p.isFolder,
+      smart: p.smart,
       detail: p.isFolder ? "" : `${p.entries} tracks`,
     })),
     copies: {
@@ -866,6 +929,15 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
         },
     problems,
     warnings: [
+      ...(lists.some((p) => p.smart)
+        ? [
+            {
+              kind: "smartPlaylistFixed",
+              title: `${lists.filter((p) => p.smart).length === 1 ? "1 smart playlist is" : `${lists.filter((p) => p.smart).length} smart playlists are`} written with the tracks matched now. Players have no smart playlists, so the stick won't update by itself.`,
+              items: lists.filter((p) => p.smart).map((p) => p.name),
+            },
+          ]
+        : []),
       ...(copies.length > 0
         ? [
             {
@@ -1025,6 +1097,7 @@ mockIPC((cmd, payload) => {
     case "analysis_reanalyse":
       return (args.ids as number[]).length;
     case "library_facets":
+      smart.refreshCounts();
       return { genres: GENRES, keys: KEYS, colours: COLOURS, playlists: NODES } satisfies Facets;
     case "library_track":
     case "library_update_track":
@@ -1032,7 +1105,10 @@ mockIPC((cmd, payload) => {
     case "artwork_get":
       throw new Error("no artwork in the mock");
     case "playlists_get":
+      smart.refreshCounts();
       return { nodes: NODES };
+    case "playlist_rule":
+      return smart.ruleOf(args.id as number);
     case "playlists_mutate":
       return mutate(args.op as PlaylistOp);
     case "tags_get":

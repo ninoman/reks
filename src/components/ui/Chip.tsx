@@ -13,14 +13,37 @@ export const chipVariants = cva(
 export type ChipProps = ComponentProps<"span"> &
   VariantProps<typeof chipVariants> & {
     onRemove?: () => void;
+    /** Makes the label a button (e.g. "Filter by this tag"); `activateLabel` names it. */
+    onActivate?: () => void;
+    activateLabel?: string;
     /** Names the × button: "Remove {removeLabel}". */
     removeLabel?: string;
   };
 
-export function Chip({ className, onRemove, removeLabel, children, ...props }: ChipProps) {
+export function Chip({
+  className,
+  onRemove,
+  removeLabel,
+  onActivate,
+  activateLabel,
+  children,
+  ...props
+}: ChipProps) {
   return (
     <span className={cn(chipVariants(), className)} {...props}>
-      <span className="truncate">{children}</span>
+      {onActivate === undefined ? (
+        <span className="truncate">{children}</span>
+      ) : (
+        <button
+          type="button"
+          title={activateLabel}
+          aria-label={activateLabel}
+          className={cn("min-w-0 cursor-pointer truncate rounded-full hover:underline", focusRing)}
+          onClick={onActivate}
+        >
+          {children}
+        </button>
+      )}
       {onRemove !== undefined && (
         <button
           type="button"

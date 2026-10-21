@@ -24,6 +24,7 @@ const set: PlaylistNode = {
   depth: 0,
   position: 0,
   entries: 2,
+  smart: false,
 };
 const done: PlaylistOutcome = { type: "done", createdId: null, added: 2, skipped: 0 };
 const dups: PlaylistOutcome = {

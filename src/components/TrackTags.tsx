@@ -4,6 +4,7 @@
  * from the context menu too. A chip's name is looked up in the tag tree.
  */
 import { useLibrary } from "../store/library";
+import { useRules } from "../store/rules";
 import { tagIndex } from "../store/tagModel";
 import { useTags } from "../store/tags";
 import { PlusIcon } from "./icons";
@@ -41,6 +42,10 @@ export function TrackTags({ trackId, fallback }: { trackId: number; fallback: nu
               key={id}
               title={hit.category.name}
               removeLabel={hit.tag.name}
+              activateLabel={`Filter by tag ${hit.tag.name}`}
+              onActivate={() =>
+                useRules.getState().addCondition({ field: "tag", ids: [id] }, false)
+              }
               onRemove={() => void unassign([trackId], [id])}
             >
               {hit.tag.name}

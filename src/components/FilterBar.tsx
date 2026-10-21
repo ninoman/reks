@@ -6,7 +6,7 @@
  * (genres, keys, colours) come from `library_facets`. The playlist tree
  * chooses the playlist; Clear leaves that alone.
  */
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 
 import { cn } from "../lib/cn";
 import {
@@ -15,17 +15,16 @@ import {
   type LastPlayedFilter,
   useLibrary,
 } from "../store/library";
-import { useKeyLabel } from "../store/settings";
-import { tagIndex } from "../store/tagModel";
-import { useTags } from "../store/tags";
-import { ChevronDownIcon } from "./icons";
-import { TagPicker } from "./TagPicker";
+import { clearAllFilters, useRules } from "../store/rules";
+import { ruleLeafCount } from "../store/ruleTree";
+import { ColourPicker } from "./ColourPicker";
+import { KeyPicker } from "./KeyPicker";
+import { TagFilterPicker } from "./TagFilterPicker";
+import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { Field as UiField } from "./ui/Field";
 import { Input } from "./ui/Input";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/Popover";
 import { Select } from "./ui/Select";
-import { Swatch } from "./ui/Swatch";
 import { Switch } from "./ui/Switch";
 import { Tooltip } from "./ui/Tooltip";
 
@@ -73,100 +72,14 @@ function Field({ label, set, children }: { label: string; set: boolean; children
   );
 }
 
-/**
- * Key picker: a button showing the chosen keys and a popover laid out as the
- * Camelot wheel, labelled in the notation chosen in Settings.
- */
-function KeyPicker() {
-  const keys = useLibrary((s) => s.facets?.keys);
-  const chosen = useLibrary((s) => s.filters.keys);
-  const setFilters = useLibrary((s) => s.setFilters);
-  const [open, setOpen] = useState(false);
-
-  const label = useKeyLabel();
-  const summary =
-    chosen.length === 0
-      ? "Any"
-      : chosen.length <= 2
-        ? chosen.map(label).join(", ")
-        : `${chosen.length} keys`;
-  const toggle = (key: string) =>
-    setFilters({
-      keys: chosen.includes(key) ? chosen.filter((k) => k !== key) : [...chosen, key],
-    });
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button size="sm" className="min-w-16 justify-between font-normal" aria-label="Key">
-          {summary}
-          <ChevronDownIcon />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent>
-        <fieldset
-          className="m-0 grid grid-cols-[repeat(6,36px)] gap-0.5 border-0 p-0"
-          aria-label="Keys"
-        >
-          {keys?.map((k) => (
-            <Button
-              key={k.key}
-              size="xs"
-              variant="ghost"
-              className="px-0 font-normal"
-              aria-pressed={chosen.includes(k.key)}
-              title={`${k.key} · ${k.camelot} · ${k.openKey}`}
-              onClick={() => toggle(k.key)}
-            >
-              {label(k.key)}
-            </Button>
-          ))}
-        </fieldset>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/** My Tags picker: tracks with at least one of the ticked tags. */
-function TagFilterPicker() {
-  const tree = useTags((s) => s.tree);
-  const chosen = useLibrary((s) => s.filters.tagIds);
-  const setFilters = useLibrary((s) => s.setFilters);
-
-  const names = tree === null ? null : tagIndex(tree);
-  const summary =
-    chosen.length === 0
-      ? "Any"
-      : chosen.length === 1
-        ? (names?.get(chosen[0] as number)?.tag.name ?? "1 tag")
-        : `${chosen.length} tags`;
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button size="sm" className="min-w-16 justify-between font-normal" aria-label="My Tags">
-          {summary}
-          <ChevronDownIcon />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent>
-        <TagPicker
-          coverageOf={(id) => (chosen.includes(id) ? "all" : "none")}
-          onToggle={(id, cov) =>
-            setFilters({ tagIds: cov === "all" ? chosen.filter((t) => t !== id) : [...chosen, id] })
-          }
-        />
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 export function FilterBar() {
   const facets = useLibrary((s) => s.facets);
   const f = useLibrary((s) => s.filters);
   const enabled = useLibrary((s) => s.filtersEnabled);
   const setFilters = useLibrary((s) => s.setFilters);
-  const clearFilters = useLibrary((s) => s.clearFilters);
+  const ruleCount = useLibrary((s) => ruleLeafCount(s.rule));
+  const rulesOpen = useRules((s) => s.open);
+  const toggleRules = useRules((s) => s.toggleOpen);
   const set = (patch: Partial<FilterState>) => setFilters(patch);
 
   return (
@@ -194,11 +107,11 @@ export function FilterBar() {
       </Field>
 
       <Field label="Key" set={f.keys.length > 0}>
-        <KeyPicker />
+        <KeyPicker value={f.keys} onChange={(keys) => set({ keys })} />
       </Field>
 
       <Field label="My Tags" set={f.tagIds.length > 0}>
-        <TagFilterPicker />
+        <TagFilterPicker ids={f.tagIds} onChange={(tagIds) => set({ tagIds })} />
       </Field>
 
       <Field label="BPM" set={f.bpmMin !== null || f.bpmMax !== null}>
@@ -226,20 +139,11 @@ export function FilterBar() {
       </Field>
 
       <Field label="Colour" set={f.color !== null}>
-        <div className="flex gap-0.5">
-          {facets?.colours.map((c) => (
-            <Swatch key={c} color={c} size="md" asChild>
-              <button
-                type="button"
-                className="cursor-pointer border-2 border-transparent p-0 aria-pressed:border-fg"
-                aria-pressed={f.color === c}
-                aria-label={c}
-                title={c}
-                onClick={() => set({ color: f.color === c ? null : c })}
-              />
-            </Swatch>
-          ))}
-        </div>
+        <ColourPicker
+          colours={facets?.colours ?? []}
+          value={f.color}
+          onChange={(color) => set({ color })}
+        />
       </Field>
 
       <Field label="Rating" set={f.ratingMin > 0}>
@@ -312,10 +216,19 @@ export function FilterBar() {
 
       <Button
         size="sm"
-        variant="link"
+        variant="outline"
         className="ml-auto"
-        onClick={clearFilters}
-        disabled={activeFilterCount(f) === 0}
+        aria-pressed={rulesOpen}
+        onClick={toggleRules}
+      >
+        Advanced
+        {ruleCount > 0 && <Badge variant={enabled ? "accent" : "muted"}>{ruleCount}</Badge>}
+      </Button>
+      <Button
+        size="sm"
+        variant="link"
+        onClick={clearAllFilters}
+        disabled={activeFilterCount(f) + ruleCount === 0}
       >
         Clear all
       </Button>

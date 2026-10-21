@@ -18,6 +18,7 @@ import {
   type Key,
   libraryFacets,
   libraryQuery,
+  type RuleNode,
   type Sort,
   type TagId,
   type TrackQuery,
@@ -75,7 +76,7 @@ export const noFilters: FilterState = {
 export const defaultSort: Sort = { column: "title", descending: false };
 
 /** Upper BPM bound when only a minimum is set (×100). */
-const BPM_X100_MAX = 1_000_00;
+export const BPM_X100_MAX = 1_000_00;
 
 /** The parts of the store a query is built from. */
 export interface QueryInputs {
@@ -83,11 +84,13 @@ export interface QueryInputs {
   filters: FilterState;
   /** Off: the sidebar filters are kept but not applied (the playlist still is). */
   filtersEnabled: boolean;
+  /** The rule builder's finished rows, ANDed with the filters; `null` = none. */
+  rule: RuleNode | null;
   sort: Sort;
 }
 
 /** Upper play count bound when only a minimum is set. */
-const PLAYS_MAX = 1_000_000;
+export const PLAYS_MAX = 1_000_000;
 
 /** Local calendar date `days` days before `now`, as `YYYY-MM-DD`. */
 export function daysAgo(days: number, now: Date = new Date()): string {
@@ -137,6 +140,7 @@ export function buildQuery(inputs: QueryInputs, page: number): TrackQuery {
         ? inputs.filters
         : { ...noFilters, playlistId: inputs.filters.playlistId },
     ),
+    ...(inputs.filtersEnabled && inputs.rule !== null ? { rule: inputs.rule } : {}),
     sort: { ...inputs.sort },
     offset: page * PAGE_SIZE,
     limit: PAGE_SIZE,
@@ -168,6 +172,8 @@ export interface LibraryState extends QueryInputs {
   setFilters(patch: Partial<FilterState>): void;
   /** Applies the filters or sets them aside without losing their values. */
   setFiltersEnabled(enabled: boolean): void;
+  /** Sets the rule builder's rule (`null`: none) and re-queries. */
+  setRule(rule: RuleNode | null): void;
   /** Clears the sidebar filters; the shown playlist (the tree's selection) stays. */
   clearFilters(): void;
   /**
@@ -233,6 +239,7 @@ export const useLibrary = create<LibraryState>()((set, get) => {
     text: "",
     filters: noFilters,
     filtersEnabled: true,
+    rule: null,
     sort: defaultSort,
     columnVisibility: {},
     total: 0,
@@ -258,6 +265,10 @@ export const useLibrary = create<LibraryState>()((set, get) => {
     setFiltersEnabled(filtersEnabled) {
       if (get().filtersEnabled === filtersEnabled) return;
       set({ filtersEnabled });
+      get().refresh();
+    },
+    setRule(rule) {
+      set({ rule });
       get().refresh();
     },
     clearFilters() {

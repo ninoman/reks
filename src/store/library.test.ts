@@ -20,6 +20,7 @@ const inputs = (patch: Partial<QueryInputs> = {}): QueryInputs => ({
   text: "",
   filters: noFilters,
   filtersEnabled: true,
+  rule: null,
   sort: defaultSort,
   ...patch,
 });

@@ -76,6 +76,7 @@ const node = (
   depth,
   position: 0,
   entries: isFolder ? 0 : 12,
+  smart: false,
 });
 
 const NODES = [
@@ -100,7 +101,9 @@ function dryRun(over: Partial<DryRun> = {}): DryRun {
     },
     target: "Any player",
     summary: [{ label: "Tracks", value: "12: 12 to copy, 0 already on the stick" }],
-    playlists: [{ id: 2, name: "Friday", depth: 0, isFolder: false, detail: "12 tracks" }],
+    playlists: [
+      { id: 2, name: "Friday", depth: 0, isFolder: false, smart: false, detail: "12 tracks" },
+    ],
     copies: {
       count: 1,
       bytes: 9_000_000,

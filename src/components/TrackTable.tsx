@@ -93,7 +93,8 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
   const view = shownPlaylist(nodes, playlistId);
   const loaded = { pages, total, dividers };
   const count = viewCount(loaded);
-  const canReorder = view !== null && sort.column === "playlistPosition" && !sort.descending;
+  const canReorder =
+    view !== null && !view.smart && sort.column === "playlistPosition" && !sort.descending;
   const [dropAt, setDropAt] = useState<{ index: number; after: boolean } | null>(null);
   // A plain press on a selected row selects only it on release, unless it starts a drag.
   const pendingClick = useRef<number | null>(null);
@@ -237,7 +238,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
   }
 
   function removeSelected() {
-    if (view === null) return;
+    if (view === null || view.smart) return;
     void usePlaylists.getState().removeEntries(view.id, selectedPositions());
   }
 
@@ -440,13 +441,14 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
           <>
             <ContextMenuSeparator />
             <ContextMenuItem
-              disabled={!dividerView}
+              disabled={!dividerView || view.smart}
               onSelect={() => {
                 menuRenames.current = true;
                 insertDivider();
               }}
             >
               Insert divider
+              {view.smart && <span className="text-fg-subtle"> (not in smart playlists)</span>}
             </ContextMenuItem>
             {menuDivider !== null && (
               <ContextMenuItem
@@ -461,7 +463,10 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
               </ContextMenuItem>
             )}
             <ContextMenuSeparator />
-            <ContextMenuItem onSelect={removeSelected}>Remove from {view.name}</ContextMenuItem>
+            <ContextMenuItem disabled={view.smart} onSelect={removeSelected}>
+              Remove from {view.name}
+              {view.smart && <span className="text-fg-subtle"> (follows its rules)</span>}
+            </ContextMenuItem>
           </>
         )}
       </ContextMenuContent>

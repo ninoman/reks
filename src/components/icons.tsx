@@ -175,3 +175,13 @@ export function TagIcon() {
     </svg>
   );
 }
+
+/** A playlist that follows rules: the list outline with a spark. */
+export function SmartIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path d="M8 1l1.4 3.6L13 6l-3.6 1.4L8 11 6.6 7.4 3 6l3.6-1.4z" fill="currentColor" />
+      <path d="M12.5 10l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" fill="currentColor" />
+    </svg>
+  );
+}

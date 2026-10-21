@@ -38,6 +38,7 @@ const node = (id: number, parentId: number | null, isFolder = false): PlaylistNo
   depth: 0,
   position: 0,
   entries: 0,
+  smart: false,
 });
 
 /** Gigs/ (1) → Friday (2), Old/ (3) → Older (4); Other (5). Depth first. */

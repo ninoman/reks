@@ -18,6 +18,7 @@ import type { PlaylistNode } from "../lib/ipc";
 import { useHistory } from "../store/history";
 import { usePlaylists } from "../store/playlists";
 import { visibleNodes } from "../store/playlistTree";
+import { useRules } from "../store/rules";
 import { Disclosure } from "./Disclosure";
 import { PlusIcon } from "./icons";
 import { DISCLOSURE, ICON, INDENT, NAME, PAD, ROW } from "./treeStyles";
@@ -25,6 +26,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "./ui/ContextMenu";
 import { focusRingInset } from "./ui/control";
@@ -44,6 +46,8 @@ export function PlaylistTree() {
   /** Set by a row's right-click, read by the tree's (which opens the menu). */
   const hit = useRef<PlaylistNode | null>(null);
   const [drop, setDrop] = useState<{ id: number; zone: DropZone } | null>(null);
+  /** The smart playlist tracks are being dragged over (they can't be dropped there). */
+  const [refused, setRefused] = useState<number | null>(null);
 
   const visible = tree.playlistsOpen ? visibleNodes(nodes, tree.expanded) : [];
   const selected = nodes.find((n) => n.id === tree.selectedId) ?? null;
@@ -96,6 +100,10 @@ export function PlaylistTree() {
     const dt = e.dataTransfer;
     if (hasType(dt, TRACKS_MIME)) {
       if (node.isFolder) return;
+      if (node.smart) {
+        setRefused(node.id);
+        return;
+      }
       e.preventDefault();
       dt.dropEffect = "copy";
       setDrop({ id: node.id, zone: "into" });
@@ -111,9 +119,10 @@ export function PlaylistTree() {
     e.preventDefault();
     const zone = drop?.id === node.id ? drop.zone : "into";
     setDrop(null);
+    setRefused(null);
     const tracks = readTracks(e.dataTransfer);
     if (tracks !== null) {
-      if (!node.isFolder) void p().addTracks(node.id, tracks.trackIds);
+      if (!node.isFolder && !node.smart) void p().addTracks(node.id, tracks.trackIds);
       return;
     }
     const moved = readNode(e.dataTransfer);
@@ -211,7 +220,11 @@ export function PlaylistTree() {
                     hit.current = node;
                   }}
                   onDragOver={(e) => onDragOver(e, node)}
-                  onDragLeave={() => setDrop((d) => (d?.id === node.id ? null : d))}
+                  refused={refused === node.id}
+                  onDragLeave={() => {
+                    setDrop((d) => (d?.id === node.id ? null : d));
+                    setRefused((r) => (r === node.id ? null : r));
+                  }}
                   onDrop={(e) => onDrop(e, node)}
                 />
               ))}
@@ -228,6 +241,10 @@ export function PlaylistTree() {
           </ContextMenuItem>
           {menuNode !== null && (
             <>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={() => excludeFromView(menuNode)}>
+                Exclude from the list
+              </ContextMenuItem>
               <ContextMenuItem
                 onSelect={() =>
                   p().dispatch({ type: "startRename", id: menuNode.id, name: menuNode.name })
@@ -235,6 +252,11 @@ export function PlaylistTree() {
               >
                 Rename
               </ContextMenuItem>
+              {menuNode.smart && (
+                <ContextMenuItem onSelect={() => void useRules.getState().editSmart(menuNode)}>
+                  Edit rules
+                </ContextMenuItem>
+              )}
               <ContextMenuItem onSelect={() => p().requestDelete(menuNode)}>
                 Delete…
               </ContextMenuItem>
@@ -244,6 +266,16 @@ export function PlaylistTree() {
       </ContextMenu>
     </section>
   );
+}
+
+/**
+ * Quick path: shows the whole collection without the tracks of `node` (a row
+ * "not in playlist" in the rule builder). The tree selects a right-clicked
+ * node, so the collection is shown first or the result would be empty.
+ */
+function excludeFromView(node: PlaylistNode) {
+  usePlaylists.getState().select(null);
+  useRules.getState().addCondition({ field: "playlist", id: node.id }, true);
 }
 
 /** Drop-target id of the "Playlists" root row (ids from SQLite are positive). */
@@ -284,12 +316,29 @@ function PlaylistIcon() {
   );
 }
 
+/** A playlist whose tracks follow rules: the list icon with a spark. */
+function SmartPlaylistIcon() {
+  return (
+    <svg className={ICON} viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+      <path
+        d="M10.5 1.5H3a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <path d="M4.5 5h4M4.5 8h3M4.5 11h3" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M12.5 4.5l.9 1.9 1.9.9-1.9.9-.9 1.9-.9-1.9-1.9-.9 1.9-.9z" fill="currentColor" />
+    </svg>
+  );
+}
+
 function TreeRow({
   node,
   selected,
   expanded,
   draft,
   dropZone,
+  refused,
   onContextMenu,
   onDragOver,
   onDragLeave,
@@ -300,6 +349,7 @@ function TreeRow({
   expanded: boolean;
   draft: string | null;
   dropZone: DropZone | null;
+  refused: boolean;
   onContextMenu: () => void;
   onDragOver: (e: DragEvent<HTMLElement>) => void;
   onDragLeave: () => void;
@@ -316,7 +366,9 @@ function TreeRow({
       data-selected={selected || undefined}
       data-drop={dropZone ?? undefined}
       style={{ paddingLeft: PAD + (node.depth + 1) * INDENT }}
-      title={node.isFolder ? undefined : `${node.entries} tracks`}
+      title={
+        node.isFolder ? undefined : `${node.entries} tracks${node.smart ? " · smart playlist" : ""}`
+      }
       draggable={draft === null}
       onClick={() => p().select(node.id)}
       onDoubleClick={() => node.isFolder && p().dispatch({ type: "toggle", id: node.id })}
@@ -341,9 +393,14 @@ function TreeRow({
       ) : (
         <span className={DISCLOSURE} />
       )}
-      {node.isFolder ? <FolderIcon /> : <PlaylistIcon />}
+      {node.isFolder ? <FolderIcon /> : node.smart ? <SmartPlaylistIcon /> : <PlaylistIcon />}
       {draft === null ? (
-        <span className={NAME}>{node.name}</span>
+        <>
+          <span className={NAME}>{node.name}</span>
+          {refused && (
+            <span className="text-xs text-fg-muted">Follows its rules: can't add tracks</span>
+          )}
+        </>
       ) : (
         <Input
           size="xs"

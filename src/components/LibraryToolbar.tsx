@@ -7,6 +7,7 @@
 
 import { activeFilterCount, useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
+import { ruleLeafCount } from "../store/ruleTree";
 import { useTags } from "../store/tags";
 import { AnalysisIndicator } from "./AnalysisIndicator";
 import { ColumnChooser } from "./ColumnChooser";
@@ -24,7 +25,7 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
   const total = useLibrary((s) => s.total);
   const selected = useLibrary((s) => s.selection.selected.size);
   const setText = useLibrary((s) => s.setText);
-  const activeFilters = useLibrary((s) => activeFilterCount(s.filters));
+  const activeFilters = useLibrary((s) => activeFilterCount(s.filters) + ruleLeafCount(s.rule));
   const filtersEnabled = useLibrary((s) => s.filtersEnabled);
   const { filterBarOpen, infoOpen, toggleFilterBar, toggleInfo } = usePanels();
 
