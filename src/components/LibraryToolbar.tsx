@@ -7,10 +7,11 @@
 
 import { activeFilterCount, useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
+import { useTags } from "../store/tags";
 import { AnalysisIndicator } from "./AnalysisIndicator";
 import { ColumnChooser } from "./ColumnChooser";
 import { FiltersSwitch } from "./FilterBar";
-import { FilterIcon, InfoIcon } from "./icons";
+import { FilterIcon, InfoIcon, TagIcon } from "./icons";
 import { SearchBox } from "./SearchBox";
 import type { TrackTableModel } from "./trackTableModel";
 import { Badge } from "./ui/Badge";
@@ -47,6 +48,11 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
       <span className="flex-1" />
       <AnalysisIndicator />
       <ColumnChooser table={table} />
+      <Tooltip content="Manage My Tags">
+        <IconButton size="sm" aria-label="My Tags" onClick={() => useTags.getState().openManager()}>
+          <TagIcon />
+        </IconButton>
+      </Tooltip>
       <Separator orientation="vertical" className="my-2.5" />
       <Tooltip content={infoOpen ? "Hide track info" : "Show track info"}>
         <IconButton size="sm" aria-pressed={infoOpen} aria-label="Track info" onClick={toggleInfo}>

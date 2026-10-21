@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 
 import { formatBpm, formatDuration, formatRating } from "../lib/format";
 import type { SortColumn, TrackRow } from "../lib/ipc";
+import { tagIndex } from "../store/tagModel";
+import { useTags } from "../store/tags";
 import { KeyLabel } from "./KeyLabel";
 import { Swatch } from "./ui/Swatch";
 
@@ -128,6 +130,22 @@ export const COLUMNS: ColumnSpec[] = [
     sort: "lastPlayed",
     cell: (r) => text(r.lastPlayed?.slice(0, 10) ?? null),
   },
+  {
+    id: "tags",
+    header: "My Tags",
+    width: 220,
+    sort: null,
+    // Read, not subscribed: the table re-renders when the tree changes (TrackTable).
+    cell: (r) => {
+      const tree = useTags.getState().tree;
+      if (tree === null || r.tags.length === 0) return "";
+      const names = tagIndex(tree);
+      return r.tags
+        .map((id) => names.get(id)?.tag.name)
+        .filter((n) => n !== undefined)
+        .join(", ");
+    },
+  },
   { id: "comment", header: "Comment", width: 200, sort: null, cell: (r) => text(r.comment) },
 ];
 
@@ -144,4 +162,5 @@ export const DEFAULT_HIDDEN = [
   "playCount",
   "lastPlayed",
   "comment",
+  "tags",
 ];

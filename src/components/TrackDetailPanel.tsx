@@ -36,6 +36,7 @@ import { primaryIndex } from "../store/selection";
 import { useKeyLabel } from "../store/settings";
 import { GridEditorDialog } from "./GridEditor";
 import { PlayedIn } from "./PlayedIn";
+import { TrackTags } from "./TrackTags";
 import {
   buildPatch,
   type EditField,
@@ -287,6 +288,8 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
           </Button>
         </div>
       </form>
+
+      <TrackTags trackId={trackId} fallback={t.tags} />
 
       <PlayedIn trackId={trackId} playCount={t.playCount} lastPlayed={t.lastPlayed} />
 

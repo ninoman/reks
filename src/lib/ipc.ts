@@ -11,6 +11,9 @@ export function appReady(): Promise<void> {
   return invoke("app_ready");
 }
 
+/** Row id of a My Tags category or tag (one id space). */
+export type TagId = number;
+
 /** Canonical key name from `keys.rs`, e.g. `Am`, `F#m`, `Db`. */
 export type Key = string;
 
@@ -27,7 +30,9 @@ export type Filter =
   | { type: "neverPlayed" }
   | { type: "playCountRange"; min: number; max: number }
   /** Last played on or after `date` (`YYYY-MM-DD`). */
-  | { type: "playedSince"; date: string };
+  | { type: "playedSince"; date: string }
+  /** The track has at least one of these My Tags. */
+  | { type: "tagAny"; ids: TagId[] };
 
 export type SortColumn =
   | "title"
@@ -87,6 +92,8 @@ export interface TrackRow {
   needsAnalysis: boolean;
   /** Position of this entry in a playlist view (one row per entry); null elsewhere. */
   entryPosition: number | null;
+  /** My Tags on the track, ordered by category then tag display order. */
+  tags: TagId[];
 }
 
 /** A divider entry in a playlist (D22); `position` numbers entries like `entryPosition`. */
@@ -230,6 +237,8 @@ export interface ImportReport {
   playlistsMatched: number;
   playlistEntries: number;
   playlistEntriesSkipped: number;
+  tagsCreated: number;
+  tagsAssigned: number;
   /** Deepest folder holding every file not found; the remap `from` to suggest. */
   missingRoot: string | null;
   elapsedMs: number;
@@ -448,6 +457,52 @@ export function playlistsGet(): Promise<PlaylistTree> {
 
 export function playlistsMutate(op: PlaylistOp): Promise<PlaylistOutcome> {
   return invoke("playlists_mutate", { op });
+}
+
+export interface TagInfo {
+  id: TagId;
+  name: string;
+  trackCount: number;
+}
+
+export interface TagCategory {
+  id: TagId;
+  name: string;
+  tags: TagInfo[];
+}
+
+/** Categories and their tags, both in display order. */
+export interface TagTree {
+  categories: TagCategory[];
+}
+
+/**
+ * A My Tags edit (`tag.rs`). `position` is an index among siblings. Names are
+ * unique under one parent, case-insensitively; bad input is rejected whole.
+ */
+export type TagOp =
+  | { type: "createCategory"; name: string; position?: number }
+  | { type: "createTag"; categoryId: TagId; name: string; position?: number }
+  | { type: "rename"; id: TagId; name: string }
+  /** A category takes its tags with it; the tags are unassigned everywhere. */
+  | { type: "delete"; id: TagId }
+  /** A category: no `categoryId`; a tag: the target category, maybe a new one. */
+  | { type: "move"; id: TagId; categoryId?: TagId | null; position: number }
+  /** Idempotent; `changed` counts new links. */
+  | { type: "assign"; trackIds: number[]; tagIds: TagId[] }
+  | { type: "unassign"; trackIds: number[]; tagIds: TagId[] };
+
+export interface TagOutcome {
+  createdId: TagId | null;
+  changed: number;
+}
+
+export function tagsGet(): Promise<TagTree> {
+  return invoke("tags_get");
+}
+
+export function tagsMutate(op: TagOp): Promise<TagOutcome> {
+  return invoke("tags_mutate", { op });
 }
 
 /** `player_*` commands: the preview player (reks-mix, docs/decisions.md D5). */

@@ -28,6 +28,8 @@ import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
 import { SessionView } from "./components/SessionView";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { TagManagerDialog } from "./components/TagManagerDialog";
+import { TagsSidebarEntry } from "./components/TagsSidebarEntry";
 import { TrackInfoPanel } from "./components/TrackDetailPanel";
 import { TrackTable } from "./components/TrackTable";
 import { TransportBar } from "./components/TransportBar";
@@ -43,6 +45,7 @@ import { usePanels } from "./store/panels";
 import { usePlayer } from "./store/player";
 import { usePlaylists } from "./store/playlists";
 import { startUiSync, useSettings } from "./store/settings";
+import { useTags } from "./store/tags";
 
 /** Pressed alone, these change nothing on screen. */
 const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta"]);
@@ -74,6 +77,7 @@ export default function App() {
     s.refresh();
     void s.loadFacets();
     void usePlaylists.getState().load();
+    void useTags.getState().load();
     void useHistory.getState().load();
     void useAnalysis.getState().subscribe();
     return () => {
@@ -110,6 +114,7 @@ export default function App() {
         <aside className="flex w-(--sidebar-w) shrink-0 flex-col border-r border-border bg-bg-subtle">
           <PlaylistTree />
           <HistoryTree />
+          <TagsSidebarEntry />
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
           {sessionOpen ? (
@@ -146,6 +151,7 @@ export default function App() {
       <AdoptDialog />
       <ExportWizard />
       <ConvertDialog />
+      <TagManagerDialog />
       <HistoryImportDialog />
     </div>
   );
