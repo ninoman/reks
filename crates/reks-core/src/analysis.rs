@@ -18,6 +18,8 @@
 //!   always written, so the track leaves the pending list either way. The
 //!   hash is the file's current one, so it also refreshes `content_hash`
 //!   (a file edited since the last scan would otherwise stay pending).
+//! - Pending tracks with a rekordbox grid are queued after the rest
+//!   (`PENDING_SQL`).
 
 use std::path::Path;
 
@@ -95,11 +97,17 @@ pub fn file_content_hash(path: &Path) -> Result<String> {
 /// analyser version, or whose file changed since (by `content_hash`). A
 /// failed run counts as a run, so failures are not retried until either
 /// changes; missing files are skipped.
+///
+/// Tracks with a rekordbox grid come last: the library already has their
+/// grid and BPM from the XML import, which analysis keeps (D10), so tracks
+/// with nothing yet get their grid first.
 const PENDING_SQL: &str = "SELECT id, path FROM track
      WHERE missing = 0
        AND (analysis_version IS NULL OR analysis_version <> ?1
             OR (content_hash IS NOT NULL AND analysis_hash IS NOT content_hash))
-     ORDER BY id";
+     ORDER BY EXISTS (SELECT 1 FROM beatgrid
+                      WHERE beatgrid.track_id = track.id AND beatgrid.source = 'rekordbox'),
+              id";
 
 impl Library {
     /// Tracks needing analysis by analyser `version`, oldest first.
@@ -339,6 +347,23 @@ mod tests {
             .unwrap();
         assert!(pending_ids(&lib, 1).is_empty());
         assert!(lib.analysis_jobs(&[a, b, 999]).unwrap().len() == 1);
+    }
+
+    #[test]
+    fn rekordbox_gridded_tracks_are_analysed_last() {
+        let (_d, lib) = lib();
+        let a = insert(&lib, "/m/a.mp3");
+        let b = insert(&lib, "/m/b.mp3");
+        let c = insert(&lib, "/m/c.mp3");
+        lib.conn()
+            .unwrap()
+            .execute(
+                "INSERT INTO beatgrid (track_id, position_ms, bpm_x100, source)
+                 VALUES (?1, 50.0, 12000, 'rekordbox')",
+                [a],
+            )
+            .unwrap();
+        assert_eq!(pending_ids(&lib, 1), [b, c, a]);
     }
 
     #[test]

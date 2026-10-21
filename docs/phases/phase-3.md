@@ -328,6 +328,8 @@ rekordbox keys (D10, "Queue").
     Tests: [tests/queue.rs](../../crates/reks-analysis/tests/queue.rs)
     (completion, pause, cancel, cache reuse and invalidation, manual data,
     failures). Throughput on real tracks is unmeasured (task 12).
+    Order (2026-10-21): pending tracks with a rekordbox grid go last; skipping
+    them altogether is proposed in D10 ("Finding", not accepted yet).
 12. [x] **Parity measurement**: run the whole imported library through reks;
     report BPM agreement (|Δ| ≤ 0.05), downbeat agreement (first beat within
     30 ms modulo bar), key agreement (exact, relative, neighbour), with

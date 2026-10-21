@@ -264,6 +264,34 @@ Date of decisions: 2026-10-18.
   can use it without touching the library. Rationale: unmeasured analysis
   must not silently replace grids a DJ has played with. A locked grid
   (`track.grid_locked`, task 13) stays too.
+- Queue order (2026-10-21): pending tracks with a rekordbox grid are
+  analysed after the rest (`PENDING_SQL` in
+  [`reks-core/src/analysis.rs`](../crates/reks-core/src/analysis.rs)), so
+  scanned tracks with no grid get one first. Every track is still analysed.
+- Finding (2026-10-21; status: **proposed**, for the maintainer): skip reks
+  analysis for tracks rekordbox already analysed. Today the XML import
+  already gives these tracks their BPM, key, grid (`TEMPO`) and cues with
+  `source = 'rekordbox'`, and analysis never replaces them, so the library
+  shows rekordbox's values either way. What the background run still adds
+  for them: (1) reks's cache entry (grid, key, waveform bands), which the
+  export needs to build reks ANLZ under `reksFirst` and for a grid the user
+  edited or locked in reks (D7, else rekordbox's cached `PQTZ` would be
+  copied and the edit lost); (2) a BPM/key where rekordbox had none;
+  (3) beat/key confidence. The deck and grid-editor waveforms don't depend
+  on it (`columns.rs` computes them on demand), nor does the parity report
+  (`reks parity run` analyses on its own). Proposal: a track counts as
+  analysed when it has a rekordbox grid and key and rekordbox's ANLZ for it
+  is found in the local cache (`rbcache`, the same match the export uses);
+  reks analyses it only on demand: Re-analyse, a grid edit or lock, or an
+  export that would build reks ANLZ for it. Costs: the D7 user-owned-grid
+  rule becomes "analyse first, then export" (slower first export after an
+  edit); confidences stay empty for those tracks; reading rekordbox's
+  waveforms into reks (instead of on-demand columns) would need our own
+  reader, since rekordcrate 0.3.0 can't parse PWV6/PWV7 and misreads
+  PWV2/PWV5 (D9). Not done until accepted, because it changes the rule
+  above that every track is analysed. Saving: one background pass over the
+  imported library (~25× real time per core, phase 3 task 12), so about
+  1.5–2 hours for 3,000 six-minute tracks on an 8-core machine.
 - Grid positions (2026-10-20): every `beatgrid.position_ms` is written as
   whole ms (XML import, analysis, grid editor), so the Rust types are `i64`.
   The column stays `REAL` (no migration; whole numbers are exact in it).
