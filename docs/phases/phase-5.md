@@ -195,6 +195,10 @@ pub enum Control {
    after each start, so the engine matches the panel. Verified in the
    browser with the dev mock only, not yet on the real engine. Channel meters
    sit beside the faders and the master meter in the master section.
+   Waveform style setting (2026-10-21, maintainer request): Settings → Decks
+   picks 3-band, RGB or Blue for the deck waveforms and overviews, applied
+   live ([`../ui.md`](../ui.md#mix-panel-phase-5); `display.deck_waveform`
+   in `reks-core` `settings.rs`). Verified in the browser with the dev mock.
 10. **Key lock evaluation**: listen to `timestretch`, `signalsmith-stretch` and
     `rubberband` at ±6% on three techno tracks and one vocal track; record the
     choice in D21; add it as a per-deck toggle, or record why not.

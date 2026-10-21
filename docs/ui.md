@@ -51,7 +51,8 @@ filled controls) with `accent-fg` on it, `danger` (+ `-fg`), `success`,
 (rekordbox colours: data, the same in both themes). The grid editor draws on
 its own dark deck in both themes: `deck`, `deck-fg`, `waveform-low/mid/high`
 (3-band), `grid-beat`, `grid-downbeat`, `grid-cursor`; the mixer's decks add
-`deck-cue` and `deck-hotcue`.
+`deck-cue`, `deck-hotcue` and the other waveform styles' `waveform-rgb-*` and
+`waveform-blue(-high)`.
 
 The indigo `accent` stays scarce: primary buttons, the loaded track, the played
 waveform, focus rings, drop indicators. Selection and toggles that are on
@@ -165,6 +166,13 @@ default, 4 with the toggle (shorter waveforms).
 - Waveforms draw on the dark `deck` like the grid editor: 8 s scrolling with
   the playhead in the middle, beat lines, cue (`deck-cue`) and hot cues
   (`deck-hotcue`); the overview under it is the keyboard seek slider.
+- Waveform style (Settings → Decks, `display.deck_waveform`), applied to both
+  views live: **3-band** (default; low/mid/high overlaid, `waveform-low/mid/high`),
+  **RGB** (mono height, colour mixed from `waveform-rgb-low/mid/high` by band
+  level) and **Blue** (mono height in `waveform-blue`, lightening to
+  `waveform-blue-high` as highs dominate). All three come from the same
+  analysis columns; drawing is pure in [`waveDraw.ts`](../src/lib/waveDraw.ts)
+  (`waveBars`). Only styles our columns can feed are offered.
 - Sync phase: a marker half a beat either side (two beats with bar sync),
   green within 1/32 beat. The tempo fader is CDJ-style: faster towards the
   bottom.

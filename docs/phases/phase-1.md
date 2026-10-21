@@ -442,7 +442,8 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
 ### Settings (`reks-core::settings`, task 13)
 
 - One `setting` row per key, value JSON: `audio.device` (name, absent = system default),
-  `display.key_notation` (`classical` default, `camelot`, `openKey`), `storage.cache_dir`
+  `display.key_notation` (`classical` default, `camelot`, `openKey`), `display.deck_waveform`
+  (Phase 5: `threeBand` default, `rgb`, `blue`), `storage.cache_dir`
   (absent = `app_cache_dir`), `ui.state` (hidden columns, filter bar shown, filters on, track
   info open, volume). A missing or unreadable value is its default (unreadable ones are logged).
   `settings_get` / `settings_set(patch)`; `player_set_device` stores the device itself.
@@ -460,8 +461,9 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
 - Window state is saved 300 ms after the last change (`startUiSync`) and restored before the
   table shows; window size and position are task 14 (window-state plugin, below).
 - UI: Settings dialog (header gear button, Cmd/Ctrl+,), one view in titled groups: Folders
-  (library folders, cache folder), Playback (output device), Display (key notation). A
-  stored device that is not connected stays listed as such.
+  (library folders, cache folder), Playback (output device), Display (key notation), Decks
+  (Mix view waveform style, Phase 5), Experimental (OneLibrary key, Phase 4). A stored
+  device that is not connected stays listed as such.
 - Covered by reks-core and Vitest tests; the dialog was reviewed in `cargo tauri dev`.
   Not checked by hand yet: settings across a restart and a real cache move.
 

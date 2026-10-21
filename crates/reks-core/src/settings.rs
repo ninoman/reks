@@ -3,8 +3,8 @@
 //!
 //! Each setting is one row whose value is JSON. A missing or unreadable value
 //! means the default (an unreadable one is logged), so a bad row never stops
-//! the app. Keys: [`AUDIO_DEVICE`], [`KEY_NOTATION`], [`CACHE_DIR`], [`UI_STATE`],
-//! [`ANLZ_PREFERENCE`], [`ONELIBRARY_KEY`].
+//! the app. Keys: [`AUDIO_DEVICE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`CACHE_DIR`],
+//! [`UI_STATE`], [`ANLZ_PREFERENCE`], [`ONELIBRARY_KEY`].
 //!
 //! The OneLibrary key is write-only from the UI's side: [`Settings`] says
 //! only whether one is stored, and [`Library::onelibrary_key`] is how the
@@ -27,6 +27,8 @@ use crate::Library;
 pub const AUDIO_DEVICE: &str = "audio.device";
 /// [`KeyNotation`] for the table, track info and key picker.
 pub const KEY_NOTATION: &str = "display.key_notation";
+/// [`DeckWaveform`]: how the Mix view's deck waveforms are drawn.
+pub const DECK_WAVEFORM: &str = "display.deck_waveform";
 /// The cache dir the user chose; absent = the app's default.
 pub const CACHE_DIR: &str = "storage.cache_dir";
 /// [`UiState`].
@@ -55,12 +57,31 @@ pub enum AnlzPreference {
     RekordboxOnly,
 }
 
+/// How the Mix view's decks draw their waveforms (display only). Every style
+/// is drawn from the same analysis columns (low, mid, high, mono), so
+/// switching needs no re-analysis.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DeckWaveform {
+    /// Low, mid and high bands overlaid in their own colours (rekordbox's
+    /// "3Band").
+    #[default]
+    ThreeBand,
+    /// Mono height, coloured by the band mix (lows red, mids green, highs
+    /// blue; rekordbox's "RGB").
+    Rgb,
+    /// Mono height in blue, lighter where highs dominate (the classic
+    /// Pioneer blue waveform).
+    Blue,
+}
+
 /// Everything the Settings dialog and app start-up read.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub audio_device: Option<String>,
     pub key_notation: KeyNotation,
+    pub deck_waveform: DeckWaveform,
     /// The cache dir in use; changed only by [`Library::move_cache_dir`].
     pub cache_dir: PathBuf,
     pub ui: UiState,
@@ -103,6 +124,7 @@ pub struct SettingsPatch {
     #[serde(default, deserialize_with = "present")]
     pub audio_device: Option<Option<String>>,
     pub key_notation: Option<KeyNotation>,
+    pub deck_waveform: Option<DeckWaveform>,
     pub ui: Option<UiState>,
     pub anlz_preference: Option<AnlzPreference>,
     /// `Some(None)` (JSON `null`) removes the stored key.
@@ -136,6 +158,7 @@ impl Library {
         Ok(Settings {
             audio_device: get(&conn, AUDIO_DEVICE)?,
             key_notation: get(&conn, KEY_NOTATION)?.unwrap_or_default(),
+            deck_waveform: get(&conn, DECK_WAVEFORM)?.unwrap_or_default(),
             cache_dir: self.cache_dir(),
             ui: get(&conn, UI_STATE)?.unwrap_or_default(),
             anlz_preference: get(&conn, ANLZ_PREFERENCE)?.unwrap_or_default(),
@@ -160,6 +183,9 @@ impl Library {
             }
             if let Some(n) = patch.key_notation {
                 put(&tx, KEY_NOTATION, Some(&n))?;
+            }
+            if let Some(w) = patch.deck_waveform {
+                put(&tx, DECK_WAVEFORM, Some(&w))?;
             }
             if let Some(mut ui) = patch.ui {
                 ui.volume = clamp_volume(ui.volume);
@@ -492,6 +518,7 @@ mod tests {
         let s = lib.settings().unwrap();
         assert_eq!(s.audio_device, None);
         assert_eq!(s.key_notation, KeyNotation::Classical);
+        assert_eq!(s.deck_waveform, DeckWaveform::ThreeBand);
         assert_eq!(s.cache_dir, dir.path().join("cache"));
         assert_eq!(s.ui, UiState::default());
         assert_eq!(s.anlz_preference, AnlzPreference::RekordboxFirst);
@@ -510,6 +537,7 @@ mod tests {
         lib.update_settings(SettingsPatch {
             audio_device: Some(Some("Speakers".into())),
             key_notation: Some(KeyNotation::Camelot),
+            deck_waveform: Some(DeckWaveform::Rgb),
             ui: Some(ui.clone()),
             anlz_preference: Some(AnlzPreference::ReksFirst),
             onelibrary_key: None,
@@ -523,6 +551,7 @@ mod tests {
             .unwrap();
         assert_eq!(s.audio_device.as_deref(), Some("Speakers"));
         assert_eq!(s.key_notation, KeyNotation::OpenKey);
+        assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
         assert_eq!(s.ui, ui);
         assert_eq!(s.anlz_preference, AnlzPreference::ReksFirst);
         assert_eq!(lib.settings().unwrap(), s);
@@ -545,6 +574,10 @@ mod tests {
         assert_eq!(p.key_notation, Some(KeyNotation::OpenKey));
         let p: SettingsPatch = serde_json::from_str(r#"{"anlzPreference":"reksFirst"}"#).unwrap();
         assert_eq!(p.anlz_preference, Some(AnlzPreference::ReksFirst));
+        let p: SettingsPatch = serde_json::from_str(r#"{"deckWaveform":"threeBand"}"#).unwrap();
+        assert_eq!(p.deck_waveform, Some(DeckWaveform::ThreeBand));
+        let p: SettingsPatch = serde_json::from_str(r#"{"deckWaveform":"blue"}"#).unwrap();
+        assert_eq!(p.deck_waveform, Some(DeckWaveform::Blue));
     }
 
     #[test]
@@ -554,12 +587,14 @@ mod tests {
             .unwrap()
             .execute_batch(
                 "INSERT INTO setting VALUES ('display.key_notation', '\"sideways\"');
+                 INSERT INTO setting VALUES ('display.deck_waveform', '\"plaid\"');
                  INSERT INTO setting VALUES ('ui.state', '{\"volume\": 0.25, \"infoOpen\": 7}');
                  INSERT INTO setting VALUES ('audio.device', 'not json');",
             )
             .unwrap();
         let s = lib.settings().unwrap();
         assert_eq!(s.key_notation, KeyNotation::Classical);
+        assert_eq!(s.deck_waveform, DeckWaveform::ThreeBand);
         assert_eq!(s.ui, UiState::default());
         assert_eq!(s.audio_device, None);
     }
