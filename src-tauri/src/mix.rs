@@ -131,6 +131,8 @@ pub struct DeckView {
     pub bpm: Option<f64>,
     /// Beat number at the playhead; `None` without a grid.
     pub beat: Option<f64>,
+    /// CUE is held from the cue point (the deck plays until it is let go).
+    pub cue_preview: bool,
     pub sync: bool,
     pub sync_bar: bool,
     pub locked: bool,
@@ -192,6 +194,7 @@ fn deck_view(d: &DeckState, loaded: Option<LoadedDeck>, rate: u32) -> DeckView {
         speed: d.speed,
         bpm: d.bpm,
         beat: d.beat,
+        cue_preview: d.cue_preview,
         sync: d.sync,
         sync_bar: d.sync_bar,
         locked: d.locked,
@@ -459,6 +462,9 @@ pub enum MixControl {
     Cue {
         deck: u8,
     },
+    CueRelease {
+        deck: u8,
+    },
     Seek {
         deck: u8,
         ms: f64,
@@ -515,6 +521,7 @@ impl MixControl {
             Self::Play { deck } => Control::Play { deck },
             Self::Pause { deck } => Control::Pause { deck },
             Self::Cue { deck } => Control::Cue { deck },
+            Self::CueRelease { deck } => Control::CueRelease { deck },
             Self::Seek { deck, ms } => Control::Seek {
                 deck,
                 frame: reks_core::deck::ms_to_frame(ms.max(0.0), rate),

@@ -124,3 +124,27 @@ describe("Dialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });
+
+describe("lit switches", () => {
+  it("a control button's pressed state is the lit fill, not the selected tint", () => {
+    render(
+      <Button variant="control" aria-pressed>
+        Cue
+      </Button>,
+    );
+    const cls = screen.getByRole("button").classList;
+    expect(cls).toContain("aria-pressed:bg-lit");
+    expect(cls).toContain("aria-pressed:shadow-lit");
+    expect(cls).not.toContain("aria-pressed:bg-selected");
+    expect(cls).toContain("focus-visible:outline-focus-ring");
+  });
+
+  it("a control segmented control marks itself for its lit segments", () => {
+    render(
+      <SegmentedControl variant="control" value="a" onValueChange={() => {}} aria-label="seg">
+        <Segment value="a">A</Segment>
+      </SegmentedControl>,
+    );
+    expect(screen.getByRole("radiogroup").getAttribute("data-variant")).toBe("control");
+  });
+});

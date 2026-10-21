@@ -41,3 +41,26 @@ export function visibleColumns(table: TrackTableModel): ColumnSpec[] {
     .map((c) => COLUMN_BY_ID.get(c.id))
     .filter((c): c is ColumnSpec => c !== undefined);
 }
+
+/**
+ * Column widths that fill `available` px. Spare width goes to the `grow`
+ * columns in proportion to their width (to all columns if none grow); base
+ * widths are minimums, so a wide table keeps them and scrolls.
+ */
+export function fitColumnWidths(
+  columns: readonly Pick<ColumnSpec, "width" | "grow">[],
+  available: number,
+) {
+  const base = columns.map((c) => c.width);
+  const spare = Math.floor(available) - base.reduce((a, b) => a + b, 0);
+  if (spare <= 0) return base;
+  const anyGrow = columns.some((c) => c.grow);
+  const weights = columns.map((c) => (anyGrow && c.grow !== true ? 0 : c.width));
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  if (totalWeight === 0) return base;
+  const shares = weights.map((w) => Math.floor((spare * w) / totalWeight));
+  // Rounding remainder goes to the last growing column so the sum is exact.
+  const lastGrowing = weights.length - 1 - [...weights].reverse().findIndex((w) => w > 0);
+  shares[lastGrowing] = (shares[lastGrowing] ?? 0) + spare - shares.reduce((a, b) => a + b, 0);
+  return base.map((w, i) => w + (shares[i] ?? 0));
+}

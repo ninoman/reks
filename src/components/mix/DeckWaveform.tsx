@@ -1,16 +1,25 @@
 /**
  * A deck's waveforms on the dark deck: the scrolling view (playhead in the
  * middle, beat lines, cue and hot cue markers; click to seek) and the whole
- * track overview under it (click or arrow keys to seek).
+ * track overview under it (click or arrow keys to seek). Both draw in the
+ * waveform style chosen in Settings → Decks.
  */
 import { type KeyboardEvent, type MouseEvent, useEffect, useState } from "react";
 
 import type { BeatMark, HotCueView } from "../../lib/ipc";
-import { drawBands, drawBeats, drawMarker, prepare, type WaveView } from "../../lib/waveDraw";
+import {
+  drawBeats,
+  drawMarker,
+  drawWave,
+  prepare,
+  type WaveView,
+  wavePalette,
+} from "../../lib/waveDraw";
+import { useSettings } from "../../store/settings";
 import { focusRingInset } from "../ui/control";
 
 /** Seconds shown across the scrolling view. */
-const VIEW_S = 8;
+export const VIEW_S = 8;
 /** Arrow-key seek step on the overview, ms. */
 const SEEK_STEP_MS = 2_000;
 
@@ -50,6 +59,7 @@ export function DeckWaveform({
   compact,
   onSeek,
 }: DeckWaveformProps) {
+  const style = useSettings((s) => s.settings?.deckWaveform ?? "threeBand");
   const [scroll, setScroll] = useState<HTMLCanvasElement | null>(null);
   const [overview, setOverview] = useState<HTMLCanvasElement | null>(null);
   const width = useWidth(scroll);
@@ -62,12 +72,12 @@ export function DeckWaveform({
     const p = prepare(scroll, width, height);
     if (p === null) return;
     const v: WaveView = { startMs, pxPerS, width, height };
-    if (columns !== null) drawBands(p.ctx, p.token, columns, v);
+    if (columns !== null) drawWave(p.ctx, wavePalette(p.token), style, columns, v);
     if (beats !== null) drawBeats(p.ctx, p.token, beats, v);
     for (const c of hotCues) drawMarker(p.ctx, p.token("--color-deck-hotcue"), c.positionMs, v, 2);
     drawMarker(p.ctx, p.token("--color-deck-cue"), cueMs, v, 2);
     drawMarker(p.ctx, p.token("--color-deck-fg"), positionMs, v, 2);
-  }, [scroll, width, columns, beats, hotCues, cueMs, positionMs, startMs, pxPerS]);
+  }, [scroll, width, style, columns, beats, hotCues, cueMs, positionMs, startMs, pxPerS]);
 
   useEffect(() => {
     if (overview === null || width === 0 || durationMs <= 0) return;
@@ -75,12 +85,12 @@ export function DeckWaveform({
     const p = prepare(overview, width, height);
     if (p === null) return;
     const v: WaveView = { startMs: 0, pxPerS: (width * 1000) / durationMs, width, height };
-    if (columns !== null) drawBands(p.ctx, p.token, columns, v);
+    if (columns !== null) drawWave(p.ctx, wavePalette(p.token), style, columns, v);
     p.ctx.fillStyle = p.token("--color-overlay");
     p.ctx.fillRect(0, 0, Math.round((positionMs / durationMs) * width), height);
     drawMarker(p.ctx, p.token("--color-deck-cue"), cueMs, v);
     drawMarker(p.ctx, p.token("--color-deck-fg"), positionMs, v, 2);
-  }, [overview, width, columns, durationMs, cueMs, positionMs]);
+  }, [overview, width, style, columns, durationMs, cueMs, positionMs]);
 
   function seekScroll(e: MouseEvent<HTMLCanvasElement>) {
     if (pxPerS <= 0) return;

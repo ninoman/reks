@@ -66,7 +66,8 @@ const USAGE: &str = "usage: reks rb plan <stick> --library <library.sqlite> \
 [--import-history|--backup-history|--discard-history] [--dividers] [--anlz-root <dir>]... [--json]
        reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]
        reks rb validate <stick> <plan flags>
-       reks rb history <stick> [--json]";
+       reks rb history <stick> [--json]
+       reks rb map --library <library.sqlite> [--cache-dir <dir>] [--anlz-root <dir>]...";
 
 pub fn run(args: &[String]) -> anyhow::Result<()> {
     match args {
@@ -110,6 +111,7 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
                 None => Ok(()),
             }
         }
+        [cmd, flags @ ..] if cmd == "map" => map(flags),
         [cmd, ours, theirs, flags @ ..] if cmd == "diff" => {
             let json = match flags {
                 [] => false,
@@ -129,6 +131,71 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
         }
         _ => bail!("{USAGE}"),
     }
+}
+
+/// `rb map`: maps rekordbox's analysis into the library's cache for every
+/// pending track that has it (D10), as the app does before queueing
+/// analysis, and prints what it did and how long it took.
+fn map(flags: &[String]) -> anyhow::Result<()> {
+    let mut library: Option<PathBuf> = None;
+    let mut cache_dir: Option<PathBuf> = None;
+    let mut roots: Vec<PathBuf> = Vec::new();
+    let mut it = flags.iter();
+    while let Some(f) = it.next() {
+        let mut value = || {
+            it.next()
+                .map(PathBuf::from)
+                .ok_or_else(|| anyhow::anyhow!("{f} needs a value"))
+        };
+        match f.as_str() {
+            "--library" => library = Some(value()?),
+            "--cache-dir" => cache_dir = Some(value()?),
+            "--anlz-root" => roots.push(value()?),
+            _ => bail!("{USAGE}"),
+        }
+    }
+    let Some(db) = library else { bail!("{USAGE}") };
+    if !db.is_file() {
+        bail!("no library at {}", db.display());
+    }
+    let beside = db.parent().unwrap_or(Path::new(".")).join("cache");
+    let lib = Library::open(&db, cache_dir.as_deref().unwrap_or(&beside))?;
+    if cache_dir.is_none() {
+        lib.use_stored_cache_dir()?;
+    }
+    if roots.is_empty() {
+        roots = rbcache::default_roots();
+    }
+    let started = std::time::Instant::now();
+    let cache = RbCache::scan(&roots)?;
+    let scanned = started.elapsed();
+    let report = reks_export_rb::rbmap::map_pending(&lib, &cache, reks_analysis::ANALYSER_VERSION)?;
+    let mut reasons: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    for (_, skip) in &report.skipped {
+        *reasons.entry(skip.to_string()).or_default() += 1;
+    }
+    println!(
+        "rekordbox analysis files indexed: {} in {} ms ({})",
+        cache.files_indexed(),
+        scanned.as_millis(),
+        cache
+            .roots()
+            .iter()
+            .map(|r| r.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    println!(
+        "candidates: {}, mapped: {}, left to reks's analyser: {} ({} ms in all)",
+        report.candidates,
+        report.mapped.len(),
+        report.skipped.len(),
+        started.elapsed().as_millis()
+    );
+    for (reason, n) in reasons {
+        println!("  {n:>5}  {reason}");
+    }
+    Ok(())
 }
 
 /// `rb export --json` output.

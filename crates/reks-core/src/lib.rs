@@ -28,7 +28,7 @@ pub mod tag;
 pub mod timefmt;
 pub mod track;
 
-pub use analysis::{AnalysisAnchor, AnalysisJob, AnalysisRecord, StoreOutcome};
+pub use analysis::{AnalysisAnchor, AnalysisJob, AnalysisRecord, MappingCandidate, StoreOutcome};
 pub use artwork::ArtworkId;
 pub use beatgrid::{BeatMark, Beatgrid, GridAnchor, GridEdit};
 pub use db::Library;
@@ -48,7 +48,7 @@ pub use query::{
 pub use rule::{Match, RuleNode, MAX_RULE_DEPTH, MAX_RULE_NODES};
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
 pub use secret::OneLibraryKey;
-pub use settings::{AnlzPreference, LibraryRoot, Settings, SettingsPatch, UiState};
+pub use settings::{AnlzPreference, DeckWaveform, LibraryRoot, Settings, SettingsPatch, UiState};
 pub use tag::{TagCategory, TagId, TagInfo, TagOp, TagOutcome, TagTree};
 pub use track::{ArtworkInfo, BeatgridSummary, Cue, Track, TrackDetail, TrackPatch};
 

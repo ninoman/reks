@@ -1,11 +1,14 @@
 /**
- * Filter unit X or Y: FREQ, RESONANCE, HP / BP / LP (any combination), ON,
- * VCF to crossfader, and on Y the LINK to X's FREQ.
+ * Filter unit X or Y: FREQ, RESONANCE, HP / BP / LP, ON, VCF to crossfader,
+ * and on Y the LINK to X's FREQ. A click picks one mode; Shift+click combines
+ * modes (`pickSwitches`).
  */
 import type { FilterUnit as Unit } from "../../lib/ipc";
+import { pickSwitches } from "../../lib/mixView";
 import type { FilterValues } from "../../store/mix";
 import { Button } from "../ui/Button";
 import { Caption } from "../ui/Caption";
+import { Tooltip } from "../ui/Tooltip";
 import { LabelledKnob } from "./LabelledKnob";
 
 export interface FilterUnitProps {
@@ -14,8 +17,10 @@ export interface FilterUnitProps {
   onChange: <K extends keyof FilterValues>(param: K, value: FilterValues[K]) => void;
 }
 
+type Mode = "highPass" | "bandPass" | "lowPass";
+
 /** `[param, button text, spoken name]`. */
-const MODES: ["highPass" | "bandPass" | "lowPass", string, string][] = [
+const MODES: [Mode, string, string][] = [
   ["highPass", "HP", "high-pass"],
   ["bandPass", "BP", "band-pass"],
   ["lowPass", "LP", "low-pass"],
@@ -23,17 +28,25 @@ const MODES: ["highPass" | "bandPass" | "lowPass", string, string][] = [
 
 export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
   const name = `Filter ${unit.toUpperCase()}`;
-  const toggle = (param: keyof FilterValues, text: string, spoken: string) => (
+  const toggle = (param: "on" | "vcfToXfader" | "link", text: string, spoken: string) => (
     <Button
       key={param}
+      variant="control"
       size="xs"
-      aria-pressed={values[param] as boolean}
+      aria-pressed={values[param]}
       aria-label={`${name} ${spoken}`}
       onClick={() => onChange(param, !values[param])}
     >
       {text}
     </Button>
   );
+  const pickMode = (i: number, additive: boolean) => {
+    const was = MODES.map(([p]) => values[p]);
+    pickSwitches(was, i, additive, true).forEach((on, j) => {
+      const mode = MODES[j]?.[0];
+      if (mode !== undefined && on !== was[j]) onChange(mode, on);
+    });
+  };
   return (
     <section aria-label={name} className="flex flex-col items-center gap-1.5">
       <div className="flex items-center gap-1.5">
@@ -57,7 +70,19 @@ export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
         />
       </div>
       <div className="flex gap-0.5">
-        {MODES.map(([p, text, spoken]) => toggle(p, text, spoken))}
+        {MODES.map(([p, text, spoken], i) => (
+          <Tooltip key={p} content="Shift+click to combine modes">
+            <Button
+              variant="control"
+              size="xs"
+              aria-pressed={values[p]}
+              aria-label={`${name} ${spoken}`}
+              onClick={(e) => pickMode(i, e.shiftKey)}
+            >
+              {text}
+            </Button>
+          </Tooltip>
+        ))}
       </div>
       <div className="flex gap-0.5">
         {toggle("vcfToXfader", "VCF", "follows the crossfader")}

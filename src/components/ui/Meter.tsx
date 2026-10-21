@@ -1,47 +1,74 @@
 /**
- * A vertical peak meter, as long as a fader. `level` is linear (1 = 0 dBFS)
- * and shown on a dB scale from `FLOOR_DB`; the cap lights when `clip` is set.
+ * A vertical LED level meter, as long as a fader: a column of round LEDs on
+ * the deck colour (`METER_LEDS`, −20 to +10), lit ones glowing, with the dB
+ * labels beside them. Takes the lit count rather than the level, so a live
+ * meter re-renders only when an LED changes; the top (red) LED also lights
+ * while `clip` is held.
  */
 import { cn } from "../../lib/cn";
+import { type LedTone, METER_LEDS } from "../../lib/meterScale";
 
-/** Bottom of the scale, in dBFS. */
-export const FLOOR_DB = -48;
-/** Above this the bar turns to the warning colour. */
-const HOT_DB = -6;
+const TONE: Record<LedTone, string> = {
+  clip: "[--led:var(--color-led-clip)]",
+  hot: "[--led:var(--color-led-hot)]",
+  ref: "[--led:var(--color-led-ref)]",
+  normal: "[--led:var(--color-led-normal)]",
+};
 
-/** Linear level to dBFS, `FLOOR_DB` for silence. */
-export function levelDb(level: number): number {
-  return level > 0 ? Math.max(FLOOR_DB, 20 * Math.log10(level)) : FLOOR_DB;
-}
+/** Top to bottom, as drawn. */
+const TOP_DOWN = [...METER_LEDS].reverse();
+const FLOOR_DB = (METER_LEDS[0]?.db ?? 0) - 5;
 
 export interface MeterProps {
-  level: number;
+  /** LEDs lit from the bottom, 0..9 (`litCount`). */
+  lit: number;
   clip: boolean;
+  /** Draw the dB labels beside the LEDs. */
+  labels?: boolean;
   "aria-label": string;
   className?: string;
 }
 
-export function Meter({ level, clip, className, ...aria }: MeterProps) {
-  const db = Math.min(0, levelDb(level));
-  const fill = (db - FLOOR_DB) / -FLOOR_DB;
+export function Meter({ lit, clip, labels = true, className, ...aria }: MeterProps) {
+  const top = METER_LEDS[Math.min(lit, METER_LEDS.length) - 1];
+  const db = top?.db ?? FLOOR_DB;
   return (
-    // biome-ignore lint/a11y/useSemanticElements: a native <meter> can't be drawn vertically with a clip cap across engines
+    // biome-ignore lint/a11y/useSemanticElements: a native <meter> can't be drawn as an LED column
     <div
       role="meter"
       aria-valuemin={FLOOR_DB}
-      aria-valuemax={0}
-      aria-valuenow={Math.round(db)}
-      aria-valuetext={clip ? "Clipping" : `${Math.round(db)} dB`}
-      className={cn("flex h-(--fader-len) w-(--meter-w) flex-col gap-px", className)}
+      aria-valuemax={METER_LEDS.at(-1)?.db ?? 0}
+      aria-valuenow={db}
+      aria-valuetext={clip ? "Clipping" : top ? `${top.label} dB` : "Silent"}
+      className={cn("flex h-(--fader-len) gap-0.5", className)}
       {...aria}
     >
-      <span className={cn("h-1 shrink-0 rounded-xs", clip ? "bg-danger" : "bg-surface-strong")} />
-      <span className="relative flex-1 overflow-hidden rounded-xs bg-surface-strong">
-        <span
-          className={cn("absolute inset-x-0 bottom-0", db > HOT_DB ? "bg-warning" : "bg-success")}
-          style={{ height: `${fill * 100}%` }}
-        />
+      <span className="flex w-(--meter-w) flex-col items-center justify-around rounded-full bg-deck">
+        {TOP_DOWN.map((led, i) => {
+          const on = METER_LEDS.length - i <= lit || (led.tone === "clip" && clip);
+          return (
+            <span
+              key={led.db}
+              data-lit={on || undefined}
+              className={cn(
+                "size-(--meter-dot) rounded-full bg-(--led) opacity-25",
+                "data-lit:opacity-100 data-lit:shadow-[0_0_5px_var(--led)]",
+                TONE[led.tone],
+              )}
+            />
+          );
+        })}
       </span>
+      {labels && (
+        <span
+          aria-hidden="true"
+          className="flex w-(--meter-label-w) flex-col justify-around text-(length:--meter-label-fs) text-fg-muted leading-none tabular-nums"
+        >
+          {TOP_DOWN.map((led) => (
+            <span key={led.db}>{led.label}</span>
+          ))}
+        </span>
+      )}
     </div>
   );
 }

@@ -224,6 +224,7 @@ function mutate(op: PlaylistOp) {
 let settings: Settings = {
   audioDevice: null,
   keyNotation: "classical",
+  deckWaveform: "threeBand",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
   onelibraryKeySet: false,

@@ -15,6 +15,8 @@ export interface ColumnSpec {
   /** `null` = not sortable. */
   sort: SortColumn | null;
   align?: "right";
+  /** Takes a share of spare width when the table is narrower than its container. */
+  grow?: true;
   cell: (row: TrackRow) => ReactNode;
 }
 
@@ -45,12 +47,54 @@ export const COLUMNS: ColumnSpec[] = [
     align: "right",
     cell: (r) => (r.entryPosition === null ? "" : r.entryPosition + 1),
   },
-  { id: "title", header: "Title", width: 280, sort: "title", cell: (r) => text(r.title) },
-  { id: "artist", header: "Artist", width: 200, sort: "artist", cell: (r) => text(r.artist) },
-  { id: "album", header: "Album", width: 180, sort: "album", cell: (r) => text(r.album) },
-  { id: "genre", header: "Genre", width: 120, sort: "genre", cell: (r) => text(r.genre) },
-  { id: "label", header: "Label", width: 140, sort: "label", cell: (r) => text(r.label) },
-  { id: "remixer", header: "Remixer", width: 140, sort: null, cell: (r) => text(r.remixer) },
+  {
+    id: "title",
+    grow: true,
+    header: "Title",
+    width: 280,
+    sort: "title",
+    cell: (r) => text(r.title),
+  },
+  {
+    id: "artist",
+    grow: true,
+    header: "Artist",
+    width: 200,
+    sort: "artist",
+    cell: (r) => text(r.artist),
+  },
+  {
+    id: "album",
+    grow: true,
+    header: "Album",
+    width: 180,
+    sort: "album",
+    cell: (r) => text(r.album),
+  },
+  {
+    id: "genre",
+    grow: true,
+    header: "Genre",
+    width: 120,
+    sort: "genre",
+    cell: (r) => text(r.genre),
+  },
+  {
+    id: "label",
+    grow: true,
+    header: "Label",
+    width: 140,
+    sort: "label",
+    cell: (r) => text(r.label),
+  },
+  {
+    id: "remixer",
+    grow: true,
+    header: "Remixer",
+    width: 140,
+    sort: null,
+    cell: (r) => text(r.remixer),
+  },
   {
     id: "bpm",
     header: "BPM",
@@ -146,7 +190,14 @@ export const COLUMNS: ColumnSpec[] = [
         .join(", ");
     },
   },
-  { id: "comment", header: "Comment", width: 200, sort: null, cell: (r) => text(r.comment) },
+  {
+    id: "comment",
+    grow: true,
+    header: "Comment",
+    width: 200,
+    sort: null,
+    cell: (r) => text(r.comment),
+  },
 ];
 
 export const COLUMN_BY_ID = new Map(COLUMNS.map((c) => [c.id, c]));

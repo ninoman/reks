@@ -30,7 +30,15 @@ import {
   playerDevices,
   waveformColumns,
 } from "../lib/ipc";
-import { ASSIGN_VALUE, type Assign, cueFits, NUDGE, type TempoRange } from "../lib/mixView";
+import { litCount } from "../lib/meterScale";
+import {
+  ASSIGN_VALUE,
+  type Assign,
+  cueFits,
+  DEFAULT_TEMPO_RANGE,
+  NUDGE,
+  type TempoRange,
+} from "../lib/mixView";
 import { usePlayer } from "./player";
 
 export type EngineStatus = "stopped" | "starting" | "running" | "error";
@@ -111,6 +119,8 @@ export interface MixStore {
   unload: (deck: number) => void;
   send: (c: MixControl) => void;
   togglePlay: (deck: number) => void;
+  /** CUE pressed (`down`) or let go. */
+  cue: (deck: number, down: boolean) => void;
   toggleSync: (deck: number, bar?: boolean) => void;
   /** -1 slower, 1 faster, 0 released. */
   nudge: (deck: number, dir: -1 | 0 | 1) => void;
@@ -139,7 +149,7 @@ export function emptyDeck(): DeckMeta {
     columns: null,
     beats: null,
     viewError: null,
-    tempoRange: 0.08,
+    tempoRange: DEFAULT_TEMPO_RANGE,
   };
 }
 
@@ -274,7 +284,11 @@ export const useMix = create<MixStore>((set, get) => {
     options: null,
     deckCount: 2,
     decks: Array.from({ length: DECKS }, emptyDeck),
-    channels: Array.from({ length: DECKS }, () => ({ ...DEFAULT_CHANNEL })),
+    // Channels 1–2 on filter X (left), 3–4 on Y (right), as in reks-mix.
+    channels: Array.from({ length: DECKS }, (_, ch) => ({
+      ...DEFAULT_CHANNEL,
+      filterAssign: ch < 2 ? ("x" as const) : ("y" as const),
+    })),
     filters: { x: { ...DEFAULT_FILTER }, y: { ...DEFAULT_FILTER, lowPass: false, highPass: true } },
     crossfader: { pos: 0.5, curve: 0 },
     master: { level: 0.8, cueLevel: 0.7, cueMix: 0, splitCue: false, cuePostEq: false },
@@ -319,7 +333,7 @@ export const useMix = create<MixStore>((set, get) => {
           live,
           decks: Array.from({ length: DECKS }, (_, i) => ({
             ...emptyDeck(),
-            tempoRange: get().decks[i]?.tempoRange ?? 0.08,
+            tempoRange: get().decks[i]?.tempoRange ?? DEFAULT_TEMPO_RANGE,
           })),
         });
         for (const c of mixerControls(get())) await mixControl(c);
@@ -393,7 +407,10 @@ export const useMix = create<MixStore>((set, get) => {
 
     unload(deck) {
       loads[deck] = (loads[deck] ?? 0) + 1;
-      patchDeck(deck, { ...emptyDeck(), tempoRange: get().decks[deck]?.tempoRange ?? 0.08 });
+      patchDeck(deck, {
+        ...emptyDeck(),
+        tempoRange: get().decks[deck]?.tempoRange ?? DEFAULT_TEMPO_RANGE,
+      });
       get().send({ type: "unload", deck });
     },
 
@@ -405,7 +422,12 @@ export const useMix = create<MixStore>((set, get) => {
     togglePlay(deck) {
       const v = deckView(deck);
       if (!v?.loaded) return;
-      get().send({ type: v.playing ? "pause" : "play", deck });
+      // PLAY during a cue preview keeps the deck playing (CDJ).
+      get().send({ type: v.playing && !v.cuePreview ? "pause" : "play", deck });
+    },
+
+    cue(deck, down) {
+      get().send({ type: down ? "cue" : "cueRelease", deck });
     },
 
     toggleSync(deck, bar) {
@@ -471,10 +493,11 @@ export const CLIP_HOLD_MS = 1000;
  * Subscribes to that meter alone, so the rest of the mixer does not render
  * at the state rate.
  */
-export function useMeter(source: number | "master"): { level: number; clip: boolean } {
+export function useMeter(source: number | "master"): { lit: number; clip: boolean } {
   const pick = (s: MixStore) =>
     source === "master" ? s.live?.masterMeter : s.live?.meters[source];
-  const level = useMix((s) => pick(s)?.level ?? 0);
+  // The lit LED count, not the level: the meter renders only when it changes.
+  const lit = useMix((s) => litCount(pick(s)?.level ?? 0));
   const clip = useMix((s) => pick(s)?.clip ?? false);
   const [held, setHeld] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -485,5 +508,5 @@ export function useMeter(source: number | "master"): { level: number; clip: bool
     timer.current = setTimeout(() => setHeld(false), CLIP_HOLD_MS);
   }, [clip]);
   useEffect(() => () => clearTimeout(timer.current), []);
-  return { level, clip: clip || held };
+  return { lit, clip: clip || held };
 }

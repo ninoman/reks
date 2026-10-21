@@ -1,5 +1,5 @@
 //! Always-on safety limiter for the master and cue buses. The hardware has
-//! none; reks needs one because a WILD resonance peak (+26 dB) goes straight
+//! none; reks needs one because a WILD resonance peak (+20 dB) goes straight
 //! into headphones.
 //!
 //! Look-ahead peak limiter, stereo-linked, after the design in G. Burton
@@ -200,7 +200,7 @@ mod tests {
                     }
                     worst = buf.iter().fold(worst, |a, s| a.max(s.abs()));
                 }
-                assert!(loudest_in > 4.0, "sweep too tame at {rate}: {loudest_in}");
+                assert!(loudest_in > 2.5, "sweep too tame at {rate}: {loudest_in}");
                 assert!(worst <= ceiling(), "{rate} {modes:?}: {worst}");
                 assert!(
                     worst_unclamped <= ceiling() * (1.0 + 1e-5),

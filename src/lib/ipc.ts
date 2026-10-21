@@ -668,6 +668,8 @@ export interface DeckView {
   bpm: number | null;
   /** Beat number at the playhead (0 at the first anchor); null without a grid. */
   beat: number | null;
+  /** CUE is held from the cue point: playing until it is let go. */
+  cuePreview: boolean;
   sync: boolean;
   syncBar: boolean;
   /** Following the leader's tempo and phase. */
@@ -748,7 +750,10 @@ export type MixControl =
   | { type: "unload"; deck: number }
   | { type: "play"; deck: number }
   | { type: "pause"; deck: number }
+  /** CUE pressed (CDJ): playing → back to the cue point; paused on it → preview; else set it. */
   | { type: "cue"; deck: number }
+  /** CUE let go: ends a cue preview. */
+  | { type: "cueRelease"; deck: number }
   | { type: "seek"; deck: number; ms: number }
   | { type: "hotCue"; deck: number; slot: number }
   /** Speed ratio, 1 = as recorded. */
@@ -791,6 +796,9 @@ export function mixControl(control: MixControl): Promise<void> {
 /** `settings_*`, `library_root*`, `cache_dir_move` (reks-core `settings.rs`). */
 export type KeyNotation = "classical" | "camelot" | "openKey";
 
+/** How the Mix view's decks draw their waveforms; all come from the same analysis columns. */
+export type DeckWaveform = "threeBand" | "rgb" | "blue";
+
 /** Library window state kept across launches. */
 export interface UiState {
   /** Hidden column ids; `null` until changed (UI defaults). */
@@ -806,6 +814,7 @@ export interface Settings {
   /** `null`: the system default. */
   audioDevice: string | null;
   keyNotation: KeyNotation;
+  deckWaveform: DeckWaveform;
   /** The cache dir in use. */
   cacheDir: string;
   ui: UiState;
@@ -819,6 +828,7 @@ export interface Settings {
 export interface SettingsPatch {
   audioDevice?: string | null;
   keyNotation?: KeyNotation;
+  deckWaveform?: DeckWaveform;
   ui?: UiState;
   anlzPreference?: AnlzPreference;
   /** Stores the OneLibrary key (Settings → Experimental); `null` removes it. Never empty. */

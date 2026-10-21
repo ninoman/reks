@@ -22,6 +22,7 @@ const MIGRATION_LIST: &[M<'static>] = &[
     M::up(include_str!("../migrations/0005_dividers_history.sql")),
     M::up(include_str!("../migrations/0006_grid_lock.sql")),
     M::up(include_str!("../migrations/0007_analysis.sql")),
+    M::up(include_str!("../migrations/0008_analysis_source.sql")),
     M::up(include_str!("../migrations/0009_my_tags.sql")),
     M::up(include_str!("../migrations/0010_smart_playlists.sql")),
 ];

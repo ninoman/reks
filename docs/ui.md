@@ -47,15 +47,19 @@ Semantic colours: `bg`, `bg-subtle` (chrome), `row-alt`, `surface`,
 `fg-muted`, `fg-subtle`, `border`, `border-subtle`, `border-strong`,
 `accent` (text, lines, focus ring), `accent-solid` (+ `-hover`, `-active`;
 filled controls) with `accent-fg` on it, `danger` (+ `-fg`), `success`,
-`warning`, `rating`, `focus-ring`, `overlay`, `waveform-*`, `track-*`
+`warning`, `rating`, `focus-ring`, `overlay`, `lit`/`lit-fg` (a switch that
+is on, with `shadow-lit`), `led-*` (meter LEDs), `waveform-*`, `track-*`
 (rekordbox colours: data, the same in both themes). The grid editor draws on
 its own dark deck in both themes: `deck`, `deck-fg`, `waveform-low/mid/high`
 (3-band), `grid-beat`, `grid-downbeat`, `grid-cursor`; the mixer's decks add
-`deck-cue` and `deck-hotcue`.
+`deck-cue`, `deck-hotcue` and the other waveform styles' `waveform-rgb-*` and
+`waveform-blue(-high)`.
 
 The indigo `accent` stays scarce: primary buttons, the loaded track, the played
 waveform, focus rings, drop indicators. Selection and toggles that are on
-use the neutral `selected` tint.
+use the neutral `selected` tint, except hardware-style switches in the Mix
+panel (`variant="control"`), which light up in `lit` so their state reads at a
+glance.
 
 ### Common edits (one line each in `tokens.css`)
 
@@ -111,7 +115,7 @@ menu items `--menu-item-h`.
 
 | Component | Variants / props | Behaviour from |
 |---|---|---|
-| `Button` | `variant`: primary, secondary, outline, ghost, danger, quiet, link; `size`; `aria-pressed` = toggle | Radix Slot (`asChild`) |
+| `Button` | `variant`: primary, secondary, outline, ghost, danger, quiet, link, control (lit when pressed); `size`; `aria-pressed` = toggle | Radix Slot (`asChild`) |
 | `IconButton` | as Button (default ghost) + `shape`: square, round; `aria-label` required | Radix Slot |
 | `Input` | `variant`: default, search; `size` | native |
 | `Textarea` | `size`: sm, md | native |
@@ -119,7 +123,7 @@ menu items `--menu-item-h`.
 | `Switch` | `size`: sm, md | Radix Switch |
 | `Checkbox` | `size`: sm, md; `indeterminate` (mixed); native, wrap in a `<label>` (Biome knows it as an input) | native |
 | `Slider` | `size`: sm, md; one value | Radix Slider |
-| `SegmentedControl` + `Segment` | `size`; one choice, can't be cleared (radiogroup) | Radix ToggleGroup |
+| `SegmentedControl` + `Segment` | `size`; `variant`: default, control (chosen segment lit); one choice, can't be cleared (radiogroup) | Radix ToggleGroup |
 | `Chip` | removable label pill (`onRemove`, `removeLabel`) | – |
 | `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |
 | `Kbd` | `variant`: default, inverse | – |
@@ -170,14 +174,17 @@ There is no in-app theme setting yet; the app and splash follow the system.
 ## Mix panel (phase 5)
 
 [`src/components/mix/`](../src/components/mix/), opened with **Mix** in the
-app header, under the table. `MixPanel` is the only part that reads the store
+transport bar (bottom edge), under the table. `MixPanel` is the only part that reads the store
 ([`src/store/mix.ts`](../src/store/mix.ts)); `DeckStrip`, `DeckWaveform`,
 `MixerPanel`, `ChannelStrip`, `FilterUnit`, `MasterSection` and `SyncPhase`
 take props. The mixer follows the hardware: four channel strips (level, HI,
 MID 1, MID 2, LO, filter assign X/off/Y, cue, fader, crossfader assign) with
 one caption column, the master and cue section, then filter X, the crossfader
-and filter Y. Decks 1 and 3 sit left of it, 2 and 4 right; 2 decks by
-default, 4 with the toggle (shorter waveforms).
+and filter Y. Decks 1 and 2 sit left of it, 3 and 4 right. Two decks by
+default, and they are decks 2 and 3, the centre channels, as with two CDJs
+on a 4-channel mixer; 4 with the toggle (shorter waveforms). Deck cards are
+as tall as their content (the columns no longer stretch them to the mixer's
+height).
 
 - States: output off (start form: device, rate, buffer, cue routing; the
   device's cue routing is preselected until the user picks one, and routings
@@ -187,22 +194,49 @@ default, 4 with the toggle (shorter waveforms).
 - Waveforms draw on the dark `deck` like the grid editor: 8 s scrolling with
   the playhead in the middle, beat lines, cue (`deck-cue`) and hot cues
   (`deck-hotcue`); the overview under it is the keyboard seek slider.
+  Drag to skim (`mix/useDeckScrub`, a wrapper around `DeckWaveform`, which
+  only draws): on the overview the playhead follows the pointer and a press
+  jumps there; on the zoomed view the track moves with the pointer (drag
+  left to go forward). A playing deck pauses while dragged and plays on from
+  the release point. Seeks are throttled to one per 30 ms, the last always sent.
+- CUE is held, not clicked (pointer down/up, Enter/Space, and the A/J keys
+  down/up): paused on the cue point it previews while held and returns on
+  release; PLAY during the preview keeps it playing.
+- Tempo range button cycles ±6, ±10 (default), ±16 and WIDE (±100%; the
+  slow end stands still), as on a CDJ-3000.
+- Waveform style (Settings → Decks, `display.deck_waveform`), applied to both
+  views live: **3-band** (default; low/mid/high overlaid, `waveform-low/mid/high`),
+  **RGB** (mono height, colour mixed from `waveform-rgb-low/mid/high` by band
+  level) and **Blue** (mono height in `waveform-blue`, lightening to
+  `waveform-blue-high` as highs dominate). All three come from the same
+  analysis columns; drawing is pure in [`waveDraw.ts`](../src/lib/waveDraw.ts)
+  (`waveBars`). Only styles our columns can feed are offered.
 - Sync phase: a marker half a beat either side (two beats with bar sync),
   green within 1/32 beat. The tempo fader is CDJ-style: faster towards the
   bottom.
 - Load: the table's context menu ("Load to deck N", also in playlist views)
   or drag a track onto a deck. Loading starts the output if it is off.
 - Shortcuts while the panel is open ([`src/lib/mixKeys.ts`](../src/lib/mixKeys.ts),
-  also under **Shortcuts** in the panel): A/S/D cue, play, sync deck 1 and
-  J/K/L deck 2 (Shift: decks 3 and 4), Q/W and U/I nudge while held, 1–4 and
+  also under **Shortcuts** in the panel): A/S/D cue, play, sync deck 2 and
+  J/K/L deck 3, the decks on screen with two (Shift: the outer decks 1 and 4), Q/W and U/I nudge while held, 1–4 and
   7–0 hot cues A–D, Z/X/C crossfader. Space stays with the preview player.
 - The mixer is memoised away from the 60 Hz engine state; only the decks
   re-render with it.
-- Meters (`ui/Meter`): peak on a −48…0 dBFS scale, warning colour above
-  −6 dB, a clip cap held for 1 s (the engine reports a clip once). Each meter
-  subscribes to its own value (`useMeter`, `mix/LiveMeter`), so the
-  memoised mixer still skips the 60 Hz renders.
-- Sizes: `--knob-*`, `--fader-*`, `--meter-w`, `--deck-wave-h*`, `--deck-overview-h`,
+- Meters (`ui/Meter`): a DJM-style column of nine round LEDs on the deck
+  colour, labelled beside them: +10 red, +6/+3 white, 0 blue, −3…−20 lime
+  (`led-*` tokens). The scale is `src/lib/meterScale.ts`: +10 is 0 dBFS, so 0
+  (blue) is −10 dBFS (our calibration, UNVERIFIED against a DJM). The red LED
+  also lights while a clip is held (1 s; the engine reports a clip once).
+  Each meter subscribes to its own lit-LED count (`useMeter`,
+  `mix/LiveMeter`), so it renders only when an LED changes and the memoised
+  mixer still skips the 60 Hz renders.
+- Mixer switches (CUE, filter ON/HP/BP/LP/VCF/LINK, SPLIT, POST EQ) are
+  `Button variant="control"` and the assign switches `SegmentedControl
+  variant="control"`: when on they are lit (`lit` fill, `lit-fg` text,
+  `shadow-lit` glow), the same look for every hardware-style switch.
+  HP / BP / LP and channel CUE: a click picks one, Shift+click combines
+  (tooltip on each); FILTER assign starts at X for channels 1–2, Y for 3–4.
+- Sizes: `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-wave-h*`, `--deck-overview-h`,
   `--mixer-strip-w`, `--mixer-row-h`, `--mix-panel-max-h` (the panel scrolls
   inside 62% of the window height).
 

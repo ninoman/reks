@@ -1,7 +1,7 @@
 /**
  * Window-wide mixer shortcuts (`src/lib/mixKeys.ts`) while the mixer is
  * open. Text fields, dialogs and menus keep their keys. Nudge keys bend
- * while held and release on key up.
+ * while held and CUE previews while held; both release on key up.
  */
 import { useEffect } from "react";
 
@@ -12,8 +12,8 @@ import { useMix } from "./mix";
 export function useMixShortcuts(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
-    /** Held nudge keys: code → deck. */
-    const held = new Map<string, number>();
+    /** Held nudge and cue keys: code → what to release. */
+    const held = new Map<string, { type: "nudge" | "cue"; deck: number }>();
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.repeat || keepsSpace(e.target)) return;
@@ -23,7 +23,8 @@ export function useMixShortcuts(enabled: boolean) {
       e.preventDefault();
       switch (action.type) {
         case "cue":
-          mix.send({ type: "cue", deck: action.deck });
+          held.set(e.code, { type: "cue", deck: action.deck });
+          mix.cue(action.deck, true);
           break;
         case "play":
           mix.togglePlay(action.deck);
@@ -35,7 +36,7 @@ export function useMixShortcuts(enabled: boolean) {
           mix.send({ type: "hotCue", deck: action.deck, slot: action.slot });
           break;
         case "nudge":
-          held.set(e.code, action.deck);
+          held.set(e.code, { type: "nudge", deck: action.deck });
           mix.nudge(action.deck, action.dir);
           break;
         case "crossfader": {
@@ -47,19 +48,33 @@ export function useMixShortcuts(enabled: boolean) {
       }
     }
 
+    function release(h: { type: "nudge" | "cue"; deck: number }) {
+      const mix = useMix.getState();
+      if (h.type === "cue") mix.cue(h.deck, false);
+      else mix.nudge(h.deck, 0);
+    }
+
     function onKeyUp(e: KeyboardEvent) {
-      const deck = held.get(e.code);
-      if (deck === undefined) return;
+      const h = held.get(e.code);
+      if (h === undefined) return;
       held.delete(e.code);
-      useMix.getState().nudge(deck, 0);
+      release(h);
+    }
+
+    // Keys let go while the window is in the background never send key up.
+    function onBlur() {
+      for (const h of held.values()) release(h);
+      held.clear();
     }
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
-      for (const deck of held.values()) useMix.getState().nudge(deck, 0);
+      window.removeEventListener("blur", onBlur);
+      onBlur();
     };
   }, [enabled]);
 }

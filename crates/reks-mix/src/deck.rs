@@ -3,7 +3,8 @@
 //! At exactly unit step (speed 1.0 and the source at the engine's rate) the
 //! deck copies source frames, so playback is bit-exact; at any other step it
 //! reads through [`Varispeed`]. The graph sets the speed before every block
-//! (tempo × nudge, or what sync asks for).
+//! (tempo × nudge, or what sync asks for). Slower than the resampler goes
+//! (WIDE tempo near −100%) the deck fades out and holds its position.
 //!
 //! Runs on the audio thread: no allocation, locks or I/O after [`Deck::new`].
 
@@ -13,7 +14,7 @@ use std::sync::Arc;
 use crate::control::Control;
 use crate::graph::{DeckState, Ramp, SEEK_XFADE_MS, TEMPO_MAX, TEMPO_MIN};
 use crate::source::DeckSource;
-use crate::varispeed::Varispeed;
+use crate::varispeed::{Varispeed, MIN_STEP};
 
 /// What a deck does once its gate has faded out.
 #[derive(Debug, Default)]
@@ -55,6 +56,10 @@ pub(crate) struct Deck {
     resampling: bool,
     /// Source frames per output frame for the current block.
     step: f64,
+    /// Too slow to resample: the head stands still once `motion` is silent.
+    held: bool,
+    /// Fades the output out into a hold and back in after it.
+    motion: Ramp,
     playing: bool,
     /// Fades the output in and out around play, pause, cue and load, so none
     /// of them clicks.
@@ -66,6 +71,8 @@ pub(crate) struct Deck {
     /// [`SEEK_XFADE_MS`] in frames.
     xfade: u32,
     cue: f64,
+    /// CUE is held from the cue point; letting go returns there.
+    cue_preview: bool,
     pub(crate) tempo: f64,
     pub(crate) nudge: f64,
     pub(crate) sync: bool,
@@ -87,6 +94,8 @@ impl Deck {
             vs: Varispeed::new()?,
             resampling: false,
             step: 1.0,
+            held: false,
+            motion: Ramp::new(1.0, sample_rate),
             playing: false,
             gate: Ramp::new(0.0, sample_rate),
             pending: Pending::None,
@@ -95,6 +104,7 @@ impl Deck {
             tail: None,
             xfade: (sample_rate * SEEK_XFADE_MS / 1000).max(1),
             cue: 0.0,
+            cue_preview: false,
             tempo: 1.0,
             nudge: 1.0,
             sync: false,
@@ -113,9 +123,13 @@ impl Deck {
         self.playing
     }
 
-    /// Source frames per output frame for the current block.
+    /// Source frames per output frame for the current block (0 while held).
     pub(crate) fn step(&self) -> f64 {
-        self.step
+        if self.held {
+            0.0
+        } else {
+            self.step
+        }
     }
 
     /// Source time of the next frame.
@@ -136,7 +150,10 @@ impl Deck {
 
     /// Speed for the next block (1.0 = as recorded).
     pub(crate) fn set_speed(&mut self, speed: f64) {
-        self.step = crate::varispeed::clamp_step(speed * self.rate_ratio());
+        let step = speed * self.rate_ratio();
+        self.held = step < MIN_STEP;
+        self.motion.target = if self.held { 0.0 } else { 1.0 };
+        self.step = crate::varispeed::clamp_step(step);
     }
 
     /// Speed the deck's own controls ask for.
@@ -157,11 +174,14 @@ impl Deck {
             Control::Unload { .. } => self.change(Pending::Load(None)),
             Control::Play { .. } => {
                 self.transports = self.transports.wrapping_add(1);
+                // PLAY during a cue preview keeps it playing on release.
+                self.cue_preview = false;
                 self.play(clock);
                 None
             }
             Control::Pause { .. } => {
                 self.transports = self.transports.wrapping_add(1);
+                self.cue_preview = false;
                 if self.audible() && matches!(self.pending, Pending::None) {
                     self.pending = Pending::Pause;
                     self.gate.target = 0.0;
@@ -171,7 +191,13 @@ impl Deck {
                 None
             }
             Control::Cue { .. } => {
-                self.cue_button();
+                self.cue_button(clock);
+                None
+            }
+            Control::CueRelease { .. } => {
+                if std::mem::take(&mut self.cue_preview) && self.playing {
+                    self.return_to_cue();
+                }
                 None
             }
             Control::Seek { frame, .. } => {
@@ -229,25 +255,26 @@ impl Deck {
 
     fn stop(&mut self) {
         self.playing = false;
+        self.cue_preview = false;
         self.started = 0;
         self.tail = None;
         self.gate.value = 0.0;
         self.gate.target = 0.0;
     }
 
-    /// CDJ cue: playing, back to the cue point and pause; paused, the cue
-    /// point moves here (to the nearest beat with quantise).
-    fn cue_button(&mut self) {
+    /// CDJ cue: playing, back to the cue point and pause; paused on the cue
+    /// point, play until CUE is let go; paused elsewhere, the cue point
+    /// moves here (to the nearest beat with quantise) and so does the head.
+    fn cue_button(&mut self, clock: u64) {
         if matches!(self.pending, Pending::Load(_)) || self.src.is_none() {
             return;
         }
         if self.playing {
-            if self.audible() {
-                self.pending = Pending::Cue;
-                self.gate.target = 0.0;
-            } else {
-                self.run(Pending::Cue);
-            }
+            self.cue_preview = false;
+            self.return_to_cue();
+        } else if (self.position() - self.cue).abs() < 1.0 {
+            self.play(clock);
+            self.cue_preview = self.playing;
         } else {
             let here = self.position();
             self.cue = match self.src.as_ref() {
@@ -255,6 +282,17 @@ impl Deck {
                 _ => here,
             }
             .clamp(0.0, self.frames() as f64);
+            self.jump(self.cue);
+        }
+    }
+
+    /// Back to the cue point and pause, after a fade-out when audible.
+    fn return_to_cue(&mut self) {
+        if self.audible() {
+            self.pending = Pending::Cue;
+            self.gate.target = 0.0;
+        } else {
+            self.run(Pending::Cue);
         }
     }
 
@@ -270,6 +308,7 @@ impl Deck {
         if matches!(self.pending, Pending::Load(_)) {
             return;
         }
+        self.cue_preview = false;
         let at = at as f64;
         let to = if self.quantise && self.playing {
             src.beats().keep_phase(self.position(), at)
@@ -384,10 +423,15 @@ impl Deck {
         if !self.playing {
             return (0.0, 0.0);
         }
-        let gate = self.gate.next();
+        let gate = self.gate.next() * self.motion.next();
         // Out for the frame, so the head can borrow `self` mutably.
         let src = self.src.take();
         let out = match &src {
+            Some(_) if self.held && self.motion.value == 0.0 => {
+                // Standing still: nothing to hear, nothing to fade.
+                self.tail = None;
+                (0.0, 0.0)
+            }
             Some(src) if self.position() < src.frames() as f64 => {
                 let (mut l, mut r) = self.read(src);
                 if let Some(t) = &mut self.tail {
@@ -430,7 +474,7 @@ impl Deck {
     pub(crate) fn state(&self) -> DeckState {
         let position = self.position();
         let beats = self.src.as_ref().map(|s| s.beats());
-        let speed = self.step / self.rate_ratio();
+        let speed = self.step() / self.rate_ratio();
         let bpm = beats
             .and_then(|b| b.period_at(position))
             .zip(self.src.as_ref())
@@ -448,6 +492,7 @@ impl Deck {
             speed,
             bpm,
             beat: beats.and_then(|b| b.beat_at(position)),
+            cue_preview: self.cue_preview,
             sync: self.sync,
             sync_bar: self.sync_bar,
             locked: self.locked,

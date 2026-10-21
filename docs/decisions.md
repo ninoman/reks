@@ -169,6 +169,9 @@ Date of decisions: 2026-10-18.
   analysis under `rekordboxFirst` too when reks has one, since rekordbox's
   cached `PQTZ` is copied as it is and the edit would be lost;
   `rekordboxOnly` still never writes reks's.
+  A track mapped from rekordbox (D10, "rekordbox mapping") counts as reks
+  analysis here: its reks-built set holds rekordbox's waveform bytes with
+  the library's grid.
   - Phase 2's ANLZ for imported tracks depends on rekordbox's local cache
     existing on the machine; otherwise fall back to generation.
 
@@ -264,6 +267,63 @@ Date of decisions: 2026-10-18.
   can use it without touching the library. Rationale: unmeasured analysis
   must not silently replace grids a DJ has played with. A locked grid
   (`track.grid_locked`, task 13) stays too.
+- Queue order (2026-10-21): pending tracks with a rekordbox grid are
+  analysed after the rest
+  ([`reks-core/src/analysis.rs`](../crates/reks-core/src/analysis.rs)), so
+  scanned tracks with no grid get one first.
+- rekordbox mapping (2026-10-21; status: accepted, maintainer decision
+  2026-10-21: "map rekordbox analysis into the reks cache instead of
+  re-analysing"). This replaces "every track is analysed" above for tracks
+  rekordbox analysed. Before queueing, the app (and `reks rb map`) runs
+  [`rbmap`](../crates/reks-export-rb/src/rbmap.rs). A pending track with a
+  rekordbox grid and a key from the XML import, whose `.DAT`/`.EXT`/`.2EX`
+  rekordbox's local cache has (`rbcache`, the match the export uses) with
+  every waveform section and a length within 1 s of the track's, gets a
+  rekordbox entry in its cache folder: copies of those three files plus
+  `rekordbox.json` (`source: "rekordbox"`, content hash, length). The track
+  is then marked analysed (`track.analysis_source = 'rekordbox'`, migration
+  0008, no analyser version and no confidences) and leaves the pending list
+  until its file changes; analyser upgrades don't re-queue it. What comes
+  from where:
+  - **Mapped from rekordbox**:
+    - grid, BPM, key and cues: the library's `source = 'rekordbox'` rows
+      from the import. They are not copied into the cache, so the cache
+      can't disagree with the library.
+    - all waveforms, PWAV/PWV2–PWV7/PWVC: read by our own
+      [`reks-anlz::rbwave`](../crates/reks-anlz/src/rbwave.rs), because
+      rekordcrate can't read them (D9). Reading and writing them back is
+      byte-identical on the rekordbox 6 reference files.
+  - **Still computed by reks**: the deck and grid-editor waveform columns,
+    on demand from the audio (`reks-analysis::columns`, decode + band
+    filters only, no beat model), as before. Everything for tracks that
+    don't qualify.
+  - **Absent**: beat and key confidence.
+
+  rekordbox's waveform bytes are not converted into reks's 150/s band
+  columns. Our encoders (peak-hold envelope, per-track gain, gamma curves,
+  3–7-bit fields) are not invertible, so columns rebuilt from them would
+  only approximate rekordbox's bytes. Keeping the bytes is exact, and
+  nothing that reads columns needs them from the cache. When reks builds
+  ANLZ for a mapped track (`reksFirst`, or a grid the user edited or locked,
+  D7), [`reksanlz`](../crates/reks-export-rb/src/reksanlz.rs) writes
+  rekordbox's waveform payloads unchanged with the library's grid and cues.
+  A reks analysis entry for the same file takes precedence (Re-analyse
+  still runs the full analyser and sets `analysis_source = 'reks'`).
+  Measured on a copy of the maintainer's library (2026-10-21, 14-core Mac,
+  analyser version 4):
+  - 2,284 of 2,292 candidates (273 h of audio) mapped in 10.2 s, using
+    934 MB of cache. Full analysis of the same tracks is about 11 CPU-hours
+    (15.3 CPU-s per 368 s track, 24× real time per core), so roughly an hour
+    of wall time on this machine.
+  - Left to the analyser: 3 tracks whose rekordbox PWV3 is one column
+    shorter than its PWV5/PWV7, 2 whose rekordbox waveform is ~16 s shorter
+    than the file, 2 grid mismatches, 1 missing file.
+  - All of 200 random mapped tracks built and validated with
+    `reks anlz build --library`.
+
+  UNVERIFIED: reks-built ANLZ carrying rekordbox's waveforms has not been
+  played on a CDJ (phase 3 task 14). Its sections are rekordbox's own bytes
+  in the framing already checked against rekordbox's files.
 - Grid positions (2026-10-20): every `beatgrid.position_ms` is written as
   whole ms (XML import, analysis, grid editor), so the Rust types are `i64`.
   The column stays `REAL` (no migration; whole numbers are exact in it).
@@ -518,6 +578,12 @@ Date of decisions: 2026-10-18.
   Phase 6). It depends only on Phase 1 (imported grids, decode) and Phase 3
   (waveform columns, grid editor). Changed 2026-10-20 (maintainer's call): it
   was Phase 6, after Engine DJ.
+- Filter interaction: clarified 2026-10-21 (maintainer's call; the model is
+  unchanged). FREQ stays the Xone:92 law (LP closes to the left, HP closes to
+  the right). In the UI, a click on HP / BP / LP picks that mode alone and
+  Shift+click combines modes (a unit always keeps one); a click on a channel
+  CUE cues that channel alone (or clears it) and Shift+click adds or removes
+  it. Channels 1–2 default to filter X (left), 3–4 to Y (right).
 - Filter LFOs: dropped 2026-10-20 (maintainer's call). The Xone:92 has one
   per filter (R§9.1); reks models the filters without them. Adding them back
   needs a new decision.

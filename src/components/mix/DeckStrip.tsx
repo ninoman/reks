@@ -1,8 +1,9 @@
 /**
- * One deck: track, tempo and time; scrolling waveform and overview; CUE,
- * PLAY, SYNC (BAR), LEADER and QUANTISE; hot cues A–H; nudge; the tempo
- * fader with its range. Drop a track from the table to load it. Shows the
- * empty, loading and error states of the deck.
+ * One deck: track, tempo and time; scrolling waveform and overview (drag
+ * either to skim); CUE (held on the cue point: preview), PLAY, SYNC (BAR),
+ * LEADER and QUANTISE; hot cues A–H; nudge; the tempo fader with its range.
+ * Drop a track from the table to load it. Shows the empty, loading and
+ * error states of the deck.
  */
 import { type DragEvent, useState } from "react";
 
@@ -13,9 +14,10 @@ import type { DeckView } from "../../lib/ipc";
 import {
   formatClock,
   formatTempo,
-  TEMPO_RANGES,
+  nextTempoRange,
   type TempoRange,
   tempoFader,
+  tempoRangeLabel,
   tempoRatio,
 } from "../../lib/mixView";
 import type { DeckMeta } from "../../store/mix";
@@ -28,12 +30,16 @@ import { IconButton } from "../ui/IconButton";
 import { Tooltip } from "../ui/Tooltip";
 import { DeckWaveform } from "./DeckWaveform";
 import { SyncPhase } from "./SyncPhase";
+import { useDeckScrub } from "./useDeckScrub";
 
 const HOT_CUES = 8;
 
 export interface DeckActions {
   togglePlay: () => void;
-  cue: () => void;
+  play: () => void;
+  pause: () => void;
+  /** CUE pressed (`down`) or let go. */
+  cue: (down: boolean) => void;
   toggleSync: () => void;
   toggleBar: () => void;
   toggleLeader: () => void;
@@ -61,10 +67,8 @@ export interface DeckStripProps {
   actions: DeckActions;
 }
 
-const RANGE_LABEL: Record<TempoRange, string> = { 0.08: "±8", 0.16: "±16", 0.5: "±50" };
-
-function nextRange(r: TempoRange): TempoRange {
-  return TEMPO_RANGES[(TEMPO_RANGES.indexOf(r) + 1) % TEMPO_RANGES.length] ?? 0.08;
+function rangeName(r: TempoRange): string {
+  return r === 1 ? "wide" : `${tempoRangeLabel(r)}%`;
 }
 
 export function DeckStrip({
@@ -81,6 +85,14 @@ export function DeckStrip({
   const n = deck + 1;
   const loaded = meta.track !== null && view?.loaded === true;
   const tempo = view?.tempo ?? 1;
+  const scrub = useDeckScrub({
+    positionMs: view?.positionMs ?? 0,
+    durationMs: view?.durationMs ?? 0,
+    playing: view?.playing ?? false,
+    seek: actions.seek,
+    play: actions.play,
+    pause: actions.pause,
+  });
 
   function onDragOver(e: DragEvent) {
     if (!hasType(e.dataTransfer, TRACKS_MIME)) return;
@@ -104,7 +116,7 @@ export function DeckStrip({
       onDragOver={onDragOver}
       onDragLeave={() => setDropping(false)}
       onDrop={onDrop}
-      className="flex min-w-0 flex-1 gap-2 rounded-md border border-border bg-surface p-2 data-[dropping]:border-accent"
+      className="flex min-w-0 gap-2 rounded-md border border-border bg-surface p-2 data-[dropping]:border-accent"
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <header className="flex min-w-0 items-center gap-2">
@@ -151,17 +163,19 @@ export function DeckStrip({
 
         {loaded && view !== undefined ? (
           <>
-            <DeckWaveform
-              deck={deck}
-              columns={meta.columns}
-              beats={meta.beats}
-              positionMs={view.positionMs}
-              durationMs={view.durationMs}
-              cueMs={view.cueMs}
-              hotCues={meta.hotCues}
-              compact={compact}
-              onSeek={actions.seek}
-            />
+            <div {...scrub} className="cursor-ew-resize touch-none">
+              <DeckWaveform
+                deck={deck}
+                columns={meta.columns}
+                beats={meta.beats}
+                positionMs={view.positionMs}
+                durationMs={view.durationMs}
+                cueMs={view.cueMs}
+                hotCues={meta.hotCues}
+                compact={compact}
+                onSeek={actions.seek}
+              />
+            </div>
             {(meta.viewError !== null || (meta.beats !== null && meta.beats.length === 0)) && (
               <p className="text-2xs text-warning">
                 {meta.viewError ??
@@ -183,7 +197,24 @@ export function DeckStrip({
         )}
 
         <div className="flex flex-wrap items-center gap-1">
-          <Button size="sm" disabled={!loaded} aria-label={`Deck ${n} cue`} onClick={actions.cue}>
+          <Button
+            size="sm"
+            disabled={!loaded}
+            aria-label={`Deck ${n} cue`}
+            onPointerDown={(e) => e.button === 0 && actions.cue(true)}
+            onPointerUp={() => actions.cue(false)}
+            onPointerCancel={() => actions.cue(false)}
+            onPointerLeave={(e) => e.buttons !== 0 && actions.cue(false)}
+            onKeyDown={(e) => {
+              if ((e.key === "Enter" || e.key === " ") && !e.repeat) {
+                e.preventDefault();
+                actions.cue(true);
+              }
+            }}
+            onKeyUp={(e) => {
+              if (e.key === "Enter" || e.key === " ") actions.cue(false);
+            }}
+          >
             Cue
           </Button>
           <IconButton
@@ -292,11 +323,11 @@ export function DeckStrip({
         <Tooltip content="Tempo range">
           <Button
             size="xs"
-            aria-label={`Deck ${n} tempo range ${RANGE_LABEL[meta.tempoRange]}%`}
-            onClick={() => actions.setTempoRange(nextRange(meta.tempoRange))}
+            aria-label={`Deck ${n} tempo range ${rangeName(meta.tempoRange)}`}
+            onClick={() => actions.setTempoRange(nextTempoRange(meta.tempoRange))}
             className="w-(--fader-w) min-w-max"
           >
-            {RANGE_LABEL[meta.tempoRange]}
+            {tempoRangeLabel(meta.tempoRange)}
           </Button>
         </Tooltip>
         <Fader

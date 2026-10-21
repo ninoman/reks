@@ -28,6 +28,7 @@ import {
 } from "react";
 
 import { hasType, readTracks, TRACKS_MIME, type TrackDrag, zoneAt } from "../lib/dnd";
+import { shownDecks } from "../lib/mixView";
 import { useAnalysis } from "../store/analysis";
 import { useConverter } from "../store/converter";
 import { entryPosition, itemAt, useLibrary, type ViewItem, viewCount } from "../store/library";
@@ -40,7 +41,7 @@ import { useTags } from "../store/tags";
 import type { ColumnSpec } from "./columns";
 import { DividerLabel } from "./DividerLabel";
 import { TagSubmenu } from "./TagSubmenu";
-import { ROW_HEIGHT } from "./trackTableModel";
+import { fitColumnWidths, ROW_HEIGHT } from "./trackTableModel";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -71,7 +72,7 @@ const ROW = [
   "data-[divider]:bg-bg-subtle data-[divider]:data-[selected]:bg-selected",
 ].join(" ");
 
-export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
+export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
   const total = useLibrary((s) => s.total);
   const dividers = useLibrary((s) => s.dividers);
   const dividerView = useLibrary((s) => s.dividerView);
@@ -129,7 +130,21 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
     else if (!keepPlace) virtualizer.scrollToOffset(0);
   }, [pagesGeneration, virtualizer]);
 
-  const width = useMemo(() => columns.reduce((w, c) => w + c.width, 0), [columns]);
+  // Spare container width is shared out by `fitColumnWidths`; a wider table scrolls.
+  const [available, setAvailable] = useState(0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el === null) return;
+    const observer = new ResizeObserver(() => setAvailable(el.clientWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const widths = useMemo(() => fitColumnWidths(specs, available), [specs, available]);
+  const columns = useMemo(
+    () => specs.map((c, i) => ({ ...c, width: widths[i] ?? c.width })),
+    [specs, widths],
+  );
+  const width = useMemo(() => widths.reduce((w, x) => w + x, 0), [widths]);
 
   function moveFocus(delta: number, extend: boolean) {
     select({ type: "move", delta, extend, count });
@@ -398,9 +413,8 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
           menuRenames.current = false;
         }}
       >
-        {Array.from({ length: deckCount }, (_, deck) => (
+        {shownDecks(deckCount).map((deck) => (
           <ContextMenuItem
-            // biome-ignore lint/suspicious/noArrayIndexKey: decks are fixed slots
             key={deck}
             disabled={selectedTrackIds().length === 0}
             onSelect={() => loadToDeck(deck)}

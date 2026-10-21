@@ -1,6 +1,8 @@
 /**
  * One choice out of a few, as joined segments (Radix ToggleGroup, single):
  * role="radiogroup" with role="radio" items. The choice can't be cleared.
+ * `variant="control"` lights the chosen segment like a lit switch (mixer
+ * assign switches).
  */
 import * as ToggleGroup from "@radix-ui/react-toggle-group";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -10,7 +12,7 @@ import { cn } from "../../lib/cn";
 import { type ControlSize, focusRingInset } from "./control";
 
 export const segmentedControlVariants = cva(
-  "inline-flex items-stretch gap-0.5 border border-border-strong bg-surface-strong p-0.5",
+  "group/seg inline-flex items-stretch gap-0.5 border border-border-strong bg-surface-strong p-0.5",
   {
     variants: {
       size: {
@@ -27,6 +29,7 @@ export const segmentedControlVariants = cva(
 export const segmentVariants = cva([
   "inline-flex cursor-default items-center gap-1.5 rounded-[calc(var(--radius-sm)-2px)] px-(--ctl-px-sm) font-medium text-fg-muted",
   "hover:text-fg data-[state=on]:bg-surface data-[state=on]:text-fg",
+  "group-data-[variant=control]/seg:data-[state=on]:bg-lit group-data-[variant=control]/seg:data-[state=on]:text-lit-fg group-data-[variant=control]/seg:data-[state=on]:shadow-lit",
   focusRingInset,
 ]);
 
@@ -35,12 +38,15 @@ export type SegmentedControlProps = Omit<
   "type" | "value" | "defaultValue" | "onValueChange"
 > &
   VariantProps<typeof segmentedControlVariants> & {
+    /** `control`: the chosen segment is lit (read by the segments via `group/seg`). */
+    variant?: "default" | "control";
     value: string;
     onValueChange: (value: string) => void;
   };
 
 export function SegmentedControl({
   size,
+  variant = "default",
   className,
   value,
   onValueChange,
@@ -53,6 +59,7 @@ export function SegmentedControl({
       onValueChange={(v) => {
         if (v !== "") onValueChange(v);
       }}
+      data-variant={variant}
       className={cn(segmentedControlVariants({ size }), className)}
       {...props}
     />

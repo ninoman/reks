@@ -251,6 +251,7 @@ describe("useExportWizard", () => {
     const settings = {
       audioDevice: null,
       keyNotation: "classical",
+      deckWaveform: "threeBand",
       cacheDir: "/cache",
       ui: {
         hiddenColumns: null,

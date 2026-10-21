@@ -39,3 +39,7 @@ export const hoverState = "hover:bg-hover active:bg-surface-strong";
 /** Text fields: shared by Input, Textarea and Select. */
 export const fieldSurface =
   "min-w-0 border border-border-strong bg-surface text-fg placeholder:text-fg-subtle hover:border-fg-subtle focus-visible:border-accent";
+
+/** A hardware-style switch that is on (`aria-pressed`): lit fill and glow (`--color-lit`). */
+export const litState =
+  "aria-pressed:border-lit aria-pressed:bg-lit aria-pressed:text-lit-fg aria-pressed:shadow-lit aria-pressed:hover:border-lit aria-pressed:hover:text-lit-fg";

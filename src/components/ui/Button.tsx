@@ -1,13 +1,15 @@
 /**
  * Button. `aria-pressed` turns it into a toggle (the selected tint), so the
- * toolbar's on/off buttons need no extra component.
+ * toolbar's on/off buttons need no extra component. `variant="control"` is a
+ * hardware-style switch (mixer, decks) whose on state is lit: accent fill
+ * and glow, readable at a glance.
  */
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 
 import { cn } from "../../lib/cn";
-import { controlSizes, disabledState, focusRing } from "./control";
+import { controlSizes, disabledState, focusRing, litState } from "./control";
 
 export const buttonVariants = cva(
   [
@@ -30,6 +32,11 @@ export const buttonVariants = cva(
         /** Quiet text action; turns to danger on hover (e.g. "Remove"). */
         quiet: "px-1 text-fg-muted hover:text-danger",
         link: "px-0 text-fg-muted underline-offset-2 hover:text-fg hover:underline",
+        /** Mixer and deck switches: dim when off, lit when `aria-pressed`. */
+        control: [
+          "border-border-strong bg-surface-strong text-fg-muted hover:border-fg-subtle hover:text-fg active:brightness-110",
+          litState,
+        ],
       },
       size: controlSizes,
     },

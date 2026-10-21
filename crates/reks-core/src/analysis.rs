@@ -18,6 +18,11 @@
 //!   always written, so the track leaves the pending list either way. The
 //!   hash is the file's current one, so it also refreshes `content_hash`
 //!   (a file edited since the last scan would otherwise stay pending).
+//! - Pending tracks with a rekordbox grid are queued after the rest.
+//! - A track whose rekordbox analysis was mapped into the cache (D10,
+//!   [`Library::store_rekordbox_mapping`]) is not pending while its file is
+//!   unchanged; a run of reks's analyser (Re-analyse) takes over from it
+//!   (`analysis_source` = `reks`).
 
 use std::path::Path;
 
@@ -35,6 +40,10 @@ use crate::timefmt::now_utc;
 pub const SOURCE_ANALYSIS: &str = "analysis";
 /// `beatgrid.source` and `key_source`/`bpm_source` for user edits.
 pub const SOURCE_MANUAL: &str = "manual";
+/// `analysis_source` of a track whose rekordbox analysis was mapped.
+pub const SOURCE_REKORDBOX: &str = "rekordbox";
+/// `analysis_source` of a track reks's analyser ran on.
+pub const SOURCE_REKS: &str = "reks";
 
 /// One track to analyse.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,18 +103,60 @@ pub fn file_content_hash(path: &Path) -> Result<String> {
 /// Tracks that need an analyser run: never analysed, analysed by another
 /// analyser version, or whose file changed since (by `content_hash`). A
 /// failed run counts as a run, so failures are not retried until either
-/// changes; missing files are skipped.
-const PENDING_SQL: &str = "SELECT id, path FROM track
-     WHERE missing = 0
+/// changes; missing files are skipped. A track whose rekordbox analysis was
+/// mapped into the cache (`analysis_source = 'rekordbox'`) is done while its
+/// file is unchanged, whatever the analyser version (D10).
+const PENDING_WHERE: &str = "missing = 0
+       AND NOT (analysis_source IS 'rekordbox' AND content_hash IS NOT NULL
+                AND analysis_hash IS content_hash)
        AND (analysis_version IS NULL OR analysis_version <> ?1
-            OR (content_hash IS NOT NULL AND analysis_hash IS NOT content_hash))
-     ORDER BY id";
+            OR (content_hash IS NOT NULL AND analysis_hash IS NOT content_hash))";
+
+/// Whether the track has a rekordbox grid (SQL on `track`).
+const HAS_RB_GRID: &str = "EXISTS (SELECT 1 FROM beatgrid
+                      WHERE beatgrid.track_id = track.id AND beatgrid.source = 'rekordbox')";
+
+/// Pending tracks; those with a rekordbox grid come last: the library
+/// already has their grid and BPM from the XML import, which analysis keeps
+/// (D10), so tracks with nothing yet get their grid first.
+fn pending_sql() -> String {
+    format!("SELECT id, path FROM track WHERE {PENDING_WHERE} ORDER BY {HAS_RB_GRID}, id")
+}
+
+/// Pending tracks that rekordbox analysed: a rekordbox grid and a key.
+/// Columns: id, path, duration_ms, first rekordbox anchor's position_ms and
+/// bpm_x100.
+fn mapping_sql() -> String {
+    format!(
+        "SELECT id, path, duration_ms,
+                (SELECT position_ms FROM beatgrid b WHERE b.track_id = track.id
+                   AND b.source = 'rekordbox' ORDER BY position_ms LIMIT 1),
+                (SELECT bpm_x100 FROM beatgrid b WHERE b.track_id = track.id
+                   AND b.source = 'rekordbox' ORDER BY position_ms LIMIT 1)
+         FROM track WHERE {PENDING_WHERE} AND key IS NOT NULL AND {HAS_RB_GRID}
+         ORDER BY id"
+    )
+}
+
+/// A pending track whose rekordbox analysis may be mapped into the cache
+/// instead of running the analyser (D10).
+#[derive(Debug, Clone, PartialEq)]
+pub struct MappingCandidate {
+    pub track_id: TrackId,
+    /// Absolute path of the audio file.
+    pub path: String,
+    pub duration_ms: Option<i64>,
+    /// First rekordbox grid anchor: whole ms and BPM × 100 (the XML's first
+    /// `TEMPO`, which rekordbox's `PQTZ` must agree with).
+    pub first_beat_ms: i64,
+    pub bpm_x100: i64,
+}
 
 impl Library {
     /// Tracks needing analysis by analyser `version`, oldest first.
     pub fn analysis_pending(&self, version: u32) -> Result<Vec<AnalysisJob>> {
         let conn = self.conn()?;
-        let mut stmt = conn.prepare(PENDING_SQL)?;
+        let mut stmt = conn.prepare(&pending_sql())?;
         let rows = stmt.query_map([version], |r| {
             Ok(AnalysisJob {
                 track_id: r.get(0)?,
@@ -128,6 +179,42 @@ impl Library {
             }
         }
         Ok(out)
+    }
+
+    /// Pending tracks (by analyser `version`) that have a rekordbox grid and
+    /// a key, oldest first.
+    pub fn mapping_candidates(&self, version: u32) -> Result<Vec<MappingCandidate>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(&mapping_sql())?;
+        let rows = stmt.query_map([version], |r| {
+            Ok(MappingCandidate {
+                track_id: r.get(0)?,
+                path: r.get(1)?,
+                duration_ms: r.get(2)?,
+                first_beat_ms: r.get::<_, f64>(3)?.round() as i64,
+                bpm_x100: r.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Records that track `id`'s rekordbox analysis was mapped into the
+    /// cache for the file with `content_hash`: the track leaves the pending
+    /// list until the file changes. Grid, key and BPM stay the library's
+    /// (rekordbox's, from the import); there are no confidences.
+    pub fn store_rekordbox_mapping(&self, id: TrackId, content_hash: &str) -> Result<()> {
+        let conn = self.conn()?;
+        let n = conn.execute(
+            "UPDATE track SET analysis_source = ?2, analysis_version = NULL,
+                    analysis_hash = ?3, content_hash = ?3, analysis_error = NULL,
+                    beat_confidence = NULL, key_confidence = NULL, analysed_at = ?4
+             WHERE id = ?1",
+            params![id, SOURCE_REKORDBOX, content_hash, now_utc()],
+        )?;
+        if n == 0 {
+            return Err(Error::TrackNotFound(id));
+        }
+        Ok(())
     }
 
     /// Stores `rec` for track `id` following the precedence rules in the
@@ -153,7 +240,7 @@ impl Library {
         // Without a hash of our own (the file could not be read), take the
         // scan's, so the pending query doesn't pick the track up again at once.
         let n = conn.execute(
-            "UPDATE track SET analysis_version = ?2,
+            "UPDATE track SET analysis_version = ?2, analysis_source = 'reks',
                     analysis_hash = coalesce(?3, content_hash),
                     content_hash = coalesce(?3, content_hash),
                     analysis_error = ?4, analysed_at = ?5
@@ -228,7 +315,7 @@ fn store(conn: &Connection, id: TrackId, rec: &AnalysisRecord) -> Result<StoreOu
 
     conn.execute(
         "UPDATE track SET analysis_version = ?2, analysis_hash = ?3, content_hash = ?3,
-                analysis_error = NULL,
+                analysis_error = NULL, analysis_source = ?7,
                 beat_confidence = ?4, key_confidence = ?5, analysed_at = ?6
          WHERE id = ?1",
         params![
@@ -237,7 +324,8 @@ fn store(conn: &Connection, id: TrackId, rec: &AnalysisRecord) -> Result<StoreOu
             rec.content_hash,
             f64::from(rec.beat_confidence),
             f64::from(rec.key_confidence),
-            now_utc()
+            now_utc(),
+            SOURCE_REKS
         ],
     )?;
     Ok(out)
@@ -339,6 +427,84 @@ mod tests {
             .unwrap();
         assert!(pending_ids(&lib, 1).is_empty());
         assert!(lib.analysis_jobs(&[a, b, 999]).unwrap().len() == 1);
+    }
+
+    #[test]
+    fn rekordbox_gridded_tracks_are_analysed_last() {
+        let (_d, lib) = lib();
+        let a = insert(&lib, "/m/a.mp3");
+        let b = insert(&lib, "/m/b.mp3");
+        let c = insert(&lib, "/m/c.mp3");
+        lib.conn()
+            .unwrap()
+            .execute(
+                "INSERT INTO beatgrid (track_id, position_ms, bpm_x100, source)
+                 VALUES (?1, 50.0, 12000, 'rekordbox')",
+                [a],
+            )
+            .unwrap();
+        assert_eq!(pending_ids(&lib, 1), [b, c, a]);
+    }
+
+    #[test]
+    fn mapped_tracks_leave_the_pending_list_until_the_file_changes() {
+        let (_d, lib) = lib();
+        let a = insert(&lib, "/m/a.mp3");
+        let b = insert(&lib, "/m/b.mp3");
+        let c = insert(&lib, "/m/c.mp3");
+        {
+            let conn = lib.conn().unwrap();
+            for (id, at) in [(a, 50.4), (a, 10_000.0), (b, 80.0)] {
+                conn.execute(
+                    "INSERT INTO beatgrid (track_id, position_ms, bpm_x100, source)
+                     VALUES (?1, ?2, 12800, 'rekordbox')",
+                    params![id, at],
+                )
+                .unwrap();
+            }
+            conn.execute(
+                "UPDATE track SET key = 'Am', key_source = 'rekordbox', duration_ms = 300000
+                 WHERE id IN (?1, ?2)",
+                [a, c],
+            )
+            .unwrap();
+        }
+        // b has no key, c no rekordbox grid: only a can be mapped.
+        let cands = lib.mapping_candidates(1).unwrap();
+        assert_eq!(
+            cands,
+            [MappingCandidate {
+                track_id: a,
+                path: "/m/a.mp3".into(),
+                duration_ms: Some(300_000),
+                first_beat_ms: 50,
+                bpm_x100: 12800,
+            }]
+        );
+        lib.store_rekordbox_mapping(a, "h1").unwrap();
+        assert_eq!(pending_ids(&lib, 1), [c, b]);
+        // A new analyser version doesn't bring it back; a changed file does.
+        assert_eq!(pending_ids(&lib, 2), [c, b]);
+        assert!(lib.mapping_candidates(2).unwrap().is_empty());
+        lib.conn()
+            .unwrap()
+            .execute("UPDATE track SET content_hash = 'h2' WHERE id = ?1", [a])
+            .unwrap();
+        assert_eq!(pending_ids(&lib, 1), [c, a, b]);
+        // Re-analyse: reks's run takes over, grid and key stay rekordbox's.
+        lib.store_analysis(a, &record("h2")).unwrap();
+        let source: String = lib
+            .conn()
+            .unwrap()
+            .query_row(
+                "SELECT analysis_source FROM track WHERE id = ?1",
+                [a],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(source, "reks");
+        assert_eq!(grid(&lib, a)[0].2, "rekordbox");
+        assert!(lib.store_rekordbox_mapping(999, "h").is_err());
     }
 
     #[test]
