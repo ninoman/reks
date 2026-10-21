@@ -54,6 +54,12 @@
   --wave-low: #2f7bff;
   --wave-mid: #f29a2e;
   --wave-high: #f4f4f8;
+  /* Deck waveform styles (Settings → Decks): RGB mixes these by band, Blue lightens to blue-high. */
+  --wave-rgb-low: #ff2a2a;
+  --wave-rgb-mid: #2ee05a;
+  --wave-rgb-high: #2f6bff;
+  --wave-blue: #1f6fff;
+  --wave-blue-high: #d6e8ff;
 
   /* rekordbox track colours (names from reks-core rbxml::TRACK_COLOURS); data, not theme. */
   --rb-pink: #ff007f;
@@ -117,6 +123,11 @@
   --color-waveform-low: var(--wave-low);
   --color-waveform-mid: var(--wave-mid);
   --color-waveform-high: var(--wave-high);
+  --color-waveform-rgb-low: var(--wave-rgb-low);
+  --color-waveform-rgb-mid: var(--wave-rgb-mid);
+  --color-waveform-rgb-high: var(--wave-rgb-high);
+  --color-waveform-blue: var(--wave-blue);
+  --color-waveform-blue-high: var(--wave-blue-high);
   --color-grid-beat: rgb(235 235 240 / 38%);
   --color-grid-downbeat: var(--red-500);
   --color-grid-cursor: var(--indigo-500);

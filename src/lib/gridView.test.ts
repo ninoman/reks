@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bandPeaks, columnsDurationMs, visibleBeats } from "./gridView";
+import { bandPeaks, columnsDurationMs, monoPeaks, visibleBeats } from "./gridView";
 
 /** `n` columns where column i has low = i, mid = 2i, high = 255 - i. */
 function cols(n: number): Uint8Array {
@@ -49,4 +49,16 @@ describe("visibleBeats", () => {
 
 it("columnsDurationMs counts 150 columns per second", () => {
   expect(columnsDurationMs(cols(300))).toBe(2000);
+});
+
+describe("monoPeaks", () => {
+  it("takes the peak mono byte under each pixel, scaled to 0..1", () => {
+    const c = new Uint8Array(4 * 4);
+    for (const [i, m] of [4, 31, 8, 0].entries()) c.set([0, 0, 0, m], 4 * i);
+    // 75 px/s: two columns per pixel.
+    const p = monoPeaks(c, 0, 75, 3);
+    expect(p[0]).toBe(1);
+    expect(p[1]).toBeCloseTo(8 / 31);
+    expect(p[2]).toBe(0);
+  });
 });

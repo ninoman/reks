@@ -741,6 +741,9 @@ export function mixControl(control: MixControl): Promise<void> {
 /** `settings_*`, `library_root*`, `cache_dir_move` (reks-core `settings.rs`). */
 export type KeyNotation = "classical" | "camelot" | "openKey";
 
+/** How the Mix view's decks draw their waveforms; all come from the same analysis columns. */
+export type DeckWaveform = "threeBand" | "rgb" | "blue";
+
 /** Library window state kept across launches. */
 export interface UiState {
   /** Hidden column ids; `null` until changed (UI defaults). */
@@ -756,6 +759,7 @@ export interface Settings {
   /** `null`: the system default. */
   audioDevice: string | null;
   keyNotation: KeyNotation;
+  deckWaveform: DeckWaveform;
   /** The cache dir in use. */
   cacheDir: string;
   ui: UiState;
@@ -769,6 +773,7 @@ export interface Settings {
 export interface SettingsPatch {
   audioDevice?: string | null;
   keyNotation?: KeyNotation;
+  deckWaveform?: DeckWaveform;
   ui?: UiState;
   anlzPreference?: AnlzPreference;
   /** Stores the OneLibrary key (Settings → Experimental); `null` removes it. Never empty. */

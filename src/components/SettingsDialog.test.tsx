@@ -25,6 +25,7 @@ const { SettingsDialog } = await import("./SettingsDialog");
 const settings: Settings = {
   audioDevice: "USB DAC",
   keyNotation: "classical",
+  deckWaveform: "threeBand",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
   onelibraryKeySet: false,
@@ -73,7 +74,7 @@ describe("SettingsDialog", () => {
   it("shows every setting in one view, folders together", async () => {
     await openDialog();
     const groups = screen.getAllByRole("region").map((g) => g.getAttribute("aria-label"));
-    expect(groups).toEqual(["Folders", "Playback", "Display", "Experimental"]);
+    expect(groups).toEqual(["Folders", "Playback", "Display", "Decks", "Experimental"]);
     const folders = screen.getByRole("region", { name: "Folders" });
     expect(folders.textContent).toContain("/Music/House");
     expect(folders.textContent).toContain("/Users/dj/Library/Caches/reks");
@@ -111,6 +112,15 @@ describe("SettingsDialog", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Camelot/ }));
     await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ keyNotation: "camelot" }));
     expect(useSettings.getState().settings?.keyNotation).toBe("camelot");
+  });
+
+  it("stores the deck waveform style", async () => {
+    await openDialog();
+    const decks = screen.getByRole("region", { name: "Decks" });
+    expect(decks.querySelector('[aria-checked="true"]')?.textContent).toContain("3-band");
+    fireEvent.click(screen.getByRole("radio", { name: /RGB/ }));
+    await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ deckWaveform: "rgb" }));
+    expect(useSettings.getState().settings?.deckWaveform).toBe("rgb");
   });
 
   it("keeps a chosen device that is not connected in the list", async () => {

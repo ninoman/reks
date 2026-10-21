@@ -206,6 +206,10 @@ pub enum Control {
    combines (`pickSwitches` in `src/lib/mixView.ts`, with a tooltip); FILTER
    assign defaults to X for channels 1–2 and Y for 3–4 (`reks-mix` and the UI
    store). See D21.
+   Waveform style setting (2026-10-21, maintainer request): Settings → Decks
+   picks 3-band, RGB or Blue for the deck waveforms and overviews, applied
+   live ([`../ui.md`](../ui.md#mix-panel-phase-5); `display.deck_waveform`
+   in `reks-core` `settings.rs`). Verified in the browser with the dev mock.
 10. **Key lock evaluation**: listen to `timestretch`, `signalsmith-stretch` and
     `rubberband` at ±6% on three techno tracks and one vocal track; record the
     choice in D21; add it as a per-deck toggle, or record why not.

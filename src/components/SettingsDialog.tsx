@@ -1,7 +1,7 @@
 /**
  * Settings (phase 1 task 13) in one view, grouped: Folders (library folders,
- * cache folder), Playback (output device), Display (key notation),
- * Experimental (the OneLibrary key, phase 4 task 8; write-only: Rust only
+ * cache folder), Playback (output device), Display (key notation), Decks
+ * (the Mix view's waveform style), Experimental (the OneLibrary key, phase 4 task 8; write-only: Rust only
  * says whether one is stored). Values
  * live in Rust (`useSettings`); the library window's own state (columns,
  * panels, volume) is saved without asking.
@@ -11,7 +11,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { cn } from "../lib/cn";
 
-import type { KeyNotation } from "../lib/ipc";
+import type { DeckWaveform, KeyNotation } from "../lib/ipc";
 import { usePlayer } from "../store/player";
 import { useScan } from "../store/scan";
 import { useSettings } from "../store/settings";
@@ -45,6 +45,12 @@ const NOTATIONS: { id: KeyNotation; label: string; example: string }[] = [
   { id: "classical", label: "Classical", example: "Am, F#, Db" },
   { id: "camelot", label: "Camelot", example: "8A, 2B, 3B" },
   { id: "openKey", label: "Open Key", example: "1m, 7d, 8d" },
+];
+
+const WAVEFORMS: { id: DeckWaveform; label: string; hint: string }[] = [
+  { id: "threeBand", label: "3-band", hint: "lows, mids, highs" },
+  { id: "rgb", label: "RGB", hint: "colour by band" },
+  { id: "blue", label: "Blue", hint: "classic" },
 ];
 
 export function SettingsDialog() {
@@ -105,6 +111,9 @@ function SettingsBody() {
           </Group>
           <Group title="Display">
             <KeyNotationChoice notation={settings.keyNotation} />
+          </Group>
+          <Group title="Decks">
+            <DeckWaveformChoice waveform={settings.deckWaveform} />
           </Group>
           <Group title="Experimental">
             <OneLibraryKey keySet={settings.onelibraryKeySet} />
@@ -238,6 +247,30 @@ function KeyNotationChoice({ notation }: { notation: KeyNotation }) {
           <Segment key={n.id} value={n.id}>
             {n.label}
             <span className="font-normal text-fg-subtle">{n.example}</span>
+          </Segment>
+        ))}
+      </SegmentedControl>
+    </div>
+  );
+}
+
+function DeckWaveformChoice({ waveform }: { waveform: DeckWaveform }) {
+  return (
+    <div className={item}>
+      <h5 className={itemTitle}>Waveform</h5>
+      <p className={hint}>How the Mix view draws the deck waveforms and overviews.</p>
+      <SegmentedControl
+        className="mt-2.5"
+        aria-label="Deck waveform"
+        value={waveform}
+        onValueChange={(v) =>
+          void useSettings.getState().update({ deckWaveform: v as DeckWaveform })
+        }
+      >
+        {WAVEFORMS.map((w) => (
+          <Segment key={w.id} value={w.id}>
+            {w.label}
+            <span className="font-normal text-fg-subtle">{w.hint}</span>
           </Segment>
         ))}
       </SegmentedControl>

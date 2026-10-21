@@ -7,6 +7,8 @@ import { type BeatMark, COLUMNS_PER_SECOND } from "./ipc";
 /** Zoom levels, pixels per second; 150 = one column per pixel. */
 export const ZOOM_PX_PER_S = [25, 50, 100, 150, 300, 600] as const;
 export const DEFAULT_ZOOM = 2;
+/** Top of a column's mono byte (`waveformColumns`). */
+const MONO_MAX = 31;
 
 /** Peak `[low, mid, high]` (0..1) per pixel of a view `width` px wide from `startMs`. */
 export function bandPeaks(
@@ -33,6 +35,29 @@ export function bandPeaks(
     out[3 * x] = low / 255;
     out[3 * x + 1] = mid / 255;
     out[3 * x + 2] = high / 255;
+  }
+  return out;
+}
+
+/** Peak mono height (0..1) per pixel, mapped like [`bandPeaks`]. */
+export function monoPeaks(
+  columns: Uint8Array,
+  startMs: number,
+  pxPerS: number,
+  width: number,
+): Float32Array {
+  const out = new Float32Array(width);
+  const count = columns.length / 4;
+  const colsPerPx = COLUMNS_PER_SECOND / pxPerS;
+  const first = (startMs / 1000) * COLUMNS_PER_SECOND;
+  for (let x = 0; x < width; x++) {
+    const c0 = Math.floor(first + x * colsPerPx);
+    const c1 = Math.max(c0 + 1, Math.floor(first + (x + 1) * colsPerPx));
+    let mono = 0;
+    for (let c = Math.max(0, c0); c < Math.min(count, c1); c++) {
+      mono = Math.max(mono, columns[4 * c + 3] ?? 0);
+    }
+    out[x] = mono / MONO_MAX;
   }
   return out;
 }
