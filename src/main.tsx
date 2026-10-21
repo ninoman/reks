@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { appReady } from "./lib/ipc";
+import { showStartupError } from "./lib/splash";
 import "./styles/index.css";
 
 const root = document.getElementById("root");
@@ -13,8 +15,15 @@ if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) {
   await import("./dev/mockBackend");
 }
 
-ReactDOM.createRoot(root).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+// The splash in index.html stays up until the library is open; App takes it
+// down once mounted.
+try {
+  await appReady();
+  ReactDOM.createRoot(root).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+} catch (err) {
+  showStartupError(String(err));
+}

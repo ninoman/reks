@@ -7,11 +7,12 @@ mod commands;
 mod grid;
 mod history;
 mod mix;
+mod startup;
 mod state;
 
+use tauri::webview::PageLoadEvent;
 use tauri::Manager;
-
-use state::AppState;
+use tauri_plugin_window_state::StateFlags;
 
 /// Returns the core library version. Smoke-test command for the scaffold.
 #[tauri::command]
@@ -29,7 +30,22 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         // Restores each window's size, position and maximised state on start and
         // saves it on close, in `app_config_dir/.window-state.json`.
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Not visibility: the window starts hidden (tauri.conf.json) and is
+        // shown below, once the themed splash has loaded.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
+                .build(),
+        )
+        // Shown only now, so the native window's white default never flashes
+        // before the page paints in the system theme.
+        .on_page_load(|webview, payload| {
+            if payload.event() == PageLoadEvent::Finished {
+                if let Err(err) = webview.window().show() {
+                    tracing::warn!(%err, "could not show the window");
+                }
+            }
+        })
         .setup(|app| {
             let paths = app.path();
             // D19: app_data_dir, but app_local_data_dir on Windows (not roaming).
@@ -39,15 +55,12 @@ pub fn run() {
                 paths.app_data_dir()?
             };
             let model_dir = analysis::model_dir(paths.resource_dir().ok().as_deref());
-            let state = AppState::open(&data_dir, &paths.app_cache_dir()?, &model_dir)?;
-            // Tracks added or changed while the app was closed, or analysed
-            // by an older analyser version.
-            state.analysis.queue_pending();
-            app.manage(state);
+            startup::begin(app.handle(), data_dir, paths.app_cache_dir()?, model_dir)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             core_version,
+            startup::app_ready,
             commands::library_query,
             commands::library_facets,
             commands::library_track,

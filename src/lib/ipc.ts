@@ -5,6 +5,12 @@
  */
 import { Channel, invoke } from "@tauri-apps/api/core";
 
+/** Resolves once the library is open (opened off the main thread at start-up);
+ * rejects with the reason it could not be. Call before any other command. */
+export function appReady(): Promise<void> {
+  return invoke("app_ready");
+}
+
 /** Canonical key name from `keys.rs`, e.g. `Am`, `F#m`, `Db`. */
 export type Key = string;
 

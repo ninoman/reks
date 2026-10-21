@@ -249,6 +249,13 @@
   --z-dialog: 40;
   --z-tooltip: 50;
 
+  /* Splash (index.html): the wordmark and the light sweeping across it. */
+  --splash-wordmark: 44px;
+  --splash-gap: 12px;
+  --splash-error-w: 420px;
+  --duration-splash-sweep: 1800ms;
+  --duration-splash-out: 240ms;
+
   /* Motion (TS mirror: src/lib/motion.ts). */
   --duration-fast: 100ms;
   --duration-slide-in: 240ms;

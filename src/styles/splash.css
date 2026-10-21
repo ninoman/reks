@@ -1,0 +1,85 @@
+/*
+ * Start-up splash (index.html): the wordmark in dim ink with a band of light
+ * sweeping across the letters while the library opens. Theme colours only, so
+ * it matches the app in light and dark. Fades out when the UI is ready
+ * (src/lib/splash.ts).
+ */
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--splash-gap);
+  background: var(--color-bg);
+  transition: opacity var(--duration-splash-out) var(--ease-out-quint);
+}
+
+#splash[data-state="done"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-wordmark {
+  font-size: var(--splash-wordmark);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  /* Dim ink, then a soft accent edge into the bright core of the light. */
+  background-image: linear-gradient(
+    100deg,
+    var(--color-border-strong) 0%,
+    var(--color-border-strong) 38%,
+    var(--color-accent) 45%,
+    var(--color-fg) 50%,
+    var(--color-accent) 55%,
+    var(--color-border-strong) 62%,
+    var(--color-border-strong) 100%
+  );
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: splash-sweep var(--duration-splash-sweep) ease-in-out infinite;
+}
+
+@keyframes splash-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+#splash[data-state="error"] .splash-wordmark {
+  animation: none;
+  background-position: 100% 0;
+}
+
+.splash-error {
+  max-width: var(--splash-error-w);
+  padding: 0 var(--ctl-px-lg);
+  text-align: center;
+  color: var(--color-danger);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-wordmark {
+    animation: splash-breathe var(--duration-splash-sweep) ease-in-out infinite alternate;
+    background-position: 50% 0;
+  }
+
+  @keyframes splash-breathe {
+    from {
+      opacity: 0.55;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}

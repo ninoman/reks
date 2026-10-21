@@ -145,6 +145,27 @@ Performance rule for the track table: rows and cells are plain `div`s with
 constant class strings; per-row state is `data-*` attributes styled with
 `data-[selected]:…`. No base component, Radix or `cn()` call per cell.
 
+## Start-up splash
+
+The library opens off the main thread
+([`src-tauri/src/startup.rs`](../src-tauri/src/startup.rs)); done in Tauri's
+`setup` it blocked the event loop for seconds and the window sat blank white.
+Now:
+
+1. The window starts hidden (`"visible": false` in `tauri.conf.json`; the
+   window-state plugin leaves visibility alone) and is shown on the page's
+   first load, so the native white background never shows.
+2. `index.html` holds the splash: the wordmark with a band of light sweeping
+   across it ([`splash.css`](../src/styles/splash.css), theme tokens only, so
+   it follows the system theme; a slow fade with reduced motion).
+3. `main.tsx` awaits `appReady()` before mounting React, so no command runs
+   before `AppState` exists. App's mount effect fades the splash out
+   ([`src/lib/splash.ts`](../src/lib/splash.ts), at least 900 ms on screen so
+   it never blinks). If the library cannot be opened, the splash stops and
+   shows the reason instead.
+
+There is no in-app theme setting yet; the app and splash follow the system.
+
 ## Mix panel (phase 5)
 
 [`src/components/mix/`](../src/components/mix/), opened with **Mix** in the

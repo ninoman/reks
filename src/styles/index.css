@@ -5,6 +5,7 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "./tokens.css";
 @import "./base.css" layer(base);
+@import "./splash.css" layer(components);
 
 /* Space plays and pauses wherever focus is (App.tsx), so it must not ring the
    control clicked last. Unlayered, to beat the focus-visible utilities. */

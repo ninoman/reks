@@ -3,10 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- The page canvas follows the system theme before any stylesheet loads. -->
+    <meta name="color-scheme" content="light dark" />
     <title>reks</title>
   </head>
 
   <body>
+    <!-- Shown until the library is open (src/lib/splash.ts, styles/splash.css). -->
+    <div id="splash" role="status" aria-label="Loading reks">
+      <span class="splash-wordmark" aria-hidden="true">reks</span>
+      <p class="splash-error" role="alert" hidden></p>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

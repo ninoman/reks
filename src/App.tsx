@@ -9,6 +9,7 @@
  * and pauses wherever focus is, except in text fields, dialogs and menus;
  * Cmd/Ctrl+, opens Settings.
  * Settings load first and restore the window state (columns, panels, volume).
+ * Mounted only once the library is open (main.tsx); takes the splash down.
  */
 import { useEffect } from "react";
 import { AdoptDialog } from "./components/AdoptDialog";
@@ -33,6 +34,7 @@ import { TransportBar } from "./components/TransportBar";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
 import { Sheet } from "./components/ui/Sheet";
 import { keepsSpace } from "./lib/keys";
+import { dismissSplash } from "./lib/splash";
 import { useAnalysis } from "./store/analysis";
 import { useHistory } from "./store/history";
 import { useLibrary } from "./store/library";
@@ -55,6 +57,7 @@ export default function App() {
   useMixShortcuts(mixOpen);
 
   useEffect(() => {
+    dismissSplash();
     // Defaults first so the table does not flash every column; settings may replace them.
     useLibrary
       .getState()

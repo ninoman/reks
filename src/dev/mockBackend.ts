@@ -995,6 +995,8 @@ async function convertApplyMock(onEvent: Channel<ConvertEvent>): Promise<Convert
 mockIPC((cmd, payload) => {
   const args = (payload ?? {}) as Record<string, unknown>;
   switch (cmd) {
+    case "app_ready":
+      return null;
     case "library_query":
       return query(args.query as TrackQuery);
     case "analysis_subscribe":
