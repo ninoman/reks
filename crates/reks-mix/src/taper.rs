@@ -96,12 +96,18 @@ pub fn filter_freq_hz(value: f32) -> f32 {
 
 /// Resonance Q at MILD: Butterworth, so the cutoff is the −3 dB point.
 pub const RESONANCE_MIN_Q: f32 = std::f32::consts::FRAC_1_SQRT_2;
-/// Resonance Q at WILD: a +26 dB peak. UNVERIFIED (the guide gives no figure).
-pub const RESONANCE_MAX_Q: f32 = 20.0;
+/// Resonance Q at WILD: a +20 dB peak. Halved from Q 20 (+26 dB) on the
+/// maintainer's ear (2026-10-21): too much at maximum. UNVERIFIED (the guide
+/// gives no figure).
+pub const RESONANCE_MAX_Q: f32 = 10.0;
 
-/// Filter resonance as Q, exponential from MILD to WILD.
+/// Filter resonance as Q from MILD to WILD: exponential in the square of the
+/// knob, so the peak in dB grows with v², not v. The first half of travel
+/// adds under 3 dB (Q 1.37 at noon) and the knob gets busy only near WILD;
+/// the plain exponential was too sensitive early on.
 pub fn resonance_q(value: f32) -> f32 {
-    RESONANCE_MIN_Q * (RESONANCE_MAX_Q / RESONANCE_MIN_Q).powf(unit(value, 0.0))
+    let v = unit(value, 0.0);
+    RESONANCE_MIN_Q * (RESONANCE_MAX_Q / RESONANCE_MIN_Q).powf(v * v)
 }
 
 /// Crossfader travel over which a side fades in at the sharpest curve, as a
@@ -213,7 +219,14 @@ mod tests {
             1e-6
         ));
         assert!(close(resonance_q(1.0), RESONANCE_MAX_Q, 1e-3));
-        assert!(resonance_q(0.5) > resonance_q(0.4));
+        // Gentle to noon (peak dB grows with v²), monotonic all the way.
+        assert!(close(resonance_q(0.5), 1.37, 0.01));
+        let mut last = 0.0;
+        for i in 0..=100 {
+            let q = resonance_q(i as f32 / 100.0);
+            assert!(q > last);
+            last = q;
+        }
     }
 
     #[test]

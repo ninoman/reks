@@ -47,7 +47,8 @@ Semantic colours: `bg`, `bg-subtle` (chrome), `row-alt`, `surface`,
 `fg-muted`, `fg-subtle`, `border`, `border-subtle`, `border-strong`,
 `accent` (text, lines, focus ring), `accent-solid` (+ `-hover`, `-active`;
 filled controls) with `accent-fg` on it, `danger` (+ `-fg`), `success`,
-`warning`, `rating`, `focus-ring`, `overlay`, `waveform-*`, `track-*`
+`warning`, `rating`, `focus-ring`, `overlay`, `lit`/`lit-fg` (a switch that
+is on, with `shadow-lit`), `led-*` (meter LEDs), `waveform-*`, `track-*`
 (rekordbox colours: data, the same in both themes). The grid editor draws on
 its own dark deck in both themes: `deck`, `deck-fg`, `waveform-low/mid/high`
 (3-band), `grid-beat`, `grid-downbeat`, `grid-cursor`; the mixer's decks add
@@ -55,7 +56,9 @@ its own dark deck in both themes: `deck`, `deck-fg`, `waveform-low/mid/high`
 
 The indigo `accent` stays scarce: primary buttons, the loaded track, the played
 waveform, focus rings, drop indicators. Selection and toggles that are on
-use the neutral `selected` tint.
+use the neutral `selected` tint, except hardware-style switches in the Mix
+panel (`variant="control"`), which light up in `lit` so their state reads at a
+glance.
 
 ### Common edits (one line each in `tokens.css`)
 
@@ -111,7 +114,7 @@ menu items `--menu-item-h`.
 
 | Component | Variants / props | Behaviour from |
 |---|---|---|
-| `Button` | `variant`: primary, secondary, outline, ghost, danger, quiet, link; `size`; `aria-pressed` = toggle | Radix Slot (`asChild`) |
+| `Button` | `variant`: primary, secondary, outline, ghost, danger, quiet, link, control (lit when pressed); `size`; `aria-pressed` = toggle | Radix Slot (`asChild`) |
 | `IconButton` | as Button (default ghost) + `shape`: square, round; `aria-label` required | Radix Slot |
 | `Input` | `variant`: default, search; `size` | native |
 | `Textarea` | `size`: sm, md | native |
@@ -119,7 +122,7 @@ menu items `--menu-item-h`.
 | `Switch` | `size`: sm, md | Radix Switch |
 | `Checkbox` | `size`: sm, md; native, wrap in a `<label>` (Biome knows it as an input) | native |
 | `Slider` | `size`: sm, md; one value | Radix Slider |
-| `SegmentedControl` + `Segment` | `size`; one choice, can't be cleared (radiogroup) | Radix ToggleGroup |
+| `SegmentedControl` + `Segment` | `size`; `variant`: default, control (chosen segment lit); one choice, can't be cleared (radiogroup) | Radix ToggleGroup |
 | `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |
 | `Kbd` | `variant`: default, inverse | – |
 | `Tooltip` | `content`, `shortcut`, `side` | Radix Tooltip |
@@ -197,11 +200,21 @@ default, 4 with the toggle (shorter waveforms).
   7–0 hot cues A–D, Z/X/C crossfader. Space stays with the preview player.
 - The mixer is memoised away from the 60 Hz engine state; only the decks
   re-render with it.
-- Meters (`ui/Meter`): peak on a −48…0 dBFS scale, warning colour above
-  −6 dB, a clip cap held for 1 s (the engine reports a clip once). Each meter
-  subscribes to its own value (`useMeter`, `mix/LiveMeter`), so the
-  memoised mixer still skips the 60 Hz renders.
-- Sizes: `--knob-*`, `--fader-*`, `--meter-w`, `--deck-wave-h*`, `--deck-overview-h`,
+- Meters (`ui/Meter`): a DJM-style column of nine round LEDs on the deck
+  colour, labelled beside them: +10 red, +6/+3 white, 0 blue, −3…−20 lime
+  (`led-*` tokens). The scale is `src/lib/meterScale.ts`: +10 is 0 dBFS, so 0
+  (blue) is −10 dBFS (our calibration, UNVERIFIED against a DJM). The red LED
+  also lights while a clip is held (1 s; the engine reports a clip once).
+  Each meter subscribes to its own lit-LED count (`useMeter`,
+  `mix/LiveMeter`), so it renders only when an LED changes and the memoised
+  mixer still skips the 60 Hz renders.
+- Mixer switches (CUE, filter ON/HP/BP/LP/VCF/LINK, SPLIT, POST EQ) are
+  `Button variant="control"` and the assign switches `SegmentedControl
+  variant="control"`: when on they are lit (`lit` fill, `lit-fg` text,
+  `shadow-lit` glow), the same look for every hardware-style switch.
+  HP / BP / LP and channel CUE: a click picks one, Shift+click combines
+  (tooltip on each); FILTER assign starts at X for channels 1–2, Y for 3–4.
+- Sizes: `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-wave-h*`, `--deck-overview-h`,
   `--mixer-strip-w`, `--mixer-row-h`, `--mix-panel-max-h` (the panel scrolls
   inside 62% of the window height).
 

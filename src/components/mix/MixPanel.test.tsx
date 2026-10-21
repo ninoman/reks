@@ -113,7 +113,8 @@ describe("MixPanel", () => {
 
     act(() => push?.(state({ masterMeter: { level: 0.5, clip: false } })));
     const master = screen.getByRole("meter", { name: "Master meter" });
-    expect(master.getAttribute("aria-valuenow")).toBe("-6");
+    // −6 dBFS is +4 on the LED scale: lit up to +3.
+    expect(master.getAttribute("aria-valuenow")).toBe("3");
     act(() => push?.(state({ masterMeter: { level: 1, clip: true } })));
     // The engine reports a clip once; the meter holds it.
     act(() => push?.(state({ masterMeter: { level: 0.5, clip: false } })));

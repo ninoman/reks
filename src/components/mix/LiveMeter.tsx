@@ -9,6 +9,6 @@ export interface LiveMeterProps {
 }
 
 export function LiveMeter({ source, ...aria }: LiveMeterProps) {
-  const { level, clip } = useMeter(source);
-  return <Meter level={level} clip={clip} {...aria} />;
+  const { lit, clip } = useMeter(source);
+  return <Meter lit={lit} clip={clip} {...aria} />;
 }

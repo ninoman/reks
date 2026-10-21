@@ -17,6 +17,16 @@ pub(crate) const BLOCK: usize = crate::varispeed::CHUNK;
 /// One block of interleaved stereo.
 pub(crate) type Block = [f32; BLOCK * 2];
 
+/// Default FILTER assign per channel (maintainer's call, 2026-10-21):
+/// channels 1–2 on unit X (left), 3–4 on unit Y (right).
+pub(crate) fn default_filter_assign(ch: usize) -> Assign {
+    if ch < 2 {
+        Assign::X
+    } else {
+        Assign::Y
+    }
+}
+
 /// A three-way switch value: X below a third, Y above two thirds, else off.
 pub(crate) fn assign_of(value: f32) -> Assign {
     match value {
@@ -55,12 +65,13 @@ pub(crate) struct Strip {
 }
 
 impl Strip {
-    /// Flat, fader up, both assigns off: a deck plays through unchanged.
-    pub(crate) fn new(sample_rate: u32) -> Self {
+    /// Flat, fader up, crossfader assign off, FILTER assign at `filter`: a
+    /// deck plays through unchanged while that filter unit is off.
+    pub(crate) fn new(sample_rate: u32, filter: Assign) -> Self {
         Self {
             level: ChannelLevel::new(1.0, sample_rate),
             eq: ChannelEq::new(sample_rate),
-            filter_assign: AssignSwitch::new(Assign::Off, sample_rate),
+            filter_assign: AssignSwitch::new(filter, sample_rate),
             filters: [Filter::new(sample_rate), Filter::new(sample_rate)],
             warm: [false; 2],
             xfade_assign: AssignSwitch::new(Assign::Off, sample_rate),

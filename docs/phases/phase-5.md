@@ -151,6 +151,9 @@ pub enum Control {
    30 Hz–20 kHz at 44.1, 48 and 96 kHz. Done: `dsp::filter` (`Filter`, `FilterPanel`
    for VCF TO XFADER and LINK), wired in task 6; MILD is Butterworth, not the
    hardware's likely overdamped setting ([`../mixer-dsp.md`](../mixer-dsp.md)).
+   2026-10-21 (maintainer's testing): resonance halved to Q 0.707–10 (WILD
+   +20 dB, was +26 dB) on a v² curve (noon +2.7 dB); a test pins the knob
+   direction (LP cuts highs to the left, HP cuts lows to the right).
 6. [x] **Channels, crossfader, master**: trim, fader taper, X/off/Y assign,
    crossfader curve law, master level, meters, limiter. Tests: crossfader gain
    at 0, 0.5 and 1 for both curve extremes (−4 dB at centre on progressive);
@@ -195,6 +198,13 @@ pub enum Control {
    after each start, so the engine matches the panel. Verified in the
    browser with the dev mock only, not yet on the real engine. Channel meters
    sit beside the faders and the master meter in the master section.
+   2026-10-21 (maintainer's testing): meters are DJM-style LED columns
+   (−20…+10, +10 = 0 dBFS, UNVERIFIED calibration), and every mixer switch
+   that is on is lit (`variant="control"`, `lit` tokens).
+   Filter modes and channel cues are single-select on click, Shift+click
+   combines (`pickSwitches` in `src/lib/mixView.ts`, with a tooltip); FILTER
+   assign defaults to X for channels 1–2 and Y for 3–4 (`reks-mix` and the UI
+   store). See D21.
 10. **Key lock evaluation**: listen to `timestretch`, `signalsmith-stretch` and
     `rubberband` at ±6% on three techno tracks and one vocal track; record the
     choice in D21; add it as a per-deck toggle, or record why not.

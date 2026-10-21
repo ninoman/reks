@@ -11,7 +11,7 @@ use crate::dsp::limiter::Limiter;
 use crate::dsp::meter::PeakMeter;
 use crate::dsp::xfader::{Crossfader, XfadeGains};
 use crate::graph::{volume_gain, Ramp, DECKS};
-use crate::strip::{Block, CueTaps, Strip, BLOCK};
+use crate::strip::{default_filter_assign, Block, CueTaps, Strip, BLOCK};
 
 /// A meter reading for the UI.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -56,8 +56,9 @@ pub(crate) struct Mixer {
 }
 
 impl Mixer {
-    /// Every channel flat with its fader up and both assigns off, master up:
-    /// a single deck (the preview player) plays through unchanged.
+    /// Every channel flat with its fader up, crossfader assign off and FILTER
+    /// assign at its default (1–2 on X, 3–4 on Y), both units off, master
+    /// up: a single deck (the preview player) plays through unchanged.
     pub(crate) fn new(sample_rate: u32) -> Self {
         let lp = FilterModes {
             lp: true,
@@ -65,7 +66,7 @@ impl Mixer {
             hp: false,
         };
         Self {
-            strips: std::array::from_fn(|_| Strip::new(sample_rate)),
+            strips: std::array::from_fn(|ch| Strip::new(sample_rate, default_filter_assign(ch))),
             panel: FilterPanel {
                 freq_x: 1.0,
                 freq_y: 1.0,

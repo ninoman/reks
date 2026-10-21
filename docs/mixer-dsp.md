@@ -70,7 +70,7 @@ change every sample. 2-pole; the hardware slope is **UNVERIFIED** (R§9.1).
 | Control | Law |
 |---|---|
 | FREQ | `30·(20000/30)^v` Hz, the −3 dB point (R§9.1) |
-| RESONANCE | `Q = 0.707·(20/0.707)^v`: MILD is Butterworth, WILD a +26 dB peak (Q 20 **UNVERIFIED**) |
+| RESONANCE | `Q = 0.707·(10/0.707)^(v²)`: MILD is Butterworth (Q 0.707), noon Q 1.37 (+2.7 dB), WILD a +20 dB peak (Q 10 **UNVERIFIED**). Halved from Q 20 with a v² curve on 2026-10-21: the maintainer found it too sensitive and too much at maximum |
 
 - Modes: `y = lp·low + bp·k·band + hp·high + none·x`, each weight smoothed.
   HP+LP is a notch at the cutoff; all three give back the input (the guide's
@@ -91,7 +91,8 @@ Tests (`dsp::filter` tests):
 | Check | Tolerance |
 |---|---|
 | LP and HP at minimum resonance, at the set cutoff (30 Hz–15 kHz) | −3.01 ±0.1 dB at 44.1, 48, 96 kHz |
-| maximum resonance at the cutoff | +26.0 ±0.2 dB |
+| maximum resonance at the cutoff | +20.0 ±0.2 dB |
+| LP with FREQ fully left / HP fully right, 60 Hz and 8 kHz sines | LP cuts 8 kHz below −60 dB, HP cuts 60 Hz below −60 dB; the open end passes both |
 | LP+BP+HP, and no mode | 0 ±0.01 dB; HP+LP notch below −40 dB |
 | maximum resonance, LP/HP/BP, 30 Hz–20 kHz in 1/3 octaves and while FREQ sweeps end to end | finite, below 200 on full-scale noise, rings down; at 44.1, 48, 96 kHz |
 | mode switch plus ON → off on a 50 Hz tone | no sample step above 0.01 |
@@ -120,8 +121,9 @@ sum → master level × preview volume → [master meter] → safety limiter →
 - Switch values arrive as knob values: assigns X below 1/3, Y above 2/3,
   else off; on/off switches on from 0.5. LINK is a panel switch, taken from
   either unit's control.
-- Start state: every channel flat with its fader up, assigns off, master
-  up, so a single deck (the Phase 1 preview player) plays through bit for
+- Start state: every channel flat with its fader up, XFADE assign off,
+  FILTER assign X for channels 1–2 and Y for 3–4 with both units off
+  (an off unit returns its input exactly), master up, so a single deck (the Phase 1 preview player) plays through bit for
   bit, delayed by the limiter's look-ahead (`Graph::latency()`, 1.5 ms).
   The HI and LO shelves return the input exactly at noon for this.
 - `Control::Volume` (preview player) stays as a squared gain on top of the

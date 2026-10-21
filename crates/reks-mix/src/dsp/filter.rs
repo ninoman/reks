@@ -229,6 +229,38 @@ mod tests {
         }
     }
 
+    /// The knob direction end to end: LP cuts highs as FREQ turns left
+    /// (anticlockwise), HP cuts lows as FREQ turns right, and the other end
+    /// of each leaves the signal alone.
+    #[test]
+    fn lp_cuts_highs_to_the_left_and_hp_cuts_lows_to_the_right() {
+        let (low, high) = (60.0, 8_000.0);
+        let gain = |modes, knob: f32, hz| {
+            let rate = 48_000;
+            let mut f = Filter::new(rate);
+            f.set_on(true);
+            f.set_modes(modes);
+            f.set_freq(knob);
+            f.settle();
+            gain_db(rate, hz, |b| f.process(b))
+        };
+        // LP fully left (30 Hz): the high sine is gone, the low one mostly kept.
+        assert!(gain(LP, 0.0, high) < -60.0);
+        assert!(gain(LP, 0.0, low) > -15.0);
+        // LP fully right (20 kHz): both pass.
+        assert!(gain(LP, 1.0, high).abs() < 0.5);
+        assert!(gain(LP, 1.0, low).abs() < 0.1);
+        // HP fully right (20 kHz): the low sine is gone, the high one cut too.
+        assert!(gain(HP, 1.0, low) < -60.0);
+        assert!(gain(HP, 1.0, high) < -20.0);
+        // HP fully left (30 Hz): both pass.
+        assert!(gain(HP, 0.0, low).abs() < 0.5);
+        assert!(gain(HP, 0.0, high).abs() < 0.1);
+        // Noon: each removes its own side and keeps the other.
+        assert!(gain(LP, 0.5, high) < -30.0 && gain(LP, 0.5, low).abs() < 0.1);
+        assert!(gain(HP, 0.5, low) < -30.0 && gain(HP, 0.5, high).abs() < 0.1);
+    }
+
     #[test]
     fn modes_combine_as_documented() {
         let rate = 48_000;
@@ -324,8 +356,8 @@ mod tests {
                         peak.is_finite() && peak < 200.0,
                         "{hz} Hz at {rate}: {peak}"
                     );
-                    // Rings down once the input stops (Q 20 at 30 Hz decays
-                    // by e every 0.21 s).
+                    // Rings down once the input stops (Q 10 at 30 Hz decays
+                    // by e every 0.11 s).
                     let mut tail = vec![0.0f32; rate as usize * 3];
                     f.process(&mut tail);
                     let block_peak = |b: &[f32]| b.iter().fold(0.0f32, |a, s| a.max(s.abs()));

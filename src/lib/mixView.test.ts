@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import type { CueRouting } from "./ipc";
-import { cueFits, formatClock, formatTempo, phaseOffset, tempoFader, tempoRatio } from "./mixView";
+import {
+  cueFits,
+  formatClock,
+  formatTempo,
+  phaseOffset,
+  pickSwitches,
+  tempoFader,
+  tempoRatio,
+} from "./mixView";
 
 describe("tempo fader", () => {
   it("is slower at the top and faster at the bottom", () => {
@@ -51,5 +59,24 @@ describe("cueFits", () => {
     expect(cueFits({ type: "splitMono" }, 2)).toBe(true);
     expect(cueFits(outputs, 2)).toBe(false);
     expect(cueFits(outputs, 4)).toBe(true);
+  });
+});
+
+describe("pickSwitches", () => {
+  const f = false;
+  const t = true;
+  it("a plain click picks one switch alone", () => {
+    expect(pickSwitches([t, t, f], 2, false, false)).toEqual([f, f, t]);
+    expect(pickSwitches([t, t, f], 0, false, false)).toEqual([t, f, f]);
+  });
+  it("a plain click on the only switch on turns it off, unless one must stay on", () => {
+    expect(pickSwitches([f, t, f], 1, false, false)).toEqual([f, f, f]);
+    expect(pickSwitches([f, t, f], 1, false, true)).toEqual([f, t, f]);
+  });
+  it("Shift+click adds and removes", () => {
+    expect(pickSwitches([t, f, f], 2, true, false)).toEqual([t, f, t]);
+    expect(pickSwitches([t, f, t], 0, true, false)).toEqual([f, f, t]);
+    expect(pickSwitches([t, f, f], 0, true, false)).toEqual([f, f, f]);
+    expect(pickSwitches([t, f, f], 0, true, true)).toEqual([t, f, f]);
   });
 });
