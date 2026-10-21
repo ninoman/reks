@@ -326,8 +326,13 @@ pub struct PlannedPlaylist {
     pub name: String,
     pub is_folder: bool,
     /// Entries in order (duplicates kept); tracks left out are dropped. Empty
-    /// for folders.
+    /// for folders. A smart playlist's: the tracks its rule matches now, in
+    /// its own sort.
     pub track_ids: Vec<TrackId>,
+    /// A smart playlist (D29), written as a plain playlist of `track_ids`;
+    /// it won't update on the stick.
+    #[serde(default)]
+    pub smart: bool,
 }
 
 /// One file to copy or delete.
@@ -411,6 +416,9 @@ pub enum Warning {
     StaleKept { files: usize, bytes: u64 },
     /// A playlist ended up empty after tracks were left out.
     EmptyPlaylist { id: PlaylistId },
+    /// A smart playlist is written as a fixed list of the tracks it matches
+    /// now (D29); players have no smart playlists.
+    SmartPlaylistFixed { id: PlaylistId },
     /// The stick holds, or may hold, play history that the export erases
     /// (baken rebuilds `export.pdb` and removes `exportLibrary.db`). With
     /// `BackUp` the files in [`ExportPlan::backups`] are copied first.
@@ -699,6 +707,9 @@ pub fn plan_sources(
         p.track_ids.retain(|id| exported.contains(id));
         if !p.is_folder && before > 0 && p.track_ids.is_empty() {
             warnings.push(Warning::EmptyPlaylist { id: p.id });
+        }
+        if p.smart {
+            warnings.push(Warning::SmartPlaylistFixed { id: p.id });
         }
     }
 

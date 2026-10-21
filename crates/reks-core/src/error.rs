@@ -60,6 +60,20 @@ pub enum Error {
         parent: crate::query::PlaylistId,
     },
 
+    /// The op edits a playlist's entries, and this playlist is smart: its
+    /// tracks follow its rules (D29).
+    #[error("{0} is a smart playlist; its tracks follow its rules")]
+    SmartPlaylist(crate::query::PlaylistId),
+
+    /// The op needs a smart playlist, and this id is a static playlist or a folder.
+    #[error("{0} is not a smart playlist")]
+    NotASmartPlaylist(crate::query::PlaylistId),
+
+    /// Saving would make smart playlist `{0}` include itself through its
+    /// rules (directly, or through other smart lists or a folder holding it).
+    #[error("smart playlist {0} would include itself through its rules")]
+    SmartPlaylistCycle(crate::query::PlaylistId),
+
     /// No tag or tag category with this id.
     #[error("tag {0} not found")]
     TagNotFound(crate::tag::TagId),

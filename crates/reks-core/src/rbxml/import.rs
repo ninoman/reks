@@ -927,10 +927,13 @@ impl Import<'_> {
         rows: &TrackRows<'_>,
         now: &str,
     ) -> Result<()> {
-        // Existing children of `parent`, in display order.
+        // Existing children of `parent`, in display order. Smart lists
+        // (D29) have no entries to merge into, so an XML playlist never
+        // matches one.
         let existing: Vec<(i64, bool, String)> = tx
             .prepare_cached(
-                "SELECT id, is_folder, name FROM playlist WHERE parent_id IS ?1
+                "SELECT id, is_folder, name FROM playlist
+                 WHERE parent_id IS ?1 AND smart_rule IS NULL
                  ORDER BY sort_order, id",
             )?
             .query_map([parent], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?

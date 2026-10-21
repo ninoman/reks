@@ -793,9 +793,25 @@ Date of decisions: 2026-10-18.
     limited to 8 levels and 200 nodes. Only a top-level playlist filter
     makes the rows a playlist's entries (and shows dividers); one inside a
     rule never does.
-  - **Smart playlists** store a rule tree. At export they become plain
-    playlists of the tracks they match at that moment; nothing smart is ever
-    written to a stick. (Lands with the smart-playlist task.)
+  - **Smart playlists** store a rule tree (`playlist.smart_rule`, JSON
+    `RuleNode`) and a sort (`smart_sort`, JSON `Sort`; default date added,
+    newest first; never playlist position), migration 0009. Ops:
+    `CreateSmart`, `SetRule`; the entry ops (add, remove, reorder, dividers)
+    refuse a smart list (`Error::SmartPlaylist`). A playlist filter on a
+    smart list means its rule; on a folder, the entries below it or any
+    smart list's rule below it. A smart list that would include itself
+    (directly, through other smart lists, or through a folder holding it)
+    is refused when saving or moving (`Error::SmartPlaylistCycle`); one
+    found at query time matches nothing and is logged. Its view has no
+    entry positions and no dividers. Every reader of a playlist's contents
+    goes through `query::playlist_track_ids`, so the XML export, stick size,
+    PDB and OneLibrary exports all see its current tracks in its sort.
+  - **At export a smart playlist is a plain playlist** of the tracks it
+    matches at that moment; nothing smart is ever written to a stick. The
+    plan flags it (`PlannedPlaylist::smart`, `Warning::SmartPlaylistFixed`)
+    so the dry run says so. Adopt never links a stick playlist to a smart
+    list, and an XML import never merges into one (a same-named static
+    sibling is created).
 - Rejected: free-form multi-level tags (OneLibrary and rekordbox have two
   levels); writing tags into audio files (Phase 1 non-goal); a smart-playlist
   format on the stick (players have none).

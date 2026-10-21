@@ -104,6 +104,7 @@ fn sources(tracks: Vec<SourceTrack>) -> Sources {
                 name: "Gigs".into(),
                 is_folder: true,
                 track_ids: vec![],
+                smart: false,
             },
             PlannedPlaylist {
                 id: 11,
@@ -111,6 +112,7 @@ fn sources(tracks: Vec<SourceTrack>) -> Sources {
                 name: "Friday".into(),
                 is_folder: false,
                 track_ids: tracks.iter().map(|t| t.track_id).collect(),
+                smart: false,
             },
         ],
         tracks,
@@ -284,6 +286,7 @@ fn warnings_are_grouped_and_unknown_tracks_get_their_id() {
         name: "Saturday".into(),
         is_folder: false,
         track_ids: vec![7],
+        smart: false,
     });
     let plan = plan_sources(
         src,

@@ -729,6 +729,7 @@ pub fn record_sync(
             depth: 0,
             position: 0,
             entries: 0,
+            smart: p.smart,
         })
         .collect();
     let tree = Tree::new(&nodes);

@@ -23,6 +23,7 @@ const MIGRATION_LIST: &[M<'static>] = &[
     M::up(include_str!("../migrations/0006_grid_lock.sql")),
     M::up(include_str!("../migrations/0007_analysis.sql")),
     M::up(include_str!("../migrations/0008_my_tags.sql")),
+    M::up(include_str!("../migrations/0009_smart_playlists.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 
@@ -431,6 +432,39 @@ mod tests {
         c.execute("DELETE FROM tag WHERE id = ?1", [genre]).unwrap();
         assert_eq!(count(&c, "track_tag"), 0);
         assert_eq!(count(&c, "tag"), 2);
+    }
+
+    #[test]
+    fn migration_9_adds_smart_columns_and_keeps_playlists() {
+        let mut c = conn_at(8);
+        let t = insert_track(&c, "/music/a.wav", "Alpha");
+        c.execute(
+            "INSERT INTO playlist (id, name, sort_order, created_at, updated_at)
+             VALUES (1, 'Set', 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO playlist_track (playlist_id, track_id, position) VALUES (1, ?1, 0)",
+            [t],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO track_tag (track_id, tag_id) SELECT ?1, id FROM tag WHERE name = 'Genre'",
+            [t],
+        )
+        .unwrap();
+        MIGRATIONS.to_latest(&mut c).unwrap();
+        let row: (String, Option<String>, Option<String>) = c
+            .query_row(
+                "SELECT name, smart_rule, smart_sort FROM playlist WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(row, ("Set".to_owned(), None, None));
+        assert_eq!(count(&c, "playlist_track"), 1);
+        assert_eq!(count(&c, "track_tag"), 1);
     }
 
     #[test]

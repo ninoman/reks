@@ -7,6 +7,10 @@
 //!
 //! An entry is a track or a labelled divider (D22, `docs/phases/phase-2.5.md`).
 //! Remove and reorder treat both alike; dividers are never duplicates.
+//!
+//! A smart playlist (D29) has no entries: its tracks are what its rule
+//! matches, so the entry ops refuse it. Saving a rule, and moving a node,
+//! refuse a smart list that would include itself.
 
 use std::collections::{BTreeSet, HashSet};
 
@@ -16,7 +20,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::Library;
 use crate::error::{Error, Result};
-use crate::query::{playlist_nodes, PlaylistId, PlaylistNode};
+use crate::query::{playlist_nodes, Filter, PlaylistId, PlaylistNode, Sort, SortColumn};
+use crate::rule::{Compiler, PlaylistIndex, RuleNode};
 use crate::scan::TrackId;
 use crate::timefmt::now_utc;
 use crate::track;
@@ -68,6 +73,25 @@ pub enum PlaylistOp {
         name: String,
         #[serde(default)]
         position: Option<u32>,
+    },
+    /// A smart playlist: its tracks are what `rule` matches, in `sort`
+    /// order (`None`: date added, newest first; never `playlistPosition`).
+    CreateSmart {
+        #[serde(default)]
+        parent_id: Option<PlaylistId>,
+        name: String,
+        rule: RuleNode,
+        #[serde(default)]
+        sort: Option<Sort>,
+        #[serde(default)]
+        position: Option<u32>,
+    },
+    /// Replaces a smart playlist's rule; `sort` `None` keeps its sort.
+    SetRule {
+        id: PlaylistId,
+        rule: RuleNode,
+        #[serde(default)]
+        sort: Option<Sort>,
     },
     Rename {
         id: PlaylistId,
@@ -187,6 +211,14 @@ impl Library {
                 name,
                 position,
             } => create(&tx, parent_id, &name, position, true, &now)?,
+            PlaylistOp::CreateSmart {
+                parent_id,
+                name,
+                rule,
+                sort,
+                position,
+            } => create_smart(&tx, parent_id, &name, &rule, sort, position, &now)?,
+            PlaylistOp::SetRule { id, rule, sort } => set_rule(&tx, id, &rule, sort, &now)?,
             PlaylistOp::Rename { id, name } => rename(&tx, id, &name, &now)?,
             PlaylistOp::Delete { id } => delete(&tx, id, &now)?,
             PlaylistOp::Move {
@@ -255,6 +287,87 @@ pub(crate) fn create(
     })
 }
 
+fn create_smart(
+    c: &Connection,
+    parent: Option<PlaylistId>,
+    name: &str,
+    rule: &RuleNode,
+    sort: Option<Sort>,
+    position: Option<u32>,
+    now: &str,
+) -> Result<PlaylistOutcome> {
+    valid_rule(rule, sort)?;
+    let out = create(c, parent, name, position, false, now)?;
+    if let PlaylistOutcome::Done {
+        created_id: Some(id),
+        ..
+    } = out
+    {
+        c.prepare_cached("UPDATE playlist SET smart_rule = ?2, smart_sort = ?3 WHERE id = ?1")?
+            .execute(params![
+                id,
+                to_json(rule)?,
+                sort.map(|s| to_json(&s)).transpose()?
+            ])?;
+        check_cycles(c, Some(id))?;
+    }
+    Ok(out)
+}
+
+fn set_rule(
+    c: &Connection,
+    id: PlaylistId,
+    rule: &RuleNode,
+    sort: Option<Sort>,
+    now: &str,
+) -> Result<PlaylistOutcome> {
+    if !node(c, id)?.smart {
+        return Err(Error::NotASmartPlaylist(id));
+    }
+    valid_rule(rule, sort)?;
+    c.prepare_cached("UPDATE playlist SET smart_rule = ?2, updated_at = ?3 WHERE id = ?1")?
+        .execute(params![id, to_json(rule)?, now])?;
+    if let Some(sort) = sort {
+        c.prepare_cached("UPDATE playlist SET smart_sort = ?2 WHERE id = ?1")?
+            .execute(params![id, to_json(&sort)?])?;
+    }
+    check_cycles(c, Some(id))?;
+    Ok(PlaylistOutcome::done())
+}
+
+/// A rule within the size limits, and a sort a smart list can have (it has
+/// no positions of its own).
+fn valid_rule(rule: &RuleNode, sort: Option<Sort>) -> Result<()> {
+    rule.validate()?;
+    if sort.is_some_and(|s| s.column == SortColumn::PlaylistPosition) {
+        return Err(Error::InvalidField {
+            field: "sort",
+            reason: "a smart playlist has no positions of its own".into(),
+        });
+    }
+    Ok(())
+}
+
+/// Fails with [`Error::SmartPlaylistCycle`] if a smart list reaches itself
+/// through its rules, as the tree is now. `first` is checked first, so its
+/// cycle is the one reported.
+fn check_cycles(c: &Connection, first: Option<PlaylistId>) -> Result<()> {
+    let index = PlaylistIndex::load(c)?;
+    let mut ids: Vec<PlaylistId> = index.smart_ids().collect();
+    ids.sort_unstable_by_key(|&id| (Some(id) != first, id));
+    for id in ids {
+        Compiler::strict(&index).filter(&Filter::Playlist { id })?;
+    }
+    Ok(())
+}
+
+fn to_json<T: Serialize>(v: &T) -> Result<String> {
+    serde_json::to_string(v).map_err(|e| Error::InvalidField {
+        field: "rule",
+        reason: e.to_string(),
+    })
+}
+
 fn rename(c: &Connection, id: PlaylistId, name: &str, now: &str) -> Result<PlaylistOutcome> {
     let name = valid_name(name)?;
     node(c, id)?;
@@ -303,6 +416,8 @@ fn move_node(
         write_order(c, &siblings(c, n.parent_id)?, now)?;
     }
     write_order(c, &target, now)?;
+    // A smart list moved into a folder its rules name would include itself.
+    check_cycles(c, Some(id))?;
     Ok(PlaylistOutcome::done())
 }
 
@@ -314,7 +429,7 @@ fn add_tracks(
     mode: DuplicateMode,
     now: &str,
 ) -> Result<PlaylistOutcome> {
-    require_playlist(c, playlist)?;
+    require_static(c, playlist)?;
     let current = entries(c, playlist)?;
     let at = match before {
         Some(b) => index(b, current.len())?,
@@ -366,7 +481,7 @@ fn remove_entries(
     positions: &[u32],
     now: &str,
 ) -> Result<PlaylistOutcome> {
-    require_playlist(c, playlist)?;
+    require_static(c, playlist)?;
     let current = entries(c, playlist)?;
     let drop = entry_set(positions, current.len())?;
     let new: Vec<Entry> = current
@@ -386,7 +501,7 @@ fn reorder_entries(
     before: u32,
     now: &str,
 ) -> Result<PlaylistOutcome> {
-    require_playlist(c, playlist)?;
+    require_static(c, playlist)?;
     let current = entries(c, playlist)?;
     let moved = entry_set(positions, current.len())?;
     let before = index(before, current.len())?;
@@ -411,7 +526,7 @@ fn insert_divider(
     now: &str,
 ) -> Result<PlaylistOutcome> {
     let label = valid_label(label)?;
-    require_playlist(c, playlist)?;
+    require_static(c, playlist)?;
     let current = entries(c, playlist)?;
     let at = match position {
         Some(p) => index(p, current.len())?,
@@ -431,7 +546,7 @@ fn rename_divider(
     now: &str,
 ) -> Result<PlaylistOutcome> {
     let label = valid_label(label)?;
-    require_playlist(c, playlist)?;
+    require_static(c, playlist)?;
     let current = entries(c, playlist)?;
     let at = entry_index(position, current.len())?;
     if !matches!(current[at], Entry::Divider(_)) {
@@ -473,18 +588,22 @@ impl Entry {
 struct Node {
     parent_id: Option<PlaylistId>,
     is_folder: bool,
+    smart: bool,
 }
 
 fn node(c: &Connection, id: PlaylistId) -> Result<Node> {
-    c.prepare_cached("SELECT parent_id, is_folder FROM playlist WHERE id = ?1")?
-        .query_row([id], |r| {
-            Ok(Node {
-                parent_id: r.get(0)?,
-                is_folder: r.get(1)?,
-            })
+    c.prepare_cached(
+        "SELECT parent_id, is_folder, smart_rule IS NOT NULL FROM playlist WHERE id = ?1",
+    )?
+    .query_row([id], |r| {
+        Ok(Node {
+            parent_id: r.get(0)?,
+            is_folder: r.get(1)?,
+            smart: r.get(2)?,
         })
-        .optional()?
-        .ok_or(Error::PlaylistNotFound(id))
+    })
+    .optional()?
+    .ok_or(Error::PlaylistNotFound(id))
 }
 
 /// `parent` is the top level or an existing folder.
@@ -495,9 +614,14 @@ fn require_folder(c: &Connection, parent: Option<PlaylistId>) -> Result<()> {
     }
 }
 
-fn require_playlist(c: &Connection, id: PlaylistId) -> Result<()> {
-    if node(c, id)?.is_folder {
+/// `id` is a playlist with entries: not a folder, not smart.
+fn require_static(c: &Connection, id: PlaylistId) -> Result<()> {
+    let n = node(c, id)?;
+    if n.is_folder {
         return Err(Error::NotAPlaylist(id));
+    }
+    if n.smart {
+        return Err(Error::SmartPlaylist(id));
     }
     Ok(())
 }

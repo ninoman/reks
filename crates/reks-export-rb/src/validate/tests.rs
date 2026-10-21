@@ -122,6 +122,7 @@ fn stick() -> Stick {
             name: name.into(),
             is_folder,
             track_ids,
+            smart: false,
         };
     let plan = ExportPlan {
         device: DeviceInfo {
@@ -407,6 +408,7 @@ fn playlist_tree_differences_are_reported() {
         name: "Extra".into(),
         is_folder: false,
         track_ids: vec![],
+        smart: false,
     });
     let r = s.validate();
     assert!(has(

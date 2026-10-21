@@ -643,10 +643,11 @@ Added 2026-10-21. One PR per task; tasks 4 and 2–3 can run in parallel once 1 
 2. [x] **Core rule tree**: `RuleNode` (all/any groups, NOT on every node),
    `TrackQuery::rule` ANDed with the filters, NOT-with-NULL rule, depth 8 /
    200 nodes limit.
-3. [ ] **Core smart playlists**: `playlist.smart_rule` / `smart_sort`,
+3. [x] **Core smart playlists**: `playlist.smart_rule` / `smart_sort`,
    `CreateSmart` / `SetRule` ops, smart lists resolved in queries and in every
    reader of playlist contents (XML export, stick size, PDB/OneLibrary
-   export as plain playlists), cycle check.
+   export as plain playlists, flagged in the dry run), cycle check
+   (migration 0009).
 4. [ ] **UI tags**: tag store, tag manager, "My Tags" context submenu, detail
    panel chips, column, filter-bar tag picker.
 5. [ ] **UI rule builder and smart playlists**: builder under the filter bar,

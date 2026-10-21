@@ -9,6 +9,9 @@
 //! [`export_with_dividers`]: the legacy writer turns each into a track row
 //! for a generated silent file, placed at the divider's entry position.
 //!
+//! A smart playlist (D29) is written as a plain playlist of the tracks its
+//! rule matches now, in its own sort.
+//!
 //! [`import`]: super::import()
 
 use std::collections::{HashMap, HashSet};
@@ -22,7 +25,8 @@ use super::{path_to_location, Collection, PositionMark, Product, Tempo, XmlNode,
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::playlist::Entry;
-use crate::query::PlaylistId;
+use crate::query::{playlist_track_ids, PlaylistId};
+use crate::rule::PlaylistIndex;
 use crate::scan::TrackId;
 
 /// What to export: playlists and folders by id. A folder stands for every
@@ -113,6 +117,7 @@ pub fn export_with_dividers(
 ) -> Result<XmlExport> {
     let conn = lib.conn()?;
     let nodes = load_nodes(&conn)?;
+    let index = PlaylistIndex::load(&conn)?;
 
     // Selected playlists (folders expanded), then everything to keep in the
     // tree: those playlists and their ancestors.
@@ -143,6 +148,7 @@ pub fn export_with_dividers(
         .collect();
     let mut b = Builder {
         conn: &conn,
+        index: &index,
         nodes: &nodes,
         keep: &keep,
         dividers: &by_slot,
@@ -252,6 +258,7 @@ fn load_nodes(conn: &Connection) -> Result<Nodes> {
 
 struct Builder<'a> {
     conn: &'a Connection,
+    index: &'a PlaylistIndex,
     nodes: &'a Nodes,
     keep: &'a HashSet<PlaylistId>,
     dividers: &'a HashMap<(PlaylistId, u32), &'a DividerTrack>,
@@ -284,6 +291,16 @@ impl Builder<'_> {
             if node.is_folder {
                 let children = self.children(Some(id), &path)?;
                 out.push(XmlNode::folder(node.name.clone(), children));
+            } else if self.index.smart(id).is_some() {
+                let mut keys = Vec::new();
+                for t in playlist_track_ids(self.conn, self.index, id)? {
+                    if self.seen.insert(t) {
+                        self.tracks.push(t);
+                    }
+                    keys.push(t.to_string());
+                }
+                out.push(XmlNode::playlist(node.name.clone(), 0, keys));
+                self.playlists.push((id, path));
             } else {
                 let mut keys = Vec::new();
                 let mut ordinal = 0u32;

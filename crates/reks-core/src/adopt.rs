@@ -16,8 +16,9 @@ use serde::Serialize;
 use crate::db::Library;
 use crate::device::{get_device, DeviceId};
 use crate::error::{Error, Result};
-use crate::playlist::{create, entries, write_entries, Entry, PlaylistOutcome};
-use crate::query::PlaylistId;
+use crate::playlist::{create, write_entries, Entry, PlaylistOutcome};
+use crate::query::{playlist_track_ids, PlaylistId};
+use crate::rule::PlaylistIndex;
 use crate::scan::TrackId;
 use crate::timefmt::now_utc;
 
@@ -76,8 +77,16 @@ impl Library {
         get_device(&tx, w.device_id)?;
         let mut out = AdoptWritten::default();
 
+        let index = PlaylistIndex::load(&tx)?;
         for l in &w.links {
-            let found = playlist_tracks(&tx, l.playlist_id)?;
+            // A smart list's contents change by themselves: never linked.
+            if index.smart(l.playlist_id).is_some() {
+                return Err(Error::StaleAdoptPlan(format!(
+                    "playlist {} is a smart playlist",
+                    l.playlist_id
+                )));
+            }
+            let found = playlist_track_ids(&tx, &index, l.playlist_id)?;
             if found != l.tracks {
                 return Err(Error::StaleAdoptPlan(format!(
                     "playlist {} changed since the scan",
@@ -136,12 +145,6 @@ impl Library {
     }
 }
 
-/// A playlist's track entries in order, dividers left out. A folder or an
-/// unknown id has none.
-pub(crate) fn playlist_tracks(c: &Connection, id: PlaylistId) -> Result<Vec<TrackId>> {
-    Ok(entries(c, id)?.iter().filter_map(Entry::track).collect())
-}
-
 fn top_folder(c: &Connection) -> Result<Option<PlaylistId>> {
     Ok(c.query_row(
         "SELECT id FROM playlist WHERE parent_id IS NULL AND is_folder = 1 AND name = ?1
@@ -185,15 +188,17 @@ fn new_node(
 }
 
 impl Library {
-    /// The track entries of each of `ids` (dividers left out), for adopt's
-    /// link check. Folders and unknown ids map to an empty list.
+    /// The tracks of each of `ids` in order (dividers left out; a smart
+    /// list's current tracks), for adopt's link check. Folders and unknown
+    /// ids map to an empty list.
     pub fn playlist_track_ids(
         &self,
         ids: &[PlaylistId],
     ) -> Result<HashMap<PlaylistId, Vec<TrackId>>> {
         let conn = self.conn()?;
+        let index = PlaylistIndex::load(&conn)?;
         ids.iter()
-            .map(|&id| Ok((id, playlist_tracks(&conn, id)?)))
+            .map(|&id| Ok((id, playlist_track_ids(&conn, &index, id)?)))
             .collect()
     }
 }
@@ -357,5 +362,45 @@ mod tests {
         let out = lib.adopt_playlists(&ok).unwrap();
         assert_eq!(out.linked, vec![id]);
         assert_eq!(lib.device_selection(dev).unwrap().len(), 2);
+    }
+
+    /// A smart list is never linked, even when it holds exactly the tracks.
+    #[test]
+    fn smart_list_is_never_linked() {
+        let (lib, t) = lib_with_tracks(2);
+        let dev = device(&lib);
+        let id = match lib
+            .playlist_mutate(PlaylistOp::CreateSmart {
+                parent_id: None,
+                name: "Everything".into(),
+                rule: crate::RuleNode::Group {
+                    r#match: crate::Match::All,
+                    not: false,
+                    rules: vec![],
+                },
+                sort: None,
+                position: None,
+            })
+            .unwrap()
+        {
+            PlaylistOutcome::Done { created_id, .. } => created_id.unwrap(),
+            other => panic!("{other:?}"),
+        };
+        let tracks = lib.playlist_track_ids(&[id]).unwrap()[&id].clone();
+        assert_eq!(tracks.len(), t.len());
+        let w = AdoptWrite {
+            device_id: dev,
+            stick_name: "Gig stick".into(),
+            creates: vec![],
+            links: vec![AdoptLink {
+                playlist_id: id,
+                tracks,
+            }],
+        };
+        assert!(matches!(
+            lib.adopt_playlists(&w),
+            Err(Error::StaleAdoptPlan(_))
+        ));
+        assert!(lib.device_selection(dev).unwrap().is_empty());
     }
 }

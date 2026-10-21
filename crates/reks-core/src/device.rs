@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::Library;
 use crate::error::{Error, Result};
-use crate::query::PlaylistId;
+use crate::query::{playlist_track_ids, PlaylistId};
+use crate::rule::PlaylistIndex;
 use crate::scan::TrackId;
 use crate::timefmt::now_utc;
 
@@ -389,27 +390,25 @@ impl Library {
         get_device(&conn, id)
     }
 
-    /// The entries of each of `playlists` in order, each with its track's
-    /// file size: what profile status needs, without loading track details.
-    /// Unknown ids and folders map to no entries.
+    /// The tracks of each of `playlists` in order (a smart list's current
+    /// tracks), each with its file size: what profile status needs, without
+    /// loading track details. Unknown ids and folders map to no entries.
     pub fn playlist_entry_sizes(
         &self,
         playlists: &[PlaylistId],
     ) -> Result<HashMap<PlaylistId, Vec<(TrackId, u64)>>> {
         let conn = self.conn()?;
-        let mut stmt = conn.prepare(
-            "SELECT pt.track_id, t.file_size FROM playlist_track pt
-             JOIN track t ON t.id = pt.track_id
-             WHERE pt.playlist_id = ?1 ORDER BY pt.position",
-        )?;
+        let index = PlaylistIndex::load(&conn)?;
+        let mut size = conn.prepare("SELECT file_size FROM track WHERE id = ?1")?;
         let mut out = HashMap::new();
         for &p in playlists {
-            let rows = stmt
-                .query_map([p], |r| {
-                    let size: i64 = r.get(1)?;
-                    Ok((r.get(0)?, u64::try_from(size).unwrap_or(0)))
-                })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
+            let rows = playlist_track_ids(&conn, &index, p)?
+                .into_iter()
+                .map(|t| {
+                    let bytes: i64 = size.query_row([t], |r| r.get(0))?;
+                    Ok((t, u64::try_from(bytes).unwrap_or(0)))
+                })
+                .collect::<Result<Vec<_>>>()?;
             out.insert(p, rows);
         }
         Ok(out)

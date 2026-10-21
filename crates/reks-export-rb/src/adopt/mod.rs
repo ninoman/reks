@@ -308,9 +308,10 @@ pub fn scan(root: &Path, volume_serial: Option<&str>, lib: &Library) -> Result<A
         .filter(|(p, _)| !p.is_folder)
         .map(|(p, _)| p.name.clone())
         .collect();
+    // Smart lists change by themselves, so they are never link candidates.
     let same_name: Vec<PlaylistId> = tree
         .iter()
-        .filter(|n| !n.is_folder && names.contains(&n.name))
+        .filter(|n| !n.is_folder && !n.smart && names.contains(&n.name))
         .map(|n| n.id)
         .collect();
     let lib_tracks = lib.playlist_track_ids(&same_name)?;

@@ -227,3 +227,74 @@ fn bad_selections_are_errors() {
     assert!(out.collection.tracks.is_empty());
     assert_eq!(out.baken_playlists(), vec!["Empty/Nothing yet"]);
 }
+
+/// A smart playlist is written as a plain playlist of the tracks it matches
+/// now, in its own sort (D29).
+#[test]
+fn smart_playlist_exports_as_a_plain_playlist() {
+    let env = Env::new();
+    let folder = env.node("reks fixtures");
+    let mut ids: Vec<i64> = env
+        .lib
+        .tracks(&reks_core::TrackQuery::default())
+        .unwrap()
+        .rows
+        .iter()
+        .map(|r| r.id)
+        .collect();
+    ids.sort_unstable();
+    let smart = env.create(PlaylistOp::CreateSmart {
+        parent_id: Some(folder),
+        name: "Smart".into(),
+        rule: reks_core::RuleNode::Group {
+            r#match: reks_core::Match::All,
+            not: false,
+            rules: vec![],
+        },
+        sort: Some(reks_core::Sort {
+            column: reks_core::SortColumn::Title,
+            descending: true,
+        }),
+        position: None,
+    });
+    let out = export(
+        &env.lib,
+        &Selection {
+            playlists: vec![smart],
+        },
+    )
+    .unwrap();
+    let want = env.lib.playlist_track_ids(&[smart]).unwrap()[&smart].clone();
+    let mut sorted = want.clone();
+    sorted.sort_unstable();
+    assert_eq!(sorted, ids, "every track: an empty \"all\" group");
+    let titles: Vec<String> = want
+        .iter()
+        .map(|&id| {
+            env.lib
+                .track(id)
+                .unwrap()
+                .track
+                .row
+                .title
+                .unwrap_or_default()
+        })
+        .collect();
+    let mut by_title = titles.clone();
+    by_title.sort_unstable_by_key(|t| std::cmp::Reverse(t.to_lowercase()));
+    assert_eq!(titles, by_title, "title, descending");
+
+    let rbxml::NodeKind::Folder(top) = &out.collection.playlists.kind else {
+        panic!("ROOT is a folder")
+    };
+    let rbxml::NodeKind::Folder(inner) = &top[0].kind else {
+        panic!("the parent folder")
+    };
+    let rbxml::NodeKind::Playlist { keys, .. } = &inner[0].kind else {
+        panic!("a plain playlist")
+    };
+    assert_eq!(inner[0].name, "Smart");
+    let want_keys: Vec<String> = want.iter().map(i64::to_string).collect();
+    assert_eq!(keys, &want_keys);
+    assert_eq!(out.collection.tracks.len(), ids.len());
+}

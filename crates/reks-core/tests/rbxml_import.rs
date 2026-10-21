@@ -913,3 +913,57 @@ fn xml_track(id: u32, path: &Path) -> XmlTrack {
         ..XmlTrack::default()
     }
 }
+
+/// An XML playlist never merges into a smart playlist of the same name: it
+/// gets a static sibling, and the smart list keeps no entries (D29).
+#[test]
+fn reimport_never_writes_into_a_smart_playlist() {
+    let env = Env::new();
+    let c = small_collection();
+    env.import(&c, fixture_remap());
+    let id = |name: &str| -> i64 {
+        env.db()
+            .query_row(
+                "SELECT id FROM playlist WHERE name = ?1 AND smart_rule IS NULL",
+                [name],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    let (folder, lossless) = (id("reks fixtures"), id("Lossless"));
+    env.lib
+        .playlist_mutate(PlaylistOp::Delete { id: lossless })
+        .unwrap();
+    let PlaylistOutcome::Done {
+        created_id: Some(smart),
+        ..
+    } = env
+        .lib
+        .playlist_mutate(PlaylistOp::CreateSmart {
+            parent_id: Some(folder),
+            name: "Lossless".into(),
+            rule: reks_core::RuleNode::Group {
+                r#match: reks_core::Match::Any,
+                not: false,
+                rules: vec![],
+            },
+            sort: None,
+            position: None,
+        })
+        .unwrap()
+    else {
+        panic!("no id");
+    };
+    env.import(&c, fixture_remap());
+    let entries: i64 = env
+        .db()
+        .query_row(
+            "SELECT count(*) FROM playlist_track WHERE playlist_id = ?1",
+            [smart],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(entries, 0);
+    assert_ne!(id("Lossless"), smart);
+    assert_eq!(env.playlist_tracks("Lossless").len(), 1);
+}

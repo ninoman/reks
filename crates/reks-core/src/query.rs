@@ -9,14 +9,15 @@ use std::fmt::Write as _;
 use std::sync::OnceLock;
 
 use rusqlite::types::Value;
-use rusqlite::{params_from_iter, Connection, OptionalExtension, Row};
+use rusqlite::{params_from_iter, Connection, Row};
 use serde::{Deserialize, Serialize};
 
 use crate::db::Library;
 use crate::error::Result;
 use crate::keys::{Key, Mode};
+use crate::playlist::{entries, Entry};
 use crate::rbxml::TRACK_COLOURS;
-use crate::rule::{Compiler, RuleNode};
+use crate::rule::{Compiler, PlaylistIndex, RuleNode};
 use crate::scan::TrackId;
 use crate::tag::{tags_of, TagId};
 
@@ -114,8 +115,8 @@ pub enum SortColumn {
     LastPlayed,
     Kind,
     BitRate,
-    /// Position in the playlist of the first `Filter::Playlist`; id order
-    /// without one.
+    /// Position in the playlist of the first `Filter::Playlist` (for a
+    /// smart playlist, its own sort); id order without one.
     PlaylistPosition,
 }
 
@@ -214,8 +215,11 @@ pub struct PlaylistNode {
     pub depth: u32,
     /// Index among its siblings (`sort_order`, kept dense by `playlist_mutate`).
     pub position: u32,
-    /// Number of track entries, dividers left out (0 for folders).
+    /// Number of track entries, dividers left out (0 for folders). For a
+    /// smart playlist, the tracks its rule matches now.
     pub entries: u32,
+    /// A smart playlist (D29): its tracks follow a saved rule.
+    pub smart: bool,
 }
 
 pub(crate) const ROW_COLUMNS: &str =
@@ -228,9 +232,14 @@ impl Library {
     /// One page of tracks matching `q`, and the total match count.
     pub fn tracks(&self, q: &TrackQuery) -> Result<TrackPage> {
         let conn = self.conn()?;
-        let view = entry_view(&conn, q)?;
-        let w = where_clause(q, view)?;
-        let (order, order_params) = order_by(q, view);
+        let index = if q.mentions_playlist() {
+            PlaylistIndex::load(&conn)?
+        } else {
+            PlaylistIndex::default()
+        };
+        let view = first_playlist(q).filter(|&id| index.is_static_playlist(id));
+        let w = where_clause(q, view, &index)?;
+        let (order, order_params) = order_by(q.sort, view, first_playlist(q), &index);
         // In a playlist view every entry is a row; `pe.position` is its place.
         let (from, entry_col) = match view {
             Some(_) => (
@@ -375,21 +384,15 @@ impl TrackQuery {
                 .iter()
                 .all(|f| matches!(f, Filter::Playlist { id } if *id == playlist))
     }
+
+    fn mentions_playlist(&self) -> bool {
+        first_playlist(self).is_some()
+            || self.rule.as_ref().is_some_and(RuleNode::mentions_playlist)
+    }
 }
 
-/// The playlist whose entries are the rows: the first `Filter::Playlist`,
-/// when it names a playlist rather than a folder.
-fn entry_view(conn: &Connection, q: &TrackQuery) -> Result<Option<PlaylistId>> {
-    let Some(id) = first_playlist(q) else {
-        return Ok(None);
-    };
-    let is_folder: Option<bool> = conn
-        .prepare_cached("SELECT is_folder FROM playlist WHERE id = ?1")?
-        .query_row([id], |r| r.get(0))
-        .optional()?;
-    Ok((is_folder == Some(false)).then_some(id))
-}
-
+/// The first top-level `Filter::Playlist`. When it names a static playlist
+/// (not a folder, not smart), its entries are the rows: the entry view.
 fn first_playlist(q: &TrackQuery) -> Option<PlaylistId> {
     q.filters.iter().find_map(|f| match f {
         Filter::Playlist { id } => Some(*id),
@@ -404,9 +407,9 @@ struct Where {
 }
 
 /// `view`: the entry-view playlist, whose filter the join already applies.
-fn where_clause(q: &TrackQuery, view: Option<PlaylistId>) -> Result<Where> {
+fn where_clause(q: &TrackQuery, view: Option<PlaylistId>, index: &PlaylistIndex) -> Result<Where> {
     let mut conds: Vec<String> = Vec::new();
-    let mut c = Compiler::default();
+    let mut c = Compiler::new(index);
     let mut view_filter = view;
 
     if let Some(m) = q.text.as_deref().and_then(fts_query) {
@@ -439,13 +442,20 @@ fn where_clause(q: &TrackQuery, view: Option<PlaylistId>) -> Result<Where> {
 }
 
 /// `ORDER BY` terms and their parameters. Empty values sort last in both
-/// directions; ties break on id so pages are stable.
-fn order_by(q: &TrackQuery, view: Option<PlaylistId>) -> (String, Vec<Value>) {
-    let dir = if q.sort.descending { "DESC" } else { "ASC" };
+/// directions; ties break on id so pages are stable. `first`: the first
+/// top-level playlist filter, whose order `PlaylistPosition` means (a smart
+/// list's own sort).
+fn order_by(
+    sort: Sort,
+    view: Option<PlaylistId>,
+    first: Option<PlaylistId>,
+    index: &PlaylistIndex,
+) -> (String, Vec<Value>) {
+    let dir = if sort.descending { "DESC" } else { "ASC" };
     let text = |col: &str| format!("({col} IS NULL OR {col} = ''), {col} COLLATE NOCASE {dir}");
     let num = |expr: &str| format!("({expr}) IS NULL, ({expr}) {dir}");
     let mut params = Vec::new();
-    let order = match q.sort.column {
+    let order = match sort.column {
         SortColumn::Title => text("t.title"),
         SortColumn::Artist => text("t.artist"),
         SortColumn::Album => text("t.album"),
@@ -463,17 +473,23 @@ fn order_by(q: &TrackQuery, view: Option<PlaylistId>) -> (String, Vec<Value>) {
         SortColumn::LastPlayed => text("t.last_played"),
         SortColumn::BitRate => num("t.bit_rate_kbps"),
         SortColumn::PlaylistPosition if view.is_some() => num("pe.position"),
-        SortColumn::PlaylistPosition => {
-            match first_playlist(q) {
-                Some(id) => {
-                    // The expression appears twice in `num`.
-                    params.extend([Value::Integer(id), Value::Integer(id)]);
-                    num("SELECT min(pt.position) FROM playlist_track pt \
-                         WHERE pt.track_id = t.id AND pt.playlist_id = ?")
-                }
-                None => format!("t.id {dir}"),
+        SortColumn::PlaylistPosition => match first.map(|id| (id, index.smart(id))) {
+            // A smart list has no positions: its own sort, reversed by `descending`.
+            Some((_, Some(def))) if def.sort.column != SortColumn::PlaylistPosition => {
+                let own = Sort {
+                    column: def.sort.column,
+                    descending: def.sort.descending != sort.descending,
+                };
+                return order_by(own, None, None, index);
             }
-        }
+            Some((id, None)) => {
+                // The expression appears twice in `num`.
+                params.extend([Value::Integer(id), Value::Integer(id)]);
+                num("SELECT min(pt.position) FROM playlist_track pt \
+                     WHERE pt.track_id = t.id AND pt.playlist_id = ?")
+            }
+            _ => format!("t.id {dir}"),
+        },
     };
     // Copies of one track in a playlist view tie on id; position breaks it.
     let tie = if view.is_some() {
@@ -532,7 +548,8 @@ fn color_rank_sql() -> &'static str {
 /// Every playlist and folder, depth first, siblings in `sort_order`.
 pub(crate) fn playlist_nodes(conn: &Connection) -> Result<Vec<PlaylistNode>> {
     let mut stmt = conn.prepare_cached(
-        "SELECT p.id, p.parent_id, p.name, p.is_folder, coalesce(e.n, 0) FROM playlist p
+        "SELECT p.id, p.parent_id, p.name, p.is_folder, coalesce(e.n, 0),
+                p.smart_rule IS NOT NULL FROM playlist p
          LEFT JOIN (SELECT playlist_id, count(*) AS n FROM playlist_track
                     WHERE item_kind = 'track' GROUP BY playlist_id) e
            ON e.playlist_id = p.id
@@ -548,9 +565,16 @@ pub(crate) fn playlist_nodes(conn: &Connection) -> Result<Vec<PlaylistNode>> {
                 depth: 0,
                 position: 0,
                 entries: r.get(4)?,
+                smart: r.get(5)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+    if all.iter().any(|n| n.smart) {
+        let index = PlaylistIndex::load(conn)?;
+        for n in all.iter_mut().filter(|n| n.smart) {
+            n.entries = smart_count(conn, &index, n.id);
+        }
+    }
 
     let mut children: HashMap<Option<PlaylistId>, Vec<usize>> = HashMap::new();
     for (i, n) in all.iter_mut().enumerate() {
@@ -572,6 +596,58 @@ pub(crate) fn playlist_nodes(conn: &Connection) -> Result<Vec<PlaylistNode>> {
         out.push(PlaylistNode { depth, ..n.clone() });
     }
     Ok(out)
+}
+
+/// How many tracks smart list `id` holds now; 0 (with a warning) if its
+/// rule can't be evaluated.
+fn smart_count(conn: &Connection, index: &PlaylistIndex, id: PlaylistId) -> u32 {
+    let count = || -> Result<i64> {
+        let mut c = Compiler::new(index);
+        let cond = c.filter(&Filter::Playlist { id })?;
+        Ok(conn.query_row(
+            &format!("SELECT count(*) FROM track t WHERE {cond}"),
+            params_from_iter(&c.params),
+            |r| r.get(0),
+        )?)
+    };
+    match count() {
+        Ok(n) => u32::try_from(n).unwrap_or(u32::MAX),
+        Err(e) => {
+            tracing::warn!(playlist = id, error = %e, "cannot count smart playlist");
+            0
+        }
+    }
+}
+
+/// A playlist's tracks in order, dividers left out: a static list's track
+/// entries (duplicates kept), or the tracks a smart list's rule matches now
+/// in its own sort. A folder or an unknown id has none. Every reader of a
+/// playlist's contents goes through this, so smart lists read like static
+/// ones everywhere (XML export, stick size, adopt).
+pub(crate) fn playlist_track_ids(
+    conn: &Connection,
+    index: &PlaylistIndex,
+    id: PlaylistId,
+) -> Result<Vec<TrackId>> {
+    if index.smart(id).is_none() {
+        return Ok(entries(conn, id)?.iter().filter_map(Entry::track).collect());
+    }
+    let mut c = Compiler::new(index);
+    let cond = c.filter(&Filter::Playlist { id })?;
+    let position = Sort {
+        column: SortColumn::PlaylistPosition,
+        descending: false,
+    };
+    let (order, order_params) = order_by(position, None, Some(id), index);
+    let mut params = c.params;
+    params.extend(order_params);
+    let ids = conn
+        .prepare_cached(&format!(
+            "SELECT t.id FROM track t WHERE {cond} ORDER BY {order}"
+        ))?
+        .query_map(params_from_iter(&params), |r| r.get(0))?
+        .collect::<rusqlite::Result<Vec<TrackId>>>()?;
+    Ok(ids)
 }
 
 #[cfg(test)]

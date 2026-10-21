@@ -49,6 +49,10 @@ impl fmt::Display for Warning {
             Self::EmptyPlaylist { id } => {
                 write!(f, "playlist {id} is empty after leaving tracks out")
             }
+            Self::SmartPlaylistFixed { id } => write!(
+                f,
+                "smart playlist {id} is written as a fixed list of the tracks it matches now"
+            ),
             Self::StickHistory {
                 sessions,
                 entries,

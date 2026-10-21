@@ -968,6 +968,7 @@ mod tests {
             depth: u32::from(parent_id.is_some()),
             position: 0,
             entries: 0,
+            smart: false,
         }
     }
 

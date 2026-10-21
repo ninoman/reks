@@ -140,6 +140,9 @@ pub struct PlaylistRow {
     pub name: String,
     pub depth: usize,
     pub is_folder: bool,
+    /// A smart playlist, written as a fixed list (D29).
+    #[serde(default)]
+    pub smart: bool,
     /// `12 tracks`; empty for folders.
     pub detail: String,
 }
@@ -522,6 +525,7 @@ fn playlist_rows(plan: &ExportPlan) -> Vec<PlaylistRow> {
                 name: p.name.clone(),
                 depth: d,
                 is_folder: p.is_folder,
+                smart: p.smart,
                 detail: if p.is_folder {
                     String::new()
                 } else {
@@ -857,6 +861,7 @@ fn warning_kind(w: &Warning) -> &'static str {
         Warning::Skipped { .. } => "skipped",
         Warning::StaleKept { .. } => "staleKept",
         Warning::EmptyPlaylist { .. } => "emptyPlaylist",
+        Warning::SmartPlaylistFixed { .. } => "smartPlaylistFixed",
         Warning::StickHistory { .. } => "stickHistory",
         Warning::NoVolumeSerial => "noVolumeSerial",
         Warning::OneLibraryExperimental => "oneLibraryExperimental",
@@ -871,7 +876,7 @@ fn warning_item(
     match w {
         Warning::Audio { track_id, message } => format!("{}: {message}", track(*track_id)),
         Warning::Skipped { track_id, reason } => format!("{}: {reason}", track(*track_id)),
-        Warning::EmptyPlaylist { id } => playlist(*id),
+        Warning::EmptyPlaylist { id } | Warning::SmartPlaylistFixed { id } => playlist(*id),
         Warning::ExFat { target } => format!(
             "The stick is exFAT, which older players don't read; FAT32 is the safe choice \
              (target: {}).",
@@ -897,6 +902,11 @@ fn warning_title(kind: &str, items: &[String]) -> Option<String> {
         "emptyPlaylist" => Some(format!(
             "{} empty after leaving tracks out",
             count(n, "playlist ends up", "playlists end up")
+        )),
+        "smartPlaylistFixed" => Some(format!(
+            "{} written with the tracks matched now. Players have no smart playlists, \
+             so the stick won't update by itself.",
+            count(n, "smart playlist is", "smart playlists are")
         )),
         _ => None,
     }

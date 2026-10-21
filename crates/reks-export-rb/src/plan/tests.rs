@@ -148,6 +148,7 @@ fn sources(tracks: Vec<SourceTrack>) -> Sources {
             name: "Set".into(),
             is_folder: false,
             track_ids: tracks.iter().map(|t| t.track_id).collect(),
+            smart: false,
         }],
         tracks,
         problems: vec![],
@@ -680,6 +681,93 @@ fn loads_selection_from_the_library() {
 
     let src = load(&lib, &Selection::default()).unwrap();
     assert_eq!(src.problems, [Problem::NothingSelected]);
+}
+
+/// A smart playlist is planned as a plain playlist of the tracks it matches
+/// now, in its own sort, flagged for the dry run (D29).
+#[test]
+fn smart_playlist_is_planned_as_a_fixed_list() {
+    let w = World::new();
+    let (lib, set, ids) = library(&w);
+    let smart = match lib
+        .playlist_mutate(PlaylistOp::CreateSmart {
+            parent_id: None,
+            name: "Smart".into(),
+            rule: reks_core::RuleNode::Filter {
+                not: false,
+                filter: reks_core::Filter::Playlist { id: set },
+            },
+            sort: Some(reks_core::Sort {
+                column: reks_core::SortColumn::Kind,
+                descending: true,
+            }),
+            position: None,
+        })
+        .unwrap()
+    {
+        PlaylistOutcome::Done { created_id, .. } => created_id.unwrap(),
+        other => panic!("{other:?}"),
+    };
+    let kind = |id: TrackId| lib.track(id).unwrap().track.row.kind;
+    let mut want = ids.clone();
+    want.sort_by_key(|&id| std::cmp::Reverse(kind(id)));
+    assert_eq!(kind(want[0]), "wav");
+
+    let plan = plan(
+        &lib,
+        &Selection {
+            playlists: vec![smart],
+        },
+        &w.dev(),
+        &ExportOptions::default(),
+        &w.locator(),
+    )
+    .unwrap();
+    assert!(!plan.is_blocked(), "{:?}", plan.errors);
+    assert_eq!(plan.playlists.len(), 1);
+    let p = &plan.playlists[0];
+    assert!(p.smart && !p.is_folder);
+    assert_eq!(p.track_ids, want);
+    assert_eq!(plan.copies.len(), 2);
+    assert!(plan
+        .warnings
+        .contains(&Warning::SmartPlaylistFixed { id: smart }));
+
+    let view = crate::dryrun::DryRun::new(&plan, &Default::default());
+    assert!(view.playlists[0].smart);
+    let note = view
+        .warnings
+        .iter()
+        .find(|g| g.kind == "smartPlaylistFixed")
+        .unwrap();
+    assert_eq!(note.items, ["Smart"]);
+    assert!(
+        note.title.starts_with("1 smart playlist is written"),
+        "{}",
+        note.title
+    );
+
+    // The static list next to it is not flagged.
+    let plain = plan_sources(
+        load(
+            &lib,
+            &Selection {
+                playlists: vec![set],
+            },
+        )
+        .unwrap(),
+        &w.dev(),
+        serial(),
+        &ExportOptions::default(),
+        &w.locator(),
+        &NoAnlz,
+    )
+    .unwrap();
+    assert!(!plain.playlists[0].smart);
+    assert!(!plain
+        .warnings
+        .iter()
+        .any(|w| matches!(w, Warning::SmartPlaylistFixed { .. })));
 }
 
 /// A library with `a.wav` and `b.mp3` (no beat grids) in playlist "Set".
