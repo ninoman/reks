@@ -1,14 +1,16 @@
 /**
  * Transport bar under the library: play/pause, the loaded track, elapsed and
- * remaining time, the overview waveform as the position slider, volume and
- * output device. Everything it shows comes from `usePlayer`.
+ * remaining time, the overview waveform as the position slider, volume,
+ * output device and the Mix toggle (the mix panel opens just above this bar). Everything it shows comes from `usePlayer`.
  */
 import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } from "react";
 
 import { formatDuration } from "../lib/format";
 import { fitColumns } from "../lib/overview";
+import { usePanels } from "../store/panels";
 import { usePlayer } from "../store/player";
 import { PauseIcon, PlayIcon } from "./icons";
+import { Button } from "./ui/Button";
 import { focusRing } from "./ui/control";
 import { IconButton } from "./ui/IconButton";
 import { Select } from "./ui/Select";
@@ -24,6 +26,7 @@ export function TransportBar() {
   const track = usePlayer((s) => s.track);
   const loading = usePlayer((s) => s.loading);
   const error = usePlayer((s) => s.error);
+  const mixOpen = usePanels((s) => s.mixOpen);
   const devices = usePlayer((s) => s.devices);
   const overview = usePlayer((s) =>
     s.overview !== null && s.overview.trackId === s.status.trackId ? s.overview.columns : null,
@@ -97,6 +100,14 @@ export function TransportBar() {
           </option>
         ))}
       </Select>
+      <Button
+        size="sm"
+        className="flex-none"
+        aria-pressed={mixOpen}
+        onClick={() => usePanels.getState().toggleMix()}
+      >
+        Mix
+      </Button>
       {(error !== null || status.deviceLost) && (
         <span className="flex-none text-danger" role="alert">
           {status.deviceLost ? "Audio device disconnected" : error}
