@@ -148,7 +148,7 @@ constant class strings; per-row state is `data-*` attributes styled with
 ## Mix panel (phase 5)
 
 [`src/components/mix/`](../src/components/mix/), opened with **Mix** in the
-app header, under the table. `MixPanel` is the only part that reads the store
+transport bar (bottom edge), under the table. `MixPanel` is the only part that reads the store
 ([`src/store/mix.ts`](../src/store/mix.ts)); `DeckStrip`, `DeckWaveform`,
 `MixerPanel`, `ChannelStrip`, `FilterUnit`, `MasterSection` and `SyncPhase`
 take props. The mixer follows the hardware: four channel strips (level, HI,
