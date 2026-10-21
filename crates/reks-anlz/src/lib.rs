@@ -11,6 +11,7 @@ pub mod build;
 pub mod compare;
 pub mod cue;
 pub mod grid;
+pub mod rbwave;
 pub mod read;
 pub mod validate;
 pub mod waveform;
