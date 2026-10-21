@@ -282,3 +282,37 @@ fn meters_report_channels_and_master() {
     frames(&mut g, 32);
     assert!(g.state().master.clip, "still over");
 }
+
+#[test]
+fn channels_1_2_default_to_filter_x_and_3_4_to_filter_y() {
+    // One 60 Hz tone per channel, each alone; a unit set to HP at 20 kHz
+    // removes it from the channels assigned to that unit only.
+    let level = |unit_on: Option<FilterUnit>, deck: u8| {
+        let mut g = Graph::new(RATE).unwrap();
+        play(&mut g, deck, tone(RATE, 60.0, 0.5));
+        if let Some(unit) = unit_on {
+            filter(&mut g, unit, FilterParam::LowPass, 0.0);
+            filter(&mut g, unit, FilterParam::HighPass, 1.0);
+            filter(&mut g, unit, FilterParam::Freq, 1.0);
+            filter(&mut g, unit, FilterParam::On, 1.0);
+        }
+        frames(&mut g, 9_600);
+        peak(&frames(&mut g, 4_800))
+    };
+    for deck in 0..4u8 {
+        let (own, other) = if deck < 2 {
+            (FilterUnit::X, FilterUnit::Y)
+        } else {
+            (FilterUnit::Y, FilterUnit::X)
+        };
+        let dry = level(None, deck);
+        assert!((dry - 0.5).abs() < 0.01, "deck {deck} dry: {dry}");
+        let cut = level(Some(own), deck);
+        assert!(cut < 0.001, "deck {deck} through {own:?}: {cut}");
+        let kept = level(Some(other), deck);
+        assert!(
+            (kept - 0.5).abs() < 0.01,
+            "deck {deck} not on {other:?}: {kept}"
+        );
+    }
+}

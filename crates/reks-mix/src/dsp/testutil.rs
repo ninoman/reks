@@ -5,7 +5,7 @@ use std::f64::consts::PI;
 /// Sample rates every response test runs at.
 pub const RATES: [u32; 3] = [44_100, 48_000, 96_000];
 
-/// Test-tone amplitude: low enough that +26 dB resonance peaks stay finite
+/// Test-tone amplitude: low enough that +20 dB resonance peaks stay finite
 /// and readable.
 const AMP: f64 = 0.05;
 
