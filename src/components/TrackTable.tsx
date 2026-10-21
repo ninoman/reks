@@ -34,7 +34,7 @@ import { useConverter } from "../store/converter";
 import { entryPosition, itemAt, useLibrary, type ViewItem, viewCount } from "../store/library";
 import { useMix } from "../store/mix";
 import { usePanels } from "../store/panels";
-import { usePlayer } from "../store/player";
+import { playTrack, usePlayerTrackId } from "../store/player";
 import { shownPlaylist, usePlaylists } from "../store/playlists";
 import { primaryIndex } from "../store/selection";
 import { useTags } from "../store/tags";
@@ -84,7 +84,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
   const ensureRange = useLibrary((s) => s.ensureRange);
   const select = useLibrary((s) => s.select);
   const playlistId = useLibrary((s) => s.filters.playlistId);
-  const loadedId = usePlayer((s) => s.status.trackId);
+  const loadedId = usePlayerTrackId();
   const deckCount = useMix((s) => s.deckCount);
   // The My Tags column reads names from the tree: redraw when it changes.
   useTags((s) => s.tree);
@@ -201,7 +201,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
 
   /** Double-click or Enter: a track plays, a divider is renamed. */
   function activate(item: ViewItem) {
-    if (item.kind === "track") void usePlayer.getState().load(item.row);
+    if (item.kind === "track") void playTrack(item.row);
     else if (view !== null)
       usePlaylists
         .getState()

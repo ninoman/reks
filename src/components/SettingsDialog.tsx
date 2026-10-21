@@ -1,7 +1,7 @@
 /**
  * Settings (phase 1 task 13) in one view, grouped: Folders (library folders,
  * cache folder), Playback (output device), Display (key notation), Decks
- * (the Mix view's waveform style), Experimental (the OneLibrary key, phase 4 task 8; write-only: Rust only
+ * (the waveform style of the player deck and the Mix view), Experimental (the OneLibrary key, phase 4 task 8; write-only: Rust only
  * says whether one is stored). Values
  * live in Rust (`useSettings`); the library window's own state (columns,
  * panels, volume) is saved without asking.
@@ -12,9 +12,9 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 
 import type { DeckWaveform, KeyNotation } from "../lib/ipc";
-import { usePlayer } from "../store/player";
+import { useMix } from "../store/mix";
 import { useScan } from "../store/scan";
-import { useSettings } from "../store/settings";
+import { chooseOutputDevice, useSettings } from "../store/settings";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import {
@@ -48,8 +48,8 @@ const NOTATIONS: { id: KeyNotation; label: string; example: string }[] = [
 ];
 
 const WAVEFORMS: { id: DeckWaveform; label: string; hint: string }[] = [
-  { id: "threeBand", label: "3-band", hint: "lows, mids, highs" },
   { id: "rgb", label: "RGB", hint: "colour by band" },
+  { id: "threeBand", label: "3-band", hint: "lows, mids, highs" },
   { id: "blue", label: "Blue", hint: "classic" },
 ];
 
@@ -199,14 +199,13 @@ function LibraryFolders() {
 }
 
 function OutputDevice({ device }: { device: string | null }) {
-  const devices = usePlayer((s) => s.devices);
+  const devices = useMix((s) => s.devices);
   useEffect(() => {
-    void usePlayer.getState().refreshDevices();
+    void useMix.getState().loadDevices();
   }, []);
 
   async function choose(value: string) {
-    await usePlayer.getState().setDevice(value === "" ? null : value);
-    await useSettings.getState().refresh();
+    await chooseOutputDevice(value === "" ? null : value);
   }
 
   // A chosen device that is not connected stays listed so the choice shows.
@@ -258,7 +257,9 @@ function DeckWaveformChoice({ waveform }: { waveform: DeckWaveform }) {
   return (
     <div className={item}>
       <h5 className={itemTitle}>Waveform</h5>
-      <p className={hint}>How the Mix view draws the deck waveforms and overviews.</p>
+      <p className={hint}>
+        How the player deck and the Mix view draw waveforms and overviews. RGB is the default.
+      </p>
       <SegmentedControl
         className="mt-2.5"
         aria-label="Deck waveform"

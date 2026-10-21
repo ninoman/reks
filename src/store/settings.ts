@@ -1,6 +1,7 @@
 /**
  * Settings (stored in Rust, `reks-core` `settings.rs`): loaded at start-up,
- * where they seed the library, panels and player stores; edited in the
+ * where they seed the library, panels and mix stores (volume, output
+ * device); edited in the
  * Settings dialog. Library window state (`UiState`) is saved by
  * `startUiSync`, `UI_SAVE_MS` after the last change.
  */
@@ -22,8 +23,8 @@ import {
   type UiState,
 } from "../lib/ipc";
 import { useLibrary } from "./library";
+import { useMix } from "./mix";
 import { usePanels } from "./panels";
-import { usePlayer } from "./player";
 
 export const UI_SAVE_MS = 300;
 
@@ -37,7 +38,7 @@ export interface SettingsStore {
 
   /** Loads settings and roots; `defaultHidden` seeds columns until they were changed. */
   load(defaultHidden: string[]): Promise<void>;
-  /** Re-reads the settings (after a command that stores one, like `player_set_device`). */
+  /** Re-reads the settings. */
   refresh(): Promise<void>;
   update(patch: SettingsPatch): Promise<void>;
   loadRoots(): Promise<void>;
@@ -63,18 +64,18 @@ export function currentUi(): UiState {
     filterBarOpen: panels.filterBarOpen,
     filtersEnabled: lib.filtersEnabled,
     infoOpen: panels.infoOpen,
-    volume: usePlayer.getState().status.volume,
+    volume: useMix.getState().volume,
   };
 }
 
-/** Puts `ui` into the library, panels and player stores. */
+/** Puts `ui` into the library, panels and mix stores. */
 function applyUi(ui: UiState, defaultHidden: string[]) {
   const hidden = ui.hiddenColumns ?? defaultHidden;
   const lib = useLibrary.getState();
   lib.setColumnVisibility(Object.fromEntries(hidden.map((id) => [id, false])));
   lib.setFiltersEnabled(ui.filtersEnabled);
   usePanels.setState({ filterBarOpen: ui.filterBarOpen, infoOpen: ui.infoOpen });
-  usePlayer.setState((s) => ({ status: { ...s.status, volume: ui.volume } }));
+  useMix.getState().setVolume(ui.volume);
 }
 
 export const useSettings = create<SettingsStore>()((set, get) => {
@@ -99,6 +100,7 @@ export const useSettings = create<SettingsStore>()((set, get) => {
         const [settings, roots] = await Promise.all([settingsGet(), libraryRoots()]);
         applyUi(settings.ui, defaultHidden);
         set({ settings, roots });
+        await useMix.getState().setConfig({ device: settings.audioDevice });
       });
     },
     refresh: () => run(async () => set({ settings: await settingsGet() })),
@@ -157,12 +159,21 @@ export function startUiSync(): () => void {
   const unsubs = [
     useLibrary.subscribe(check),
     usePanels.subscribe(check),
-    usePlayer.subscribe(check),
+    useMix.subscribe((s, prev) => s.volume !== prev.volume && check()),
   ];
   return () => {
     if (timer !== null) clearTimeout(timer);
     for (const u of unsubs) u();
   };
+}
+
+/**
+ * Plays through `device` from now on (`null`: system default) and stores the
+ * choice; a running output reopens on it.
+ */
+export async function chooseOutputDevice(device: string | null): Promise<void> {
+  await useMix.getState().setDevice(device);
+  await useSettings.getState().update({ audioDevice: device });
 }
 
 /** A function labelling canonical keys in the notation chosen in Settings. */

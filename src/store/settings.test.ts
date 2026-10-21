@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Settings } from "../lib/ipc";
 
 vi.mock("../lib/ipc", () => ({
+  DECKS: 4,
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),
   libraryRoots: vi.fn(),
@@ -12,13 +13,13 @@ vi.mock("../lib/ipc", () => ({
 const ipc = await import("../lib/ipc");
 const { useLibrary } = await import("./library");
 const { usePanels } = await import("./panels");
-const { usePlayer } = await import("./player");
+const { useMix } = await import("./mix");
 const { startUiSync, UI_SAVE_MS, useSettings } = await import("./settings");
 
 const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
   audioDevice: null,
   keyNotation: "camelot",
-  deckWaveform: "threeBand",
+  deckWaveform: "rgb",
   cacheDir: "/cache",
   anlzPreference: "rekordboxFirst",
   onelibraryKeySet: false,
@@ -61,7 +62,7 @@ describe("settings store", () => {
     expect(useLibrary.getState().columnVisibility).toEqual({ bpm: false });
     expect(useLibrary.getState().filtersEnabled).toBe(false);
     expect(usePanels.getState()).toMatchObject({ filterBarOpen: false, infoOpen: true });
-    expect(usePlayer.getState().status.volume).toBe(0.4);
+    expect(useMix.getState().volume).toBe(0.4);
     expect(useSettings.getState().settings?.keyNotation).toBe("camelot");
   });
 
@@ -96,6 +97,10 @@ describe("settings store", () => {
     usePanels.getState().toggleFilterBar();
     vi.advanceTimersByTime(UI_SAVE_MS);
     expect(ipc.settingsSet).toHaveBeenCalledTimes(1);
+    // The player's volume lives in the mix store.
+    useMix.getState().setVolume(0.6);
+    vi.advanceTimersByTime(UI_SAVE_MS);
+    expect(vi.mocked(ipc.settingsSet).mock.lastCall?.[0].ui?.volume).toBe(0.6);
     stop();
   });
 });

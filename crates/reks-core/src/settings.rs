@@ -57,18 +57,18 @@ pub enum AnlzPreference {
     RekordboxOnly,
 }
 
-/// How the Mix view's decks draw their waveforms (display only). Every style
-/// is drawn from the same analysis columns (low, mid, high, mono), so
-/// switching needs no re-analysis.
+/// How the decks (the player deck and the Mix view's) draw their waveforms
+/// (display only). Every style is drawn from the same analysis columns (low,
+/// mid, high, mono), so switching needs no re-analysis.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DeckWaveform {
     /// Low, mid and high bands overlaid in their own colours (rekordbox's
     /// "3Band").
-    #[default]
     ThreeBand,
     /// Mono height, coloured by the band mix (lows red, mids green, highs
-    /// blue; rekordbox's "RGB").
+    /// blue; rekordbox's "RGB"). The default (maintainer's call, 2026-10-21).
+    #[default]
     Rgb,
     /// Mono height in blue, lighter where highs dominate (the classic
     /// Pioneer blue waveform).
@@ -518,7 +518,7 @@ mod tests {
         let s = lib.settings().unwrap();
         assert_eq!(s.audio_device, None);
         assert_eq!(s.key_notation, KeyNotation::Classical);
-        assert_eq!(s.deck_waveform, DeckWaveform::ThreeBand);
+        assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
         assert_eq!(s.cache_dir, dir.path().join("cache"));
         assert_eq!(s.ui, UiState::default());
         assert_eq!(s.anlz_preference, AnlzPreference::RekordboxFirst);
@@ -537,7 +537,7 @@ mod tests {
         lib.update_settings(SettingsPatch {
             audio_device: Some(Some("Speakers".into())),
             key_notation: Some(KeyNotation::Camelot),
-            deck_waveform: Some(DeckWaveform::Rgb),
+            deck_waveform: Some(DeckWaveform::ThreeBand),
             ui: Some(ui.clone()),
             anlz_preference: Some(AnlzPreference::ReksFirst),
             onelibrary_key: None,
@@ -551,7 +551,7 @@ mod tests {
             .unwrap();
         assert_eq!(s.audio_device.as_deref(), Some("Speakers"));
         assert_eq!(s.key_notation, KeyNotation::OpenKey);
-        assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
+        assert_eq!(s.deck_waveform, DeckWaveform::ThreeBand);
         assert_eq!(s.ui, ui);
         assert_eq!(s.anlz_preference, AnlzPreference::ReksFirst);
         assert_eq!(lib.settings().unwrap(), s);
@@ -594,7 +594,7 @@ mod tests {
             .unwrap();
         let s = lib.settings().unwrap();
         assert_eq!(s.key_notation, KeyNotation::Classical);
-        assert_eq!(s.deck_waveform, DeckWaveform::ThreeBand);
+        assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
         assert_eq!(s.ui, UiState::default());
         assert_eq!(s.audio_device, None);
     }

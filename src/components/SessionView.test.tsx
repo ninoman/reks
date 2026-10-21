@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionDetail, SessionEntryRow } from "../lib/ipc";
 
 vi.mock("../lib/ipc", () => ({
+  DECKS: 4,
   historySessions: vi.fn(),
   historySession: vi.fn(),
   historySessionUpdate: vi.fn(),

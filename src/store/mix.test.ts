@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CueRouting, MixState } from "../lib/ipc";
+import type { CueRouting, DeckView, MixState } from "../lib/ipc";
 
 vi.mock("../lib/ipc", () => ({
   DECKS: 4,
-  playerDevices: vi.fn(),
+  audioDevices: vi.fn(),
   mixDeviceOptions: vi.fn(),
   mixStart: vi.fn(),
   mixStop: vi.fn(),
@@ -43,6 +43,28 @@ const options = (channels: number) => ({
 
 const initial = useMix.getState();
 
+const deckView = (over: Partial<DeckView> = {}): DeckView => ({
+  trackId: null,
+  loaded: false,
+  playing: false,
+  positionMs: 0,
+  durationMs: 0,
+  cueMs: 0,
+  tempo: 1,
+  nudge: 1,
+  speed: 1,
+  bpm: null,
+  beat: null,
+  cuePreview: false,
+  sync: false,
+  syncBar: false,
+  locked: false,
+  quantise: true,
+  ...over,
+});
+
+const sent = () => vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0]);
+
 beforeEach(() => {
   vi.mocked(ipc.mixStart).mockResolvedValue(running);
   vi.mocked(ipc.mixControl).mockResolvedValue(undefined);
@@ -62,7 +84,7 @@ afterEach(() => {
 
 describe("mix store", () => {
   it("preselects each device's cue routing until the user picks one", async () => {
-    vi.mocked(ipc.playerDevices).mockResolvedValue(["Laptop", "Interface"]);
+    vi.mocked(ipc.audioDevices).mockResolvedValue(["Laptop", "Interface"]);
     vi.mocked(ipc.mixDeviceOptions).mockImplementation(async (d) =>
       options(d === "Interface" ? 4 : 2),
     );
@@ -134,5 +156,54 @@ describe("mix store", () => {
     useMix.getState().setCrossfader({ pos: 0 });
     expect(ipc.mixControl).not.toHaveBeenCalled();
     expect(useMix.getState().crossfader.pos).toBe(0);
+  });
+
+  it("load with play plays once loaded, and leaves a deck already playing that track", async () => {
+    vi.mocked(ipc.mixLoad).mockResolvedValue({ deck: 1, trackId: 9, durationMs: 1, hotCues: [] });
+    await useMix.getState().load(1, { id: 9, title: "T", artist: null }, true);
+    expect(sent()).toContainEqual({ type: "play", deck: 1 });
+
+    const decks = [deckView(), deckView({ loaded: true, playing: true, trackId: 9 })];
+    useMix.setState({ live: { ...running, decks } });
+    vi.mocked(ipc.mixLoad).mockClear();
+    await useMix.getState().load(1, { id: 9, title: "T", artist: null }, true);
+    expect(ipc.mixLoad).not.toHaveBeenCalled();
+  });
+
+  it("sends the volume with the mixer positions on start", async () => {
+    useMix.getState().setVolume(0.3);
+    expect(ipc.mixControl).not.toHaveBeenCalled();
+    await useMix.getState().start();
+    expect(sent()).toContainEqual({ type: "volume", value: 0.3 });
+  });
+
+  it("a new device reopens the output with the loaded tracks where they were", async () => {
+    vi.mocked(ipc.mixDeviceOptions).mockResolvedValue(options(2));
+    vi.mocked(ipc.mixLoad).mockResolvedValue({ deck: 1, trackId: 9, durationMs: 1, hotCues: [] });
+    await useMix.getState().load(1, { id: 9, title: "T", artist: null });
+    const decks = [
+      deckView(),
+      deckView({ loaded: true, playing: true, trackId: 9, positionMs: 4200, tempo: 1.02 }),
+    ];
+    useMix.setState({ live: { ...running, decks } });
+    vi.mocked(ipc.mixControl).mockClear();
+    await useMix.getState().setDevice("Interface");
+    expect(ipc.mixStart).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(ipc.mixStart).mock.lastCall?.[0].device).toBe("Interface");
+    expect(useMix.getState().decks[1]?.track?.id).toBe(9);
+    expect(sent()).toEqual(
+      expect.arrayContaining([
+        { type: "seek", deck: 1, ms: 4200 },
+        { type: "tempo", deck: 1, ratio: 1.02 },
+        { type: "play", deck: 1 },
+      ]),
+    );
+  });
+
+  it("a new device while the output is off only changes the config", async () => {
+    vi.mocked(ipc.mixDeviceOptions).mockResolvedValue(options(2));
+    await useMix.getState().setDevice("Interface");
+    expect(useMix.getState().config.device).toBe("Interface");
+    expect(ipc.mixStart).not.toHaveBeenCalled();
   });
 });

@@ -3,7 +3,8 @@
  * either to skim); CUE (held on the cue point: preview), PLAY, SYNC (BAR),
  * LEADER and QUANTISE; hot cues A–H; nudge; the tempo fader with its range.
  * Drop a track from the table to load it. Shows the empty, loading and
- * error states of the deck.
+ * error states of the deck. `solo` is the library's player deck on its own:
+ * no SYNC, BAR or LEADER (nothing to sync to).
  */
 import { type DragEvent, useState } from "react";
 
@@ -64,6 +65,8 @@ export interface DeckStripProps {
   /** Beats from the leader's phase; null when there is none to compare. */
   phase: number | null;
   compact: boolean;
+  /** Shown alone as the player: hides the sync controls. */
+  solo?: boolean;
   actions: DeckActions;
 }
 
@@ -79,6 +82,7 @@ export function DeckStrip({
   leaderChosen,
   phase,
   compact,
+  solo = false,
   actions,
 }: DeckStripProps) {
   const [dropping, setDropping] = useState(false);
@@ -192,7 +196,9 @@ export function DeckStrip({
           >
             {meta.loading !== null
               ? "Decoding…"
-              : `Drag a track here, or right-click one and choose Load to deck ${n}`}
+              : solo
+                ? "Double-click a track to play it, or drag one here"
+                : `Drag a track here, or right-click one and choose Load to deck ${n}`}
           </div>
         )}
 
@@ -226,33 +232,37 @@ export function DeckStrip({
           >
             {view?.playing ? <PauseIcon /> : <PlayIcon />}
           </IconButton>
-          <Button
-            size="sm"
-            disabled={!loaded}
-            aria-pressed={view?.sync ?? false}
-            aria-label={`Deck ${n} sync`}
-            onClick={actions.toggleSync}
-          >
-            Sync
-          </Button>
-          <Button
-            size="sm"
-            disabled={!loaded}
-            aria-pressed={view?.syncBar ?? false}
-            aria-label={`Deck ${n} bar sync`}
-            onClick={actions.toggleBar}
-          >
-            Bar
-          </Button>
-          <Button
-            size="sm"
-            disabled={!loaded}
-            aria-pressed={leaderChosen && leader}
-            aria-label={`Deck ${n} leader`}
-            onClick={actions.toggleLeader}
-          >
-            Lead
-          </Button>
+          {!solo && (
+            <>
+              <Button
+                size="sm"
+                disabled={!loaded}
+                aria-pressed={view?.sync ?? false}
+                aria-label={`Deck ${n} sync`}
+                onClick={actions.toggleSync}
+              >
+                Sync
+              </Button>
+              <Button
+                size="sm"
+                disabled={!loaded}
+                aria-pressed={view?.syncBar ?? false}
+                aria-label={`Deck ${n} bar sync`}
+                onClick={actions.toggleBar}
+              >
+                Bar
+              </Button>
+              <Button
+                size="sm"
+                disabled={!loaded}
+                aria-pressed={leaderChosen && leader}
+                aria-label={`Deck ${n} leader`}
+                onClick={actions.toggleLeader}
+              >
+                Lead
+              </Button>
+            </>
+          )}
           <Button
             size="sm"
             disabled={!loaded}
@@ -262,10 +272,12 @@ export function DeckStrip({
           >
             Q
           </Button>
-          {loaded && view?.sync === true && (
+          {!solo && loaded && view?.sync === true && (
             <SyncPhase offset={phase} half={view.syncBar ? 2 : 0.5} leader={leader} />
           )}
-          {loaded && view?.sync !== true && leader && <SyncPhase offset={null} half={0.5} leader />}
+          {!solo && loaded && view?.sync !== true && leader && (
+            <SyncPhase offset={null} half={0.5} leader />
+          )}
           <span className="ml-auto font-mono text-xs tabular-nums">
             {formatClock(view?.positionMs ?? 0)}
             <span className="ml-2 text-fg-muted">

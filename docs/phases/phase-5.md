@@ -16,7 +16,8 @@ speakers. It is a preparation tool. Nothing here is meant for playing a gig.
 
 - `reks-mix` crate: real-time engine on a raw `cpal` stream, decks, sync, mixer
   DSP, and an offline `render()` that runs the same graph without a device.
-  The Phase 1 preview player already runs on this engine (D5).
+  The Phase 1 preview player already runs on this engine (D5); since D30 the
+  library's player is this engine's deck 2.
 - Decks (2 shown, decks 2 and 3; 4 on demand): load from the track table or a
   playlist, play/pause, CDJ-style cue (set, return, preview while held), jump
   to the track's hot cues, drag the waveform to skim, tempo fader

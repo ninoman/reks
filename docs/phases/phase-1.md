@@ -444,10 +444,10 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
 
 - One `setting` row per key, value JSON: `audio.device` (name, absent = system default),
   `display.key_notation` (`classical` default, `camelot`, `openKey`), `display.deck_waveform`
-  (Phase 5: `threeBand` default, `rgb`, `blue`), `storage.cache_dir`
+  (Phase 5: `rgb` default since D30, `threeBand`, `blue`), `storage.cache_dir`
   (absent = `app_cache_dir`), `ui.state` (hidden columns, filter bar shown, filters on, track
   info open, volume). A missing or unreadable value is its default (unreadable ones are logged).
-  `settings_get` / `settings_set(patch)`; `player_set_device` stores the device itself.
+  `settings_get` / `settings_set(patch)` (the UI stores `audioDevice` when the device changes).
 - Key notation is display only: the Key column, the track info key field and the key picker
   (still laid out as the Camelot wheel) use `Facets.keys` labels; storage stays canonical and
   edits accept any notation.
@@ -537,7 +537,10 @@ Scan rules (task 5, [`scan.rs`](../../crates/reks-core/src/scan.rs))
   (unplugged drive), or under a folder that could not be read. Rows are never
   deleted by a scan.
 
-Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5)
+Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5). Since
+2026-10-21 the app plays on deck 2 of the mix engine instead (D30,
+[`docs/ui.md`](../ui.md)); the decode, fade and seek rules below still hold
+there, the `player_*` commands, polling and transport bar are gone.
 - `reks-audio::decode_stereo` decodes the whole track to stereo `i16` (mono
   copied to both sides, channels past two dropped) and resamples it to the
   output rate with rubato (FFT, off the audio thread). Tracks over 60 minutes
@@ -577,7 +580,8 @@ Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5)
 `playlists_mutate`, `playlist_rule`, `scan_start` (progress via `Channel<ScanEvent>`), `scan_cancel`,
 `rbxml_preview(path, remap)`, `rbxml_import_start` (progress via Channel), `rbxml_import_cancel`, `rbxml_export`,
 `player_load(id, play)`, `player_play/pause/seek/volume/devices/set_device`,
-`player_state` (polled every 100 ms while playing), `artwork_get(artwork_id) -> Response(bytes)`, `overview_waveform(id) ->
+`player_state` (polled every 100 ms while playing; these and `overview_waveform` were replaced by the
+mix engine's deck 2 and `audio_devices` in D30), `artwork_get(artwork_id) -> Response(bytes)`, `overview_waveform(id) ->
 Response(bytes)`, `settings_get`, `settings_set(patch)`, `library_roots`, `library_root_add(path)`,
 `library_root_remove(id)`, `cache_dir_move(path)`.
 

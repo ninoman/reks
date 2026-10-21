@@ -4,9 +4,9 @@
  * the toolbar, filters and table); toolbar, filter bar and track table in the
  * middle, with the track info panel sliding over the table's right edge when
  * its toolbar button is on; the mix panel (decks and mixer) under them when
- * its header button is on, with its own shortcuts (`src/lib/mixKeys.ts`);
- * the transport bar along the bottom. Space plays
- * and pauses wherever focus is, except in text fields, dialogs and menus;
+ * the Mix button is on, with its own shortcuts (`src/lib/mixKeys.ts`),
+ * otherwise the player deck alone (D30), under the player's header row
+ * (volume, output, Mix). Space plays and pauses the player deck wherever focus is, except in text fields, dialogs and menus;
  * Cmd/Ctrl+, opens Settings.
  * Settings load first and restore the window state (columns, panels, volume).
  * Mounted only once the library is open (main.tsx); takes the splash down.
@@ -25,6 +25,8 @@ import { HistoryTree } from "./components/HistoryTree";
 import { ImportWizard } from "./components/ImportWizard";
 import { LibraryToolbar } from "./components/LibraryToolbar";
 import { MixPanel } from "./components/mix/MixPanel";
+import { PlayerBar } from "./components/PlayerBar";
+import { PlayerDeck } from "./components/PlayerDeck";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
 import { RuleBuilder } from "./components/RuleBuilder";
@@ -36,7 +38,6 @@ import { TagsSidebarEntry } from "./components/TagsSidebarEntry";
 import { ToastHost } from "./components/ToastHost";
 import { TrackInfoPanel } from "./components/TrackDetailPanel";
 import { TrackTable } from "./components/TrackTable";
-import { TransportBar } from "./components/TransportBar";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
 import { Sheet } from "./components/ui/Sheet";
 import { keepsSpace } from "./lib/keys";
@@ -46,7 +47,7 @@ import { useHistory } from "./store/history";
 import { useLibrary } from "./store/library";
 import { useMixShortcuts } from "./store/mixShortcuts";
 import { usePanels } from "./store/panels";
-import { usePlayer } from "./store/player";
+import { togglePlayer } from "./store/player";
 import { usePlaylists } from "./store/playlists";
 import { useRules } from "./store/rules";
 import { startUiSync, useSettings } from "./store/settings";
@@ -107,7 +108,7 @@ export default function App() {
       if (!space) return;
       // Also stops a focused button or checkbox from taking the press.
       e.preventDefault();
-      if (!e.repeat) void usePlayer.getState().toggle();
+      if (!e.repeat) togglePlayer();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -150,8 +151,8 @@ export default function App() {
           )}
         </main>
       </div>
-      {mixOpen && <MixPanel />}
-      <TransportBar />
+      <PlayerBar />
+      {mixOpen ? <MixPanel /> : <PlayerDeck />}
       <DuplicateDialog />
       <DeleteDialog />
       <ImportWizard />

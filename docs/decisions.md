@@ -84,7 +84,8 @@ Date of decisions: 2026-10-18.
 - Decision: the Phase 1 player is the first slice of the Phase 5 engine (D21):
   crate `reks-mix` on a raw `cpal` 0.18 stream, `rtrb` 0.4 queues for control,
   state and retired sources, an offline `render()` and an allocation guard
-  test. One deck, play/pause/seek/volume. The output opens at 44.1 kHz when the
+  test. One deck, play/pause/seek/volume (2026-10-21: the app's player is
+  now deck 2 of the mixer, D30). The output opens at 44.1 kHz when the
   device offers it (most DJ music is 44.1 kHz, so those tracks skip the
   resampler; on macOS this sets the device clock, as rekordbox does), else at
   the device's default rate (2026-10-19). Tracks are decoded whole to stereo
@@ -573,7 +574,8 @@ Date of decisions: 2026-10-18.
   raw `cpal` stream with `rtrb` queues for control and state. Tempo is varispeed
   through `rubato` (already in the tree via `beat-this`, D10). The engine's
   first slice ships in Phase 1 as the preview player (D5), so one engine owns
-  the audio device from the start.
+  the audio device from the start. Since D30 the library's player is a deck
+  of this engine.
 - Order: Phase 5, after OneLibrary (Phase 4) and before Engine DJ export (now
   Phase 6). It depends only on Phase 1 (imported grids, decode) and Phase 3
   (waveform columns, grid editor). Changed 2026-10-20 (maintainer's call): it
@@ -883,6 +885,34 @@ Date of decisions: 2026-10-18.
   format on the stick (players have none).
 - Risks: the Comments format (UNVERIFIED above); how OneLibrary `myTag` rows
   map at export is not designed yet (Phase 4).
+
+## D30. The library's player is a deck of the mix engine
+
+- Date: 2026-10-21 (maintainer's call). Changes D5's one-deck preview player.
+- Decision: there is one audio engine in the app, the Phase 5 mixer
+  (`reks-mix` `Engine`, src-tauri `mix.rs`). The library plays on its deck 2
+  (`PLAYER_DECK`, [`src/store/player.ts`](../src/store/player.ts)), one of the
+  two decks the Mix panel shows by default. Double-click, Enter, Space and the
+  history view play on it; it opens the output when it is off, with the saved
+  device (`audio.device`) and the start form's other choices. With the Mix
+  panel off, the bottom of the window shows that deck alone in the deck
+  design (scrolling and overview waveform, cue, hot cues, nudge, quantise,
+  tempo fader; no sync controls) under a header row with the volume
+  (`MixControl::Volume`, `ui.state.volume`), the output device and the Mix
+  toggle. Changing the device reopens the output and puts each loaded deck
+  back at its position, tempo and play state. The deck waveform style
+  defaults to RGB (was 3-band).
+- Removed: the `player_*` commands, `overview_waveform` and the app's
+  `reks_mix::Player` (the type stays for `reks-cli play`). The device list
+  is `audio_devices`.
+- Rationale: the player should look and work like a deck (cue, hot cues,
+  tempo) without a second engine that has to grow the same features;
+  one engine also means one owner of the audio device.
+- Rejected: extending the preview `Player` with cue, hot cues and tempo
+  (a second copy of the deck features and a second device owner).
+- Risks: playing a track now goes through the mixer (EQ flat, master at the
+  mix store's 0.8), so it is a little quieter than the old player at the
+  same volume; a failed or lost output shows in the player's header row.
 
 ## Open risks (cross-cutting)
 

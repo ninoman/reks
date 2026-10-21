@@ -59,7 +59,7 @@ export function DeckWaveform({
   compact,
   onSeek,
 }: DeckWaveformProps) {
-  const style = useSettings((s) => s.settings?.deckWaveform ?? "threeBand");
+  const style = useSettings((s) => s.settings?.deckWaveform ?? "rgb");
   const [scroll, setScroll] = useState<HTMLCanvasElement | null>(null);
   const [overview, setOverview] = useState<HTMLCanvasElement | null>(null);
   const width = useWidth(scroll);

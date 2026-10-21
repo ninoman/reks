@@ -21,12 +21,11 @@ use reks_export_rb::onelibrary as one;
 use reks_export_rb::plan::{ExportOptions, Selection};
 use reks_export_rb::report::{self, ProgressView, ReportView};
 use reks_export_rb::{ApplyEnv, OneLibraryEnv, StickCheck, TargetProfile};
-use reks_mix::{PlayerState, Reopened};
 use serde::Serialize;
 use tauri::ipc::{Channel, Response};
 use tauri::State;
 
-use crate::state::{AppState, PlayerSlot};
+use crate::state::AppState;
 
 /// Error returned to the UI: the message of the underlying error.
 #[derive(Debug, Serialize)]
@@ -291,152 +290,10 @@ pub async fn cache_dir_move(state: State<'_, AppState>, path: PathBuf) -> CmdRes
     .await
 }
 
-/// The player state plus the track on it.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PlayerStatus {
-    #[serde(flatten)]
-    pub state: PlayerState,
-    pub track_id: Option<TrackId>,
-}
-
-/// Runs `f` with the player locked. Player calls only queue controls, so
-/// the lock is short; decoding happens outside it.
-fn with_player<T>(
-    state: &State<'_, AppState>,
-    f: impl FnOnce(&mut PlayerSlot) -> reks_mix::Result<T>,
-) -> CmdResult<T> {
-    let mut slot = state.player.lock().map_err(|_| "player state poisoned")?;
-    Ok(f(&mut slot)?)
-}
-
-fn status(slot: &mut PlayerSlot) -> PlayerStatus {
-    PlayerStatus {
-        state: slot.player.state(),
-        track_id: slot.track,
-    }
-}
-
-/// Decodes `id` at the output rate, then loads it unless a newer load
-/// request came in meanwhile. Seeks to `position_ms` and plays if asked.
-async fn load_track(
-    state: &State<'_, AppState>,
-    id: TrackId,
-    position_ms: u64,
-    play: bool,
-) -> CmdResult<PlayerStatus> {
-    let (generation, rate) = with_player(state, |slot| {
-        slot.generation += 1;
-        Ok((slot.generation, slot.player.sample_rate()?))
-    })?;
-    let audio = blocking(state, move |lib| lib.preview_audio(id, rate)).await?;
-    with_player(state, |slot| {
-        if slot.generation == generation {
-            slot.player.load(audio.pcm.samples, audio.pcm.sample_rate)?;
-            slot.track = Some(id);
-            if position_ms > 0 {
-                slot.player.seek_ms(position_ms)?;
-            }
-            if play {
-                slot.player.play()?;
-            }
-        }
-        Ok(status(slot))
-    })
-}
-
 /// Output device names, the system default first.
 #[tauri::command]
-pub async fn player_devices() -> CmdResult<Vec<String>> {
+pub async fn audio_devices() -> CmdResult<Vec<String>> {
     Ok(tauri::async_runtime::spawn_blocking(reks_mix::output_devices).await??)
-}
-
-/// Loads track `id` stopped at the start, or playing with `play`.
-#[tauri::command]
-pub async fn player_load(
-    state: State<'_, AppState>,
-    id: TrackId,
-    play: bool,
-) -> CmdResult<PlayerStatus> {
-    load_track(&state, id, 0, play).await
-}
-
-/// Switches the output device (`None`: system default), keeping the track,
-/// position and play state.
-#[tauri::command]
-pub async fn player_set_device(
-    state: State<'_, AppState>,
-    device: Option<String>,
-) -> CmdResult<PlayerStatus> {
-    let (reopened, track) = with_player(&state, |slot| {
-        let r = slot.player.set_device(device.clone())?;
-        Ok((r, slot.track))
-    })?;
-    blocking(&state, move |lib| {
-        lib.update_settings(SettingsPatch {
-            audio_device: Some(device),
-            ..SettingsPatch::default()
-        })
-    })
-    .await?;
-    match (reopened, track) {
-        (
-            Reopened::Reload {
-                position_ms,
-                playing,
-            },
-            Some(id),
-        ) => load_track(&state, id, position_ms, playing).await,
-        _ => with_player(&state, |slot| Ok(status(slot))),
-    }
-}
-
-#[tauri::command]
-pub fn player_play(state: State<'_, AppState>) -> CmdResult<PlayerStatus> {
-    with_player(&state, |slot| {
-        slot.player.play()?;
-        Ok(status(slot))
-    })
-}
-
-#[tauri::command]
-pub fn player_pause(state: State<'_, AppState>) -> CmdResult<PlayerStatus> {
-    with_player(&state, |slot| {
-        slot.player.pause()?;
-        Ok(status(slot))
-    })
-}
-
-#[tauri::command]
-pub fn player_seek(state: State<'_, AppState>, ms: u64) -> CmdResult<PlayerStatus> {
-    with_player(&state, |slot| {
-        slot.player.seek_ms(ms)?;
-        Ok(status(slot))
-    })
-}
-
-/// Volume 0..=1 like a knob.
-#[tauri::command]
-pub fn player_volume(state: State<'_, AppState>, volume: f32) -> CmdResult<PlayerStatus> {
-    with_player(&state, |slot| {
-        slot.player.set_volume(volume)?;
-        Ok(status(slot))
-    })
-}
-
-/// Polled by the transport bar (about 10 times a second while playing).
-#[tauri::command]
-pub fn player_state(state: State<'_, AppState>) -> CmdResult<PlayerStatus> {
-    with_player(&state, |slot| Ok(status(slot)))
-}
-
-/// Overview waveform bytes (little-endian f32 `[min, max]` pairs per 1,000
-/// frames), sent raw (an `ArrayBuffer` in the UI).
-#[tauri::command]
-pub async fn overview_waveform(state: State<'_, AppState>, id: TrackId) -> CmdResult<Response> {
-    blocking(&state, move |lib| lib.overview_waveform(id))
-        .await
-        .map(Response::new)
 }
 
 /// Removable volumes an export can target (phase 2 task 1).

@@ -25,7 +25,6 @@ import type {
   ImportPreview,
   ImportReport,
   KeyInfo,
-  PlayerStatus,
   PlaylistNode,
   PlaylistOp,
   PlaylistStatus,
@@ -271,7 +270,7 @@ function mutate(op: PlaylistOp) {
 let settings: Settings = {
   audioDevice: null,
   keyNotation: "classical",
-  deckWaveform: "threeBand",
+  deckWaveform: "rgb",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
   onelibraryKeySet: false,
@@ -282,16 +281,6 @@ let settings: Settings = {
     infoOpen: false,
     volume: 0.8,
   },
-};
-let status: PlayerStatus = {
-  loaded: false,
-  playing: false,
-  positionMs: 0,
-  durationMs: 0,
-  volume: 0.8,
-  device: null,
-  deviceLost: false,
-  trackId: null,
 };
 
 const SORT: Partial<Record<SortColumn, keyof TrackRow>> = {
@@ -423,19 +412,6 @@ function detail(id: number): TrackDetail {
           bpmMaxX100: row.bpmX100 ?? 0,
         },
   };
-}
-
-function waveform(): ArrayBuffer {
-  const n = 1200;
-  const out = new Float32Array(n * 2);
-  const r = rng(3);
-  for (let i = 0; i < n; i++) {
-    const env = 0.35 + 0.6 * Math.sin((i / n) * Math.PI) ** 0.6;
-    const v = env * (0.6 + 0.4 * r());
-    out[2 * i] = -v;
-    out[2 * i + 1] = v;
-  }
-  return out.buffer;
 }
 
 const PREVIEW: ImportPreview = {
@@ -1126,39 +1102,8 @@ mockIPC((cmd, payload) => {
     }
     case "library_roots":
       return [{ id: 1, path: "/Users/dj/Music", lastScan: "2026-10-18T19:48:00Z" }];
-    case "player_devices":
+    case "audio_devices":
       return ["MacBook Pro Speakers", "USB Audio Interface"];
-    case "player_state":
-      return status;
-    case "player_load": {
-      const row = TRACKS[(args.id as number) - 1] as TrackRow;
-      status = {
-        ...status,
-        loaded: true,
-        playing: args.play as boolean,
-        trackId: row.id,
-        positionMs: 0,
-        durationMs: row.durationMs ?? 0,
-      };
-      return status;
-    }
-    case "player_play":
-      status = { ...status, playing: true };
-      return status;
-    case "player_pause":
-      status = { ...status, playing: false };
-      return status;
-    case "player_seek":
-      status = { ...status, positionMs: args.ms as number };
-      return status;
-    case "player_volume":
-      status = { ...status, volume: args.volume as number };
-      return status;
-    case "player_set_device":
-      status = { ...status, device: args.device as string | null };
-      return status;
-    case "overview_waveform":
-      return waveform();
     case "rbxml_preview":
       return PREVIEW;
     case "rbxml_import_start":

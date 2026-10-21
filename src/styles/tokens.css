@@ -255,7 +255,7 @@
   --toolbar-h: 40px;
   --sidebar-w: 240px;
   --sheet-w: 300px;
-  --transport-h: 52px;
+  --player-bar-h: 40px;
 
   /* Mixer (phase 5): knobs, faders, deck waveforms, channel strips. */
   --knob-sm: 22px;

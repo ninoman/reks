@@ -193,4 +193,16 @@ describe("DeckStrip", () => {
     fireEvent.drop(deck, { dataTransfer });
     expect(a.drop).toHaveBeenCalledWith(42);
   });
+
+  it("solo (the player deck): no sync controls, says how to play", () => {
+    setup({ solo: true });
+    expect(screen.getByText("Double-click a track to play it, or drag one here")).toBeTruthy();
+    cleanup();
+    setup({ solo: true, view: view({ sync: true }), meta: loadedMeta() });
+    expect(screen.queryByRole("button", { name: "Deck 2 sync" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deck 2 leader" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Deck 2 cue" })).toBeTruthy();
+    expect(screen.getByRole("slider", { name: "Deck 2 tempo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Deck 2 hot cue B" })).toBeTruthy();
+  });
 });

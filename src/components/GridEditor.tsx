@@ -23,7 +23,7 @@ import {
   type GridEdit,
   waveformColumns,
 } from "../lib/ipc";
-import { usePlayer } from "../store/player";
+import { usePlayerPosition } from "../store/player";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import {
@@ -70,9 +70,7 @@ export function GridEditorDialog({
   const durationMs = columns === null ? 0 : columnsDurationMs(columns);
   const viewMs = width > 0 ? (width / pxPerS) * 1000 : 0;
   const maxStart = Math.max(0, durationMs - viewMs);
-  const playheadMs = usePlayer((s) =>
-    s.status.trackId === trackId && s.status.loaded ? s.status.positionMs : null,
-  );
+  const playheadMs = usePlayerPosition(trackId);
 
   useEffect(() => {
     let live = true;

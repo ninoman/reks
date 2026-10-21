@@ -7,12 +7,14 @@
 import { memo, useEffect, useMemo } from "react";
 
 import { deckSide, phaseOffset, shownDecks } from "../../lib/mixView";
-import { type MixStore, useMix } from "../../store/mix";
+import { useMix } from "../../store/mix";
+import { chooseOutputDevice } from "../../store/settings";
 import { Button } from "../ui/Button";
 import { Kbd } from "../ui/Kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/Popover";
 import { Segment, SegmentedControl } from "../ui/SegmentedControl";
-import { type DeckActions, DeckStrip } from "./DeckStrip";
+import { DeckStrip } from "./DeckStrip";
+import { deckActions } from "./deckActions";
 import { MixerPanel } from "./MixerPanel";
 import { MixStartForm } from "./MixStartForm";
 
@@ -28,30 +30,6 @@ const SHORTCUTS: [string, string][] = [
   ["Shift + key", "Same on deck 1 / 4"],
   ["Z X C", "Crossfader left, centre, right"],
 ];
-
-function deckActions(mix: MixStore, deck: number): DeckActions {
-  return {
-    togglePlay: () => mix.togglePlay(deck),
-    play: () => mix.send({ type: "play", deck }),
-    pause: () => mix.send({ type: "pause", deck }),
-    cue: (down) => mix.cue(deck, down),
-    toggleSync: () => mix.toggleSync(deck),
-    toggleBar: () => mix.toggleSync(deck, !(mix.live?.decks[deck]?.syncBar ?? false)),
-    toggleLeader: () => {
-      const chosen = mix.live?.leaderChosen === true && mix.live.leader === deck;
-      mix.send({ type: "leader", deck: chosen ? null : deck });
-    },
-    toggleQuantise: () =>
-      mix.send({ type: "quantise", deck, on: !(mix.live?.decks[deck]?.quantise ?? false) }),
-    hotCue: (slot) => mix.send({ type: "hotCue", deck, slot }),
-    nudge: (dir) => mix.nudge(deck, dir),
-    setTempo: (ratio) => mix.setTempo(deck, ratio),
-    setTempoRange: (range) => mix.setTempoRange(deck, range),
-    seek: (ms) => mix.send({ type: "seek", deck, ms }),
-    eject: () => mix.unload(deck),
-    drop: (id) => void mix.load(deck, id),
-  };
-}
 
 function ShortcutHelp() {
   return (
@@ -169,7 +147,11 @@ export function MixPanel() {
             devices={mix.devices}
             options={mix.options}
             starting={status === "starting"}
-            onChange={(patch) => void mix.setConfig(patch)}
+            onChange={(patch) =>
+              void ("device" in patch
+                ? chooseOutputDevice(patch.device ?? null)
+                : mix.setConfig(patch))
+            }
             onStart={() => void mix.start()}
           />
         </div>

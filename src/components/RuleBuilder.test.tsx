@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaylistNode, RuleNode, TrackQuery } from "../lib/ipc";
 
 vi.mock("../lib/ipc", () => ({
+  DECKS: 4,
   libraryFacets: vi.fn(),
   libraryQuery: vi.fn(),
   playlistsGet: vi.fn(),

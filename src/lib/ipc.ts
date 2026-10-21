@@ -534,59 +534,9 @@ export function tagsMutate(op: TagOp): Promise<TagOutcome> {
   return invoke("tags_mutate", { op });
 }
 
-/** `player_*` commands: the preview player (reks-mix, docs/decisions.md D5). */
-export interface PlayerStatus {
-  loaded: boolean;
-  playing: boolean;
-  positionMs: number;
-  durationMs: number;
-  /** 0..1, the knob position (squared taper in Rust). */
-  volume: number;
-  device: string | null;
-  deviceLost: boolean;
-  trackId: number | null;
-}
-
-/** Output device names, the system default first. */
-export function playerDevices(): Promise<string[]> {
-  return invoke("player_devices");
-}
-
-export function playerLoad(id: number, play: boolean): Promise<PlayerStatus> {
-  return invoke("player_load", { id, play });
-}
-
-/** `null`: the system default. */
-export function playerSetDevice(device: string | null): Promise<PlayerStatus> {
-  return invoke("player_set_device", { device });
-}
-
-export function playerPlay(): Promise<PlayerStatus> {
-  return invoke("player_play");
-}
-
-export function playerPause(): Promise<PlayerStatus> {
-  return invoke("player_pause");
-}
-
-export function playerSeek(ms: number): Promise<PlayerStatus> {
-  return invoke("player_seek", { ms: Math.max(0, Math.round(ms)) });
-}
-
-export function playerVolume(volume: number): Promise<PlayerStatus> {
-  return invoke("player_volume", { volume });
-}
-
-export function playerState(): Promise<PlayerStatus> {
-  return invoke("player_state");
-}
-
-/**
- * Overview waveform: little-endian f32 `[min, max]` pairs, one per 1,000
- * source frames (raw `ipc::Response`, not JSON).
- */
-export function overviewWaveform(id: number): Promise<ArrayBuffer> {
-  return invoke("overview_waveform", { id });
+/** Output device names, the system default first (`audio_devices`). */
+export function audioDevices(): Promise<string[]> {
+  return invoke("audio_devices");
 }
 
 /** `beatgrid_*`, `waveform_columns`: the grid editor (reks-core `beatgrid.rs`, src-tauri `grid.rs`). */
@@ -796,7 +746,9 @@ export type MixControl =
   | { type: "channel"; ch: number; param: ChannelParam; value: number }
   | { type: "filter"; unit: FilterUnit; param: FilterParam; value: number }
   | { type: "crossfader"; pos: number; curve: number }
-  | { type: "master"; param: MasterParam; value: number };
+  | { type: "master"; param: MasterParam; value: number }
+  /** The player's volume slider, 0..1 (squared taper in Rust), on top of the master level. */
+  | { type: "volume"; value: number };
 
 export function mixDeviceOptions(device: string | null): Promise<MixDeviceOptions> {
   return invoke("mix_device_options", { device });
@@ -825,7 +777,7 @@ export function mixControl(control: MixControl): Promise<void> {
 /** `settings_*`, `library_root*`, `cache_dir_move` (reks-core `settings.rs`). */
 export type KeyNotation = "classical" | "camelot" | "openKey";
 
-/** How the Mix view's decks draw their waveforms; all come from the same analysis columns. */
+/** How the decks draw their waveforms; all come from the same analysis columns. */
 export type DeckWaveform = "threeBand" | "rgb" | "blue";
 
 /** Library window state kept across launches. */

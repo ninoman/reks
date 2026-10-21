@@ -123,10 +123,10 @@ sum → master level × preview volume → [master meter] → safety limiter →
   either unit's control.
 - Start state: every channel flat with its fader up, XFADE assign off,
   FILTER assign X for channels 1–2 and Y for 3–4 with both units off
-  (an off unit returns its input exactly), master up, so a single deck (the Phase 1 preview player) plays through bit for
+  (an off unit returns its input exactly), master up, so a single deck (the library's player, D30) plays through bit for
   bit, delayed by the limiter's look-ahead (`Graph::latency()`, 1.5 ms).
   The HI and LO shelves return the input exactly at noon for this.
-- `Control::Volume` (preview player) stays as a squared gain on top of the
+- `Control::Volume` (the player's volume slider, `MixControl::Volume`) stays as a squared gain on top of the
   master level.
 - Meters: channel meters read after EQ and filter, before the fader, so they
   show the level the trim sets; the master meter reads before the limiter,

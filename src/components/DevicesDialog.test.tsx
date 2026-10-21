@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Device, DeviceInfo, ProfileStatus } from "../lib/ipc";
 
 vi.mock("../lib/ipc", () => ({
+  DECKS: 4,
   devicesList: vi.fn(),
   deviceEject: vi.fn(),
   profilesList: vi.fn(),

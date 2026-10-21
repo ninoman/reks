@@ -107,8 +107,8 @@ have the same height (tested in `ui.test.tsx`).
 | gap | 4 | 4 | 6 | 8 |
 
 Use: `xs` inside rows (tree "+", sheet close, key grid); `sm` in bars (app
-header, library toolbar, filter bar, transport); `md` (default) in dialogs and
-forms; `lg` for the transport play button. Table and tree rows use `--row-h`,
+header, library toolbar, filter bar, player bar, decks); `md` (default) in dialogs and
+forms; `lg` for large standalone controls. Table and tree rows use `--row-h`,
 menu items `--menu-item-h`.
 
 ## Components
@@ -172,10 +172,32 @@ Now:
 
 There is no in-app theme setting yet; the app and splash follow the system.
 
+## Player (D30)
+
+The library plays on deck 2 of the mix engine ([`src/store/player.ts`](../src/store/player.ts)).
+Along the bottom of the window:
+
+- `PlayerBar`: the header row. Volume (`MixControl::Volume`, saved as
+  `ui.state.volume`), output device (stored in Settings; a running output
+  reopens on the new device with every loaded deck back where it was), the
+  **Mix** toggle, and with the Mix panel off, why the output is not playing
+  (opening, failed start, lost device).
+- Under it, `PlayerDeck` (Mix off): deck 2 alone as a `DeckStrip` with
+  `solo` (no SYNC, BAR, LEADER or phase marker), so it has the deck's
+  waveforms, cue, hot cues, nudge, quantise and tempo fader. Empty, it says
+  to double-click a track or drag one onto it. With Mix on, the Mix panel
+  takes its place and shows the same deck among the others.
+- Double-click or Enter on a row, and double-click in a history session,
+  load the track on deck 2 and play it (it keeps playing if it already is);
+  loading opens the output when it is off. Space plays and pauses deck 2
+  wherever focus is (except in text fields, dialogs and menus). The row of
+  the track on deck 2 is marked as loaded; the grid editor draws deck 2's
+  playhead when it shows that track.
+
 ## Mix panel (phase 5)
 
 [`src/components/mix/`](../src/components/mix/), opened with **Mix** in the
-transport bar (bottom edge), under the table. `MixPanel` is the only part that reads the store
+player bar (bottom edge), in place of the player deck. `MixPanel` is the only part that reads the store
 ([`src/store/mix.ts`](../src/store/mix.ts)); `DeckStrip`, `DeckWaveform`,
 `MixerPanel`, `ChannelStrip`, `FilterUnit`, `MasterSection` and `SyncPhase`
 take props. The mixer follows the hardware: four channel strips (level, HI,
@@ -206,9 +228,9 @@ height).
 - Tempo range button cycles ±6, ±10 (default), ±16 and WIDE (±100%; the
   slow end stands still), as on a CDJ-3000.
 - Waveform style (Settings → Decks, `display.deck_waveform`), applied to both
-  views live: **3-band** (default; low/mid/high overlaid, `waveform-low/mid/high`),
-  **RGB** (mono height, colour mixed from `waveform-rgb-low/mid/high` by band
-  level) and **Blue** (mono height in `waveform-blue`, lightening to
+  views live, on the player deck too: **RGB** (default since D30; mono height,
+  colour mixed from `waveform-rgb-low/mid/high` by band level), **3-band**
+  (low/mid/high overlaid, `waveform-low/mid/high`) and **Blue** (mono height in `waveform-blue`, lightening to
   `waveform-blue-high` as highs dominate). All three come from the same
   analysis columns; drawing is pure in [`waveDraw.ts`](../src/lib/waveDraw.ts)
   (`waveBars`). Only styles our columns can feed are offered.
@@ -220,7 +242,7 @@ height).
 - Shortcuts while the panel is open ([`src/lib/mixKeys.ts`](../src/lib/mixKeys.ts),
   also under **Shortcuts** in the panel): A/S/D cue, play, sync deck 2 and
   J/K/L deck 3, the decks on screen with two (Shift: the outer decks 1 and 4), Q/W and U/I nudge while held, 1–4 and
-  7–0 hot cues A–D, Z/X/C crossfader. Space stays with the preview player.
+  7–0 hot cues A–D, Z/X/C crossfader. Space stays with the player (deck 2).
 - The mixer is memoised away from the 60 Hz engine state; only the decks
   re-render with it.
 - Meters (`ui/Meter`): a DJM-style column of nine round LEDs on the deck

@@ -5,11 +5,10 @@ use std::sync::{Arc, Mutex};
 
 use reks_core::convert::ConvertPlan;
 use reks_core::history::HistoryImportPlan;
-use reks_core::{CancelToken, Library, TrackId};
+use reks_core::{CancelToken, Library};
 use reks_export_rb::adopt::AdoptPlan;
 use reks_export_rb::devices::DeviceId;
 use reks_export_rb::plan::{ExportPlan, Selection};
-use reks_mix::Player;
 
 use crate::analysis::Analysis;
 use crate::mix::Mix;
@@ -39,8 +38,7 @@ pub struct AppState {
     pub shown_adopt: Mutex<ShownAdopt>,
     /// App data dir (D19): stick backups go under it.
     pub data_dir: PathBuf,
-    pub player: Mutex<PlayerSlot>,
-    /// The mixer engine and its decks (Phase 5).
+    /// The audio engine: the player deck and the mixer (D30).
     pub mix: Mix,
     /// Background analysis queue (Phase 3 task 11).
     pub analysis: Analysis,
@@ -83,16 +81,6 @@ pub struct ShownAdopt {
     pub plan: Option<(u64, AdoptPlan)>,
 }
 
-/// The preview player and the track on it.
-#[derive(Debug)]
-pub struct PlayerSlot {
-    pub player: Player,
-    pub track: Option<TrackId>,
-    /// Bumped by every load request; a decode that finishes after a newer
-    /// request is dropped.
-    pub generation: u64,
-}
-
 impl AppState {
     /// Opens (creating and migrating) the library in `data_dir`, with
     /// derived files under `cache_dir`, and starts the analysis queue with
@@ -106,7 +94,6 @@ impl AppState {
             Ok(dir) => tracing::info!(cache = %dir.display(), "cache dir"),
             Err(err) => tracing::warn!(%err, "stored cache dir unusable, using the default"),
         }
-        let settings = library.settings()?;
         let library = Arc::new(library);
         let analysis = Analysis::start(&library, model_dir);
         Ok(Self {
@@ -120,11 +107,6 @@ impl AppState {
             shown_history: Mutex::new(ShownHistory::default()),
             shown_adopt: Mutex::new(ShownAdopt::default()),
             data_dir: data_dir.to_path_buf(),
-            player: Mutex::new(PlayerSlot {
-                player: Player::new(settings.audio_device).with_volume(settings.ui.volume),
-                track: None,
-                generation: 0,
-            }),
             mix: Mix::default(),
             analysis,
         })

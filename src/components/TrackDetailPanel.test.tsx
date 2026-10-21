@@ -10,6 +10,7 @@ import { emptySelection } from "../store/selection";
 import { TrackDetailPanel, TrackInfoPanel } from "./TrackDetailPanel";
 
 vi.mock("../lib/ipc", () => ({
+  DECKS: 4,
   libraryTrack: vi.fn(),
   libraryUpdateTrack: vi.fn(),
   artworkGet: vi.fn(),

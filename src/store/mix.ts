@@ -1,14 +1,16 @@
 /**
  * Mixer (Zustand): starts and stops the `reks-mix` engine, mirrors the state
  * it streams (about 60 a second), loads library tracks onto decks with their
- * waveform and beat lines, and keeps the mixer's knob and switch positions,
- * which it sends as `MixControl`s. Tempo, sync and every mixer law live in
- * Rust; this only forwards.
+ * waveform and beat lines, and keeps the mixer's knob and switch positions
+ * and the player's volume, which it sends as `MixControl`s. The library's
+ * player is one of these decks (`player.ts`, D30). Tempo, sync and every
+ * mixer law live in Rust; this only forwards.
  */
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 
 import {
+  audioDevices,
   type BeatMark,
   beatgridGet,
   type ChannelParam,
@@ -27,7 +29,6 @@ import {
   mixLoad,
   mixStart,
   mixStop,
-  playerDevices,
   waveformColumns,
 } from "../lib/ipc";
 import { litCount } from "../lib/meterScale";
@@ -39,7 +40,6 @@ import {
   NUDGE,
   type TempoRange,
 } from "../lib/mixView";
-import { usePlayer } from "./player";
 
 export type EngineStatus = "stopped" | "starting" | "running" | "error";
 
@@ -109,13 +109,21 @@ export interface MixStore {
   filters: Record<FilterUnit, FilterValues>;
   crossfader: { pos: number; curve: number };
   master: MasterValues;
+  /** The player's volume slider, 0..1, on top of the master level. */
+  volume: number;
 
   loadDevices: () => Promise<void>;
   setConfig: (patch: Partial<MixConfig>) => Promise<void>;
+  /**
+   * Picks the output device (`null`: system default). A running output
+   * reopens on it with the loaded tracks back where they were.
+   */
+  setDevice: (device: string | null) => Promise<void>;
   start: () => Promise<boolean>;
   stop: () => Promise<void>;
   setDeckCount: (n: 2 | 4) => void;
-  load: (deck: number, track: DeckTrack | number) => Promise<void>;
+  /** Loads `track` on `deck`, starting the output if it is off; `play` plays it once loaded. */
+  load: (deck: number, track: DeckTrack | number, play?: boolean) => Promise<void>;
   unload: (deck: number) => void;
   send: (c: MixControl) => void;
   togglePlay: (deck: number) => void;
@@ -138,6 +146,7 @@ export interface MixStore {
   ) => void;
   setCrossfader: (patch: Partial<{ pos: number; curve: number }>) => void;
   setMaster: <K extends keyof MasterValues>(param: K, value: MasterValues[K]) => void;
+  setVolume: (volume: number) => void;
 }
 
 export function emptyDeck(): DeckMeta {
@@ -233,7 +242,17 @@ function mixerControls(s: MixStore): MixControl[] {
       value: typeof v === "boolean" ? bit(v) : v,
     });
   }
+  out.push({ type: "volume", value: s.volume });
   return out;
+}
+
+/** Where a loaded deck is, to put it back after the output reopens. */
+interface DeckResume {
+  deck: number;
+  track: DeckTrack;
+  positionMs: number;
+  playing: boolean;
+  tempo: number;
 }
 
 /** Bumped by each load per deck; a load that finishes after a newer one is dropped. */
@@ -292,11 +311,12 @@ export const useMix = create<MixStore>((set, get) => {
     filters: { x: { ...DEFAULT_FILTER }, y: { ...DEFAULT_FILTER, lowPass: false, highPass: true } },
     crossfader: { pos: 0.5, curve: 0 },
     master: { level: 0.8, cueLevel: 0.7, cueMix: 0, splitCue: false, cuePostEq: false },
+    volume: 1,
 
     async loadDevices() {
       try {
         const [devices, options] = await Promise.all([
-          playerDevices(),
+          audioDevices(),
           mixDeviceOptions(get().config.device),
         ]);
         set({ devices });
@@ -321,11 +341,33 @@ export const useMix = create<MixStore>((set, get) => {
       }
     },
 
+    async setDevice(device) {
+      const s = get();
+      if (device === s.config.device) return;
+      const resume: DeckResume[] = [];
+      if (s.status === "running") {
+        s.decks.forEach((meta, deck) => {
+          const v = s.live?.decks[deck];
+          if (meta.track === null || v?.loaded !== true) return;
+          const { positionMs, playing, tempo } = v;
+          resume.push({ deck, track: meta.track, positionMs, playing, tempo });
+        });
+      }
+      await get().setConfig({ device });
+      if (s.status !== "running") return;
+      if (!(await get().start())) return;
+      for (const r of resume) {
+        await get().load(r.deck, r.track);
+        if (get().decks[r.deck]?.track?.id !== r.track.id) continue;
+        get().send({ type: "seek", deck: r.deck, ms: r.positionMs });
+        if (r.tempo !== 1) get().send({ type: "tempo", deck: r.deck, ratio: r.tempo });
+        if (r.playing) get().send({ type: "play", deck: r.deck });
+      }
+    },
+
     async start() {
       if (get().status === "starting") return false;
       set({ status: "starting", error: null, live: null });
-      const player = usePlayer.getState();
-      if (player.status.playing) void player.toggle();
       try {
         const live = await mixStart(get().config, onState);
         set({
@@ -360,7 +402,11 @@ export const useMix = create<MixStore>((set, get) => {
 
     setDeckCount: (n) => set({ deckCount: n }),
 
-    async load(deck, track) {
+    async load(deck, track, play = false) {
+      const id = typeof track === "number" ? track : track.id;
+      // Playing the track that is already playing keeps it going.
+      const v = deckView(deck);
+      if (play && v?.playing === true && get().decks[deck]?.track?.id === id) return;
       const seq = (loads[deck] ?? 0) + 1;
       loads[deck] = seq;
       const current = () => loads[deck] === seq;
@@ -389,6 +435,7 @@ export const useMix = create<MixStore>((set, get) => {
           beats: null,
           viewError: null,
         });
+        if (play) get().send({ type: "play", deck });
         const [columns, grid] = await Promise.allSettled([
           waveformColumns(meta.id),
           beatgridGet(meta.id),
@@ -481,6 +528,11 @@ export const useMix = create<MixStore>((set, get) => {
         param: param as MasterParam,
         value: typeof value === "boolean" ? bit(value) : (value as number),
       });
+    },
+
+    setVolume(volume) {
+      set({ volume });
+      get().send({ type: "volume", value: volume });
     },
   };
 });

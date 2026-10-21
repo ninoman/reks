@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../lib/ipc", () => ({ libraryFacets: vi.fn(), libraryQuery: vi.fn() }));
+vi.mock("../lib/ipc", () => ({ DECKS: 4, libraryFacets: vi.fn(), libraryQuery: vi.fn() }));
 
 const ipc = await import("../lib/ipc");
 const { useTags } = await import("../store/tags");

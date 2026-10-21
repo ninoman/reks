@@ -5,14 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryRoot, Settings } from "../lib/ipc";
 
 vi.mock("../lib/ipc", () => ({
+  DECKS: 4,
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),
   libraryRoots: vi.fn(),
   libraryRootAdd: vi.fn(),
   libraryRootRemove: vi.fn(),
   cacheDirMove: vi.fn(),
-  playerDevices: vi.fn(),
-  playerSetDevice: vi.fn(),
+  audioDevices: vi.fn(),
+  mixDeviceOptions: vi.fn(),
   libraryQuery: vi.fn(),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
@@ -20,12 +21,13 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 const ipc = await import("../lib/ipc");
 const dialog = await import("@tauri-apps/plugin-dialog");
 const { useSettings } = await import("../store/settings");
+const { useMix } = await import("../store/mix");
 const { SettingsDialog } = await import("./SettingsDialog");
 
 const settings: Settings = {
   audioDevice: "USB DAC",
   keyNotation: "classical",
-  deckWaveform: "threeBand",
+  deckWaveform: "rgb",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
   onelibraryKeySet: false,
@@ -45,7 +47,14 @@ const roots: LibraryRoot[] = [
 beforeEach(() => {
   vi.mocked(ipc.settingsGet).mockResolvedValue(settings);
   vi.mocked(ipc.libraryRoots).mockResolvedValue(roots);
-  vi.mocked(ipc.playerDevices).mockResolvedValue(["Built-in Output"]);
+  vi.mocked(ipc.audioDevices).mockResolvedValue(["Built-in Output"]);
+  vi.mocked(ipc.mixDeviceOptions).mockResolvedValue({
+    rates: [44_100],
+    defaultRate: 44_100,
+    channels: 2,
+    defaultCue: { type: "off" },
+    bufferFrames: null,
+  });
   vi.mocked(ipc.libraryRootRemove).mockResolvedValue();
   vi.mocked(ipc.settingsSet).mockImplementation(async (p) => ({ ...settings, ...p }) as Settings);
   vi.mocked(ipc.cacheDirMove).mockResolvedValue({ ...settings, cacheDir: "/Volumes/SSD/cache" });
@@ -117,10 +126,12 @@ describe("SettingsDialog", () => {
   it("stores the deck waveform style", async () => {
     await openDialog();
     const decks = screen.getByRole("region", { name: "Decks" });
-    expect(decks.querySelector('[aria-checked="true"]')?.textContent).toContain("3-band");
-    fireEvent.click(screen.getByRole("radio", { name: /RGB/ }));
-    await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ deckWaveform: "rgb" }));
-    expect(useSettings.getState().settings?.deckWaveform).toBe("rgb");
+    expect(decks.querySelector('[aria-checked="true"]')?.textContent).toContain("RGB");
+    fireEvent.click(screen.getByRole("radio", { name: /3-band/ }));
+    await waitFor(() =>
+      expect(ipc.settingsSet).toHaveBeenCalledWith({ deckWaveform: "threeBand" }),
+    );
+    expect(useSettings.getState().settings?.deckWaveform).toBe("threeBand");
   });
 
   it("keeps a chosen device that is not connected in the list", async () => {
@@ -129,6 +140,17 @@ describe("SettingsDialog", () => {
     await waitFor(() => expect(select.options.length).toBe(3));
     expect(select.value).toBe("USB DAC");
     expect(select.selectedOptions[0]?.textContent).toBe("USB DAC (not connected)");
+  });
+
+  it("stores the output device and hands it to the engine", async () => {
+    await openDialog();
+    const select = screen.getByRole("combobox", { name: "Output device" }) as HTMLSelectElement;
+    await waitFor(() => expect(select.options.length).toBe(3));
+    fireEvent.change(select, { target: { value: "Built-in Output" } });
+    await waitFor(() =>
+      expect(ipc.settingsSet).toHaveBeenCalledWith({ audioDevice: "Built-in Output" }),
+    );
+    expect(useMix.getState().config.device).toBe("Built-in Output");
   });
 
   it("asks before moving the cache", async () => {

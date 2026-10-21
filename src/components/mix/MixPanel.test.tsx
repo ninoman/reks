@@ -6,7 +6,7 @@ import type { DeckView, MixState } from "../../lib/ipc";
 
 vi.mock("../../lib/ipc", () => ({
   DECKS: 4,
-  playerDevices: vi.fn(),
+  audioDevices: vi.fn(),
   mixDeviceOptions: vi.fn(),
   mixStart: vi.fn(),
   mixStop: vi.fn(),
@@ -60,7 +60,7 @@ const state = (over: Partial<MixState> = {}): MixState => ({
 const initial = useMix.getState();
 
 beforeEach(() => {
-  vi.mocked(ipc.playerDevices).mockResolvedValue(["Laptop Speakers"]);
+  vi.mocked(ipc.audioDevices).mockResolvedValue(["Laptop Speakers"]);
   vi.mocked(ipc.mixDeviceOptions).mockResolvedValue({
     rates: [44_100, 48_000],
     defaultRate: 48_000,

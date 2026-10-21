@@ -511,6 +511,10 @@ pub enum MixControl {
         param: MasterParamArg,
         value: f32,
     },
+    /// The player's volume slider, on top of the master level.
+    Volume {
+        value: f32,
+    },
 }
 
 impl MixControl {
@@ -575,6 +579,7 @@ impl MixControl {
                 },
                 value,
             },
+            Self::Volume { value } => Control::Volume { value },
         }
     }
 }
@@ -650,6 +655,10 @@ mod tests {
                 on: true,
                 bar: false
             }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"volume","value":0.5}"#),
+            reks_mix::Control::Volume { value } if value == 0.5
         ));
     }
 
