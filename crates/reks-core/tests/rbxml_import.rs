@@ -538,8 +538,8 @@ fn comment_tags_become_my_tags() {
         .created_id
         .unwrap();
     let mut c = small_collection();
-    c.tracks[0].comments = Some("/* deep / Peak */ ok".into());
-    c.tracks[1].comments = Some("/* Peak */".into());
+    c.tracks[0].comments = Some("ok /* deep / Peak */".into());
+    c.tracks[1].comments = Some(" /* Peak */".into());
     let report = env.import(&c, fixture_remap());
     assert_eq!((report.tags_created, report.tags_assigned), (1, 3));
 
@@ -557,7 +557,7 @@ fn comment_tags_become_my_tags() {
     // The comment is stored as it is.
     assert_eq!(
         first.track.row.comment.as_deref(),
-        Some("/* deep / Peak */ ok")
+        Some("ok /* deep / Peak */")
     );
 
     // A second import adds nothing.
