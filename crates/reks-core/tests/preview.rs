@@ -79,3 +79,32 @@ fn unknown_track_and_missing_file_are_errors() {
         Err(Error::Audio(_))
     ));
 }
+
+#[test]
+fn deck_audio_carries_the_grid_in_frames_of_the_decoded_audio() {
+    let (_dir, lib, id) = setup();
+    let empty = lib.deck_audio(id, 48_000).unwrap();
+    assert!(empty.anchors.is_empty());
+    assert!(empty.hot_cues.is_empty());
+
+    lib.edit_beatgrid(
+        id,
+        reks_core::GridEdit::SetBpm {
+            bpm_x100: 12_800,
+            anchor_ms: 250,
+        },
+    )
+    .unwrap();
+    let deck = lib.deck_audio(id, 48_000).unwrap();
+    assert_eq!(deck.pcm.sample_rate, 48_000);
+    assert_eq!(deck.pcm.frames(), 1_440_000);
+    assert_eq!(
+        deck.anchors,
+        [reks_core::DeckAnchor {
+            frame: 12_000,
+            bpm: 128.0,
+            beat_in_bar: 1,
+            beats_per_bar: 4,
+        }]
+    );
+}

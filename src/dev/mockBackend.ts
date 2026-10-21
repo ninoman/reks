@@ -40,6 +40,7 @@ import type {
 import { mockAdopt } from "./mockAdopt";
 import { mockGrid } from "./mockGrid";
 import { mockHistory } from "./mockHistory";
+import { mockMix } from "./mockMix";
 
 const CAMELOT: [string, string][] = [
   ["Am", "8A"],
@@ -1150,6 +1151,7 @@ mockIPC((cmd, payload) => {
         history(cmd, args) ??
         mockAdopt(cmd, args) ??
         mockGrid(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
+        mockMix(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
         null
       );
   }

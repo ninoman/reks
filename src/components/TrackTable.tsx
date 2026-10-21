@@ -9,7 +9,8 @@
  * filter that view also shows the playlist's dividers (D22) as full-width
  * rows, which select, drag and delete like entries; the context menu inserts
  * one above the selection, and double-click, Enter or the menu renames one.
- * The context menu converts the selected tracks anywhere (`ConvertDialog`).
+ * The context menu converts the selected tracks anywhere (`ConvertDialog`)
+ * and loads the first selected track onto a mixer deck (opening the mix panel).
  * Double-click or Enter loads
  * a row into the player and plays it; the loaded track's row is marked with
  * an accent bar and accent text, separate from the selection background.
@@ -30,6 +31,8 @@ import { hasType, readTracks, TRACKS_MIME, type TrackDrag, zoneAt } from "../lib
 import { useAnalysis } from "../store/analysis";
 import { useConverter } from "../store/converter";
 import { entryPosition, itemAt, useLibrary, type ViewItem, viewCount } from "../store/library";
+import { useMix } from "../store/mix";
+import { usePanels } from "../store/panels";
 import { usePlayer } from "../store/player";
 import { shownPlaylist, usePlaylists } from "../store/playlists";
 import { primaryIndex } from "../store/selection";
@@ -79,6 +82,7 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const select = useLibrary((s) => s.select);
   const playlistId = useLibrary((s) => s.filters.playlistId);
   const loadedId = usePlayer((s) => s.status.trackId);
+  const deckCount = useMix((s) => s.deckCount);
   const nodes = usePlaylists((s) => s.nodes);
   const rename = usePlaylists((s) => s.dividerRename);
   const view = shownPlaylist(nodes, playlistId);
@@ -203,6 +207,14 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
     return selectedItems()
       .map(entryPosition)
       .filter((p) => p !== null);
+  }
+
+  /** Loads the first selected track onto `deck` and shows the mix panel. */
+  function loadToDeck(deck: number) {
+    const first = selectedItems().find((i) => i.kind === "track");
+    if (first?.kind !== "track") return;
+    if (!usePanels.getState().mixOpen) usePanels.getState().toggleMix();
+    void useMix.getState().load(deck, first.row);
   }
 
   function removeSelected() {
@@ -382,6 +394,17 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
           menuRenames.current = false;
         }}
       >
+        {Array.from({ length: deckCount }, (_, deck) => (
+          <ContextMenuItem
+            // biome-ignore lint/suspicious/noArrayIndexKey: decks are fixed slots
+            key={deck}
+            disabled={selectedTrackIds().length === 0}
+            onSelect={() => loadToDeck(deck)}
+          >
+            Load to deck {deck + 1}
+          </ContextMenuItem>
+        ))}
+        <ContextMenuSeparator />
         <ContextMenuItem
           disabled={selectedTrackIds().length === 0}
           onSelect={() => useConverter.getState().open(selectedTrackIds())}

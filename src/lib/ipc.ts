@@ -560,6 +560,159 @@ export function waveformColumns(id: number): Promise<ArrayBuffer> {
   return invoke("waveform_columns", { id });
 }
 
+/** `mix_*`: the Phase 5 mixer (src-tauri `mix.rs`, reks-mix `Control`). */
+export const DECKS = 4;
+
+export type CueRouting =
+  | { type: "off" }
+  /** Cue in the left ear, master (mono) in the right. */
+  | { type: "splitMono" }
+  /** 0-based output channels, e.g. master `[0, 1]`, cue `[2, 3]`. */
+  | { type: "outputs"; master: [number, number]; cue: [number, number] };
+
+export interface MixConfig {
+  /** null: the system default. */
+  device: string | null;
+  /** null: 44.1 kHz when offered, else the device's default. */
+  sampleRate: number | null;
+  /** null: the device's default buffer. */
+  bufferFrames: number | null;
+  cue: CueRouting;
+}
+
+export interface MixDeviceOptions {
+  rates: number[];
+  defaultRate: number;
+  /** `[min, max]` frames, when the platform reports them. */
+  bufferFrames: [number, number] | null;
+}
+
+/** One deck; times in ms of the track. */
+export interface DeckView {
+  trackId: number | null;
+  loaded: boolean;
+  playing: boolean;
+  positionMs: number;
+  durationMs: number;
+  cueMs: number;
+  /** Tempo fader as a speed ratio. */
+  tempo: number;
+  nudge: number;
+  speed: number;
+  /** Tempo heard at the playhead; null without a grid. */
+  bpm: number | null;
+  /** Beat number at the playhead (0 at the first anchor); null without a grid. */
+  beat: number | null;
+  sync: boolean;
+  syncBar: boolean;
+  /** Following the leader's tempo and phase. */
+  locked: boolean;
+  quantise: boolean;
+}
+
+/** Engine state, about 60 a second. No meters yet (phase 5 task 6). */
+export interface MixState {
+  device: string;
+  sampleRate: number;
+  channels: number;
+  bufferFrames: number | null;
+  deviceLost: boolean;
+  xruns: number;
+  leader: number | null;
+  leaderChosen: boolean;
+  decks: DeckView[];
+}
+
+export interface HotCueView {
+  /** 0..7 = A..H. */
+  slot: number;
+  positionMs: number;
+}
+
+export interface DeckLoaded {
+  deck: number;
+  trackId: number;
+  durationMs: number;
+  hotCues: HotCueView[];
+}
+
+export type ChannelParam =
+  | "trim"
+  | "eqHi"
+  | "eqMid1"
+  | "eqMid2"
+  | "eqLo"
+  | "fader"
+  /** 0 = X, 0.5 = off, 1 = Y. */
+  | "filterAssign"
+  /** 0 = X, 0.5 = off (direct), 1 = Y. */
+  | "xfadeAssign"
+  | "cue";
+
+export type FilterUnit = "x" | "y";
+
+export type FilterParam =
+  | "freq"
+  | "resonance"
+  | "highPass"
+  | "bandPass"
+  | "lowPass"
+  | "on"
+  | "vcfToXfader"
+  /** Unit Y only: Y follows X's FREQ. */
+  | "link";
+
+export type MasterParam = "level" | "cueLevel" | "cueMix" | "splitCue" | "cuePostEq";
+
+/**
+ * Mirrors `reks_mix::Control` (knob values 0..1, switches 0 or 1). `Load` is
+ * `mixLoad`; `seek` takes ms. Mixer controls take effect once the channel
+ * strips are wired (phase 5 tasks 6–7).
+ */
+export type MixControl =
+  | { type: "unload"; deck: number }
+  | { type: "play"; deck: number }
+  | { type: "pause"; deck: number }
+  | { type: "cue"; deck: number }
+  | { type: "seek"; deck: number; ms: number }
+  | { type: "hotCue"; deck: number; slot: number }
+  /** Speed ratio, 1 = as recorded. */
+  | { type: "tempo"; deck: number; ratio: number }
+  /** Pitch bend while held; 1 releases it. */
+  | { type: "nudge"; deck: number; ratio: number }
+  | { type: "sync"; deck: number; on: boolean; bar: boolean }
+  /** null: automatic leader. */
+  | { type: "leader"; deck: number | null }
+  | { type: "quantise"; deck: number; on: boolean }
+  | { type: "channel"; ch: number; param: ChannelParam; value: number }
+  | { type: "filter"; unit: FilterUnit; param: FilterParam; value: number }
+  | { type: "crossfader"; pos: number; curve: number }
+  | { type: "master"; param: MasterParam; value: number };
+
+export function mixDeviceOptions(device: string | null): Promise<MixDeviceOptions> {
+  return invoke("mix_device_options", { device });
+}
+
+/** Opens the output and streams the state to `onState` until `mixStop`; resolves to the first state. */
+export function mixStart(config: MixConfig, onState: (s: MixState) => void): Promise<MixState> {
+  const channel = new Channel<MixState>();
+  channel.onmessage = onState;
+  return invoke("mix_start", { config, onState: channel });
+}
+
+export function mixStop(): Promise<void> {
+  return invoke("mix_stop");
+}
+
+/** Decodes and loads track `id` on `deck`; null when a newer load for the deck won. */
+export function mixLoad(deck: number, id: number): Promise<DeckLoaded | null> {
+  return invoke("mix_load", { deck, id });
+}
+
+export function mixControl(control: MixControl): Promise<void> {
+  return invoke("mix_control", { control });
+}
+
 /** `settings_*`, `library_root*`, `cache_dir_move` (reks-core `settings.rs`). */
 export type KeyNotation = "classical" | "camelot" | "openKey";
 

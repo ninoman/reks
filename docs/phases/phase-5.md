@@ -174,10 +174,26 @@ pub enum Control {
    a routing the device has no outputs for. `Graph::render_outputs` renders
    master and phones. Tests: routing modes on the engine callback, cue render
    tests in `crates/reks-mix/tests/cue.rs`.
-8. **Tauri commands and IPC**: thin `mix_*` commands, typed wrappers in
+8. [x] **Tauri commands and IPC**: thin `mix_*` commands, typed wrappers in
    `src/lib/ipc.ts`, engine state on a `Channel`, waveform columns as `ArrayBuffer`.
-9. **UI**: mixer panel, 2/4-deck layout, scrolling waveforms with beat markers
+   Done 2026-10-21 ([`src-tauri/src/mix.rs`](../../src-tauri/src/mix.rs)):
+   `mix_device_options`, `mix_start` (device, rate, buffer, cue routing; the
+   state goes to a `Channel` at 60 Hz until `mix_stop`), `mix_load` (decodes
+   at the engine rate on a worker with grid and hot cues in frames,
+   `reks_core::deck`, then builds the `DeckSource` there; a newer load for
+   the deck wins), `mix_control` (`MixControl` mirrors `Control`; seek in ms;
+   `Load` is `mix_load`). Waveforms and beat lines reuse `waveform_columns`
+   (raw `ArrayBuffer`) and `beatgrid_get`. Dev mock: `src/dev/mockMix.ts`.
+   No meters in `MixState` yet: `EngineState` has none until task 6 wires
+   them; add them to `MixState` and `ipc.ts` then.
+9. [x] **UI**: mixer panel, 2/4-deck layout, scrolling waveforms with beat markers
    and sync phase, "load to deck" from the track table and playlists, shortcuts.
+   Done 2026-10-21: the Mix panel ([`../ui.md`](../ui.md#mix-panel-phase-5),
+   `src/components/mix/`, `src/store/mix.ts`), new base components `Knob`,
+   `Fader`, `Caption`. Mixer positions live in the UI store and are all sent
+   after each start, so the engine matches the panel. Verified in the
+   browser with the dev mock only; on a real engine the mixer controls do
+   nothing until tasks 6–7 land, and meters are still to add.
 10. **Key lock evaluation**: listen to `timestretch`, `signalsmith-stretch` and
     `rubberband` at ±6% on three techno tracks and one vocal track; record the
     choice in D21; add it as a per-deck toggle, or record why not.

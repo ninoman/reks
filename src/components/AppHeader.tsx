@@ -1,6 +1,6 @@
 /**
  * App header: the top bar across the whole window for library-wide actions
- * (scan, import, export to USB, USB devices, settings), with the scan status
+ * (scan, import, export to USB, the mix panel, USB devices, settings), with the scan status
  * line under it.
  * "Scan folder…" adds the folder to the library folders (Settings) and scans
  * it. "Import rekordbox XML…" picks the file and opens the import wizard
@@ -15,6 +15,7 @@ import { useConverter } from "../store/converter";
 import { useDevices } from "../store/devices";
 import { openExportWizard } from "../store/exportWizard";
 import { useImportWizard } from "../store/importWizard";
+import { usePanels } from "../store/panels";
 import { useScan } from "../store/scan";
 import { useSettings } from "../store/settings";
 import { GearIcon, UsbIcon } from "./icons";
@@ -23,6 +24,7 @@ import { IconButton } from "./ui/IconButton";
 import { Tooltip } from "./ui/Tooltip";
 
 export function AppHeader() {
+  const mixOpen = usePanels((s) => s.mixOpen);
   const status = useScan((s) => s.status);
   const scanning = useScan((s) => s.scanning);
   const importing = useImportWizard((s) => s.step !== "closed");
@@ -74,6 +76,9 @@ export function AppHeader() {
         </Button>
         <Button size="sm" disabled={importing} onClick={() => openExportWizard()}>
           Export to USB…
+        </Button>
+        <Button size="sm" aria-pressed={mixOpen} onClick={() => usePanels.getState().toggleMix()}>
+          Mix
         </Button>
         <Tooltip content="USB devices">
           <IconButton
