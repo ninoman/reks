@@ -1,12 +1,14 @@
 # Mixer DSP
 
 The Phase 5 mixer's signal processing ([`phases/phase-5.md`](phases/phase-5.md)
-tasks 4–6, decision D21). Reference: the Xone:92 music section as documented in
+tasks 4–7, decision D21). Reference: the Xone:92 music section as documented in
 the original user guide ([`research.md`](research.md) §9.1). The target is the
 documented response, not an analogue emulation.
 
-Code: [`crates/reks-mix/src/taper.rs`](../crates/reks-mix/src/taper.rs) and
-[`crates/reks-mix/src/dsp/`](../crates/reks-mix/src/dsp/). Every processor
+Code: [`crates/reks-mix/src/taper.rs`](../crates/reks-mix/src/taper.rs),
+[`crates/reks-mix/src/dsp/`](../crates/reks-mix/src/dsp/) (the blocks) and
+[`strip.rs`](../crates/reks-mix/src/strip.rs) /
+[`mixer.rs`](../crates/reks-mix/src/mixer.rs) (the signal flow). Every processor
 works in place on interleaved stereo `f32`, keeps `f64` filter state, and never
 allocates after `new`. Filter states are flushed to zero together below
 1e-20 so silence never leaves subnormals or a limit cycle behind.
@@ -94,10 +96,80 @@ Tests (`dsp::filter` tests):
 | maximum resonance, LP/HP/BP, 30 Hz–20 kHz in 1/3 octaves and while FREQ sweeps end to end | finite, below 200 on full-scale noise, rings down; at 44.1, 48, 96 kHz |
 | mode switch plus ON → off on a 50 Hz tone | no sample step above 0.01 |
 
-## Channels, crossfader, master (task 6, DSP only)
+## Signal flow (task 6)
 
-The parts exist as standalone blocks; wiring them into `graph.rs` (channel
-strips, filter and crossfader assign routing, master bus) is still to do.
+The graph renders 32-frame blocks: each deck fills its channel's block, the
+mixer runs the strips and the master bus.
+
+```
+deck → trim → EQ → FILTER assign (dry / X / Y) → [channel meter] → fader → XFADE assign (X / direct / Y) ─┐
+                                                                                                  sum ←┘
+sum → master level × preview volume → [master meter] → safety limiter → output
+```
+
+- Each channel has its own copy of filter units X and Y, all set alike.
+  The filters are linear, so this sounds the same as one shared unit fed the
+  sum of its channels, while the fader can still follow the filter as the
+  task order asks. A copy only runs while its side of the FILTER assign is
+  heard, and starts from cleared state.
+- FILTER and XFADE assigns are three smoothed weights (dry/X/Y,
+  X/direct/Y), so moving a switch crossfades; filter modes and ON are
+  smoothed inside the filter. VCF TO XFADER and LINK set the cutoff once a
+  block from the smoothed crossfader position, and the filter smooths it.
+  The crossfader keeps crossfading in VCF TO XFADER mode (**UNVERIFIED**).
+- Switch values arrive as knob values: assigns X below 1/3, Y above 2/3,
+  else off; on/off switches on from 0.5. LINK is a panel switch, taken from
+  either unit's control.
+- Start state: every channel flat with its fader up, assigns off, master
+  up, so a single deck (the Phase 1 preview player) plays through bit for
+  bit, delayed by the limiter's look-ahead (`Graph::latency()`, 1.5 ms).
+  The HI and LO shelves return the input exactly at noon for this.
+- `Control::Volume` (preview player) stays as a squared gain on top of the
+  master level.
+- Meters: channel meters read after EQ and filter, before the fader, so they
+  show the level the trim sets; the master meter reads before the limiter,
+  so it shows what the limiter catches. `EngineState` carries both; each
+  snapshot clears the clip latches.
+
+## Headphone cue (task 7)
+
+`cue.rs`, `routing.rs`.
+
+```
+strip: trim ─┬─ EQ → filter ─┬─ fader …
+             └ pre tap       └ post tap      (× CUE button, smoothed)
+pre/post (POST EQ switch) → CUE MIX with the master (after its level, before its limiter)
+  or split (cue mono L, master mono R) → CUE LEVEL → safety limiter → phones
+```
+
+| Control | Law |
+|---|---|
+| CUE (per channel) | on/off, smoothed; pre-fader |
+| POST EQ | crossfades the pre-EQ tap (after the trim) to the post-EQ tap (after EQ and filter, before the fader; that the filter is included is **UNVERIFIED**) |
+| CUE MIX | equal power: cue `cos(π/2·v)`, master `sin(π/2·v)`; −3 dB each at noon (**UNVERIFIED**) |
+| SPLIT CUE | crossfades to cue (mono) left, master (mono) right; CUE MIX is not used while split |
+| CUE LEVEL | fader law `v³`, at most 0 dB |
+
+The phones limiter has the master's look-ahead, so phones and master stay
+aligned. Start state: pre-EQ, cue only, level up, not split; nothing cued
+means silent phones.
+
+Routing (`EngineConfig::cue`): `Outputs { master, cue }` puts each on the
+named 0-based outputs, `SplitMono` sends the phones signal with split forced
+on to outputs 1/2 (one stereo output, e.g. a laptop), `Off` master only.
+Other outputs are silent; a mono device gets the master summed. The engine
+refuses a routing whose outputs the device lacks. When the routing is
+`Off`, the cue bus does not run.
+
+Tests: `routing.rs` per mode; the engine callback renders each mode
+(master, cue and silent channels, 4 and 6 outputs, split, mono);
+`tests/cue.rs` through the graph: pre-fader, pre/post EQ around a LO kill,
+CUE MIX ends, split sides, CUE LEVEL, phones limiter with a maximum-
+resonance sweep, and no clicks from any cue switch. The engine's allocation
+guard runs every cue control with master on 1/2 and cue on 3/4, then split
+mono.
+
+## Channels, crossfader, master (task 6)
 
 | Block | Law |
 |---|---|
@@ -120,9 +192,19 @@ rounding. NaN or infinite input becomes silence.
 
 Tests: crossfader gains at 0, 0.5 and 1 for both curve extremes (progressive
 centre −4 ±0.01 dB; sharpest centre 0 dB, full level 1/40 off the stop),
+both as a function and through the whole graph,
 monotonic and symmetric curves, assign and crossfader ramps; the limiter's
 ceiling on a full-scale step and on a maximum-resonance LP, HP and LP+BP
 sweep 30 Hz → 20 kHz → 30 Hz at 44.1, 48 and 96 kHz (input peaks above +12 dB),
 checked before the rounding clamp; `tests/dsp_realtime.rs` runs every block
 with all parameters moving under a counting allocator and requires zero
 allocations.
+
+Render tests through the graph (`tests/mixer.rs`): crossfader gains as
+above; the limiter ceiling with trim at +10 dB into a maximum-resonance LP
+and HP swept 30 Hz → 20 kHz → 30 Hz at 44.1, 48 and 96 kHz (master meter
+above +12 dB); assign, filter-mode and ON switches on a 50 Hz tone with no
+frame-to-frame step above 0.01; LO kill, fader taper and master level;
+LINK and VCF TO XFADER; meters and clip latches. The engine's allocation
+guard test sends every mixer control while both filter units and the
+assigns move.

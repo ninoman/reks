@@ -70,24 +70,24 @@ pub enum Control {
         deck: u8,
         on: bool,
     },
-    /// Mixer channel strip. Declared for the mixer tasks; no effect yet.
+    /// Mixer channel strip.
     Channel {
         ch: u8,
         param: ChannelParam,
         value: f32,
     },
-    /// Filter unit X or Y. Declared for the mixer tasks; no effect yet.
+    /// Filter unit X or Y.
     Filter {
         unit: FilterUnit,
         param: FilterParam,
         value: f32,
     },
-    /// Crossfader position and curve. Declared for the mixer tasks; no effect yet.
+    /// Crossfader position and curve (0 progressive, 1 near-instant cut).
     Crossfader {
         pos: f32,
         curve: f32,
     },
-    /// Master section. Declared for the mixer tasks; no effect yet.
+    /// Master and cue section.
     Master {
         param: MasterParam,
         value: f32,
@@ -175,13 +175,16 @@ pub enum MasterParam {
     CuePostEq,
 }
 
-/// Where the headphone cue goes (task 7). Only `Off` is implemented.
+/// Where the headphone cue goes on the output device. The engine refuses a
+/// routing the device has no outputs for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CueRouting {
     /// Master on outputs `master`, cue on outputs `cue` (0-based).
     Outputs { master: [u16; 2], cue: [u16; 2] },
-    /// Cue in the left ear, master (mono) in the right.
+    /// One stereo output for both: cue (mono) on the left, master (mono)
+    /// on the right, at the cue level, as with split cue.
     SplitMono,
+    /// Master only.
     #[default]
     Off,
 }
