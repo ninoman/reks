@@ -153,7 +153,7 @@ describe("summarize", () => {
       newRow({ field: "bpm", min: 120, max: 128 }),
     ]);
     expect(summarize(root, names)).toBe(
-      "Has tag Peak/Deep · not in playlist Warm-up · BPM is 120–128",
+      "Has tag Peak or Deep · not in playlist Warm-up · BPM is 120–128",
     );
   });
 

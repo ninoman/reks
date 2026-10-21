@@ -73,7 +73,7 @@ export function RuleGroup({
       aria-label={`Group: match ${MODE_WORD[group.mode]}`}
       className={
         nested
-          ? "m-0 flex min-w-0 flex-col gap-1.5 border-0 border-l-2 border-border py-0.5 pl-3"
+          ? "m-0 flex min-w-0 flex-col gap-1.5 border-0 border-l-2 border-border-strong py-0.5 pl-3"
           : "m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0"
       }
     >

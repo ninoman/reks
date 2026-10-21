@@ -218,11 +218,19 @@ export function FilterBar() {
         size="sm"
         variant="outline"
         className="ml-auto"
-        aria-pressed={rulesOpen}
+        aria-expanded={rulesOpen}
+        aria-controls={rulesOpen ? "rule-builder" : undefined}
         onClick={toggleRules}
       >
         Advanced
-        {ruleCount > 0 && <Badge variant={enabled ? "accent" : "muted"}>{ruleCount}</Badge>}
+        {ruleCount > 0 && (
+          <>
+            <Badge aria-hidden variant={enabled ? "accent" : "muted"}>
+              {ruleCount}
+            </Badge>
+            <span className="sr-only">, {ruleCount} active</span>
+          </>
+        )}
       </Button>
       <Button
         size="sm"

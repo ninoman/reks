@@ -37,7 +37,12 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
           <FilterIcon />
           Filters
           {activeFilters > 0 && (
-            <Badge variant={filtersEnabled ? "accent" : "muted"}>{activeFilters}</Badge>
+            <>
+              <Badge aria-hidden variant={filtersEnabled ? "accent" : "muted"}>
+                {activeFilters}
+              </Badge>
+              <span className="sr-only">, {activeFilters} active</span>
+            </>
           )}
         </Button>
       </Tooltip>

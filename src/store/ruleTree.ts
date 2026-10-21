@@ -379,6 +379,11 @@ function range(min: number | null, max: number | null): string {
   return min !== null ? `${min}+` : `up to ${max}`;
 }
 
+/** "A", "A or B", "A, B or C". */
+function orList(items: string[]): string {
+  return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
+}
+
 /** One finished row as a phrase; `null` for an unfinished one. */
 export function rowText(row: RowDraft, names: SummaryNames): string | null {
   const v = row.value;
@@ -388,13 +393,13 @@ export function rowText(row: RowDraft, names: SummaryNames): string | null {
     case null:
       return null;
     case "tag":
-      return v.ids.length === 0 ? null : `${verb} tag ${v.ids.map(names.tag).join("/")}`;
+      return v.ids.length === 0 ? null : `${verb} tag ${orList(v.ids.map(names.tag))}`;
     case "playlist":
       return v.id === null ? null : `${verb} playlist ${names.playlist(v.id)}`;
     case "genre":
       return v.genre === null ? null : `genre ${verb} ${v.genre}`;
     case "key":
-      return v.keys.length === 0 ? null : `key ${verb} ${v.keys.map(names.key).join("/")}`;
+      return v.keys.length === 0 ? null : `key ${verb} ${orList(v.keys.map(names.key))}`;
     case "bpm":
       return v.min === null && v.max === null ? null : `BPM ${verb} ${range(v.min, v.max)}`;
     case "color":

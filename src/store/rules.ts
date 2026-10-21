@@ -225,6 +225,7 @@ export const useRules = create<RulesState>()((set, get) => {
       if (outcome?.type !== "done" || outcome.createdId === null) return false;
       // The rule now lives in the playlist; showing it ANDed with the same rule would only confuse.
       get().clear();
+      set({ open: false });
       playlists.select(outcome.createdId);
       useToasts.getState().show(`Saved smart playlist “${name.trim()}”`);
       return true;

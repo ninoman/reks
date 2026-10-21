@@ -55,6 +55,7 @@ export function RuleBuilder() {
 
   return (
     <section
+      id="rule-builder"
       aria-label="Advanced filter"
       className="flex shrink-0 flex-col gap-2 border-b border-border bg-bg-subtle px-2.5 py-2"
     >
