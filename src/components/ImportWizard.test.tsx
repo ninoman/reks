@@ -63,6 +63,8 @@ const report: ImportReport = {
   beatgridRows: 3,
   cueRows: 10,
   playlistsCreated: 2,
+  tagsCreated: 0,
+  tagsAssigned: 0,
   playlistsMatched: 0,
   playlistEntries: 4,
   playlistEntriesSkipped: 0,

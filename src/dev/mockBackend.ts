@@ -33,6 +33,7 @@ import type {
   Settings,
   SettingsPatch,
   SortColumn,
+  TagOp,
   TrackDetail,
   TrackQuery,
   TrackRow,
@@ -41,6 +42,7 @@ import { mockAdopt } from "./mockAdopt";
 import { mockGrid } from "./mockGrid";
 import { mockHistory } from "./mockHistory";
 import { mockMix } from "./mockMix";
+import { createMockTags } from "./mockTags";
 
 const CAMELOT: [string, string][] = [
   ["Am", "8A"],
@@ -134,6 +136,7 @@ const TRACKS: TrackRow[] = Array.from({ length: 3000 }, (_, i) => ({
   missing: rand() < 0.02,
   needsAnalysis: rand() < 0.08,
   entryPosition: null,
+  tags: [],
 }));
 
 // Baseline play counts (as from rekordbox XML), before the mock sessions add theirs.
@@ -143,6 +146,10 @@ for (const t of TRACKS) {
   t.lastPlayed = `2025-${String(1 + Math.floor(rand() * 12)).padStart(2, "0")}-1${Math.floor(rand() * 9)}`;
 }
 const history = mockHistory(TRACKS);
+const tags = createMockTags(TRACKS.length);
+
+/** A row as the backend returns it: with its current tags. */
+const tagged = (r: TrackRow): TrackRow => ({ ...r, tags: tags.tagsOf(r.id) });
 
 const NODES: PlaylistNode[] = [
   { id: 1, parentId: null, name: "Gigs", isFolder: true, depth: 0, position: 0, entries: 0 },
@@ -298,6 +305,7 @@ function query(q: TrackQuery) {
       rows = rows.filter((r) => r.playCount >= f.min && r.playCount <= f.max);
     if (f.type === "playedSince")
       rows = rows.filter((r) => r.lastPlayed !== null && r.lastPlayed >= f.date);
+    if (f.type === "tagAny") rows = rows.filter((r) => tags.hasAny(r.id, f.ids));
   }
   const col = SORT[q.sort.column] ?? "title";
   const dir = q.sort.descending ? -1 : 1;
@@ -307,7 +315,7 @@ function query(q: TrackQuery) {
     return (x < y ? -1 : x > y ? 1 : 0) * dir;
   });
   return {
-    rows: rows.slice(q.offset, q.offset + q.limit),
+    rows: rows.slice(q.offset, q.offset + q.limit).map(tagged),
     total: rows.length,
     dividers,
     dividerView,
@@ -315,7 +323,7 @@ function query(q: TrackQuery) {
 }
 
 function detail(id: number): TrackDetail {
-  const row = TRACKS[id - 1] as TrackRow;
+  const row = tagged(TRACKS[id - 1] as TrackRow);
   return {
     track: {
       ...row,
@@ -401,6 +409,8 @@ const REPORT: ImportReport = {
   playlistsMatched: 0,
   playlistEntries: 2210,
   playlistEntriesSkipped: 0,
+  tagsCreated: 4,
+  tagsAssigned: 310,
   missingRoot: "/Volumes/OldDrive/Music",
   elapsedMs: 8400,
   cancelled: false,
@@ -1024,6 +1034,10 @@ mockIPC((cmd, payload) => {
       return { nodes: NODES };
     case "playlists_mutate":
       return mutate(args.op as PlaylistOp);
+    case "tags_get":
+      return tags.tree();
+    case "tags_mutate":
+      return tags.mutate(args.op as TagOp);
     case "settings_get":
       return settings;
     case "settings_set": {

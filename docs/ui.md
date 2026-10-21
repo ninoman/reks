@@ -117,14 +117,15 @@ menu items `--menu-item-h`.
 | `Textarea` | `size`: sm, md | native |
 | `Select` | `size`; native `<select>` with our chevron | native |
 | `Switch` | `size`: sm, md | Radix Switch |
-| `Checkbox` | `size`: sm, md; native, wrap in a `<label>` (Biome knows it as an input) | native |
+| `Checkbox` | `size`: sm, md; `indeterminate` (mixed); native, wrap in a `<label>` (Biome knows it as an input) | native |
 | `Slider` | `size`: sm, md; one value | Radix Slider |
 | `SegmentedControl` + `Segment` | `size`; one choice, can't be cleared (radiogroup) | Radix ToggleGroup |
+| `Chip` | removable label pill (`onRemove`, `removeLabel`) | – |
 | `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |
 | `Kbd` | `variant`: default, inverse | – |
 | `Tooltip` | `content`, `shortcut`, `side` | Radix Tooltip |
 | `DropdownMenu*` | Content, Item (`variant`: default, danger), CheckboxItem, Separator | Radix DropdownMenu |
-| `ContextMenu*` | Content, Item, Separator; wrap the whole area, not each row | Radix ContextMenu |
+| `ContextMenu*` | Content, Item, CheckboxItem (`checked="indeterminate"` shows a dash), Sub / SubTrigger / SubContent, Group / Label, Separator; wrap the whole area, not each row | Radix ContextMenu |
 | `Popover*` | Content (`align`, `sideOffset`) | Radix Popover |
 | `Dialog*` | Content `size`: sm, md, lg, xl (960 px, the grid editor), `closeOnOutsideClick`; Header, Title, Description, Body, Footer | Radix Dialog |
 | `Sheet` + `SheetHeader` | right-hand slide-over (non-modal, inside its parent) | Web Animations |
@@ -204,6 +205,29 @@ default, 4 with the toggle (shorter waveforms).
 - Sizes: `--knob-*`, `--fader-*`, `--meter-w`, `--deck-wave-h*`, `--deck-overview-h`,
   `--mixer-strip-w`, `--mixer-row-h`, `--mix-panel-max-h` (the panel scrolls
   inside 62% of the window height).
+
+## My Tags
+
+Two-level tags (category → tag, `tag.rs`). The store
+([`src/store/tags.ts`](../src/store/tags.ts)) holds the tree and runs every
+edit through `tags_mutate`; assigning patches the loaded table rows in place
+(selection and scroll stay, so several tags can be ticked in a row), deleting
+re-queries. Pure helpers (coverage, search, create offers) are in
+[`tagModel.ts`](../src/store/tagModel.ts).
+
+- `TagManagerDialog` (toolbar tag button, sidebar "My Tags" row, "Manage tags…"):
+  rename in place, up/down reorder, delete with a confirmation, add rows.
+- `TagSubmenu`: "My Tags" in the track context menu. One checkbox per tag
+  for the whole selection; a tag only some selected tracks have is mixed and a
+  click adds it to all; the menu stays open; the search field offers
+  "Create 'X' in <category>".
+- `TagPicker` (Popover body, search + checkboxes by category): the filter bar's
+  My Tags field (`FilterState.tagIds` → `tagAny`, counted in the Filters badge)
+  and the info panel's `TrackTags` chip editor.
+- "My Tags" table column, hidden until switched on.
+- States: loading, load error with Retry, no tags yet ("Create your first
+  tag"), no match for the search.
+- Dev: `npm run dev` serves tags from [`mockTags.ts`](../src/dev/mockTags.ts).
 
 ## Adding a component or variant
 

@@ -19,6 +19,7 @@ import {
   libraryFacets,
   libraryQuery,
   type Sort,
+  type TagId,
   type TrackQuery,
   type TrackRow,
 } from "../lib/ipc";
@@ -49,6 +50,8 @@ export interface FilterState {
   playsMax: number | null;
   /** "never", or played within this many days. */
   lastPlayed: LastPlayedFilter | null;
+  /** My Tags: tracks with at least one of these. */
+  tagIds: TagId[];
 }
 
 /** The "Last played" filter's choices. */
@@ -66,6 +69,7 @@ export const noFilters: FilterState = {
   playsMin: null,
   playsMax: null,
   lastPlayed: null,
+  tagIds: [],
 };
 
 export const defaultSort: Sort = { column: "title", descending: false };
@@ -114,6 +118,7 @@ export function buildFilters(f: FilterState, now: Date = new Date()): Filter[] {
   if (f.lastPlayed === "never") out.push({ type: "neverPlayed" });
   else if (f.lastPlayed !== null)
     out.push({ type: "playedSince", date: daysAgo(f.lastPlayed, now) });
+  if (f.tagIds.length > 0) out.push({ type: "tagAny", ids: [...f.tagIds] });
   return out;
 }
 
@@ -187,6 +192,8 @@ export interface LibraryState extends QueryInputs {
    * matches the filter or sort stays where it is until the next refresh.
    */
   replaceRow(row: TrackRow): void;
+  /** Rewrites the tags of the loaded rows of `trackIds` (after an assign), keeping selection and scroll. */
+  patchRowTags(trackIds: readonly number[], update: (tags: TagId[]) => TagId[]): void;
   loadFacets(): Promise<void>;
 }
 
@@ -308,6 +315,20 @@ export const useLibrary = create<LibraryState>()((set, get) => {
           changed = true;
         }
         return changed ? { pages } : {};
+      });
+    },
+    patchRowTags(trackIds, update) {
+      const ids = new Set(trackIds);
+      set((s) => {
+        const pages = new Map(s.pages);
+        for (const [p, rows] of pages) {
+          if (rows.some((r) => ids.has(r.id)))
+            pages.set(
+              p,
+              rows.map((r) => (ids.has(r.id) ? { ...r, tags: update(r.tags) } : r)),
+            );
+        }
+        return { pages };
       });
     },
     async loadFacets() {

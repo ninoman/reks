@@ -16,7 +16,10 @@ import {
   useLibrary,
 } from "../store/library";
 import { useKeyLabel } from "../store/settings";
+import { tagIndex } from "../store/tagModel";
+import { useTags } from "../store/tags";
 import { ChevronDownIcon } from "./icons";
+import { TagPicker } from "./TagPicker";
 import { Button } from "./ui/Button";
 import { Field as UiField } from "./ui/Field";
 import { Input } from "./ui/Input";
@@ -124,6 +127,40 @@ function KeyPicker() {
   );
 }
 
+/** My Tags picker: tracks with at least one of the ticked tags. */
+function TagFilterPicker() {
+  const tree = useTags((s) => s.tree);
+  const chosen = useLibrary((s) => s.filters.tagIds);
+  const setFilters = useLibrary((s) => s.setFilters);
+
+  const names = tree === null ? null : tagIndex(tree);
+  const summary =
+    chosen.length === 0
+      ? "Any"
+      : chosen.length === 1
+        ? (names?.get(chosen[0] as number)?.tag.name ?? "1 tag")
+        : `${chosen.length} tags`;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button size="sm" className="min-w-16 justify-between font-normal" aria-label="My Tags">
+          {summary}
+          <ChevronDownIcon />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent>
+        <TagPicker
+          coverageOf={(id) => (chosen.includes(id) ? "all" : "none")}
+          onToggle={(id, cov) =>
+            setFilters({ tagIds: cov === "all" ? chosen.filter((t) => t !== id) : [...chosen, id] })
+          }
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function FilterBar() {
   const facets = useLibrary((s) => s.facets);
   const f = useLibrary((s) => s.filters);
@@ -158,6 +195,10 @@ export function FilterBar() {
 
       <Field label="Key" set={f.keys.length > 0}>
         <KeyPicker />
+      </Field>
+
+      <Field label="My Tags" set={f.tagIds.length > 0}>
+        <TagFilterPicker />
       </Field>
 
       <Field label="BPM" set={f.bpmMin !== null || f.bpmMax !== null}>

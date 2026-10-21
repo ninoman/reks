@@ -36,8 +36,10 @@ import { usePanels } from "../store/panels";
 import { usePlayer } from "../store/player";
 import { shownPlaylist, usePlaylists } from "../store/playlists";
 import { primaryIndex } from "../store/selection";
+import { useTags } from "../store/tags";
 import type { ColumnSpec } from "./columns";
 import { DividerLabel } from "./DividerLabel";
+import { TagSubmenu } from "./TagSubmenu";
 import { ROW_HEIGHT } from "./trackTableModel";
 import {
   ContextMenu,
@@ -83,6 +85,8 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
   const playlistId = useLibrary((s) => s.filters.playlistId);
   const loadedId = usePlayer((s) => s.status.trackId);
   const deckCount = useMix((s) => s.deckCount);
+  // The My Tags column reads names from the tree: redraw when it changes.
+  useTags((s) => s.tree);
   const nodes = usePlaylists((s) => s.nodes);
   const rename = usePlaylists((s) => s.dividerRename);
   const view = shownPlaylist(nodes, playlistId);
@@ -405,6 +409,7 @@ export function TrackTable({ columns }: { columns: ColumnSpec[] }) {
           </ContextMenuItem>
         ))}
         <ContextMenuSeparator />
+        <TagSubmenu trackIds={selectedTrackIds()} />
         <ContextMenuItem
           disabled={selectedTrackIds().length === 0}
           onSelect={() => useConverter.getState().open(selectedTrackIds())}

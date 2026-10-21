@@ -303,6 +303,10 @@ function ReportBody({ report: r }: { report: ImportReport }) {
         <dd>
           {n(r.playlistEntries)} ({n(r.playlistEntriesSkipped)})
         </dd>
+        <dt>Tags created / assigned</dt>
+        <dd>
+          {n(r.tagsCreated)} / {n(r.tagsAssigned)}
+        </dd>
         <dt>Time</dt>
         <dd>{(r.elapsedMs / 1000).toFixed(1)} s</dd>
       </dl>

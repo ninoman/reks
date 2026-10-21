@@ -8,11 +8,32 @@ import type { VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 
 import { cn } from "../../lib/cn";
-import { menuContentVariants, menuItemVariants, menuSeparatorClass } from "./menu";
+import { CheckIcon, ChevronRightIcon, MinusIcon } from "../icons";
+import {
+  menuContentVariants,
+  menuIndicatorClass,
+  menuItemVariants,
+  menuSeparatorClass,
+} from "./menu";
 
 export { menuContentVariants as contextMenuContentVariants };
 export const ContextMenu = Menu.Root;
 export const ContextMenuTrigger = Menu.Trigger;
+export const ContextMenuSub = Menu.Sub;
+export const ContextMenuGroup = Menu.Group;
+
+/** Heading of a `ContextMenuGroup`. */
+export function ContextMenuLabel({ className, ...props }: ComponentProps<typeof Menu.Label>) {
+  return (
+    <Menu.Label
+      className={cn(
+        "px-2 pt-1.5 pb-0.5 text-2xs font-semibold tracking-caption text-fg-subtle uppercase",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
 export function ContextMenuContent({ className, ...props }: ComponentProps<typeof Menu.Content>) {
   return (
@@ -36,4 +57,52 @@ export function ContextMenuSeparator({
   ...props
 }: ComponentProps<typeof Menu.Separator>) {
   return <Menu.Separator className={cn(menuSeparatorClass, className)} {...props} />;
+}
+
+export function ContextMenuSubTrigger({
+  className,
+  children,
+  ...props
+}: ComponentProps<typeof Menu.SubTrigger>) {
+  return (
+    <Menu.SubTrigger
+      className={cn(menuItemVariants(), "data-[state=open]:bg-hover", className)}
+      {...props}
+    >
+      {children}
+      <ChevronRightIcon />
+    </Menu.SubTrigger>
+  );
+}
+
+export function ContextMenuSubContent({
+  className,
+  ...props
+}: ComponentProps<typeof Menu.SubContent>) {
+  return (
+    <Menu.Portal>
+      <Menu.SubContent className={cn(menuContentVariants(), className)} {...props} />
+    </Menu.Portal>
+  );
+}
+
+/** `checked="indeterminate"` shows a dash (some of the selection has it). */
+export function ContextMenuCheckboxItem({
+  className,
+  children,
+  checked,
+  ...props
+}: ComponentProps<typeof Menu.CheckboxItem>) {
+  return (
+    <Menu.CheckboxItem
+      className={cn(menuItemVariants({ inset: true }), className)}
+      checked={checked}
+      {...props}
+    >
+      <Menu.ItemIndicator className={menuIndicatorClass}>
+        {checked === "indeterminate" ? <MinusIcon /> : <CheckIcon />}
+      </Menu.ItemIndicator>
+      {children}
+    </Menu.CheckboxItem>
+  );
 }

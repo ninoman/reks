@@ -1,0 +1,39 @@
+/** A removable label pill (a tag on a track). `onRemove` adds the × button. */
+import { cva, type VariantProps } from "class-variance-authority";
+import type { ComponentProps } from "react";
+
+import { cn } from "../../lib/cn";
+import { CloseIcon } from "../icons";
+import { focusRing } from "./control";
+
+export const chipVariants = cva(
+  "inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-surface-strong px-2 text-xs leading-5 text-fg",
+);
+
+export type ChipProps = ComponentProps<"span"> &
+  VariantProps<typeof chipVariants> & {
+    onRemove?: () => void;
+    /** Names the × button: "Remove {removeLabel}". */
+    removeLabel?: string;
+  };
+
+export function Chip({ className, onRemove, removeLabel, children, ...props }: ChipProps) {
+  return (
+    <span className={cn(chipVariants(), className)} {...props}>
+      <span className="truncate">{children}</span>
+      {onRemove !== undefined && (
+        <button
+          type="button"
+          aria-label={`Remove ${removeLabel ?? "tag"}`}
+          className={cn(
+            "-mr-1 inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-fg-muted hover:bg-hover hover:text-fg [&_svg]:size-3",
+            focusRing,
+          )}
+          onClick={onRemove}
+        >
+          <CloseIcon />
+        </button>
+      )}
+    </span>
+  );
+}

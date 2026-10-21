@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activeFilterCount,
   buildFilters,
   buildQuery,
   daysAgo,
@@ -53,6 +54,17 @@ describe("buildQuery", () => {
     ]);
   });
 
+  it("sends the tag filter, and keeps it set aside while filters are off", () => {
+    const filters = { ...noFilters, tagIds: [2], playlistId: 7 };
+    expect(buildQuery(inputs({ filters }), 0).filters).toEqual([
+      { type: "playlist", id: 7 },
+      { type: "tagAny", ids: [2] },
+    ]);
+    expect(buildQuery(inputs({ filters, filtersEnabled: false }), 0).filters).toEqual([
+      { type: "playlist", id: 7 },
+    ]);
+  });
+
   it("passes the sort through", () => {
     const sort = { column: "bpm", descending: true } as const;
     expect(buildQuery(inputs({ sort }), 0).sort).toEqual(sort);
@@ -74,6 +86,7 @@ describe("buildFilters", () => {
         playsMin: null,
         playsMax: null,
         lastPlayed: null,
+        tagIds: [4, 9],
       }),
     ).toEqual([
       { type: "genre", genre: "House" },
@@ -83,7 +96,14 @@ describe("buildFilters", () => {
       { type: "ratingMin", rating: 3 },
       { type: "playlist", id: 11 },
       { type: "missing", missing: false },
+      { type: "tagAny", ids: [4, 9] },
     ]);
+  });
+
+  it("emits tagAny only with tags chosen, and counts it as one filter", () => {
+    expect(buildFilters({ ...noFilters, tagIds: [] })).toEqual([]);
+    expect(buildFilters({ ...noFilters, tagIds: [3] })).toEqual([{ type: "tagAny", ids: [3] }]);
+    expect(activeFilterCount({ ...noFilters, tagIds: [3, 4], genre: "House" })).toBe(2);
   });
 
   it("leaves out unset filters", () => {
