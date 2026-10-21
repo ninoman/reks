@@ -68,3 +68,21 @@ export function cueFits(cue: CueRouting, channels: number): boolean {
       return [...cue.master, ...cue.cue].every((c) => c < channels);
   }
 }
+
+/**
+ * Click on switch `i` of a group (filter modes, channel cues): a plain click
+ * picks that switch alone, Shift+click (`additive`) toggles it on top of the
+ * others. Clicking the only switch on turns it off, unless `keepOne` (filter
+ * modes: a unit always has a mode), when it stays on.
+ */
+export function pickSwitches(
+  on: readonly boolean[],
+  i: number,
+  additive: boolean,
+  keepOne: boolean,
+): boolean[] {
+  const next = additive
+    ? on.map((v, j) => (j === i ? !v : v))
+    : on.map((v, j) => (j === i ? !(v && on.every((w, k) => k === j || !w)) : false));
+  return keepOne && !next.some(Boolean) ? [...on] : next;
+}

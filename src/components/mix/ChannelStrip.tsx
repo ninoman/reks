@@ -8,6 +8,7 @@ import { Button } from "../ui/Button";
 import { Caption } from "../ui/Caption";
 import { Fader } from "../ui/Fader";
 import { Knob } from "../ui/Knob";
+import { Tooltip } from "../ui/Tooltip";
 import { AssignSwitch } from "./AssignSwitch";
 import { LiveMeter } from "./LiveMeter";
 
@@ -32,9 +33,11 @@ export interface ChannelStripProps {
   /** The deck on this channel has a track. */
   active: boolean;
   onChange: <K extends keyof ChannelValues>(param: K, value: ChannelValues[K]) => void;
+  /** CUE pressed; `additive` is Shift+click (cue this channel on top of others). */
+  onCue: (additive: boolean) => void;
 }
 
-export function ChannelStrip({ ch, values, active, onChange }: ChannelStripProps) {
+export function ChannelStrip({ ch, values, active, onChange, onCue }: ChannelStripProps) {
   const n = ch + 1;
   return (
     <section aria-label={`Channel ${n}`} className="flex w-(--mixer-strip-w) flex-col items-center">
@@ -61,14 +64,17 @@ export function ChannelStrip({ ch, values, active, onChange }: ChannelStripProps
         />
       </div>
       <div className={row}>
-        <Button
-          size="xs"
-          aria-pressed={values.cue}
-          aria-label={`Channel ${n} cue`}
-          onClick={() => onChange("cue", !values.cue)}
-        >
-          Cue
-        </Button>
+        <Tooltip content="Shift+click to cue more than one channel">
+          <Button
+            variant="control"
+            size="xs"
+            aria-pressed={values.cue}
+            aria-label={`Channel ${n} cue`}
+            onClick={(e) => onCue(e.shiftKey)}
+          >
+            Cue
+          </Button>
+        </Tooltip>
       </div>
       <div className="my-1 flex gap-1.5">
         <Fader

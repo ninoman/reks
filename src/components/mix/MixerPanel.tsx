@@ -3,6 +3,7 @@
  * section, then filter X, the crossfader (with its curve) and filter Y.
  */
 import type { FilterUnit as Unit } from "../../lib/ipc";
+import { pickSwitches } from "../../lib/mixView";
 import type { ChannelValues, FilterValues, MasterValues } from "../../store/mix";
 import { Caption } from "../ui/Caption";
 import { Fader } from "../ui/Fader";
@@ -25,6 +26,13 @@ export interface MixerPanelProps {
 }
 
 export function MixerPanel(p: MixerPanelProps) {
+  // A click cues one channel alone; Shift+click adds or removes it.
+  const cue = (ch: number, additive: boolean) => {
+    const was = p.channels.map((c) => c.cue);
+    pickSwitches(was, ch, additive, false).forEach((on, i) => {
+      if (on !== was[i]) p.onChannel(i, "cue", on);
+    });
+  };
   return (
     <section
       aria-label="Mixer"
@@ -40,6 +48,7 @@ export function MixerPanel(p: MixerPanelProps) {
             values={values}
             active={p.active[ch] ?? false}
             onChange={(param, value) => p.onChannel(ch, param, value)}
+            onCue={(additive) => cue(ch, additive)}
           />
         ))}
         <MasterSection values={p.master} onChange={p.onMaster} />

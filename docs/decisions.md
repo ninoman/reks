@@ -518,6 +518,12 @@ Date of decisions: 2026-10-18.
   Phase 6). It depends only on Phase 1 (imported grids, decode) and Phase 3
   (waveform columns, grid editor). Changed 2026-10-20 (maintainer's call): it
   was Phase 6, after Engine DJ.
+- Filter interaction: clarified 2026-10-21 (maintainer's call; the model is
+  unchanged). FREQ stays the Xone:92 law (LP closes to the left, HP closes to
+  the right). In the UI, a click on HP / BP / LP picks that mode alone and
+  Shift+click combines modes (a unit always keeps one); a click on a channel
+  CUE cues that channel alone (or clears it) and Shift+click adds or removes
+  it. Channels 1–2 default to filter X (left), 3–4 to Y (right).
 - Filter LFOs: dropped 2026-10-20 (maintainer's call). The Xone:92 has one
   per filter (R§9.1); reks models the filters without them. Adding them back
   needs a new decision.

@@ -13,6 +13,7 @@ export function AssignSwitch({
 }) {
   return (
     <SegmentedControl
+      variant="control"
       size="xs"
       aria-label={label}
       value={value}

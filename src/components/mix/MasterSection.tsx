@@ -47,6 +47,7 @@ export function MasterSection({ values, onChange }: MasterSectionProps) {
         aria-label="Cue and mix balance"
       />
       <Button
+        variant="control"
         size="xs"
         aria-pressed={values.splitCue}
         onClick={() => onChange("splitCue", !values.splitCue)}
@@ -54,6 +55,7 @@ export function MasterSection({ values, onChange }: MasterSectionProps) {
         Split
       </Button>
       <Button
+        variant="control"
         size="xs"
         aria-pressed={values.cuePostEq}
         aria-label="Cue after EQ"

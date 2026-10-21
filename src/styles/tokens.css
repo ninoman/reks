@@ -44,6 +44,12 @@
   --amber-600: #c08532;
   --amber-700: #9a6516;
 
+  /* Mixer level LEDs (DJM-style column), the same in both themes. */
+  --led-red: #ff3d3d;
+  --led-white: #f4f4f8;
+  --led-blue: #4f7bff;
+  --led-lime: #c3e03a;
+
   /* Grid editor waveform: 3-band on a dark deck in both themes (like the players). */
   --wave-low: #2f7bff;
   --wave-mid: #f29a2e;
@@ -117,6 +123,15 @@
   /* Deck markers on the same dark deck: cue point and hot cues. */
   --color-deck-cue: var(--amber-500);
   --color-deck-hotcue: var(--green-500);
+  /* Level meter LEDs, on the deck colour: +10 red, +6/+3 white, 0 blue, below lime. */
+  --color-led-clip: var(--led-red);
+  --color-led-hot: var(--led-white);
+  --color-led-ref: var(--led-blue);
+  --color-led-normal: var(--led-lime);
+
+  /* A hardware-style switch that is on (mixer buttons, assign switches): lit. */
+  --color-lit: var(--indigo-600);
+  --color-lit-fg: var(--mist-0);
 
   --color-track-pink: var(--rb-pink);
   --color-track-red: var(--rb-red);
@@ -150,6 +165,8 @@
 
   /* Hairline depth; only floating layers (menus, popovers, dialogs, sheet) cast a shadow. */
   --shadow-overlay: 0 8px 24px rgb(36 36 43 / 12%), 0 1px 3px rgb(36 36 43 / 8%);
+  /* The glow of a lit switch; the one non-overlay shadow. */
+  --shadow-lit: 0 0 8px rgb(66 80 219 / 45%);
 
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-snap: cubic-bezier(0.32, 0.72, 0, 1);
@@ -183,6 +200,8 @@
     --color-warning: var(--amber-500);
     --color-rating: var(--amber-500);
     --color-overlay: rgb(0 0 0 / 50%);
+    --color-lit: var(--indigo-550);
+    --shadow-lit: 0 0 10px rgb(81 100 240 / 60%);
     --color-waveform-rest: var(--mist-600);
     --shadow-overlay: 0 8px 24px rgb(0 0 0 / 45%), 0 1px 3px rgb(0 0 0 / 30%);
     color-scheme: dark;
@@ -230,10 +249,14 @@
   /* Mixer (phase 5): knobs, faders, deck waveforms, channel strips. */
   --knob-sm: 22px;
   --knob-md: 28px;
-  --fader-len: 84px;
+  --fader-len: 108px;
   --fader-w: 20px;
   --fader-cap: 12px;
-  --meter-w: 5px;
+  /* Level meter: 9 LEDs over --fader-len, labels beside them. */
+  --meter-w: 10px;
+  --meter-dot: 6px;
+  --meter-label-fs: 9px;
+  --meter-label-w: 14px;
   --deck-wave-h: 112px;
   --deck-wave-h-compact: 44px;
   --deck-overview-h: 14px;
