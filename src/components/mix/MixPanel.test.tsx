@@ -51,6 +51,8 @@ const state = (over: Partial<MixState> = {}): MixState => ({
   leader: null,
   leaderChosen: false,
   decks: [idleDeck, idleDeck, idleDeck, idleDeck],
+  meters: Array.from({ length: 4 }, () => ({ level: 0, clip: false })),
+  masterMeter: { level: 0, clip: false },
   ...over,
 });
 
@@ -61,6 +63,8 @@ beforeEach(() => {
   vi.mocked(ipc.mixDeviceOptions).mockResolvedValue({
     rates: [44_100, 48_000],
     defaultRate: 48_000,
+    channels: 2,
+    defaultCue: { type: "off" },
     bufferFrames: [64, 1024],
   });
   mixControl.mockResolvedValue(undefined);
@@ -82,6 +86,10 @@ describe("MixPanel", () => {
     render(<MixPanel />);
     expect(screen.getByText("Audio output off")).toBeTruthy();
     await screen.findByRole("option", { name: "Laptop Speakers" });
+    // Two outputs: no cue on 3/4.
+    expect(
+      (screen.getByRole("option", { name: /cue on 3\/4/ }) as HTMLOptionElement).disabled,
+    ).toBe(true);
     // Buffer sizes outside the device's range are not offered.
     expect(screen.queryByRole("option", { name: "2048 frames" })).toBeNull();
     fireEvent.change(screen.getByLabelText("Buffer"), { target: { value: "256" } });
@@ -102,6 +110,14 @@ describe("MixPanel", () => {
     await waitFor(() =>
       expect(mixControl).toHaveBeenCalledWith({ type: "crossfader", pos: 0.5, curve: 0 }),
     );
+
+    act(() => push?.(state({ masterMeter: { level: 0.5, clip: false } })));
+    const master = screen.getByRole("meter", { name: "Master meter" });
+    expect(master.getAttribute("aria-valuenow")).toBe("-6");
+    act(() => push?.(state({ masterMeter: { level: 1, clip: true } })));
+    // The engine reports a clip once; the meter holds it.
+    act(() => push?.(state({ masterMeter: { level: 0.5, clip: false } })));
+    expect(master.getAttribute("aria-valuetext")).toBe("Clipping");
 
     act(() => push?.(state({ deviceLost: true })));
     expect(screen.getByRole("alert").textContent).toMatch(/went away/);

@@ -184,16 +184,17 @@ pub enum Control {
    the deck wins), `mix_control` (`MixControl` mirrors `Control`; seek in ms;
    `Load` is `mix_load`). Waveforms and beat lines reuse `waveform_columns`
    (raw `ArrayBuffer`) and `beatgrid_get`. Dev mock: `src/dev/mockMix.ts`.
-   No meters in `MixState` yet: `EngineState` has none until task 6 wires
-   them; add them to `MixState` and `ipc.ts` then.
+   `MixState` carries the channel and master meters. `mix_device_options`
+   reports the device's output count and the cue routing to preselect
+   (`reks_mix::default_cue_routing`: cue on 3/4 with four outputs, else off).
 9. [x] **UI**: mixer panel, 2/4-deck layout, scrolling waveforms with beat markers
    and sync phase, "load to deck" from the track table and playlists, shortcuts.
    Done 2026-10-21: the Mix panel ([`../ui.md`](../ui.md#mix-panel-phase-5),
    `src/components/mix/`, `src/store/mix.ts`), new base components `Knob`,
    `Fader`, `Caption`. Mixer positions live in the UI store and are all sent
    after each start, so the engine matches the panel. Verified in the
-   browser with the dev mock only; on a real engine the mixer controls do
-   nothing until tasks 6–7 land, and meters are still to add.
+   browser with the dev mock only, not yet on the real engine. Channel meters
+   sit beside the faders and the master meter in the master section.
 10. **Key lock evaluation**: listen to `timestretch`, `signalsmith-stretch` and
     `rubberband` at ±6% on three techno tracks and one vocal track; record the
     choice in D21; add it as a per-deck toggle, or record why not.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { formatClock, formatTempo, phaseOffset, tempoFader, tempoRatio } from "./mixView";
+import type { CueRouting } from "./ipc";
+import { cueFits, formatClock, formatTempo, phaseOffset, tempoFader, tempoRatio } from "./mixView";
 
 describe("tempo fader", () => {
   it("is slower at the top and faster at the bottom", () => {
@@ -39,5 +40,16 @@ describe("formatClock", () => {
     expect(formatClock(83_456)).toBe("1:23.4");
     expect(formatClock(5_000, true)).toBe("-0:05.0");
     expect(formatClock(-3)).toBe("0:00.0");
+  });
+});
+
+describe("cueFits", () => {
+  it("matches the outputs a routing needs", () => {
+    const outputs: CueRouting = { type: "outputs", master: [0, 1], cue: [2, 3] };
+    expect(cueFits({ type: "off" }, 1)).toBe(true);
+    expect(cueFits({ type: "splitMono" }, 1)).toBe(false);
+    expect(cueFits({ type: "splitMono" }, 2)).toBe(true);
+    expect(cueFits(outputs, 2)).toBe(false);
+    expect(cueFits(outputs, 4)).toBe(true);
   });
 });

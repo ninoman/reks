@@ -9,7 +9,7 @@
  */
 
 import type { Channel } from "@tauri-apps/api/core";
-import type { DeckLoaded, DeckView, MixConfig, MixControl, MixState } from "../lib/ipc";
+import type { DeckLoaded, DeckView, MeterView, MixConfig, MixControl, MixState } from "../lib/ipc";
 
 const DURATION_MS = 30_000;
 const FIRST_BEAT_MS = 12;
@@ -114,7 +114,14 @@ function snapshot(): MixState {
     leader: leader(),
     leaderChosen: chosenLeader !== null,
     decks: decks.map((d) => ({ ...d.view })),
+    meters: decks.map((d) => meter(d.view.playing)),
+    masterMeter: meter(decks.some((d) => d.view.playing)),
   };
+}
+
+/** A plausible moving level while playing. */
+function meter(playing: boolean): MeterView {
+  return { level: playing ? 0.45 + 0.25 * Math.abs(Math.sin(Date.now() / 90)) : 0, clip: false };
 }
 
 function snap(d: Deck, ms: number): number {
@@ -215,8 +222,20 @@ export function mockMix(
   switch (cmd) {
     case "mix_device_options":
       return args.device === "USB Audio Interface"
-        ? { rates: [44_100, 48_000, 88_200, 96_000], defaultRate: 48_000, bufferFrames: [32, 2048] }
-        : { rates: [44_100, 48_000], defaultRate: 48_000, bufferFrames: [64, 4096] };
+        ? {
+            rates: [44_100, 48_000, 88_200, 96_000],
+            defaultRate: 48_000,
+            channels: 4,
+            defaultCue: { type: "outputs", master: [0, 1], cue: [2, 3] },
+            bufferFrames: [32, 2048],
+          }
+        : {
+            rates: [44_100, 48_000],
+            defaultRate: 48_000,
+            channels: 2,
+            defaultCue: { type: "off" },
+            bufferFrames: [64, 4096],
+          };
     case "mix_start": {
       config = args.config as MixConfig;
       decks = Array.from({ length: 4 }, emptyDeck);

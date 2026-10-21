@@ -9,6 +9,7 @@ import { Caption } from "../ui/Caption";
 import { Fader } from "../ui/Fader";
 import { Knob } from "../ui/Knob";
 import { AssignSwitch } from "./AssignSwitch";
+import { LiveMeter } from "./LiveMeter";
 
 type EqParam = "eqHi" | "eqMid1" | "eqMid2" | "eqLo";
 
@@ -69,13 +70,15 @@ export function ChannelStrip({ ch, values, active, onChange }: ChannelStripProps
           Cue
         </Button>
       </div>
-      <Fader
-        className="my-1"
-        value={values.fader}
-        defaultValue={1}
-        onValueChange={(v) => onChange("fader", v)}
-        aria-label={`Channel ${n} fader`}
-      />
+      <div className="my-1 flex gap-1.5">
+        <Fader
+          value={values.fader}
+          defaultValue={1}
+          onValueChange={(v) => onChange("fader", v)}
+          aria-label={`Channel ${n} fader`}
+        />
+        <LiveMeter source={ch} aria-label={`Channel ${n} meter`} />
+      </div>
       <div className={row}>
         <AssignSwitch
           label={`Channel ${n} crossfader assign`}

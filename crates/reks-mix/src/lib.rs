@@ -33,3 +33,4 @@ pub use graph::{
     TEMPO_MAX, TEMPO_MIN,
 };
 pub use player::{Player, PlayerState, Reopened};
+pub use routing::default_cue_routing;

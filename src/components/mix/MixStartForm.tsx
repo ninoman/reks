@@ -3,6 +3,7 @@
  * where the headphone cue goes.
  */
 import type { CueRouting, MixConfig, MixDeviceOptions } from "../../lib/ipc";
+import { cueFits } from "../../lib/mixView";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { Select } from "../ui/Select";
@@ -93,11 +94,15 @@ export function MixStartForm({
             if (choice !== undefined) onChange({ cue: choice[1] });
           }}
         >
-          {CUE_CHOICES.map(([k, , label]) => (
-            <option key={k} value={k}>
-              {label}
-            </option>
-          ))}
+          {CUE_CHOICES.map(([k, routing, label]) => {
+            // Unknown outputs until the options arrive: offer everything.
+            const fits = options === null || cueFits(routing, options.channels);
+            return (
+              <option key={k} value={k} disabled={!fits}>
+                {fits ? label : `${label} (needs ${k === "outputs" ? 4 : 2} outputs)`}
+              </option>
+            );
+          })}
         </Select>
       </Field>
       <Button type="submit" variant="primary" disabled={starting}>

@@ -583,6 +583,10 @@ export interface MixConfig {
 export interface MixDeviceOptions {
   rates: number[];
   defaultRate: number;
+  /** Output channels the stream opens with. */
+  channels: number;
+  /** The cue routing to preselect: cue on 3/4 with four outputs, else off. */
+  defaultCue: CueRouting;
   /** `[min, max]` frames, when the platform reports them. */
   bufferFrames: [number, number] | null;
 }
@@ -610,7 +614,13 @@ export interface DeckView {
   quantise: boolean;
 }
 
-/** Engine state, about 60 a second. No meters yet (phase 5 task 6). */
+/** A peak meter: `level` linear (1 = 0 dBFS); `clip` reached 0 dBFS since the last state. */
+export interface MeterView {
+  level: number;
+  clip: boolean;
+}
+
+/** Engine state, about 60 a second. */
 export interface MixState {
   device: string;
   sampleRate: number;
@@ -621,6 +631,10 @@ export interface MixState {
   leader: number | null;
   leaderChosen: boolean;
   decks: DeckView[];
+  /** Channel meters, after EQ and filter, before the fader. */
+  meters: MeterView[];
+  /** Master meter, before the limiter. */
+  masterMeter: MeterView;
 }
 
 export interface HotCueView {

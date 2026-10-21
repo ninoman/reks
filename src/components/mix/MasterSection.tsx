@@ -1,12 +1,12 @@
 /**
- * Master and headphone cue: master level, cue level, cue/mix balance, split
- * cue and post-EQ cue. No meters yet (the engine reports none until phase 5
- * task 6).
+ * Master and headphone cue: master level and meter, cue level, cue/mix
+ * balance, split cue and post-EQ cue.
  */
 import type { MasterValues } from "../../store/mix";
 import { Button } from "../ui/Button";
 import { Caption } from "../ui/Caption";
 import { LabelledKnob } from "./LabelledKnob";
+import { LiveMeter } from "./LiveMeter";
 
 export interface MasterSectionProps {
   values: MasterValues;
@@ -27,6 +27,7 @@ export function MasterSection({ values, onChange }: MasterSectionProps) {
         onValueChange={(v) => onChange("level", v)}
         aria-label="Master level"
       />
+      <LiveMeter source="master" aria-label="Master meter" />
       <Caption tone="default" className="mt-2">
         Cue
       </Caption>

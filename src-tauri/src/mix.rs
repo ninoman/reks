@@ -59,7 +59,7 @@ impl MixSlot {
 }
 
 /// Headphone cue routing, as the UI sends it.
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum CueRoutingArg {
     Off,
@@ -73,6 +73,16 @@ impl From<CueRoutingArg> for reks_mix::CueRouting {
             CueRoutingArg::Off => Self::Off,
             CueRoutingArg::SplitMono => Self::SplitMono,
             CueRoutingArg::Outputs { master, cue } => Self::Outputs { master, cue },
+        }
+    }
+}
+
+impl From<reks_mix::CueRouting> for CueRoutingArg {
+    fn from(c: reks_mix::CueRouting) -> Self {
+        match c {
+            reks_mix::CueRouting::Off => Self::Off,
+            reks_mix::CueRouting::SplitMono => Self::SplitMono,
+            reks_mix::CueRouting::Outputs { master, cue } => Self::Outputs { master, cue },
         }
     }
 }
@@ -96,6 +106,10 @@ pub struct MixConfig {
 pub struct MixDeviceOptions {
     pub rates: Vec<u32>,
     pub default_rate: u32,
+    /// Output channels the stream opens with.
+    pub channels: u16,
+    /// The cue routing to preselect for this device.
+    pub default_cue: CueRoutingArg,
     /// `[min, max]` frames, when the platform reports them.
     pub buffer_frames: Option<[u32; 2]>,
 }
@@ -123,8 +137,25 @@ pub struct DeckView {
     pub quantise: bool,
 }
 
-/// The mixer state streamed to the UI. Meters are not here yet: the engine
-/// state has none until phase 5 task 6 lands.
+/// A peak meter: `level` linear (1.0 = 0 dBFS) with a falling display;
+/// `clip` when a sample reached 0 dBFS since the last state.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MeterView {
+    pub level: f32,
+    pub clip: bool,
+}
+
+impl From<reks_mix::MeterState> for MeterView {
+    fn from(m: reks_mix::MeterState) -> Self {
+        Self {
+            level: m.level,
+            clip: m.clip,
+        }
+    }
+}
+
+/// The mixer state streamed to the UI.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MixState {
@@ -138,6 +169,10 @@ pub struct MixState {
     pub leader: Option<u8>,
     pub leader_chosen: bool,
     pub decks: Vec<DeckView>,
+    /// Channel meters, after EQ and filter, before the fader.
+    pub meters: Vec<MeterView>,
+    /// Master meter, before the limiter.
+    pub master_meter: MeterView,
 }
 
 fn frames_to_ms(frames: i64, rate: u32) -> f64 {
@@ -185,6 +220,8 @@ fn snapshot(slot: &mut MixSlot) -> Option<MixState> {
             .zip(decks)
             .map(|(d, l)| deck_view(d, l, rate))
             .collect(),
+        meters: st.channels.iter().map(|&m| m.into()).collect(),
+        master_meter: st.master.into(),
     })
 }
 
@@ -203,6 +240,8 @@ pub async fn mix_device_options(device: Option<String>) -> CmdResult<MixDeviceOp
     Ok(MixDeviceOptions {
         rates: o.rates,
         default_rate: o.default_rate,
+        channels: o.channels,
+        default_cue: reks_mix::default_cue_routing(o.channels).into(),
         buffer_frames: o.buffer_frames.map(|(a, b)| [a, b]),
     })
 }

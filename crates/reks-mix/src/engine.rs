@@ -55,6 +55,8 @@ pub struct DeviceOptions {
     /// The [`COMMON_RATES`] the device offers.
     pub rates: Vec<u32>,
     pub default_rate: u32,
+    /// Output channels the stream opens with (the device's default).
+    pub channels: u16,
     /// Smallest and largest buffer in frames, when the platform reports them.
     pub buffer_frames: Option<(u32, u32)>,
 }
@@ -84,6 +86,7 @@ pub fn device_options(device: Option<&str>) -> Result<DeviceOptions> {
     Ok(DeviceOptions {
         rates,
         default_rate: default.sample_rate(),
+        channels: default.channels(),
         buffer_frames,
     })
 }

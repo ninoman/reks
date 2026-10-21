@@ -157,7 +157,9 @@ one caption column, the master and cue section, then filter X, the crossfader
 and filter Y. Decks 1 and 3 sit left of it, 2 and 4 right; 2 decks by
 default, 4 with the toggle (shorter waveforms).
 
-- States: output off (start form: device, rate, buffer, cue routing), opening,
+- States: output off (start form: device, rate, buffer, cue routing; the
+  device's cue routing is preselected until the user picks one, and routings
+  it has too few outputs for are disabled), opening,
   error (failed start, device lost), running. A deck is empty (how to load),
   loading, failed or loaded; a track without a grid says sync needs one.
 - Waveforms draw on the dark `deck` like the grid editor: 8 s scrolling with
@@ -174,8 +176,11 @@ default, 4 with the toggle (shorter waveforms).
   7–0 hot cues A–D, Z/X/C crossfader. Space stays with the preview player.
 - The mixer is memoised away from the 60 Hz engine state; only the decks
   re-render with it.
-- No meters yet: the engine reports none until phase 5 task 6.
-- Sizes: `--knob-*`, `--fader-*`, `--deck-wave-h*`, `--deck-overview-h`,
+- Meters (`ui/Meter`): peak on a −48…0 dBFS scale, warning colour above
+  −6 dB, a clip cap held for 1 s (the engine reports a clip once). Each meter
+  subscribes to its own value (`useMeter`, `mix/LiveMeter`), so the
+  memoised mixer still skips the 60 Hz renders.
+- Sizes: `--knob-*`, `--fader-*`, `--meter-w`, `--deck-wave-h*`, `--deck-overview-h`,
   `--mixer-strip-w`, `--mixer-row-h`, `--mix-panel-max-h` (the panel scrolls
   inside 62% of the window height).
 

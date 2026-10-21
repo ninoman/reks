@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { MixState } from "../lib/ipc";
+import type { CueRouting, MixState } from "../lib/ipc";
 
 vi.mock("../lib/ipc", () => ({
   DECKS: 4,
@@ -28,7 +28,18 @@ const running: MixState = {
   leader: null,
   leaderChosen: false,
   decks: [],
+  meters: Array.from({ length: 4 }, () => ({ level: 0, clip: false })),
+  masterMeter: { level: 0, clip: false },
 };
+
+const outputs4: CueRouting = { type: "outputs", master: [0, 1], cue: [2, 3] };
+const options = (channels: number) => ({
+  rates: [48_000],
+  defaultRate: 48_000,
+  channels,
+  defaultCue: channels >= 4 ? outputs4 : ({ type: "off" } satisfies CueRouting),
+  bufferFrames: null,
+});
 
 const initial = useMix.getState();
 
@@ -50,6 +61,26 @@ afterEach(() => {
 });
 
 describe("mix store", () => {
+  it("preselects each device's cue routing until the user picks one", async () => {
+    vi.mocked(ipc.playerDevices).mockResolvedValue(["Laptop", "Interface"]);
+    vi.mocked(ipc.mixDeviceOptions).mockImplementation(async (d) =>
+      options(d === "Interface" ? 4 : 2),
+    );
+    await useMix.getState().loadDevices();
+    expect(useMix.getState().config.cue).toEqual({ type: "off" });
+    await useMix.getState().setConfig({ device: "Interface" });
+    expect(useMix.getState().config.cue).toEqual(outputs4);
+
+    // A choice the next device can take is kept; one it cannot falls back.
+    await useMix.getState().setConfig({ cue: { type: "splitMono" } });
+    await useMix.getState().setConfig({ device: "Laptop" });
+    expect(useMix.getState().config.cue).toEqual({ type: "splitMono" });
+    await useMix.getState().setConfig({ device: "Interface" });
+    await useMix.getState().setConfig({ cue: outputs4 });
+    await useMix.getState().setConfig({ device: "Laptop" });
+    expect(useMix.getState().config.cue).toEqual({ type: "off" });
+  });
+
   it("load starts the output, then fetches the waveform and beats", async () => {
     vi.mocked(ipc.mixLoad).mockResolvedValue({
       deck: 1,

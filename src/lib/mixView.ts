@@ -3,6 +3,8 @@
  * mixer laws are in Rust, `reks-mix`).
  */
 
+import type { CueRouting } from "./ipc";
+
 /** Tempo fader ranges, as a fraction either side of 1. */
 export const TEMPO_RANGES = [0.08, 0.16, 0.5] as const;
 export type TempoRange = (typeof TEMPO_RANGES)[number];
@@ -54,3 +56,15 @@ export function formatClock(ms: number, remaining = false): string {
 /** X / off / Y switch positions as the engine takes them. */
 export type Assign = "x" | "off" | "y";
 export const ASSIGN_VALUE: Record<Assign, number> = { x: 0, off: 0.5, y: 1 };
+
+/** Whether a device with `channels` outputs can take `cue` (as reks-mix checks at start). */
+export function cueFits(cue: CueRouting, channels: number): boolean {
+  switch (cue.type) {
+    case "off":
+      return true;
+    case "splitMono":
+      return channels >= 2;
+    case "outputs":
+      return [...cue.master, ...cue.cue].every((c) => c < channels);
+  }
+}

@@ -5,6 +5,7 @@
  * which it sends as `MixControl`s. Tempo, sync and every mixer law live in
  * Rust; this only forwards.
  */
+import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 
 import {
@@ -29,7 +30,7 @@ import {
   playerDevices,
   waveformColumns,
 } from "../lib/ipc";
-import { ASSIGN_VALUE, type Assign, NUDGE, type TempoRange } from "../lib/mixView";
+import { ASSIGN_VALUE, type Assign, cueFits, NUDGE, type TempoRange } from "../lib/mixView";
 import { usePlayer } from "./player";
 
 export type EngineStatus = "stopped" | "starting" | "running" | "error";
@@ -246,6 +247,20 @@ export const useMix = create<MixStore>((set, get) => {
     set({ live });
   }
 
+  /** The user picked a cue routing; until then each device gets its own default. */
+  let cueChosen = false;
+
+  /**
+   * New device options. Preselects the device's cue routing unless the user
+   * chose one that the device can take.
+   */
+  function setOptions(options: MixDeviceOptions) {
+    set((s) => {
+      const keep = cueChosen && cueFits(s.config.cue, options.channels);
+      return { options, config: keep ? s.config : { ...s.config, cue: options.defaultCue } };
+    });
+  }
+
   function deckView(deck: number) {
     return get().live?.decks[deck];
   }
@@ -270,7 +285,8 @@ export const useMix = create<MixStore>((set, get) => {
           playerDevices(),
           mixDeviceOptions(get().config.device),
         ]);
-        set({ devices, options });
+        set({ devices });
+        setOptions(options);
       } catch (e) {
         set({ error: message(e) });
       }
@@ -280,10 +296,11 @@ export const useMix = create<MixStore>((set, get) => {
       const deviceChanged = "device" in patch && patch.device !== get().config.device;
       // A new device has its own rates and buffer sizes: back to its defaults.
       const reset = deviceChanged ? { sampleRate: null, bufferFrames: null } : {};
+      if ("cue" in patch) cueChosen = true;
       set((s) => ({ config: { ...s.config, ...reset, ...patch } }));
       if (deviceChanged) {
         try {
-          set({ options: await mixDeviceOptions(get().config.device) });
+          setOptions(await mixDeviceOptions(get().config.device));
         } catch (e) {
           set({ options: null, error: message(e) });
         }
@@ -445,3 +462,28 @@ export const useMix = create<MixStore>((set, get) => {
     },
   };
 });
+
+/** How long a clip stays lit; the engine reports it for one state only. */
+export const CLIP_HOLD_MS = 1000;
+
+/**
+ * One meter from the live engine state: a channel (0..3) or the master.
+ * Subscribes to that meter alone, so the rest of the mixer does not render
+ * at the state rate.
+ */
+export function useMeter(source: number | "master"): { level: number; clip: boolean } {
+  const pick = (s: MixStore) =>
+    source === "master" ? s.live?.masterMeter : s.live?.meters[source];
+  const level = useMix((s) => pick(s)?.level ?? 0);
+  const clip = useMix((s) => pick(s)?.clip ?? false);
+  const [held, setHeld] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => {
+    if (!clip) return;
+    setHeld(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setHeld(false), CLIP_HOLD_MS);
+  }, [clip]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return { level, clip: clip || held };
+}
