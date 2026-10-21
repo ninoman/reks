@@ -151,6 +151,21 @@ Performance rule for the track table: rows and cells are plain `div`s with
 constant class strings; per-row state is `data-*` attributes styled with
 `data-[selected]:…`. No base component, Radix or `cn()` call per cell.
 
+### Split track lists
+
+Shift+click a playlist or folder in the tree to open it in a pane under the
+track table ([`TrackLists.tsx`](../src/components/TrackLists.tsx)); the lists
+stack top to bottom and share the height. With more than one list, each has a
+header (name, track count, × to close); closing the main list moves the first
+pane up into it. Each pane is its own library store
+([`panes.ts`](../src/store/panes.ts)) with its own sort and selection, handed
+to `TrackTable` through `LibraryStoreContext`. Search, filters, the rule
+builder and the info panel stay with the main list. A playlist shows in one
+list at a time. Rows dragged from one list onto a playlist pane sorted by
+position are added at the drop line. Edits that change rows reach every list
+(`allLibraries()`). An (i) on the tree's Playlists row explains all this in a
+tooltip.
+
 ## Start-up splash
 
 The library opens off the main thread

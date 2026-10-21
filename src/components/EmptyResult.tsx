@@ -4,13 +4,15 @@
  * what to do about it. Waits for the query to land first.
  */
 
-import { activeFilterCount, useLibrary } from "../store/library";
+import { activeFilterCount } from "../store/library";
 import { shownPlaylist, usePlaylists } from "../store/playlists";
 import { clearAllFilters } from "../store/rules";
 import { ruleLeafCount } from "../store/ruleTree";
+import { useLibraryStore } from "./libraryStoreContext";
 import { Button } from "./ui/Button";
 
 export function EmptyResult() {
+  const useLibrary = useLibraryStore();
   const total = useLibrary((s) => s.total);
   const landed = useLibrary((s) => s.pagesGeneration === s.generation);
   const failed = useLibrary((s) => s.error !== null);

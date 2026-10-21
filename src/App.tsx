@@ -2,11 +2,13 @@
  * Library window: the app header (library-wide actions) across the top; the
  * playlist and Histories trees on the left (an open history session replaces
  * the toolbar, filters and table); toolbar, filter bar and track table in the
- * middle, with the track info panel sliding over the table's right edge when
- * its toolbar button is on; the mix panel (decks and mixer) under them when
- * the Mix button is on, with its own shortcuts (`src/lib/mixKeys.ts`),
- * otherwise the player deck alone (D30), under the player's header row
- * (volume, output, Mix). Space plays and pauses the player deck wherever focus is, except in text fields, dialogs and menus;
+ * middle, with Shift+clicked playlists split under it (`TrackLists`) and the
+ * track info panel sliding over the tables' right edge when its toolbar
+ * button is on; the mix panel (decks and mixer) under them when the Mix
+ * button is on, with its own shortcuts (`src/lib/mixKeys.ts`), otherwise the
+ * player deck alone (D30), under the player's header row (volume, output,
+ * Mix). Space plays and pauses the player deck wherever focus is, except in
+ * text fields, dialogs and menus;
  * Cmd/Ctrl+, opens Settings.
  * Settings load first and restore the window state (columns, panels, volume).
  * Mounted only once the library is open (main.tsx); takes the splash down.
@@ -17,7 +19,6 @@ import { AppHeader } from "./components/AppHeader";
 import { ConvertDialog } from "./components/ConvertDialog";
 import { DEFAULT_HIDDEN } from "./components/columns";
 import { DevicesDialog } from "./components/DevicesDialog";
-import { EmptyResult } from "./components/EmptyResult";
 import { ExportWizard } from "./components/ExportWizard";
 import { FilterBar } from "./components/FilterBar";
 import { HistoryImportDialog } from "./components/HistoryImportDialog";
@@ -32,14 +33,11 @@ import { PlaylistTree } from "./components/PlaylistTree";
 import { RuleBuilder } from "./components/RuleBuilder";
 import { SessionView } from "./components/SessionView";
 import { SettingsDialog } from "./components/SettingsDialog";
-import { SmartListHeader } from "./components/SmartListHeader";
 import { TagManagerDialog } from "./components/TagManagerDialog";
 import { TagsSidebarEntry } from "./components/TagsSidebarEntry";
 import { ToastHost } from "./components/ToastHost";
-import { TrackInfoPanel } from "./components/TrackDetailPanel";
-import { TrackTable } from "./components/TrackTable";
+import { TrackLists } from "./components/TrackLists";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
-import { Sheet } from "./components/ui/Sheet";
 import { keepsSpace } from "./lib/keys";
 import { dismissSplash } from "./lib/splash";
 import { useAnalysis } from "./store/analysis";
@@ -60,7 +58,6 @@ export default function App() {
   const table = useTrackTable();
   const error = useLibrary((s) => s.error);
   const filterBarOpen = usePanels((s) => s.filterBarOpen);
-  const infoOpen = usePanels((s) => s.infoOpen);
   const sessionOpen = useHistory((s) => s.openId !== null);
   const mixOpen = usePanels((s) => s.mixOpen);
   const rulesOpen = useRules((s) => s.open);
@@ -131,7 +128,6 @@ export default function App() {
               <LibraryToolbar table={table} />
               {filterBarOpen && <FilterBar />}
               {filterBarOpen && rulesOpen && <RuleBuilder />}
-              <SmartListHeader />
               {error !== null && (
                 <div
                   className="border-b border-border px-2.5 py-1 text-danger select-text"
@@ -140,13 +136,7 @@ export default function App() {
                   {error}
                 </div>
               )}
-              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-                <TrackTable columns={visibleColumns(table)} />
-                <EmptyResult />
-                <Sheet open={infoOpen}>
-                  <TrackInfoPanel />
-                </Sheet>
-              </div>
+              <TrackLists columns={visibleColumns(table)} />
             </>
           )}
         </main>

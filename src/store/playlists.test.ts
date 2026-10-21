@@ -14,6 +14,7 @@ const playlistsGet = vi.mocked(ipc.playlistsGet);
 const playlistsMutate = vi.mocked(ipc.playlistsMutate);
 const { useLibrary } = await import("./library");
 const { NEW_DIVIDER_LABEL, usePlaylists } = await import("./playlists");
+const { usePanes } = await import("./panes");
 const { initialTree } = await import("./playlistTree");
 
 const set: PlaylistNode = {
@@ -26,6 +27,7 @@ const set: PlaylistNode = {
   entries: 2,
   smart: false,
 };
+const other: PlaylistNode = { ...set, id: 8, name: "Peak", position: 1 };
 const done: PlaylistOutcome = { type: "done", createdId: null, added: 2, skipped: 0 };
 const dups: PlaylistOutcome = {
   type: "duplicates",
@@ -50,6 +52,8 @@ beforeEach(() => {
     dividers: [],
     dividerView: false,
   });
+  usePanes.setState({ panes: [] });
+  useLibrary.getState().showPlaylist(null, true);
   usePlaylists.setState({
     nodes: [set],
     tree: initialTree,
@@ -135,6 +139,7 @@ describe("usePlaylists", () => {
 
   it("insert divider selects the new row and renames it in place", async () => {
     playlistsMutate.mockResolvedValue(done);
+    usePlaylists.getState().select(7);
     await usePlaylists.getState().insertDivider(7, 2);
     expect(playlistsMutate).toHaveBeenCalledWith({
       type: "insertDivider",
@@ -186,5 +191,58 @@ describe("usePlaylists", () => {
   it("a drag of dividers only adds nothing", async () => {
     await usePlaylists.getState().addTracks(7, []);
     expect(playlistsMutate).not.toHaveBeenCalled();
+  });
+
+  describe("split panes", () => {
+    const paneIds = () => usePanes.getState().panes.map((p) => p.playlistId);
+
+    beforeEach(() => {
+      usePlaylists.setState({ nodes: [set, other] });
+      playlistsGet.mockResolvedValue({ nodes: [set, other] });
+    });
+
+    it("Shift+click opens a playlist once, and not one the main list shows", () => {
+      usePlaylists.getState().select(7);
+      usePlaylists.getState().openInPane(7);
+      usePlaylists.getState().openInPane(8);
+      usePlaylists.getState().openInPane(8);
+      expect(paneIds()).toEqual([8]);
+      const pane = usePanes.getState().panes[0];
+      expect(pane?.store.getState().filters.playlistId).toBe(8);
+      expect(pane?.store.getState().sort.column).toBe("playlistPosition");
+    });
+
+    it("showing a pane's playlist in the main list closes that pane", () => {
+      usePlaylists.getState().openInPane(8);
+      usePlaylists.getState().select(8);
+      expect(paneIds()).toEqual([]);
+      expect(useLibrary.getState().filters.playlistId).toBe(8);
+    });
+
+    it("closing the main list moves the first pane up into it", () => {
+      usePlaylists.getState().select(7);
+      usePlaylists.getState().openInPane(8);
+      usePlaylists.getState().closeMainList();
+      expect(paneIds()).toEqual([]);
+      expect(useLibrary.getState().filters.playlistId).toBe(8);
+      expect(usePlaylists.getState().tree.selectedId).toBe(8);
+    });
+
+    it("a deleted playlist's pane closes", async () => {
+      usePlaylists.getState().openInPane(8);
+      playlistsGet.mockResolvedValue({ nodes: [set] });
+      playlistsMutate.mockResolvedValue(done);
+      await usePlaylists.getState().mutate({ type: "delete", id: 8 });
+      expect(paneIds()).toEqual([]);
+    });
+
+    it("a divider inserted in a pane's playlist is selected in that pane", async () => {
+      usePlaylists.getState().openInPane(8);
+      playlistsMutate.mockResolvedValue(done);
+      await usePlaylists.getState().insertDivider(8, 1);
+      const pane = usePanes.getState().panes[0];
+      expect([...(pane?.store.getState().selection.selected ?? [])]).toEqual([1]);
+      expect([...useLibrary.getState().selection.selected]).toEqual([]);
+    });
   });
 });

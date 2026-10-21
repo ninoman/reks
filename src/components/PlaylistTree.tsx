@@ -1,6 +1,7 @@
 /**
  * The playlist tree in the sidebar. Click selects (and shows it in the
- * table), F2 / Enter renames in place, Delete asks first. Right-click for the
+ * table), Shift+click opens it in a split pane under the table (its row is
+ * marked too), F2 / Enter renames in place, Delete asks first. Right-click for the
  * menu. Drop tracks on a playlist to add them; drag nodes to move them.
  */
 import { type DragEvent, type KeyboardEvent, useRef, useState } from "react";
@@ -16,11 +17,12 @@ import {
 } from "../lib/dnd";
 import type { PlaylistNode } from "../lib/ipc";
 import { useHistory } from "../store/history";
+import { usePanes } from "../store/panes";
 import { usePlaylists } from "../store/playlists";
 import { visibleNodes } from "../store/playlistTree";
 import { useRules } from "../store/rules";
 import { Disclosure } from "./Disclosure";
-import { PlusIcon } from "./icons";
+import { InfoIcon, PlusIcon } from "./icons";
 import { DISCLOSURE, ICON, INDENT, NAME, PAD, ROW } from "./treeStyles";
 import {
   ContextMenu,
@@ -33,6 +35,7 @@ import { focusRingInset } from "./ui/control";
 import { IconButton } from "./ui/IconButton";
 import { Input } from "./ui/Input";
 import { ScrollArea } from "./ui/ScrollArea";
+import { Tooltip } from "./ui/Tooltip";
 
 export function PlaylistTree() {
   const nodes = usePlaylists((s) => s.nodes);
@@ -40,6 +43,7 @@ export function PlaylistTree() {
   const error = usePlaylists((s) => s.error);
   /** A history session in the main area: no playlist row is selected. */
   const sessionOpen = useHistory((s) => s.openId !== null);
+  const panes = usePanes((s) => s.panes);
   const p = usePlaylists.getState;
   /** The node the context menu is for (`null`: the tree itself). */
   const [menuNode, setMenuNode] = useState<PlaylistNode | null>(null);
@@ -193,6 +197,16 @@ export function PlaylistTree() {
               >
                 <Disclosure open={tree.playlistsOpen} />
                 <span className={NAME}>Playlists</span>
+                <Tooltip content={SPLIT_HINT} side="right" className="block max-w-64">
+                  <IconButton
+                    size="xs"
+                    shape="round"
+                    aria-label="About opening several playlists"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <InfoIcon />
+                  </IconButton>
+                </Tooltip>
                 <IconButton
                   size="xs"
                   shape="round"
@@ -213,6 +227,7 @@ export function PlaylistTree() {
                   key={node.id}
                   node={node}
                   selected={tree.selectedId === node.id && !sessionOpen}
+                  inPane={!sessionOpen && panes.some((pane) => pane.playlistId === node.id)}
                   expanded={tree.expanded.has(node.id)}
                   draft={tree.renaming?.id === node.id ? tree.renaming.draft : null}
                   dropZone={drop?.id === node.id ? drop.zone : null}
@@ -280,6 +295,17 @@ function excludeFromView(node: PlaylistNode) {
   useRules.getState().addCondition({ field: "playlist", id: node.id }, true);
 }
 
+/** The Playlists row's (i) tooltip: how to open several lists at once. */
+const SPLIT_HINT = (
+  <>
+    <p className="m-0">Shift+click a playlist to open it under the track table.</p>
+    <p className="m-0 mt-1">
+      Each open list has its own sort and selection and an × to close it. Search, filters and the
+      info panel apply to the top list. Drag tracks between lists to add them.
+    </p>
+  </>
+);
+
 /** Drop-target id of the "Playlists" root row (ids from SQLite are positive). */
 const ROOT = -1;
 
@@ -337,6 +363,7 @@ function SmartPlaylistIcon() {
 function TreeRow({
   node,
   selected,
+  inPane,
   expanded,
   draft,
   dropZone,
@@ -348,6 +375,8 @@ function TreeRow({
 }: {
   node: PlaylistNode;
   selected: boolean;
+  /** Shown in a split pane: marked like the selection, but not the tree's cursor. */
+  inPane: boolean;
   expanded: boolean;
   draft: string | null;
   dropZone: DropZone | null;
@@ -365,14 +394,14 @@ function TreeRow({
       aria-selected={selected}
       aria-expanded={node.isFolder ? expanded : undefined}
       className={ROW}
-      data-selected={selected || undefined}
+      data-selected={selected || inPane || undefined}
       data-drop={dropZone ?? undefined}
       style={{ paddingLeft: PAD + (node.depth + 1) * INDENT }}
       title={
         node.isFolder ? undefined : `${node.entries} tracks${node.smart ? " · smart playlist" : ""}`
       }
       draggable={draft === null}
-      onClick={() => p().select(node.id)}
+      onClick={(e) => (e.shiftKey ? p().openInPane(node.id) : p().select(node.id))}
       onDoubleClick={() => node.isFolder && p().dispatch({ type: "toggle", id: node.id })}
       onContextMenu={onContextMenu}
       onDragStart={(e) => {

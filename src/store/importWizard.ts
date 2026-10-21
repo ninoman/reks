@@ -14,6 +14,7 @@ import {
   rbxmlPreview,
 } from "../lib/ipc";
 import { useLibrary } from "./library";
+import { refreshAll } from "./panes";
 import { usePlaylists } from "./playlists";
 
 export type WizardStep = "closed" | "review" | "importing" | "report";
@@ -147,7 +148,6 @@ export const useImportWizard = create<ImportWizardState>((set, get) => {
 
 /** The table, facets and playlist tree after an import changed the library. */
 async function refreshLibrary() {
-  const { refresh, loadFacets } = useLibrary.getState();
-  refresh();
-  await Promise.all([loadFacets(), usePlaylists.getState().load()]);
+  refreshAll();
+  await Promise.all([useLibrary.getState().loadFacets(), usePlaylists.getState().load()]);
 }

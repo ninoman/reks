@@ -6,6 +6,7 @@ import { create } from "zustand";
 
 import { scanCancel, scanStart } from "../lib/ipc";
 import { useLibrary } from "./library";
+import { refreshAll } from "./panes";
 import { usePlaylists } from "./playlists";
 
 export interface ScanState {
@@ -35,9 +36,8 @@ export const useScan = create<ScanState>()((set, get) => ({
       set({ status: `Scan failed: ${String(e)}` });
     } finally {
       set({ scanning: false });
-      const { refresh, loadFacets } = useLibrary.getState();
-      refresh();
-      await Promise.all([loadFacets(), usePlaylists.getState().load()]);
+      refreshAll();
+      await Promise.all([useLibrary.getState().loadFacets(), usePlaylists.getState().load()]);
     }
   },
   cancel() {

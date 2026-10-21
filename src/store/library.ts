@@ -9,7 +9,7 @@
  * virtualiser count table rows; pages hold tracks only. `itemAt` maps one to
  * the other.
  */
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 
 import {
   type DividerRow,
@@ -203,154 +203,162 @@ export interface LibraryState extends QueryInputs {
   loadFacets(): Promise<void>;
 }
 
-export const useLibrary = create<LibraryState>()((set, get) => {
-  async function fetchPage(page: number, generation: number): Promise<void> {
-    set((s) => ({ inFlight: new Set(s.inFlight).add(page) }));
-    try {
-      const result = await libraryQuery(buildQuery(get(), page));
-      if (get().generation !== generation) return;
-      set((s) => {
-        // Keep showing the old result until the new one's first page lands.
-        const pages = new Map(s.pagesGeneration === generation ? s.pages : []);
-        pages.set(page, result.rows);
-        return {
-          pages,
-          total: result.total,
-          dividers: result.dividers,
-          dividerView: result.dividerView,
-          pagesGeneration: generation,
-          error: null,
-        };
-      });
-    } catch (e) {
-      if (get().generation === generation) set({ error: String(e) });
-    } finally {
-      if (get().generation === generation) {
+/** One track list's state; the main view and each split pane (`panes.ts`) has its own. */
+export type LibraryStore = UseBoundStore<StoreApi<LibraryState>>;
+
+export function createLibraryStore(): LibraryStore {
+  return create<LibraryState>()((set, get) => {
+    async function fetchPage(page: number, generation: number): Promise<void> {
+      set((s) => ({ inFlight: new Set(s.inFlight).add(page) }));
+      try {
+        const result = await libraryQuery(buildQuery(get(), page));
+        if (get().generation !== generation) return;
         set((s) => {
-          const inFlight = new Set(s.inFlight);
-          inFlight.delete(page);
-          return { inFlight };
+          // Keep showing the old result until the new one's first page lands.
+          const pages = new Map(s.pagesGeneration === generation ? s.pages : []);
+          pages.set(page, result.rows);
+          return {
+            pages,
+            total: result.total,
+            dividers: result.dividers,
+            dividerView: result.dividerView,
+            pagesGeneration: generation,
+            error: null,
+          };
         });
+      } catch (e) {
+        if (get().generation === generation) set({ error: String(e) });
+      } finally {
+        if (get().generation === generation) {
+          set((s) => {
+            const inFlight = new Set(s.inFlight);
+            inFlight.delete(page);
+            return { inFlight };
+          });
+        }
       }
     }
-  }
 
-  return {
-    text: "",
-    filters: noFilters,
-    filtersEnabled: true,
-    rule: null,
-    sort: defaultSort,
-    columnVisibility: {},
-    total: 0,
-    dividers: [],
-    dividerView: false,
-    pages: new Map(),
-    generation: 0,
-    pagesGeneration: -1,
-    keepPlace: false,
-    inFlight: new Set(),
-    selection: emptySelection,
-    facets: null,
-    error: null,
+    return {
+      text: "",
+      filters: noFilters,
+      filtersEnabled: true,
+      rule: null,
+      sort: defaultSort,
+      columnVisibility: {},
+      total: 0,
+      dividers: [],
+      dividerView: false,
+      pages: new Map(),
+      generation: 0,
+      pagesGeneration: -1,
+      keepPlace: false,
+      inFlight: new Set(),
+      selection: emptySelection,
+      facets: null,
+      error: null,
 
-    setText(text) {
-      set({ text });
-      get().refresh();
-    },
-    setFilters(patch) {
-      set((s) => ({ filters: { ...s.filters, ...patch } }));
-      get().refresh();
-    },
-    setFiltersEnabled(filtersEnabled) {
-      if (get().filtersEnabled === filtersEnabled) return;
-      set({ filtersEnabled });
-      get().refresh();
-    },
-    setRule(rule) {
-      set({ rule });
-      get().refresh();
-    },
-    clearFilters() {
-      set((s) => ({ filters: { ...noFilters, playlistId: s.filters.playlistId } }));
-      get().refresh();
-    },
-    showPlaylist(id, isFolder) {
-      set((s) => {
-        let sort = s.sort;
-        if (id !== null && !isFolder) sort = { column: "playlistPosition", descending: false };
-        else if (sort.column === "playlistPosition") sort = defaultSort;
-        return { filters: { ...s.filters, playlistId: id }, sort };
-      });
-      get().refresh();
-    },
-    toggleSort(column) {
-      set((s) => ({
-        sort: { column, descending: s.sort.column === column ? !s.sort.descending : false },
-      }));
-      get().refresh();
-    },
-    setColumnVisibility(columnVisibility) {
-      set({ columnVisibility });
-    },
-    refresh(keepPlace = false) {
-      const generation = get().generation + 1;
-      set({ generation, keepPlace, inFlight: new Set(), selection: emptySelection });
-      void fetchPage(0, generation);
-    },
-    ensureRange(start, end) {
-      const s = get();
-      // Until the current generation's first page arrives, rows belong to the old result.
-      if (s.pagesGeneration !== s.generation) return;
-      const first = Math.max(0, Math.floor(trackIndex(s, start) / PAGE_SIZE));
-      const last = Math.floor(trackIndex(s, Math.max(start, end)) / PAGE_SIZE);
-      for (let p = first; p <= last; p++) {
-        if (p * PAGE_SIZE >= s.total) break;
-        if (!s.pages.has(p) && !s.inFlight.has(p)) void fetchPage(p, s.generation);
-      }
-    },
-    select(action) {
-      set((s) => ({ selection: selectionReducer(s.selection, action) }));
-    },
-    replaceRow(row) {
-      set((s) => {
-        let changed = false;
-        const pages = new Map(s.pages);
-        for (const [p, rows] of pages) {
-          if (!rows.some((r) => r.id === row.id)) continue;
-          // A playlist view can hold the track more than once; each row keeps its entry.
-          pages.set(
-            p,
-            rows.map((r) => (r.id === row.id ? { ...row, entryPosition: r.entryPosition } : r)),
-          );
-          changed = true;
+      setText(text) {
+        set({ text });
+        get().refresh();
+      },
+      setFilters(patch) {
+        set((s) => ({ filters: { ...s.filters, ...patch } }));
+        get().refresh();
+      },
+      setFiltersEnabled(filtersEnabled) {
+        if (get().filtersEnabled === filtersEnabled) return;
+        set({ filtersEnabled });
+        get().refresh();
+      },
+      setRule(rule) {
+        set({ rule });
+        get().refresh();
+      },
+      clearFilters() {
+        set((s) => ({ filters: { ...noFilters, playlistId: s.filters.playlistId } }));
+        get().refresh();
+      },
+      showPlaylist(id, isFolder) {
+        set((s) => {
+          let sort = s.sort;
+          if (id !== null && !isFolder) sort = { column: "playlistPosition", descending: false };
+          else if (sort.column === "playlistPosition") sort = defaultSort;
+          return { filters: { ...s.filters, playlistId: id }, sort };
+        });
+        get().refresh();
+      },
+      toggleSort(column) {
+        set((s) => ({
+          sort: { column, descending: s.sort.column === column ? !s.sort.descending : false },
+        }));
+        get().refresh();
+      },
+      setColumnVisibility(columnVisibility) {
+        set({ columnVisibility });
+      },
+      refresh(keepPlace = false) {
+        const generation = get().generation + 1;
+        set({ generation, keepPlace, inFlight: new Set(), selection: emptySelection });
+        void fetchPage(0, generation);
+      },
+      ensureRange(start, end) {
+        const s = get();
+        // Until the current generation's first page arrives, rows belong to the old result.
+        if (s.pagesGeneration !== s.generation) return;
+        const first = Math.max(0, Math.floor(trackIndex(s, start) / PAGE_SIZE));
+        const last = Math.floor(trackIndex(s, Math.max(start, end)) / PAGE_SIZE);
+        for (let p = first; p <= last; p++) {
+          if (p * PAGE_SIZE >= s.total) break;
+          if (!s.pages.has(p) && !s.inFlight.has(p)) void fetchPage(p, s.generation);
         }
-        return changed ? { pages } : {};
-      });
-    },
-    patchRowTags(trackIds, update) {
-      const ids = new Set(trackIds);
-      set((s) => {
-        const pages = new Map(s.pages);
-        for (const [p, rows] of pages) {
-          if (rows.some((r) => ids.has(r.id)))
+      },
+      select(action) {
+        set((s) => ({ selection: selectionReducer(s.selection, action) }));
+      },
+      replaceRow(row) {
+        set((s) => {
+          let changed = false;
+          const pages = new Map(s.pages);
+          for (const [p, rows] of pages) {
+            if (!rows.some((r) => r.id === row.id)) continue;
+            // A playlist view can hold the track more than once; each row keeps its entry.
             pages.set(
               p,
-              rows.map((r) => (ids.has(r.id) ? { ...r, tags: update(r.tags) } : r)),
+              rows.map((r) => (r.id === row.id ? { ...row, entryPosition: r.entryPosition } : r)),
             );
+            changed = true;
+          }
+          return changed ? { pages } : {};
+        });
+      },
+      patchRowTags(trackIds, update) {
+        const ids = new Set(trackIds);
+        set((s) => {
+          const pages = new Map(s.pages);
+          for (const [p, rows] of pages) {
+            if (rows.some((r) => ids.has(r.id)))
+              pages.set(
+                p,
+                rows.map((r) => (ids.has(r.id) ? { ...r, tags: update(r.tags) } : r)),
+              );
+          }
+          return { pages };
+        });
+      },
+      async loadFacets() {
+        try {
+          set({ facets: await libraryFacets() });
+        } catch (e) {
+          set({ error: String(e) });
         }
-        return { pages };
-      });
-    },
-    async loadFacets() {
-      try {
-        set({ facets: await libraryFacets() });
-      } catch (e) {
-        set({ error: String(e) });
-      }
-    },
-  };
-});
+      },
+    };
+  });
+}
+
+/** The main track list: the one the toolbar, filters and info panel work on. */
+export const useLibrary = createLibraryStore();
 
 /** The loaded part of the current result that table rows map onto. */
 export interface LoadedView {

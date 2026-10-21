@@ -19,6 +19,7 @@ import {
   convertPlan,
 } from "../lib/ipc";
 import { useLibrary } from "./library";
+import { refreshAll } from "./panes";
 import { usePlaylists } from "./playlists";
 
 export type ConvertStep = "closed" | "settings" | "dryRun" | "converting" | "report";
@@ -245,7 +246,6 @@ export const useConverter = create<ConverterState>((set, get) => ({
 
 /** Paths, kinds and sizes changed (Replace) or tracks were added (Add as new). */
 async function refreshLibrary() {
-  const { refresh, loadFacets } = useLibrary.getState();
-  refresh();
-  await Promise.all([loadFacets(), usePlaylists.getState().load()]);
+  refreshAll();
+  await Promise.all([useLibrary.getState().loadFacets(), usePlaylists.getState().load()]);
 }
