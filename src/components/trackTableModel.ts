@@ -60,7 +60,7 @@ export function fitColumnWidths(
   if (totalWeight === 0) return base;
   const shares = weights.map((w) => Math.floor((spare * w) / totalWeight));
   // Rounding remainder goes to the last growing column so the sum is exact.
-  const lastGrowing = weights.findLastIndex((w) => w > 0);
+  const lastGrowing = weights.length - 1 - [...weights].reverse().findIndex((w) => w > 0);
   shares[lastGrowing] = (shares[lastGrowing] ?? 0) + spare - shares.reduce((a, b) => a + b, 0);
   return base.map((w, i) => w + (shares[i] ?? 0));
 }
