@@ -28,6 +28,7 @@ import {
 } from "react";
 
 import { hasType, readTracks, TRACKS_MIME, type TrackDrag, zoneAt } from "../lib/dnd";
+import { shownDecks } from "../lib/mixView";
 import { useAnalysis } from "../store/analysis";
 import { useConverter } from "../store/converter";
 import { entryPosition, itemAt, useLibrary, type ViewItem, viewCount } from "../store/library";
@@ -408,9 +409,8 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
           menuRenames.current = false;
         }}
       >
-        {Array.from({ length: deckCount }, (_, deck) => (
+        {shownDecks(deckCount).map((deck) => (
           <ContextMenuItem
-            // biome-ignore lint/suspicious/noArrayIndexKey: decks are fixed slots
             key={deck}
             disabled={selectedTrackIds().length === 0}
             onSelect={() => loadToDeck(deck)}

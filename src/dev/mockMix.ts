@@ -39,6 +39,7 @@ function emptyDeck(): Deck {
       speed: 1,
       bpm: null,
       beat: null,
+      cuePreview: false,
       sync: false,
       syncBar: false,
       locked: false,
@@ -142,6 +143,7 @@ function control(c: MixControl) {
       decks[c.deck] = emptyDeck();
       break;
     case "play":
+      v.cuePreview = false;
       if (v.loaded && !v.playing) {
         v.playing = true;
         d.since = performance.now();
@@ -149,13 +151,27 @@ function control(c: MixControl) {
       break;
     case "pause":
       v.playing = false;
+      v.cuePreview = false;
       break;
     case "cue":
       if (v.playing) {
         v.playing = false;
+        v.cuePreview = false;
         v.positionMs = v.cueMs;
+      } else if (Math.abs(v.positionMs - v.cueMs) < 1 && v.loaded) {
+        // Held on the cue point: preview until let go.
+        v.playing = true;
+        v.cuePreview = true;
+        d.since = performance.now();
       } else {
         v.cueMs = snap(d, v.positionMs);
+        v.positionMs = v.cueMs;
+      }
+      break;
+    case "cueRelease":
+      if (v.cuePreview) {
+        v.cuePreview = false;
+        v.playing = false;
         v.positionMs = v.cueMs;
       }
       break;
@@ -165,6 +181,7 @@ function control(c: MixControl) {
     case "hotCue": {
       const at = d.hotCues[c.slot];
       if (at !== undefined) {
+        v.cuePreview = false;
         v.positionMs = at;
         v.playing = true;
         d.since = performance.now();
@@ -172,7 +189,7 @@ function control(c: MixControl) {
       break;
     }
     case "tempo":
-      v.tempo = Math.min(1.5, Math.max(0.5, c.ratio));
+      v.tempo = Math.min(2, Math.max(0, c.ratio));
       break;
     case "nudge":
       v.nudge = c.ratio;

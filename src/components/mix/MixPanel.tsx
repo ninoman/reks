@@ -1,12 +1,12 @@
 /**
- * The mix-prep panel (phase 5): decks on either side of the mixer, 2 by
- * default or 4. Connects the mixer store to the presentational deck and
+ * The mix-prep panel (phase 5): decks on either side of the mixer, 1–2 on
+ * the left and 3–4 on the right; with two shown, decks 2 and 3. Connects the mixer store to the presentational deck and
  * mixer components. Before the output is started it shows the start form;
  * an error (start failed, device lost) shows above it.
  */
 import { memo, useEffect, useMemo } from "react";
 
-import { phaseOffset } from "../../lib/mixView";
+import { deckSide, phaseOffset, shownDecks } from "../../lib/mixView";
 import { type MixStore, useMix } from "../../store/mix";
 import { Button } from "../ui/Button";
 import { Kbd } from "../ui/Kbd";
@@ -20,19 +20,21 @@ import { MixStartForm } from "./MixStartForm";
 const Mixer = memo(MixerPanel);
 
 const SHORTCUTS: [string, string][] = [
-  ["A / J", "Cue deck 1 / 2"],
-  ["S / K", "Play or pause deck 1 / 2"],
-  ["D / L", "Sync deck 1 / 2"],
+  ["A / J", "Cue deck 2 / 3 (hold on the cue point to preview)"],
+  ["S / K", "Play or pause deck 2 / 3"],
+  ["D / L", "Sync deck 2 / 3"],
   ["Q W / U I", "Nudge slower, faster (hold)"],
   ["1–4 / 7–0", "Hot cues A–D"],
-  ["Shift + key", "Same on deck 3 / 4"],
+  ["Shift + key", "Same on deck 1 / 4"],
   ["Z X C", "Crossfader left, centre, right"],
 ];
 
 function deckActions(mix: MixStore, deck: number): DeckActions {
   return {
     togglePlay: () => mix.togglePlay(deck),
-    cue: () => mix.send({ type: "cue", deck }),
+    play: () => mix.send({ type: "play", deck }),
+    pause: () => mix.send({ type: "pause", deck }),
+    cue: (down) => mix.cue(deck, down),
     toggleSync: () => mix.toggleSync(deck),
     toggleBar: () => mix.toggleSync(deck, !(mix.live?.decks[deck]?.syncBar ?? false)),
     toggleLeader: () => {
@@ -86,7 +88,7 @@ export function MixPanel() {
   }, []);
 
   const running = status === "running" && live !== null;
-  const shown = Array.from({ length: deckCount }, (_, i) => i);
+  const shown = shownDecks(deckCount);
   const compact = deckCount === 4;
   const activeKey = mix.decks.map((d) => (d.track === null ? 0 : 1)).join("");
   // Recomputed only when a deck loads or empties.
@@ -174,7 +176,7 @@ export function MixPanel() {
       ) : (
         <div className="flex min-h-0 items-stretch gap-2">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
-            {shown.filter((d) => d % 2 === 0).map(strip)}
+            {shown.filter((d) => deckSide(d) === "left").map(strip)}
           </div>
           <Mixer
             channels={mix.channels}
@@ -188,7 +190,7 @@ export function MixPanel() {
             onMaster={mix.setMaster}
           />
           <div className="flex min-w-0 flex-1 flex-col gap-2">
-            {shown.filter((d) => d % 2 === 1).map(strip)}
+            {shown.filter((d) => deckSide(d) === "right").map(strip)}
           </div>
         </div>
       )}

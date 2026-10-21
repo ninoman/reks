@@ -31,7 +31,14 @@ import {
   waveformColumns,
 } from "../lib/ipc";
 import { litCount } from "../lib/meterScale";
-import { ASSIGN_VALUE, type Assign, cueFits, NUDGE, type TempoRange } from "../lib/mixView";
+import {
+  ASSIGN_VALUE,
+  type Assign,
+  cueFits,
+  DEFAULT_TEMPO_RANGE,
+  NUDGE,
+  type TempoRange,
+} from "../lib/mixView";
 import { usePlayer } from "./player";
 
 export type EngineStatus = "stopped" | "starting" | "running" | "error";
@@ -112,6 +119,8 @@ export interface MixStore {
   unload: (deck: number) => void;
   send: (c: MixControl) => void;
   togglePlay: (deck: number) => void;
+  /** CUE pressed (`down`) or let go. */
+  cue: (deck: number, down: boolean) => void;
   toggleSync: (deck: number, bar?: boolean) => void;
   /** -1 slower, 1 faster, 0 released. */
   nudge: (deck: number, dir: -1 | 0 | 1) => void;
@@ -140,7 +149,7 @@ export function emptyDeck(): DeckMeta {
     columns: null,
     beats: null,
     viewError: null,
-    tempoRange: 0.08,
+    tempoRange: DEFAULT_TEMPO_RANGE,
   };
 }
 
@@ -324,7 +333,7 @@ export const useMix = create<MixStore>((set, get) => {
           live,
           decks: Array.from({ length: DECKS }, (_, i) => ({
             ...emptyDeck(),
-            tempoRange: get().decks[i]?.tempoRange ?? 0.08,
+            tempoRange: get().decks[i]?.tempoRange ?? DEFAULT_TEMPO_RANGE,
           })),
         });
         for (const c of mixerControls(get())) await mixControl(c);
@@ -398,7 +407,10 @@ export const useMix = create<MixStore>((set, get) => {
 
     unload(deck) {
       loads[deck] = (loads[deck] ?? 0) + 1;
-      patchDeck(deck, { ...emptyDeck(), tempoRange: get().decks[deck]?.tempoRange ?? 0.08 });
+      patchDeck(deck, {
+        ...emptyDeck(),
+        tempoRange: get().decks[deck]?.tempoRange ?? DEFAULT_TEMPO_RANGE,
+      });
       get().send({ type: "unload", deck });
     },
 
@@ -410,7 +422,12 @@ export const useMix = create<MixStore>((set, get) => {
     togglePlay(deck) {
       const v = deckView(deck);
       if (!v?.loaded) return;
-      get().send({ type: v.playing ? "pause" : "play", deck });
+      // PLAY during a cue preview keeps the deck playing (CDJ).
+      get().send({ type: v.playing && !v.cuePreview ? "pause" : "play", deck });
+    },
+
+    cue(deck, down) {
+      get().send({ type: down ? "cue" : "cueRelease", deck });
     },
 
     toggleSync(deck, bar) {

@@ -10,7 +10,7 @@ import { drawBands, drawBeats, drawMarker, prepare, type WaveView } from "../../
 import { focusRingInset } from "../ui/control";
 
 /** Seconds shown across the scrolling view. */
-const VIEW_S = 8;
+export const VIEW_S = 8;
 /** Arrow-key seek step on the overview, ms. */
 const SEEK_STEP_MS = 2_000;
 

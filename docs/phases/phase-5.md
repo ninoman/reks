@@ -17,9 +17,10 @@ speakers. It is a preparation tool. Nothing here is meant for playing a gig.
 - `reks-mix` crate: real-time engine on a raw `cpal` stream, decks, sync, mixer
   DSP, and an offline `render()` that runs the same graph without a device.
   The Phase 1 preview player already runs on this engine (D5).
-- Decks (2 shown, 4 on demand): load from the track table or a playlist,
-  play/pause, CDJ-style cue (set and return), jump to the track's hot cues, seek
-  on the waveform, tempo fader (±8/±16/±50%), pitch-bend nudge, quantise.
+- Decks (2 shown, decks 2 and 3; 4 on demand): load from the track table or a
+  playlist, play/pause, CDJ-style cue (set, return, preview while held), jump
+  to the track's hot cues, drag the waveform to skim, tempo fader
+  (±6/±10/±16% and WIDE ±100%, CDJ-3000; ±10 default), pitch-bend nudge, quantise.
 - Sync: one leader deck (first playing, or chosen). SYNC on a deck matches the
   leader's tempo and beat phase from `beatgrid` rows; bar sync also matches the
   downbeat. Varispeed: pitch follows tempo.
@@ -78,7 +79,7 @@ pub fn render(graph: &mut Graph, out: &mut [f32]);     // same graph, no device;
 
 pub enum Control {
     Load { deck: u8, src: Arc<DeckSource> }, Play { deck: u8 }, Pause { deck: u8 },
-    Cue { deck: u8 }, Seek { deck: u8, sample: i64 }, HotCue { deck: u8, slot: u8 },
+    Cue { deck: u8 }, CueRelease { deck: u8 }, Seek { deck: u8, sample: i64 }, HotCue { deck: u8, slot: u8 },
     Tempo { deck: u8, ratio: f64 }, Nudge { deck: u8, ratio: f64 },
     Sync { deck: u8, on: bool, bar: bool }, Leader { deck: u8 },
     Channel { ch: u8, param: ChannelParam, value: f32 },   // trim, eq_*, fader, filter/xfade assign, cue
@@ -280,6 +281,32 @@ pub enum Control {
 
     Listener, date, headphones/speakers: _______. Choice: pending (D21).
 11. **Listening checklist** below, run and logged.
+12. [x] **Deck refinements** (maintainer review of tasks 8–9, 2026-10-21):
+    - Tempo ranges ±6, ±10, ±16 and WIDE (±100%), CDJ-3000; ±10 is the
+      default, as on the CDJ. The engine takes tempo 0–2 (`TEMPO_MIN`/`MAX`);
+      the varispeed head goes to 8:1 steps (`MAX_STEP`), so slower than 1/8
+      of the source rate the deck fades out over 5 ms and holds its place
+      (speed reported as 0) until it is fast enough again.
+    - CUE preview: `Control::Cue` is the press, `Control::CueRelease` the
+      release. Paused on the cue point, the press plays until the release,
+      which returns to the cue point and pauses; PLAY during the preview
+      keeps playing. Setting the cue point while paused now moves the head
+      onto it (with quantise it was left off the beat), as on a CDJ.
+      `DeckState::cue_preview` / `cuePreview` reports it.
+    - Drag to skim on the deck's overview and zoomed waveform
+      ([`../ui.md`](../ui.md#mix-panel-phase-5)).
+    - Deck cards no longer stretch to the mixer's height: each deck was
+      `flex-1` inside a column that stretches to the mixer, so in 2-deck mode
+      the card grew by the mixer's spare height. Nothing used that space.
+    - Two decks shown are decks 2 and 3 (channels 2 and 3, the centre pair
+      around a 4-channel mixer); 1–2 sit left of the mixer, 3–4 right.
+      Deck N still plays into channel N and every crossfader assign stays
+      off (THRU), so routing needs no change. Keys: A/S/D… drive deck 2 and
+      J/K/L… deck 3; Shift reaches the outer decks 1 and 4.
+    Tests: `holding_cue_on_the_cue_point_previews`,
+    `wide_tempo_doubles_and_stands_still_at_the_ends` (`graph.rs`),
+    `mixView.test.ts`, `mixKeys.test.ts`, `DeckStrip.test.tsx`. Checked in
+    the browser with the dev mock only.
 
 ## Acceptance criteria
 
