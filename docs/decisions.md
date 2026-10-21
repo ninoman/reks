@@ -847,11 +847,13 @@ Date of decisions: 2026-10-18.
     case-insensitively. New libraries get rekordbox's categories (Genre,
     Components, Situation).
   - **XML import** reads tags from Comments: rekordbox's "Add My Tag to
-    Comments" writes `/* Tag A / Tag B */` at its start
-    (`tag::parse_comment_tags`). Comments carry no category, so a name that
-    exists in any category is reused and a new one goes under "Imported".
-    The comment itself is kept as it is. The format is **UNVERIFIED** until it
-    is checked against the maintainer's real `collection.xml`.
+    Comments" ends Comments with `/* Tag A / Tag B */`, after any text
+    already there (`tag::parse_comment_tags`; names split on ` / ` only, so
+    `Deep/minimal House` stays one tag). Checked 2026-10-21 against the
+    maintainer's rekordbox 6.8.6 `collection.xml`: 2,562 of 3,062 tracks carry
+    a block, 25 of them after other text, none with text after it. Comments
+    carry no category, so a name that exists in any category is reused and a
+    new one goes under "Imported". The comment itself is kept as it is.
   - **Filters** become a rule tree (`reks-core::rule::RuleNode`,
     `TrackQuery::rule`, ANDed with the filter bar): nested all/any groups,
     and every rule or group can be negated. An empty "all" group matches
@@ -883,7 +885,8 @@ Date of decisions: 2026-10-18.
 - Rejected: free-form multi-level tags (OneLibrary and rekordbox have two
   levels); writing tags into audio files (Phase 1 non-goal); a smart-playlist
   format on the stick (players have none).
-- Risks: the Comments format (UNVERIFIED above); how OneLibrary `myTag` rows
+- Risks: the Comments format is checked against one rekordbox version
+  (6.8.6) only; how OneLibrary `myTag` rows
   map at export is not designed yet (Phase 4).
 
 ## D30. The library's player is a deck of the mix engine

@@ -417,18 +417,20 @@ pub(crate) fn tags_of(c: &Connection, track_ids: &[TrackId]) -> Result<Vec<(Trac
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// rekordbox's "Add My Tag to Comments" writes the track's tags at the start
-/// of Comments as `/* Tag A / Tag B */` (UNVERIFIED against a real
-/// `collection.xml`, D29). Returns the names, in order, without duplicates.
+/// rekordbox's "Add My Tag to Comments" ends Comments with the track's tags
+/// as `/* Tag A / Tag B */`, after any text already there (checked against a
+/// rekordbox 6.8.6 `collection.xml`, 2026-10-21, D29). Names are split on
+/// ` / ` only, so `Deep/minimal House` is one tag. Returns the names, in
+/// order, without duplicates.
 pub fn parse_comment_tags(comment: &str) -> Vec<String> {
-    let Some(rest) = comment.trim_start().strip_prefix("/*") else {
+    let Some(rest) = comment.trim_end().strip_suffix("*/") else {
         return Vec::new();
     };
-    let Some(end) = rest.find("*/") else {
+    let Some(start) = rest.rfind("/*") else {
         return Vec::new();
     };
     let mut out: Vec<String> = Vec::new();
-    for name in rest[..end].split(" / ") {
+    for name in rest[start + 2..].split(" / ") {
         let name = name.trim();
         if !name.is_empty() && !out.iter().any(|n| n.eq_ignore_ascii_case(name)) {
             out.push(name.to_owned());
@@ -442,24 +444,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn comment_tags_are_parsed_from_the_leading_block() {
-        assert_eq!(parse_comment_tags("/* Deep / Peak */ ok"), ["Deep", "Peak"]);
-        assert_eq!(parse_comment_tags("  /*Deep*/"), ["Deep"]);
+    fn comment_tags_are_parsed_from_the_closing_block() {
+        // As rekordbox 6.8.6 writes them.
         assert_eq!(
-            parse_comment_tags("/* Deep / deep /  / Peak */"),
-            ["Deep", "Peak"]
+            parse_comment_tags(" /* Psychodelic trance / Prog Trance / G 3 */"),
+            ["Psychodelic trance", "Prog Trance", "G 3"]
         );
         assert_eq!(
-            parse_comment_tags("/* Drum/Bass / Vocal */"),
-            ["Drum/Bass", "Vocal"]
+            parse_comment_tags(
+                "Visit https://x.bandcamp.com /* Tech House / Deep/minimal House */"
+            ),
+            ["Tech House", "Deep/minimal House"]
+        );
+        assert_eq!(parse_comment_tags("/*Deep*/  "), ["Deep"]);
+        assert_eq!(
+            parse_comment_tags(" /* Deep / deep /  / Peak */"),
+            ["Deep", "Peak"]
         );
     }
 
     #[test]
-    fn comments_without_a_leading_block_have_no_tags() {
+    fn comments_without_a_closing_block_have_no_tags() {
         assert!(parse_comment_tags("").is_empty());
-        assert!(parse_comment_tags("great track /* Deep */").is_empty());
-        assert!(parse_comment_tags("/* never closed").is_empty());
-        assert!(parse_comment_tags("/* */").is_empty());
+        assert!(parse_comment_tags("great track").is_empty());
+        assert!(parse_comment_tags("/* Deep */ great track").is_empty());
+        assert!(parse_comment_tags("never opened */").is_empty());
+        assert!(parse_comment_tags(" /* */").is_empty());
     }
 }
