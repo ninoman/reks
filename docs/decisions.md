@@ -784,9 +784,15 @@ Date of decisions: 2026-10-18.
     exists in any category is reused and a new one goes under "Imported".
     The comment itself is kept as it is. The format is **UNVERIFIED** until it
     is checked against the maintainer's real `collection.xml`.
-  - **Filters** become a rule tree: nested all/any groups, and every rule or
-    group can be negated. NOT is compiled as `NOT coalesce((cond), 0)`, so
-    "genre is not X" keeps tracks with no genre. (Lands with the rule-tree task.)
+  - **Filters** become a rule tree (`reks-core::rule::RuleNode`,
+    `TrackQuery::rule`, ANDed with the filter bar): nested all/any groups,
+    and every rule or group can be negated. An empty "all" group matches
+    every track, an empty "any" group none. NOT is compiled as
+    `NOT coalesce((cond), 0)`, so "genre is not X" keeps tracks with no
+    genre and "not in playlist X" keeps tracks in no playlist. A tree is
+    limited to 8 levels and 200 nodes. Only a top-level playlist filter
+    makes the rows a playlist's entries (and shows dividers); one inside a
+    rule never does.
   - **Smart playlists** store a rule tree. At export they become plain
     playlists of the tracks they match at that moment; nothing smart is ever
     written to a stick. (Lands with the smart-playlist task.)

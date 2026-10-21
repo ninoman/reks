@@ -20,6 +20,7 @@ pub mod playlist;
 pub mod preview;
 pub mod query;
 pub mod rbxml;
+pub mod rule;
 pub mod scan;
 pub mod secret;
 pub mod settings;
@@ -44,6 +45,7 @@ pub use query::{
     DividerRow, Facets, Filter, KeyInfo, PlaylistId, PlaylistNode, Sort, SortColumn, TrackPage,
     TrackQuery, TrackRow,
 };
+pub use rule::{Match, RuleNode, MAX_RULE_DEPTH, MAX_RULE_NODES};
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
 pub use secret::OneLibraryKey;
 pub use settings::{AnlzPreference, LibraryRoot, Settings, SettingsPatch, UiState};

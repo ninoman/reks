@@ -16,6 +16,7 @@ use crate::db::Library;
 use crate::error::Result;
 use crate::keys::{Key, Mode};
 use crate::rbxml::TRACK_COLOURS;
+use crate::rule::{Compiler, RuleNode};
 use crate::scan::TrackId;
 use crate::tag::{tags_of, TagId};
 
@@ -34,6 +35,9 @@ pub struct TrackQuery {
     pub text: Option<String>,
     /// All filters must hold.
     pub filters: Vec<Filter>,
+    /// A rule tree (D29), ANDed with `filters` and `text`. Playlist filters
+    /// inside it never make the rows a playlist's entries.
+    pub rule: Option<RuleNode>,
     pub sort: Sort,
     pub offset: u32,
     /// Clamped to `1..=MAX_PAGE`.
@@ -45,6 +49,7 @@ impl Default for TrackQuery {
         Self {
             text: None,
             filters: Vec::new(),
+            rule: None,
             sort: Sort::default(),
             offset: 0,
             limit: 100,
@@ -224,7 +229,7 @@ impl Library {
     pub fn tracks(&self, q: &TrackQuery) -> Result<TrackPage> {
         let conn = self.conn()?;
         let view = entry_view(&conn, q)?;
-        let w = where_clause(q, view);
+        let w = where_clause(q, view)?;
         let (order, order_params) = order_by(q, view);
         // In a playlist view every entry is a row; `pe.position` is its place.
         let (from, entry_col) = match view {
@@ -358,11 +363,13 @@ pub(crate) fn track_row(r: &Row<'_>) -> rusqlite::Result<TrackRow> {
 
 impl TrackQuery {
     /// Whether the entry view of `playlist` shows its dividers: playlist
-    /// order (ascending), no search text and no filter but the playlist.
+    /// order (ascending), no search text, no filter but the playlist and no
+    /// rule that could drop a track.
     fn shows_dividers(&self, playlist: PlaylistId) -> bool {
         self.sort.column == SortColumn::PlaylistPosition
             && !self.sort.descending
             && self.text.as_deref().and_then(fts_query).is_none()
+            && self.rule.as_ref().is_none_or(RuleNode::is_everything)
             && self
                 .filters
                 .iter()
@@ -397,86 +404,27 @@ struct Where {
 }
 
 /// `view`: the entry-view playlist, whose filter the join already applies.
-fn where_clause(q: &TrackQuery, view: Option<PlaylistId>) -> Where {
+fn where_clause(q: &TrackQuery, view: Option<PlaylistId>) -> Result<Where> {
     let mut conds: Vec<String> = Vec::new();
-    let mut params: Vec<Value> = Vec::new();
+    let mut c = Compiler::default();
     let mut view_filter = view;
 
     if let Some(m) = q.text.as_deref().and_then(fts_query) {
         conds.push("t.id IN (SELECT rowid FROM track_fts WHERE track_fts MATCH ?)".into());
-        params.push(Value::Text(m));
+        c.params.push(Value::Text(m));
     }
     for f in &q.filters {
-        match f {
-            Filter::Genre { genre } => {
-                conds.push("t.genre = ? COLLATE NOCASE".into());
-                params.push(Value::Text(genre.clone()));
-            }
-            Filter::KeyIn { keys } => {
-                if keys.is_empty() {
-                    conds.push("0".into());
-                } else {
-                    conds.push(format!("t.key IN ({})", placeholders(keys.len())));
-                    params.extend(keys.iter().map(|k| Value::Text(k.canonical().to_owned())));
-                }
-            }
-            Filter::BpmRange { min, max } => {
-                conds.push("t.bpm_x100 BETWEEN ? AND ?".into());
-                params.push(Value::Integer(i64::from(*min)));
-                params.push(Value::Integer(i64::from(*max)));
-            }
-            Filter::Color { color } => {
-                conds.push("t.color = ? COLLATE NOCASE".into());
-                params.push(Value::Text(color.clone()));
-            }
-            Filter::RatingMin { rating } => {
-                conds.push("t.rating >= ?".into());
-                params.push(Value::Integer(i64::from(*rating)));
-            }
-            Filter::Playlist { id } => {
-                if view_filter == Some(*id) {
-                    view_filter = None;
-                    continue;
-                }
-                conds.push(
-                    "EXISTS (SELECT 1 FROM playlist_track pt WHERE pt.track_id = t.id
-                       AND pt.playlist_id IN (
-                         WITH RECURSIVE sub(id) AS (
-                           SELECT ? UNION SELECT p.id FROM playlist p JOIN sub ON p.parent_id = sub.id)
-                         SELECT id FROM sub))"
-                        .into(),
-                );
-                params.push(Value::Integer(*id));
-            }
-            Filter::Missing { missing } => {
-                conds.push("t.missing = ?".into());
-                params.push(Value::Integer(i64::from(*missing)));
-            }
-            Filter::NeverPlayed => {
-                conds.push("(t.play_count = 0 AND t.last_played IS NULL)".into());
-            }
-            Filter::PlayCountRange { min, max } => {
-                conds.push("t.play_count BETWEEN ? AND ?".into());
-                params.push(Value::Integer(i64::from(*min)));
-                params.push(Value::Integer(i64::from(*max)));
-            }
-            Filter::PlayedSince { date } => {
-                conds.push("t.last_played >= ?".into());
-                params.push(Value::Text(date.clone()));
-            }
-            Filter::TagAny { ids } => {
-                if ids.is_empty() {
-                    conds.push("0".into());
-                } else {
-                    conds.push(format!(
-                        "EXISTS (SELECT 1 FROM track_tag tt WHERE tt.track_id = t.id
-                           AND tt.tag_id IN ({}))",
-                        placeholders(ids.len())
-                    ));
-                    params.extend(ids.iter().map(|&id| Value::Integer(id)));
-                }
+        if let Filter::Playlist { id } = f {
+            if view_filter == Some(*id) {
+                view_filter = None;
+                continue;
             }
         }
+        conds.push(c.filter(f)?);
+    }
+    if let Some(rule) = &q.rule {
+        rule.validate()?;
+        conds.push(c.rule(rule)?);
     }
 
     let sql = if conds.is_empty() {
@@ -484,7 +432,10 @@ fn where_clause(q: &TrackQuery, view: Option<PlaylistId>) -> Where {
     } else {
         format!(" WHERE {}", conds.join(" AND "))
     };
-    Where { sql, params }
+    Ok(Where {
+        sql,
+        params: c.params,
+    })
 }
 
 /// `ORDER BY` terms and their parameters. Empty values sort last in both
@@ -543,10 +494,6 @@ pub(crate) fn fts_query(text: &str) -> Option<String> {
         .map(|w| format!("\"{}\"*", w.replace('"', "\"\"")))
         .collect();
     (!terms.is_empty()).then(|| terms.join(" "))
-}
-
-fn placeholders(n: usize) -> String {
-    vec!["?"; n].join(", ")
 }
 
 /// 1A → 1, 1B → 2, 2A → 3, …

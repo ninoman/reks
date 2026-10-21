@@ -640,7 +640,7 @@ Added 2026-10-21. One PR per task; tasks 4 and 2–3 can run in parallel once 1 
    delete, move, assign, unassign), `TrackRow::tags`, `Filter::TagAny`, the
    `tags_get` / `tags_mutate` commands, and tags read from XML Comments
    (`ImportReport::tags_created` / `tags_assigned`).
-2. [ ] **Core rule tree**: `RuleNode` (all/any groups, NOT on every node),
+2. [x] **Core rule tree**: `RuleNode` (all/any groups, NOT on every node),
    `TrackQuery::rule` ANDed with the filters, NOT-with-NULL rule, depth 8 /
    200 nodes limit.
 3. [ ] **Core smart playlists**: `playlist.smart_rule` / `smart_sort`,

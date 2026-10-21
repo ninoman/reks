@@ -6,7 +6,7 @@
 
 use std::time::Instant;
 
-use reks_core::{Filter, Key, Library, Sort, SortColumn, TrackQuery};
+use reks_core::{Error, Filter, Key, Library, Match, RuleNode, Sort, SortColumn, TrackQuery};
 use rusqlite::Connection;
 
 struct Env {
@@ -304,6 +304,246 @@ fn filters() {
     );
 }
 
+fn leaf(filter: Filter) -> RuleNode {
+    RuleNode::Filter { not: false, filter }
+}
+
+fn not(filter: Filter) -> RuleNode {
+    RuleNode::Filter { not: true, filter }
+}
+
+fn group(m: Match, not: bool, rules: Vec<RuleNode>) -> RuleNode {
+    RuleNode::Group {
+        r#match: m,
+        not,
+        rules,
+    }
+}
+
+impl Env {
+    /// Ids matching `rule` (and `filters`), in id order.
+    fn ruled(&self, filters: Vec<Filter>, rule: RuleNode) -> Vec<i64> {
+        let q = TrackQuery {
+            filters,
+            rule: Some(rule),
+            limit: 1000,
+            ..TrackQuery::default()
+        };
+        let page = self.lib.tracks(&q).unwrap();
+        let mut ids: Vec<i64> = page.rows.iter().map(|r| r.id).collect();
+        assert_eq!(page.total, ids.len() as u64, "total for {q:?}");
+        ids.sort_unstable();
+        ids
+    }
+}
+
+/// NOT keeps tracks whose column is NULL or that have no tag / playlist:
+/// "genre is not House" includes the track with no genre.
+#[test]
+fn not_keeps_tracks_without_a_value() {
+    let env = seeded();
+    let c = env.db();
+    c.execute(
+        "INSERT INTO tag (id, parent_id, name, sort_order, created_at, updated_at)
+         VALUES (100, 1, 'Peak', 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        [],
+    )
+    .unwrap();
+    c.execute(
+        "INSERT INTO track_tag (track_id, tag_id) VALUES (1, 100)",
+        [],
+    )
+    .unwrap();
+    c.execute(
+        "UPDATE track SET last_played = '2026-02-01' WHERE id = 5",
+        [],
+    )
+    .unwrap();
+    let n = |f: Filter| env.ruled(vec![], not(f));
+    // Track 4 has no genre, key, BPM; track 3 no colour.
+    assert_eq!(
+        n(Filter::Genre {
+            genre: "house".into()
+        }),
+        [2, 4, 5]
+    );
+    assert_eq!(
+        n(Filter::KeyIn {
+            keys: vec![key("Am")]
+        }),
+        [2, 3, 4, 5]
+    );
+    assert_eq!(
+        n(Filter::Color {
+            color: "red".into()
+        }),
+        [2, 3, 4, 5]
+    );
+    assert_eq!(
+        n(Filter::BpmRange {
+            min: 12000,
+            max: 13000
+        }),
+        [2, 4, 5]
+    );
+    assert_eq!(
+        n(Filter::PlayedSince {
+            date: "2026-01-15".into()
+        }),
+        [1, 2, 3, 4]
+    );
+    assert_eq!(n(Filter::TagAny { ids: vec![100] }), [2, 3, 4, 5]);
+    assert_eq!(n(Filter::TagAny { ids: vec![] }), [1, 2, 3, 4, 5]);
+    assert_eq!(n(Filter::Playlist { id: 11 }), [2, 4, 5], "not in playlist");
+    assert_eq!(n(Filter::Playlist { id: 10 }), [2, 4], "not in folder");
+    // A negated group: none of genre House, colour blue.
+    assert_eq!(
+        env.ruled(
+            vec![],
+            group(
+                Match::Any,
+                true,
+                vec![
+                    leaf(Filter::Genre {
+                        genre: "house".into()
+                    }),
+                    leaf(Filter::Color {
+                        color: "blue".into()
+                    }),
+                ]
+            )
+        ),
+        [4, 5]
+    );
+}
+
+#[test]
+fn nested_and_empty_groups() {
+    let env = seeded();
+    // (in Set A or in Set B) and not missing
+    let rule = group(
+        Match::All,
+        false,
+        vec![
+            group(
+                Match::Any,
+                false,
+                vec![
+                    leaf(Filter::Playlist { id: 11 }),
+                    leaf(Filter::Playlist { id: 12 }),
+                ],
+            ),
+            not(Filter::Missing { missing: true }),
+        ],
+    );
+    assert_eq!(env.ruled(vec![], rule.clone()), [1, 3]);
+    // ANDed with the top-level filters and the text.
+    assert_eq!(
+        env.ruled(vec![Filter::RatingMin { rating: 5 }], rule.clone()),
+        [1]
+    );
+    let page = env
+        .lib
+        .tracks(&TrackQuery {
+            text: Some("deep".into()),
+            rule: Some(rule),
+            ..TrackQuery::default()
+        })
+        .unwrap();
+    assert_eq!(page.rows.iter().map(|r| r.id).collect::<Vec<_>>(), [3]);
+
+    assert_eq!(
+        env.ruled(vec![], group(Match::All, false, vec![])),
+        [1, 2, 3, 4, 5]
+    );
+    assert_eq!(
+        env.ruled(vec![], group(Match::Any, false, vec![])),
+        Vec::<i64>::new()
+    );
+    assert_eq!(
+        env.ruled(vec![], group(Match::Any, true, vec![])),
+        [1, 2, 3, 4, 5]
+    );
+}
+
+#[test]
+fn rule_limits() {
+    let env = seeded();
+    let mut deep = leaf(Filter::NeverPlayed);
+    for _ in 0..8 {
+        deep = group(Match::All, false, vec![deep]);
+    }
+    let err = env
+        .lib
+        .tracks(&TrackQuery {
+            rule: Some(deep),
+            ..TrackQuery::default()
+        })
+        .unwrap_err();
+    assert!(matches!(err, Error::InvalidField { field: "rule", .. }));
+
+    let wide = group(Match::Any, false, vec![leaf(Filter::NeverPlayed); 200]);
+    let err = env
+        .lib
+        .tracks(&TrackQuery {
+            rule: Some(wide),
+            ..TrackQuery::default()
+        })
+        .unwrap_err();
+    assert!(matches!(err, Error::InvalidField { field: "rule", .. }));
+}
+
+/// Only a top-level playlist filter makes the rows a playlist's entries; a
+/// rule never does, and any real rule hides the dividers.
+#[test]
+fn rule_playlist_is_not_an_entry_view() {
+    let env = seeded();
+    let c = env.db();
+    c.execute(
+        "INSERT INTO playlist_track (playlist_id, position, item_kind, label)
+         VALUES (11, 2, 'divider', 'Peak')",
+        [],
+    )
+    .unwrap();
+    let by_position = Sort {
+        column: SortColumn::PlaylistPosition,
+        descending: false,
+    };
+    let in_rule = env
+        .lib
+        .tracks(&TrackQuery {
+            rule: Some(leaf(Filter::Playlist { id: 11 })),
+            sort: by_position,
+            ..TrackQuery::default()
+        })
+        .unwrap();
+    assert!(!in_rule.divider_view);
+    assert!(in_rule.dividers.is_empty());
+    assert!(in_rule.rows.iter().all(|r| r.entry_position.is_none()));
+
+    let entry_view = |rule: Option<RuleNode>| {
+        env.lib
+            .tracks(&TrackQuery {
+                filters: vec![Filter::Playlist { id: 11 }],
+                rule,
+                sort: by_position,
+                ..TrackQuery::default()
+            })
+            .unwrap()
+    };
+    let plain = entry_view(None);
+    assert!(plain.divider_view);
+    assert_eq!(plain.dividers.len(), 1);
+    assert_eq!(plain.rows.iter().map(|r| r.id).collect::<Vec<_>>(), [3, 1]);
+    // An empty "all" group drops nothing, so the dividers stay.
+    assert!(entry_view(Some(group(Match::All, false, vec![]))).divider_view);
+    let ruled = entry_view(Some(leaf(Filter::RatingMin { rating: 5 })));
+    assert!(!ruled.divider_view);
+    assert!(ruled.dividers.is_empty());
+    assert_eq!(ruled.rows.iter().map(|r| r.id).collect::<Vec<_>>(), [1]);
+    assert_eq!(ruled.rows[0].entry_position, Some(1));
+}
+
 #[test]
 fn row_fields() {
     let env = seeded();
@@ -478,6 +718,48 @@ fn serde_shapes() {
     );
     assert_eq!(q.sort.column, SortColumn::DateAdded);
     assert_eq!((q.offset, q.limit), (200, 200));
+
+    let rule_json = r#"{
+        "type": "group", "match": "all", "not": false, "rules": [
+            {"type": "filter", "not": true, "filter": {"type": "playlist", "id": 11}},
+            {"type": "group", "match": "any", "not": false, "rules": [
+                {"type": "filter", "not": false, "filter": {"type": "tagAny", "ids": [3]}},
+                {"type": "filter", "filter": {"type": "genre", "genre": "House"}}
+            ]}
+        ]
+    }"#;
+    let rule: RuleNode = serde_json::from_str(rule_json).unwrap();
+    assert_eq!(
+        rule,
+        group(
+            Match::All,
+            false,
+            vec![
+                not(Filter::Playlist { id: 11 }),
+                group(
+                    Match::Any,
+                    false,
+                    vec![
+                        leaf(Filter::TagAny { ids: vec![3] }),
+                        leaf(Filter::Genre {
+                            genre: "House".into()
+                        }),
+                    ]
+                ),
+            ]
+        )
+    );
+    assert_eq!(
+        serde_json::to_value(&rule).unwrap(),
+        serde_json::from_str::<serde_json::Value>(&rule_json.replace(
+            r#"{"type": "filter", "filter""#,
+            r#"{"type": "filter", "not": false, "filter""#
+        ))
+        .unwrap()
+    );
+    let with_rule: TrackQuery =
+        serde_json::from_str(&format!(r#"{{"rule": {rule_json}}}"#)).unwrap();
+    assert_eq!(with_rule.rule, Some(rule));
 
     let minimal: TrackQuery = serde_json::from_str("{}").unwrap();
     assert_eq!(minimal, TrackQuery::default());
