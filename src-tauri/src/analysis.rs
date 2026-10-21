@@ -1,12 +1,18 @@
 //! Background analysis (Phase 3 task 11): commands over
 //! `reks_analysis::AnalysisQueue`. The queue runs on its own threads; these
-//! commands only queue, pause, cancel and report.
+//! commands only queue, pause, cancel and report. Before queueing, tracks
+//! rekordbox analysed are mapped into the cache instead (D10,
+//! `reks_export_rb::rbmap`).
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use reks_analysis::{AnalysisQueue, ModelPaths, QueueEvent, QueueOptions, QueueStatus};
+use reks_analysis::{
+    AnalysisQueue, ModelPaths, QueueEvent, QueueOptions, QueueStatus, ANALYSER_VERSION,
+};
 use reks_core::{Library, TrackId};
+use reks_export_rb::rbcache::{self, RbCache};
+use reks_export_rb::rbmap;
 use tauri::ipc::Channel;
 use tauri::State;
 
@@ -16,6 +22,9 @@ use crate::state::AppState;
 /// The queue (absent when the beat model is missing) and where its events go.
 pub struct Analysis {
     pub queue: Option<Arc<AnalysisQueue>>,
+    lib: Arc<Library>,
+    /// Held while a mapping pass runs, so two triggers don't map at once.
+    mapping: Arc<Mutex<()>>,
     /// The UI's subscription; events are dropped while there is none.
     events: Arc<Mutex<Option<Channel<QueueEvent>>>>,
 }
@@ -46,27 +55,46 @@ impl Analysis {
         match queue {
             Ok(queue) => Self {
                 queue: Some(Arc::new(queue)),
+                lib: Arc::clone(lib),
+                mapping: Arc::default(),
                 events,
             },
             Err(err) => {
                 tracing::error!(%err, dir = %model_dir.display(), "analysis disabled");
                 Self {
                     queue: None,
+                    lib: Arc::clone(lib),
+                    mapping: Arc::default(),
                     events,
                 }
             }
         }
     }
 
-    /// Queues every track that needs analysis (after start, scan, import,
-    /// conversion). Errors are logged: the next trigger tries again.
+    /// Maps rekordbox's analysis into the cache for the tracks that have it
+    /// (D10), then queues every track still needing analysis (after start,
+    /// scan, import, conversion). Runs on its own thread; errors are logged
+    /// and the next trigger tries again.
     pub fn queue_pending(&self) {
-        if let Some(q) = &self.queue {
-            match q.enqueue_pending() {
-                Ok(n) if n > 0 => tracing::info!(tracks = n, "queued for analysis"),
-                Ok(_) => {}
-                Err(err) => tracing::warn!(%err, "cannot queue tracks for analysis"),
-            }
+        let lib = Arc::clone(&self.lib);
+        let queue = self.queue.clone();
+        let mapping = Arc::clone(&self.mapping);
+        let spawned = std::thread::Builder::new()
+            .name("rekordbox-map".into())
+            .spawn(move || {
+                if let Ok(_guard) = mapping.lock() {
+                    map_rekordbox(&lib);
+                }
+                if let Some(q) = queue {
+                    match q.enqueue_pending() {
+                        Ok(n) if n > 0 => tracing::info!(tracks = n, "queued for analysis"),
+                        Ok(_) => {}
+                        Err(err) => tracing::warn!(%err, "cannot queue tracks for analysis"),
+                    }
+                }
+            });
+        if let Err(err) = spawned {
+            tracing::warn!(%err, "cannot start the analysis queueing thread");
         }
     }
 
@@ -82,6 +110,29 @@ impl Analysis {
             .as_ref()
             .and_then(|q| q.status().ok())
             .is_some_and(|s| !s.is_idle())
+    }
+}
+
+/// One mapping pass over rekordbox's local analysis folders.
+fn map_rekordbox(lib: &Library) {
+    let started = std::time::Instant::now();
+    let rb = match RbCache::scan(&rbcache::default_roots()) {
+        Ok(rb) if !rb.roots().is_empty() => rb,
+        Ok(_) => return,
+        Err(err) => {
+            tracing::warn!(%err, "cannot read rekordbox's analysis folders");
+            return;
+        }
+    };
+    match rbmap::map_pending(lib, &rb, ANALYSER_VERSION) {
+        Ok(r) if r.candidates > 0 => tracing::info!(
+            candidates = r.candidates,
+            mapped = r.mapped.len(),
+            ms = started.elapsed().as_millis() as u64,
+            "rekordbox analysis mapped instead of analysed"
+        ),
+        Ok(_) => {}
+        Err(err) => tracing::warn!(%err, "cannot map rekordbox's analysis"),
     }
 }
 

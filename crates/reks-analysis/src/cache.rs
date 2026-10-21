@@ -16,6 +16,15 @@
 //! Files are written to a temporary name and renamed, columns first, so a
 //! crash leaves either the old entry, a stale one, or the new one; a
 //! half-written JSON never parses as valid.
+//!
+//! A track rekordbox analysed can instead have a **rekordbox entry** in the
+//! same folder (D10, "rekordbox mapping"): copies of rekordbox's
+//! `ANLZ0000.DAT/.EXT/.2EX` as `rekordbox.{DAT,EXT,2EX}` and
+//! `rekordbox.json` (`source: "rekordbox"`, the file's content hash, the
+//! track length). Its grid, key and BPM are the library's rows from the XML
+//! import, so they are not repeated here. It is versioned by
+//! [`REKORDBOX_FORMAT`], not the analyser version: a new analyser doesn't
+//! make rekordbox's analysis stale. Written files first, JSON last.
 
 use std::fs;
 use std::io;
@@ -34,6 +43,11 @@ const META_FILE: &str = "analysis.json";
 const COLUMNS_FILE: &str = "bands.bin";
 const COLUMNS_MAGIC: &[u8; 4] = b"RKWC";
 const COLUMNS_FORMAT: u32 = 1;
+const RB_META_FILE: &str = "rekordbox.json";
+/// Extensions of rekordbox's three files, each saved as `rekordbox.<ext>`.
+const RB_EXTS: [&str; 3] = ["DAT", "EXT", "2EX"];
+/// Bump when the rekordbox entry's layout changes.
+pub const REKORDBOX_FORMAT: u32 = 1;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {
@@ -217,6 +231,106 @@ pub fn remove(cache_dir: &Path, track: TrackId) -> Result<(), CacheError> {
     match fs::remove_dir_all(&dir) {
         Err(e) if e.kind() != io::ErrorKind::NotFound => Err(io_err(&dir)(e)),
         _ => Ok(()),
+    }
+}
+
+/// rekordbox's analysis of one track, as copied into the cache.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RekordboxEntry {
+    /// The library's track length when the entry was written.
+    pub duration_ms: u64,
+    /// `ANLZ0000.DAT`, `.EXT` and `.2EX` bytes.
+    pub dat: Vec<u8>,
+    pub ext: Vec<u8>,
+    pub ex2: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RbMeta {
+    format: u32,
+    /// Always `rekordbox`: where every value of this entry came from.
+    source: String,
+    content_hash: String,
+    duration_ms: u64,
+    /// The `.DAT` it was copied from (for people reading the cache).
+    copied_from: PathBuf,
+}
+
+/// Writes `entry` as `track`'s rekordbox entry for a file with
+/// `content_hash`; `from` is rekordbox's `.DAT` it was read from.
+pub fn write_rekordbox(
+    cache_dir: &Path,
+    track: TrackId,
+    entry: &RekordboxEntry,
+    content_hash: &str,
+    from: &Path,
+) -> Result<(), CacheError> {
+    let dir = entry_dir(cache_dir, track);
+    fs::create_dir_all(&dir).map_err(io_err(&dir))?;
+    let meta = RbMeta {
+        format: REKORDBOX_FORMAT,
+        source: "rekordbox".to_owned(),
+        content_hash: content_hash.to_owned(),
+        duration_ms: entry.duration_ms,
+        copied_from: from.to_path_buf(),
+    };
+    let json = serde_json::to_vec_pretty(&meta).map_err(|e| CacheError::Corrupt {
+        path: dir.join(RB_META_FILE),
+        reason: e.to_string(),
+    })?;
+    for (ext, bytes) in RB_EXTS.iter().zip([&entry.dat, &entry.ext, &entry.ex2]) {
+        replace(&rb_file(&dir, ext), bytes)?;
+    }
+    replace(&dir.join(RB_META_FILE), &json)
+}
+
+/// `track`'s rekordbox entry if it was written in this format for a file
+/// with `content_hash`. Missing, stale or unreadable entries give `None`
+/// (unreadable ones are logged).
+pub fn load_rekordbox(
+    cache_dir: &Path,
+    track: TrackId,
+    content_hash: &str,
+) -> Option<RekordboxEntry> {
+    let dir = entry_dir(cache_dir, track);
+    let meta = rb_meta(&dir, track, content_hash)?;
+    let read = |ext: &str| match fs::read(rb_file(&dir, ext)) {
+        Ok(b) => Some(b),
+        Err(err) => {
+            tracing::warn!(track, %err, "ignoring rekordbox cache entry");
+            None
+        }
+    };
+    Some(RekordboxEntry {
+        duration_ms: meta.duration_ms,
+        dat: read("DAT")?,
+        ext: read("EXT")?,
+        ex2: read("2EX")?,
+    })
+}
+
+/// Whether [`load_rekordbox`] would find an entry, from the JSON and the
+/// files' presence (the export planner's cheap check).
+pub fn has_valid_rekordbox(cache_dir: &Path, track: TrackId, content_hash: &str) -> bool {
+    let dir = entry_dir(cache_dir, track);
+    rb_meta(&dir, track, content_hash).is_some()
+        && RB_EXTS.iter().all(|e| rb_file(&dir, e).is_file())
+}
+
+fn rb_file(dir: &Path, ext: &str) -> PathBuf {
+    dir.join(format!("rekordbox.{ext}"))
+}
+
+fn rb_meta(dir: &Path, track: TrackId, content_hash: &str) -> Option<RbMeta> {
+    let json = fs::read(dir.join(RB_META_FILE)).ok()?;
+    match serde_json::from_slice::<RbMeta>(&json) {
+        Ok(m) if m.format == REKORDBOX_FORMAT && m.content_hash == content_hash => Some(m),
+        Ok(_) => None,
+        Err(err) => {
+            tracing::warn!(track, %err, "ignoring rekordbox cache entry");
+            None
+        }
     }
 }
 
@@ -420,6 +534,32 @@ mod tests {
         fs::write(entry_dir(dir.path(), 1).join("analysis.json"), b"{").unwrap();
         assert!(load_valid(dir.path(), 1, "h").is_none());
         assert!(!has_valid(dir.path(), 1, "h"));
+    }
+
+    #[test]
+    fn rekordbox_entry_round_trip_and_invalidation() {
+        let dir = tempfile::tempdir().unwrap();
+        let e = RekordboxEntry {
+            duration_ms: 300_000,
+            dat: b"dat".to_vec(),
+            ext: b"ext".to_vec(),
+            ex2: b"2ex".to_vec(),
+        };
+        assert!(load_rekordbox(dir.path(), 3, "h").is_none());
+        write_rekordbox(dir.path(), 3, &e, "h", Path::new("/rb/ANLZ0000.DAT")).unwrap();
+        assert_eq!(load_rekordbox(dir.path(), 3, "h"), Some(e.clone()));
+        assert!(has_valid_rekordbox(dir.path(), 3, "h"));
+        assert!(!has_valid_rekordbox(dir.path(), 3, "other"));
+        // Lives beside a reks entry without touching it.
+        write(dir.path(), 3, &sample(), "h").unwrap();
+        assert_eq!(load_valid(dir.path(), 3, "h"), Some(sample()));
+        assert_eq!(load_rekordbox(dir.path(), 3, "h"), Some(e));
+        let json = fs::read_to_string(entry_dir(dir.path(), 3).join("rekordbox.json")).unwrap();
+        assert!(json.contains(r#""source": "rekordbox""#), "{json}");
+        // A missing file makes it invalid.
+        fs::remove_file(entry_dir(dir.path(), 3).join("rekordbox.2EX")).unwrap();
+        assert!(!has_valid_rekordbox(dir.path(), 3, "h"));
+        assert!(load_rekordbox(dir.path(), 3, "h").is_none());
     }
 
     #[test]

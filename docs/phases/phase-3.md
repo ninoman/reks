@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–11 and 13 done; 12 measured, tuning (12a) in progress: BPM and downbeat met; key port verified, mode kept, tonic next). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–11, 11b and 13 done; 12 measured, tuning (12a) in progress: BPM and downbeat met; key port verified, mode kept, tonic next). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -143,7 +143,9 @@ confidences as JSON; waveform columns as raw bytes; the grid editor's
 `analysis_version`, `analysis_hash`, `analysed_at`, `analysis_error`,
 `beat_confidence`, `key_confidence` on the track row (migration 0007).
 Analysis never overwrites manual or rekordbox grids, or manual, tag or
-rekordbox keys (D10, "Queue").
+rekordbox keys (D10, "Queue"). A track rekordbox analysed has a rekordbox entry instead
+(`rekordbox.json` + rekordbox's `rekordbox.{DAT,EXT,2EX}` in the same folder,
+`track.analysis_source = 'rekordbox'`; D10, "rekordbox mapping").
 
 ## Tasks
 
@@ -328,8 +330,20 @@ rekordbox keys (D10, "Queue").
     Tests: [tests/queue.rs](../../crates/reks-analysis/tests/queue.rs)
     (completion, pause, cancel, cache reuse and invalidation, manual data,
     failures). Throughput on real tracks is unmeasured (task 12).
-    Order (2026-10-21): pending tracks with a rekordbox grid go last; skipping
-    them altogether is proposed in D10 ("Finding", not accepted yet).
+    Order (2026-10-21): pending tracks with a rekordbox grid go last.
+11b. [x] **rekordbox mapping** (2026-10-21, maintainer decision, D10): before
+    queueing, tracks rekordbox analysed are mapped into the cache instead of
+    analysed ([`rbmap.rs`](../../crates/reks-export-rb/src/rbmap.rs), app and
+    `reks rb map --library <db>`). rekordbox's waveforms are read by
+    [`rbwave.rs`](../../crates/reks-anlz/src/rbwave.rs) and written back
+    unchanged by the reks ANLZ builder. Migration 0008 adds
+    `track.analysis_source` (`reks` / `rekordbox`). On the maintainer's
+    library, 2,284 tracks were mapped in 10 s instead of about 11 CPU-hours
+    of analysis. Tests:
+    [tests/rbmap.rs](../../crates/reks-export-rb/tests/rbmap.rs) (XML
+    `TEMPO` → rekordbox grid rows, mapping, pending list, built ANLZ with
+    rekordbox waveforms before and after a grid edit) and the round trip in
+    `rbwave.rs`. On players: UNVERIFIED (task 14).
 12. [x] **Parity measurement**: run the whole imported library through reks;
     report BPM agreement (|Δ| ≤ 0.05), downbeat agreement (first beat within
     30 ms modulo bar), key agreement (exact, relative, neighbour), with

@@ -4,7 +4,7 @@
 //! - **Planning** asks a [`ReksLocator`] whether a track has reks analysis:
 //!   [`ReksCache`] looks for a current entry in the analysis cache
 //!   (`reks_analysis::cache`, same analyser version, same file content
-//!   hash). [`ExportOptions::anlz_preference`](crate::plan::ExportOptions)
+//!   hash), or a rekordbox entry ([`crate::rbmap`], D10) for the same file. [`ExportOptions::anlz_preference`](crate::plan::ExportOptions)
 //!   decides between that and rekordbox's cache.
 //! - **Writing**: the writer builds each track's set into its scratch folder
 //!   before anything goes to the stick ([`write_all`]) and hands baken the
@@ -14,8 +14,9 @@
 //!   [`reks_anlz::validate_set`].
 //!
 //! What a built set holds: waveforms encoded from the cached 150/s columns
-//! ([`Waveforms::encode`], [`WaveformCalibration::default`] until task 8
-//! calibrates it); the library's beatgrid
+//! ([`Waveforms::encode`], [`WaveformCalibration::default`]), or, for a track
+//! with only a rekordbox entry, rekordbox's own waveform bytes
+//! ([`reks_anlz::rbwave`]); the library's beatgrid
 //! ([`pqtz_beats_from_anchors`], so grid edits and rekordbox grids are what
 //! the player shows) and cues; `PVBR` from the MP3's frame count. No `PSSI`,
 //! no FLAC seek table (`PVB2`), as with baken's generated files. All of it is
@@ -26,6 +27,7 @@ use std::path::{Path, PathBuf};
 
 use reks_analysis::cache;
 use reks_anlz::grid::{pqtz_beats_from_anchors, GridError};
+use reks_anlz::rbwave::{read_waveforms, RbWaveError};
 use reks_anlz::waveform::EncodeError;
 use reks_anlz::{AnlzInput, AnlzSet, AnlzTarget, BuildError, WaveformCalibration, Waveforms};
 use reks_audio::Kind;
@@ -60,7 +62,10 @@ impl ReksLocator for ReksCache {
             return false;
         }
         match file_content_hash(&track.src) {
-            Ok(hash) => cache::has_valid(&self.cache_dir, track.track_id, &hash),
+            Ok(hash) => {
+                cache::has_valid(&self.cache_dir, track.track_id, &hash)
+                    || cache::has_valid_rekordbox(&self.cache_dir, track.track_id, &hash)
+            }
             Err(err) => {
                 tracing::debug!(track = track.track_id, %err, "no content hash");
                 false
@@ -113,6 +118,8 @@ pub enum ReksAnlzError {
     #[error("waveforms: {0}")]
     Encode(#[from] EncodeError),
     #[error(transparent)]
+    RekordboxWaveforms(#[from] RbWaveError),
+    #[error(transparent)]
     Build(#[from] BuildError),
     #[error("{}: {source}", path.display())]
     Io {
@@ -161,14 +168,22 @@ pub fn build(
     target: AnlzTarget,
 ) -> Result<AnlzSet, ReksAnlzError> {
     let hash = file_content_hash(track.src)?;
-    let analysis =
-        cache::load_valid(&lib.cache_dir(), track.track_id, &hash).ok_or(ReksAnlzError::Stale)?;
+    let cache_dir = lib.cache_dir();
+    // reks's own analysis first (a Re-analyse replaces a mapping), then
+    // rekordbox's mapped into the cache.
+    let (duration_ms, waveforms) =
+        if let Some(analysis) = cache::load_valid(&cache_dir, track.track_id, &hash) {
+            // The decoded length: the one the columns, grid and cue checks agree on.
+            let w = Waveforms::encode(&analysis.columns, &WaveformCalibration::default())?;
+            (analysis.duration_ms, w)
+        } else if let Some(rb) = cache::load_rekordbox(&cache_dir, track.track_id, &hash) {
+            (rb.duration_ms, read_waveforms(&rb.dat, &rb.ext, &rb.ex2)?)
+        } else {
+            return Err(ReksAnlzError::Stale);
+        };
     let cues = lib.track(track.track_id)?.cues;
     let anchors = lib.beatgrid(track.track_id)?.anchors;
-    // The decoded length: the one the columns, grid and cue checks agree on.
-    let duration_ms = analysis.duration_ms;
     let beats = pqtz_beats_from_anchors(&anchors, duration_ms)?;
-    let waveforms = Waveforms::encode(&analysis.columns, &WaveformCalibration::default())?;
     let mp3_audio_frames = match track.kind {
         Kind::Mp3 => reks_audio::mp3_audio_frames(track.src)?,
         _ => None,

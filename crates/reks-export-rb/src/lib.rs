@@ -15,6 +15,7 @@ pub mod onelibrary;
 pub mod pdbread;
 pub mod plan;
 pub mod rbcache;
+pub mod rbmap;
 pub mod reksanlz;
 pub mod report;
 pub mod target;
