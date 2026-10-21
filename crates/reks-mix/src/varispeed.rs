@@ -25,8 +25,12 @@ pub(crate) const CHUNK: usize = 32;
 /// −100 dB in the passband at a fraction of the cost of 256.
 const SINC_LEN: usize = 128;
 /// Steps (source frames per output frame) the resampler accepts:
-/// `1 / MAX_STEP..=MAX_STEP`. Covers ±50% tempo with a 2:1 rate ratio.
-pub(crate) const MAX_STEP: f64 = 4.0;
+/// `1 / MAX_STEP..=MAX_STEP`. Covers +100% tempo (WIDE) with a 4:1 rate
+/// ratio, and down to −87.5% at 1:1; slower than that the deck stands
+/// still ([`MIN_STEP`]). The cost per output frame does not depend on it.
+pub(crate) const MAX_STEP: f64 = 8.0;
+/// Below this step the deck holds its position instead of resampling.
+pub(crate) const MIN_STEP: f64 = 1.0 / MAX_STEP;
 /// Source time of rubato's first output after a reset, less one step, in
 /// frames from the first frame fed. Rubato starts its index at
 /// `-(SINC_LEN - 1)` and a kernel at index `i` is centred on

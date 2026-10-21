@@ -19,10 +19,11 @@ use crate::sync;
 /// Deck slots in the graph. The UI shows 2 or 4; idle decks cost nothing.
 pub const DECKS: usize = 4;
 
-/// Slowest tempo fader setting (−50%, the widest CDJ range).
-pub const TEMPO_MIN: f64 = 0.5;
-/// Fastest tempo fader setting (+50%).
-pub const TEMPO_MAX: f64 = 1.5;
+/// Slowest tempo fader setting: −100%, the bottom of the CDJ-3000's WIDE
+/// range, where the deck stands still.
+pub const TEMPO_MIN: f64 = 0.0;
+/// Fastest tempo fader setting: +100% (WIDE).
+pub const TEMPO_MAX: f64 = 2.0;
 
 /// Length of every gain ramp: play, pause, load, volume (phase-5.md: ≥ 5 ms).
 pub const RAMP_MS: u32 = 5;
@@ -57,6 +58,8 @@ pub struct DeckState {
     pub bpm: Option<f64>,
     /// Beat number at the playhead (0 at the grid's first anchor).
     pub beat: Option<f64>,
+    /// CUE is held from the cue point: the deck plays until it is let go.
+    pub cue_preview: bool,
     /// Sync is on.
     pub sync: bool,
     /// Sync matches the downbeat too.
@@ -82,6 +85,7 @@ impl Default for DeckState {
             speed: 1.0,
             bpm: None,
             beat: None,
+            cue_preview: false,
             sync: false,
             sync_bar: false,
             locked: false,
@@ -739,6 +743,76 @@ mod tests {
     }
 
     #[test]
+    fn holding_cue_on_the_cue_point_previews() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, ramp_source(48_000));
+        g.apply(Control::Seek {
+            deck: 0,
+            frame: 5_000,
+        });
+        g.apply(Control::Cue { deck: 0 });
+        assert!(!g.state().decks[0].playing, "the first press sets the cue");
+        // Pressed again on the cue point: plays while held.
+        g.apply(Control::Cue { deck: 0 });
+        let st = g.state().decks[0];
+        assert!(st.playing && st.cue_preview);
+        render_frames(&mut g, 2_000);
+        g.apply(Control::CueRelease { deck: 0 });
+        render_frames(&mut g, RAMP + 10);
+        let st = g.state().decks[0];
+        assert!(!st.playing && !st.cue_preview);
+        assert_eq!((st.position, st.cue), (5_000, 5_000));
+        // PLAY during the preview: letting go keeps it playing.
+        g.apply(Control::Cue { deck: 0 });
+        render_frames(&mut g, 500);
+        g.apply(Control::Play { deck: 0 });
+        g.apply(Control::CueRelease { deck: 0 });
+        render_frames(&mut g, RAMP * 3);
+        let st = g.state().decks[0];
+        assert!(st.playing && !st.cue_preview);
+        assert!(st.position > 5_500);
+        // A release with no preview does nothing.
+        g.apply(Control::CueRelease { deck: 0 });
+        render_frames(&mut g, RAMP * 3);
+        assert!(g.state().decks[0].playing);
+    }
+
+    #[test]
+    fn wide_tempo_doubles_and_stands_still_at_the_ends() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, ramp_source(48_000));
+        g.apply(Control::Tempo {
+            deck: 0,
+            ratio: 2.0,
+        });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 1_000);
+        let st = g.state().decks[0];
+        assert_eq!(st.speed, 2.0);
+        assert!((st.position - 2_000).abs() <= 1, "{}", st.position);
+        // −100%: fades out, then holds its place in silence.
+        g.apply(Control::Tempo {
+            deck: 0,
+            ratio: 0.0,
+        });
+        let lat = g.latency();
+        render_frames(&mut g, 2 * RAMP + lat);
+        let held = g.state().decks[0];
+        assert!(held.playing);
+        assert_eq!(held.speed, 0.0);
+        let out = render_frames(&mut g, 1_000);
+        assert!(out.iter().all(|&s| s == 0.0));
+        assert_eq!(g.state().decks[0].position, held.position);
+        // Back up to speed: moving again.
+        g.apply(Control::Tempo {
+            deck: 0,
+            ratio: 0.5,
+        });
+        render_frames(&mut g, 1_000);
+        assert!(g.state().decks[0].position > held.position + 400);
+    }
+
+    #[test]
     fn quantised_cue_and_seek_snap_to_the_beat() {
         let mut g = Graph::new(RATE).unwrap();
         load(&mut g, gridded(480_000));
@@ -751,8 +825,8 @@ mod tests {
         assert_eq!(g.state().decks[0].cue, 24_000);
         assert_eq!(
             g.state().decks[0].position,
-            13_000,
-            "cue does not move the head"
+            24_000,
+            "the head moves to the cue point, as on a CDJ"
         );
         g.apply(Control::Seek {
             deck: 0,

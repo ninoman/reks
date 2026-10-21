@@ -5,9 +5,68 @@
 
 import type { CueRouting } from "./ipc";
 
-/** Tempo fader ranges, as a fraction either side of 1. */
-export const TEMPO_RANGES = [0.08, 0.16, 0.5] as const;
+/**
+ * Tempo fader ranges (CDJ-3000), as a fraction either side of 1. WIDE is
+ * ±100%: at the slow end the deck stands still.
+ */
+export const TEMPO_RANGES = [0.06, 0.1, 0.16, 1] as const;
 export type TempoRange = (typeof TEMPO_RANGES)[number];
+
+/** ±10%, the CDJ default. */
+export const DEFAULT_TEMPO_RANGE: TempoRange = 0.1;
+
+const RANGE_LABEL: Record<TempoRange, string> = { 0.06: "±6", 0.1: "±10", 0.16: "±16", 1: "WIDE" };
+
+/** `±6`, `±10`, `±16`, `WIDE`. */
+export function tempoRangeLabel(r: TempoRange): string {
+  return RANGE_LABEL[r];
+}
+
+/** The range after `r`, as the range button cycles. */
+export function nextTempoRange(r: TempoRange): TempoRange {
+  return TEMPO_RANGES[(TEMPO_RANGES.indexOf(r) + 1) % TEMPO_RANGES.length] ?? DEFAULT_TEMPO_RANGE;
+}
+
+/**
+ * Decks on screen, by index. With two shown they are decks 2 and 3, the
+ * centre channels of a 4-channel mixer, as with two CDJs on a DJM.
+ */
+export function shownDecks(count: 2 | 4): number[] {
+  return count === 4 ? [0, 1, 2, 3] : [1, 2];
+}
+
+/** Decks 1 and 2 sit left of the mixer, 3 and 4 right. */
+export function deckSide(deck: number): "left" | "right" {
+  return deck < 2 ? "left" : "right";
+}
+
+/** Pointer travel (px) before a press on a waveform counts as a drag. */
+export const SCRUB_SLOP_PX = 3;
+/** At most one seek per this many ms while dragging. */
+export const SCRUB_INTERVAL_MS = 30;
+
+/** Where a drag on a deck waveform puts the playhead, ms. */
+export type ScrubGrip =
+  /** The overview: the point under the pointer. */
+  | { kind: "overview"; widthPx: number; durationMs: number }
+  /**
+   * The zoomed view: the track moves with the pointer, like a record under
+   * a hand (drag left to go forward). `fromMs` is the position at the press.
+   */
+  | { kind: "zoomed"; pxPerS: number; fromMs: number; durationMs: number };
+
+/** `x`: pointer x from the element's left; `dx`: travel since the press. */
+export function scrubTarget(grip: ScrubGrip, x: number, dx: number): number {
+  const ms =
+    grip.kind === "overview"
+      ? grip.widthPx > 0
+        ? (x / grip.widthPx) * grip.durationMs
+        : 0
+      : grip.pxPerS > 0
+        ? grip.fromMs - (dx / grip.pxPerS) * 1000
+        : grip.fromMs;
+  return Math.min(grip.durationMs, Math.max(0, ms));
+}
 
 /** Nudge (pitch bend) while held, as a fraction. */
 export const NUDGE = 0.04;

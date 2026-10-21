@@ -25,6 +25,7 @@ const view = (over: Partial<DeckView> = {}): DeckView => ({
   syncBar: false,
   locked: false,
   quantise: true,
+  cuePreview: false,
   ...over,
 });
 
@@ -41,6 +42,8 @@ function setup(props: Partial<DeckStripProps> = {}) {
   const actions = Object.fromEntries(
     [
       "togglePlay",
+      "play",
+      "pause",
       "cue",
       "toggleSync",
       "toggleBar",
@@ -109,7 +112,9 @@ describe("DeckStrip", () => {
     expect(c.disabled).toBe(true);
     fireEvent.click(b);
     expect(a.hotCue).toHaveBeenCalledWith(1);
-    fireEvent.click(screen.getByRole("button", { name: /tempo range/ }));
+    const range = screen.getByRole("button", { name: "Deck 2 tempo range ±10%" });
+    expect(range.textContent).toBe("±10");
+    fireEvent.click(range);
     expect(a.setTempoRange).toHaveBeenCalledWith(0.16);
     fireEvent.keyDown(screen.getByRole("slider", { name: "Deck 2 position" }), { key: "Home" });
     expect(a.seek).toHaveBeenCalledWith(0);
@@ -122,6 +127,48 @@ describe("DeckStrip", () => {
     expect(a.nudge).toHaveBeenLastCalledWith(1);
     fireEvent.pointerUp(faster);
     expect(a.nudge).toHaveBeenLastCalledWith(0);
+  });
+
+  it("holds CUE from pointer down to up, and from key down to up", () => {
+    const a = setup({ view: view(), meta: loadedMeta() });
+    const cue = screen.getByRole("button", { name: "Deck 2 cue" });
+    fireEvent.pointerDown(cue, { button: 0 });
+    expect(a.cue).toHaveBeenLastCalledWith(true);
+    fireEvent.pointerUp(cue);
+    expect(a.cue).toHaveBeenLastCalledWith(false);
+    fireEvent.keyDown(cue, { key: " " });
+    expect(a.cue).toHaveBeenLastCalledWith(true);
+    fireEvent.keyUp(cue, { key: " " });
+    expect(a.cue).toHaveBeenLastCalledWith(false);
+  });
+
+  it("drag on the overview skims; a playing deck pauses and plays on", () => {
+    vi.useFakeTimers();
+    try {
+      const a = setup({ view: view({ playing: true }), meta: loadedMeta() });
+      const overview = screen.getByRole("slider", { name: "Deck 2 position" });
+      overview.getBoundingClientRect = () => ({ left: 0, width: 300 }) as DOMRect;
+      // A press jumps there and keeps playing.
+      fireEvent.pointerDown(overview, { button: 0, pointerId: 1, clientX: 100 });
+      expect(a.seek).toHaveBeenLastCalledWith(10_000);
+      expect(a.pause).not.toHaveBeenCalled();
+      // Moves within the throttle window send only the last one, on time.
+      fireEvent.pointerMove(overview, { pointerId: 1, clientX: 150 });
+      expect(a.pause).toHaveBeenCalled();
+      fireEvent.pointerMove(overview, { pointerId: 1, clientX: 200 });
+      expect(a.seek).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(40);
+      expect(a.seek).toHaveBeenLastCalledWith(20_000);
+      fireEvent.pointerMove(overview, { pointerId: 1, clientX: 210 });
+      fireEvent.pointerUp(overview, { pointerId: 1, clientX: 210 });
+      expect(a.seek).toHaveBeenLastCalledWith(21_000);
+      expect(a.play).toHaveBeenCalledTimes(1);
+      // The canvas's own click does not seek again.
+      fireEvent.click(overview);
+      expect(a.seek).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows sync phase against the leader, and the leader itself", () => {

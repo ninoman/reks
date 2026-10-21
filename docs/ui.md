@@ -154,8 +154,11 @@ app header, under the table. `MixPanel` is the only part that reads the store
 take props. The mixer follows the hardware: four channel strips (level, HI,
 MID 1, MID 2, LO, filter assign X/off/Y, cue, fader, crossfader assign) with
 one caption column, the master and cue section, then filter X, the crossfader
-and filter Y. Decks 1 and 3 sit left of it, 2 and 4 right; 2 decks by
-default, 4 with the toggle (shorter waveforms).
+and filter Y. Decks 1 and 2 sit left of it, 3 and 4 right. Two decks by
+default, and they are decks 2 and 3, the centre channels, as with two CDJs
+on a 4-channel mixer; 4 with the toggle (shorter waveforms). Deck cards are
+as tall as their content (the columns no longer stretch them to the mixer's
+height).
 
 - States: output off (start form: device, rate, buffer, cue routing; the
   device's cue routing is preselected until the user picks one, and routings
@@ -165,14 +168,24 @@ default, 4 with the toggle (shorter waveforms).
 - Waveforms draw on the dark `deck` like the grid editor: 8 s scrolling with
   the playhead in the middle, beat lines, cue (`deck-cue`) and hot cues
   (`deck-hotcue`); the overview under it is the keyboard seek slider.
+  Drag to skim (`mix/useDeckScrub`, a wrapper around `DeckWaveform`, which
+  only draws): on the overview the playhead follows the pointer and a press
+  jumps there; on the zoomed view the track moves with the pointer (drag
+  left to go forward). A playing deck pauses while dragged and plays on from
+  the release point. Seeks are throttled to one per 30 ms, the last always sent.
+- CUE is held, not clicked (pointer down/up, Enter/Space, and the A/J keys
+  down/up): paused on the cue point it previews while held and returns on
+  release; PLAY during the preview keeps it playing.
+- Tempo range button cycles ±6, ±10 (default), ±16 and WIDE (±100%; the
+  slow end stands still), as on a CDJ-3000.
 - Sync phase: a marker half a beat either side (two beats with bar sync),
   green within 1/32 beat. The tempo fader is CDJ-style: faster towards the
   bottom.
 - Load: the table's context menu ("Load to deck N", also in playlist views)
   or drag a track onto a deck. Loading starts the output if it is off.
 - Shortcuts while the panel is open ([`src/lib/mixKeys.ts`](../src/lib/mixKeys.ts),
-  also under **Shortcuts** in the panel): A/S/D cue, play, sync deck 1 and
-  J/K/L deck 2 (Shift: decks 3 and 4), Q/W and U/I nudge while held, 1–4 and
+  also under **Shortcuts** in the panel): A/S/D cue, play, sync deck 2 and
+  J/K/L deck 3, the decks on screen with two (Shift: the outer decks 1 and 4), Q/W and U/I nudge while held, 1–4 and
   7–0 hot cues A–D, Z/X/C crossfader. Space stays with the preview player.
 - The mixer is memoised away from the 60 Hz engine state; only the decks
   re-render with it.

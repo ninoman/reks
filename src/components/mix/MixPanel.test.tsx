@@ -39,6 +39,7 @@ const idleDeck: DeckView = {
   syncBar: false,
   locked: false,
   quantise: false,
+  cuePreview: false,
 };
 
 const state = (over: Partial<MixState> = {}): MixState => ({
@@ -104,8 +105,10 @@ describe("MixPanel", () => {
       cue: { type: "splitMono" },
     });
     expect(screen.getByRole("status").textContent).toBe("Laptop Speakers · 48.0 kHz · 256 frames");
-    expect(screen.getByRole("region", { name: "Deck 1" })).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "Deck 3" })).toBeNull();
+    // Two decks: 2 and 3, the centre channels.
+    expect(screen.getByRole("region", { name: "Deck 2" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Deck 3" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Deck 1" })).toBeNull();
     // The engine is told every mixer position after a start.
     await waitFor(() =>
       expect(mixControl).toHaveBeenCalledWith({ type: "crossfader", pos: 0.5, curve: 0 }),

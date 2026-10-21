@@ -25,9 +25,15 @@ pub enum Control {
     Pause {
         deck: u8,
     },
-    /// CDJ cue: while playing, return to the cue point and pause; while
-    /// paused, set the cue point here.
+    /// CUE pressed (CDJ): while playing, return to the cue point and pause;
+    /// paused at the cue point, play until [`Control::CueRelease`] (cue
+    /// preview); paused elsewhere, set the cue point here and move to it.
     Cue {
+        deck: u8,
+    },
+    /// CUE let go: ends a cue preview (back to the cue point, paused).
+    /// PLAY during the preview keeps the deck playing instead.
+    CueRelease {
         deck: u8,
     },
     /// Clamped to the track. The new position plays from the next frame;
@@ -107,6 +113,7 @@ impl Control {
             | Self::Play { deck }
             | Self::Pause { deck }
             | Self::Cue { deck }
+            | Self::CueRelease { deck }
             | Self::Seek { deck, .. }
             | Self::HotCue { deck, .. }
             | Self::Tempo { deck, .. }
