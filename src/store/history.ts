@@ -17,7 +17,7 @@ import {
   type SessionPatch,
   type SessionRow,
 } from "../lib/ipc";
-import { useLibrary } from "./library";
+import { refreshAll } from "./panes";
 
 const MONTHS = [
   "January",
@@ -129,7 +129,7 @@ export const useHistory = create<HistoryState>()((set, get) => {
     }
     if (countsMoved) {
       set((s) => ({ version: s.version + 1 }));
-      useLibrary.getState().refresh(true);
+      refreshAll(true);
     }
   }
 

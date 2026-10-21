@@ -18,6 +18,7 @@ import {
 } from "../lib/ipc";
 import { useHistory } from "./history";
 import { useLibrary } from "./library";
+import { allLibraries, usePanes } from "./panes";
 import {
   ancestors,
   dropTarget,
@@ -64,6 +65,10 @@ export interface PlaylistsState {
   mutate(op: PlaylistOp): Promise<PlaylistOutcome | null>;
   /** Selects a node (or the collection) and shows it in the track table (closing a session). */
   select(id: number | null): void;
+  /** Shift+click: shows a node in a split pane under the track table (closing a session). */
+  openInPane(id: number): void;
+  /** The main list's close button: the first split pane's playlist moves up into it. */
+  closeMainList(): void;
   /** New playlist or folder inside `near` (a folder) or next to it, then renames it. */
   create(kind: "playlist" | "folder", near: PlaylistNode | null): Promise<void>;
   commitRename(): Promise<void>;
@@ -96,6 +101,11 @@ export const usePlaylists = create<PlaylistsState>()((set, get) => {
     const shown = lib.filters.playlistId;
     if (shown !== null && byId(shown) === undefined) lib.showPlaylist(null, true);
     else lib.refresh(true);
+    const panes = usePanes.getState();
+    for (const pane of panes.panes) {
+      if (byId(pane.playlistId) === undefined) panes.close(pane.key);
+      else pane.store.getState().refresh(true);
+    }
   }
 
   return {
@@ -132,7 +142,18 @@ export const usePlaylists = create<PlaylistsState>()((set, get) => {
       useHistory.getState().close();
       get().dispatch({ type: "select", id });
       const node = byId(id);
+      usePanes.getState().closePlaylist(node?.id ?? null);
       useLibrary.getState().showPlaylist(node?.id ?? null, node?.isFolder ?? true);
+    },
+    openInPane(id) {
+      const node = byId(id);
+      if (node === undefined) return;
+      useHistory.getState().close();
+      usePanes.getState().open(node.id, node.isFolder);
+    },
+    closeMainList() {
+      const first = usePanes.getState().panes[0];
+      if (first !== undefined) get().select(first.playlistId);
     },
     async create(kind, near) {
       let parentId: number | null = null;
@@ -209,8 +230,10 @@ export const usePlaylists = create<PlaylistsState>()((set, get) => {
       const label = NEW_DIVIDER_LABEL;
       const outcome = await get().mutate({ type: "insertDivider", playlistId, position, label });
       if (outcome?.type !== "done") return;
-      // The reloaded table puts the new divider at table row `position`.
-      useLibrary.getState().select({ type: "click", index: position });
+      // The reloaded table showing it puts the new divider at table row `position`.
+      for (const lib of allLibraries())
+        if (lib.getState().filters.playlistId === playlistId)
+          lib.getState().select({ type: "click", index: position });
       get().startDividerRename(playlistId, position, label);
     },
     startDividerRename(playlistId, position, label) {

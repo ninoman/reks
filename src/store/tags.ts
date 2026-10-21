@@ -17,6 +17,7 @@ import {
   tagsMutate,
 } from "../lib/ipc";
 import { useLibrary } from "./library";
+import { allLibraries } from "./panes";
 import { applyTags } from "./tagModel";
 
 export type TagsStatus = "loading" | "ready" | "error";
@@ -56,13 +57,14 @@ export const useTags = create<TagsState>()((set, get) => {
 
   async function change(op: Extract<TagOp, { type: "assign" | "unassign" }>) {
     if (op.trackIds.length === 0 || op.tagIds.length === 0) return;
-    await edit(op, (tree) =>
-      useLibrary
-        .getState()
-        .patchRowTags(op.trackIds, (tags) =>
-          applyTags(tree, tags, op.tagIds, op.type === "assign"),
-        ),
-    );
+    await edit(op, (tree) => {
+      for (const lib of allLibraries())
+        lib
+          .getState()
+          .patchRowTags(op.trackIds, (tags) =>
+            applyTags(tree, tags, op.tagIds, op.type === "assign"),
+          );
+    });
   }
 
   return {
@@ -87,6 +89,7 @@ export const useTags = create<TagsState>()((set, get) => {
         const tagIds = lib.filters.tagIds.filter((id) => known.has(id));
         if (tagIds.length !== lib.filters.tagIds.length) lib.setFilters({ tagIds });
         else lib.refresh(true);
+        for (const pane of allLibraries().slice(1)) pane.getState().refresh(true);
       });
     },
     assign: (trackIds, tagIds) => change({ type: "assign", trackIds, tagIds }),

@@ -15,7 +15,7 @@ import {
   analysisSubscribe,
   libraryTrack,
 } from "../lib/ipc";
-import { useLibrary } from "./library";
+import { replaceRowEverywhere } from "./panes";
 
 export interface AnalysisState {
   /** `null` until subscribed, or when analysis is off (no beat model). */
@@ -36,7 +36,7 @@ export const useAnalysis = create<AnalysisState>()((set) => {
   /** Shows the new BPM/key of `id` wherever its row is loaded. */
   function updateRow(id: number) {
     libraryTrack(id).then(
-      (d) => useLibrary.getState().replaceRow(d.track),
+      (d) => replaceRowEverywhere(d.track),
       () => {}, // removed meanwhile; the next refresh shows it anyway
     );
   }

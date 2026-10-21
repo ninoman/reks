@@ -32,6 +32,7 @@ import {
 } from "../lib/ipc";
 import { rowAt, useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
+import { replaceRowEverywhere } from "../store/panes";
 import { primaryIndex } from "../store/selection";
 import { useKeyLabel } from "../store/settings";
 import { GridEditorDialog } from "./GridEditor";
@@ -92,7 +93,6 @@ export function TrackInfoPanel() {
 }
 
 export function TrackDetailPanel({ trackId }: { trackId: number }) {
-  const replaceRow = useLibrary((s) => s.replaceRow);
   const colours = useLibrary((s) => s.facets?.colours ?? NO_COLOURS);
 
   const [detail, setDetail] = useState<TrackDetail | null>(null);
@@ -133,11 +133,11 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
     libraryTrack(trackId).then(
       (d) => {
         setDetail((cur) => (cur === null ? d : { ...cur, beatgrid: d.beatgrid, track: d.track }));
-        replaceRow(d.track);
+        replaceRowEverywhere(d.track);
       },
       (e: unknown) => setError(String(e)),
     );
-  }, [trackId, replaceRow]);
+  }, [trackId]);
 
   if (detail === null || initial === null || form === null) {
     return (
@@ -181,7 +181,7 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
       const d = await libraryUpdateTrack(trackId, patch);
       load(d);
       setError(null);
-      replaceRow(d.track);
+      replaceRowEverywhere(d.track);
       void useLibrary.getState().loadFacets();
     } catch (err) {
       setError(String(err));

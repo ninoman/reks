@@ -1,10 +1,12 @@
 /**
- * The virtualised track table. Only the visible rows (plus overscan) are in
+ * The virtualised track table of the list in `LibraryStoreContext` (the main
+ * list or a split pane). Only the visible rows (plus overscan) are in
  * the DOM; rows come from the store's page cache, which fetches pages from
  * `library_query` as they scroll into view.
  *
  * Rows drag (the whole selection) onto playlists in the tree. In a playlist
- * view sorted by position (ascending) they also drag to reorder, and Delete or
+ * view sorted by position (ascending) they also drag to reorder, rows dropped
+ * from another list (a split pane) are added at the drop line, and Delete or
  * the context menu removes the selected entries. With no search or other
  * filter that view also shows the playlist's dividers (D22) as full-width
  * rows, which select, drag and delete like entries; the context menu inserts
@@ -31,7 +33,7 @@ import { hasType, readTracks, TRACKS_MIME, type TrackDrag, zoneAt } from "../lib
 import { shownDecks } from "../lib/mixView";
 import { useAnalysis } from "../store/analysis";
 import { useConverter } from "../store/converter";
-import { entryPosition, itemAt, useLibrary, type ViewItem, viewCount } from "../store/library";
+import { entryPosition, itemAt, type ViewItem, viewCount } from "../store/library";
 import { useMix } from "../store/mix";
 import { usePanels } from "../store/panels";
 import { usePlayer } from "../store/player";
@@ -40,6 +42,7 @@ import { primaryIndex } from "../store/selection";
 import { useTags } from "../store/tags";
 import type { ColumnSpec } from "./columns";
 import { DividerLabel } from "./DividerLabel";
+import { useLibraryStore } from "./libraryStoreContext";
 import { TagSubmenu } from "./TagSubmenu";
 import { fitColumnWidths, ROW_HEIGHT } from "./trackTableModel";
 import {
@@ -73,17 +76,18 @@ const ROW = [
 ].join(" ");
 
 export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
-  const total = useLibrary((s) => s.total);
-  const dividers = useLibrary((s) => s.dividers);
-  const dividerView = useLibrary((s) => s.dividerView);
-  const pages = useLibrary((s) => s.pages);
-  const pagesGeneration = useLibrary((s) => s.pagesGeneration);
-  const sort = useLibrary((s) => s.sort);
-  const selection = useLibrary((s) => s.selection);
-  const toggleSort = useLibrary((s) => s.toggleSort);
-  const ensureRange = useLibrary((s) => s.ensureRange);
-  const select = useLibrary((s) => s.select);
-  const playlistId = useLibrary((s) => s.filters.playlistId);
+  const useLib = useLibraryStore();
+  const total = useLib((s) => s.total);
+  const dividers = useLib((s) => s.dividers);
+  const dividerView = useLib((s) => s.dividerView);
+  const pages = useLib((s) => s.pages);
+  const pagesGeneration = useLib((s) => s.pagesGeneration);
+  const sort = useLib((s) => s.sort);
+  const selection = useLib((s) => s.selection);
+  const toggleSort = useLib((s) => s.toggleSort);
+  const ensureRange = useLib((s) => s.ensureRange);
+  const select = useLib((s) => s.select);
+  const playlistId = useLib((s) => s.filters.playlistId);
   const loadedId = usePlayer((s) => s.status.trackId);
   const deckCount = useMix((s) => s.deckCount);
   // The My Tags column reads names from the tree: redraw when it changes.
@@ -125,7 +129,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
   // a divider just inserted is scrolled to, where its rename input waits.
   // biome-ignore lint/correctness/useExhaustiveDependencies: pagesGeneration is the trigger, not an input.
   useEffect(() => {
-    const { keepPlace, selection: sel } = useLibrary.getState();
+    const { keepPlace, selection: sel } = useLib.getState();
     if (usePlaylists.getState().dividerRename !== null && sel.focus !== null)
       virtualizer.scrollToIndex(sel.focus, { align: "auto" });
     else if (!keepPlace) virtualizer.scrollToOffset(0);
@@ -149,7 +153,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
 
   function moveFocus(delta: number, extend: boolean) {
     select({ type: "move", delta, extend, count });
-    const focus = useLibrary.getState().selection.focus;
+    const focus = useLib.getState().selection.focus;
     if (focus !== null) virtualizer.scrollToIndex(focus, { align: "auto" });
   }
 
@@ -176,7 +180,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
     } else if (e.key === "Escape") {
       select({ type: "clear" });
     } else if (e.key === "Enter") {
-      const focus = useLibrary.getState().selection.focus;
+      const focus = useLib.getState().selection.focus;
       const item = focus === null ? undefined : itemAt(loaded, focus);
       if (item !== undefined) activate(item);
     } else if ((e.key === "Delete" || e.key === "Backspace") && view !== null) {
@@ -210,7 +214,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
 
   /** The selected rows that are loaded (tracks and dividers), in table order. */
   function selectedItems() {
-    const current = useLibrary.getState();
+    const current = useLib.getState();
     return [...current.selection.selected]
       .sort((a, b) => a - b)
       .map((i) => itemAt(current, i))
@@ -245,7 +249,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
   /** Above the first selected row, or at the end. Table rows are entry positions here. */
   function insertDivider() {
     if (view === null || !dividerView) return;
-    const { selected } = useLibrary.getState().selection;
+    const { selected } = useLib.getState().selection;
     const position = selected.size === 0 ? count : Math.min(...selected);
     void usePlaylists.getState().insertDivider(view.id, position);
   }
@@ -257,7 +261,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
 
   function onRowDragStart(e: DragEvent<HTMLElement>, index: number) {
     pendingClick.current = null;
-    if (!useLibrary.getState().selection.selected.has(index)) select({ type: "click", index });
+    if (!useLib.getState().selection.selected.has(index)) select({ type: "click", index });
     const items = selectedItems();
     const payload: TrackDrag = {
       trackIds: items.flatMap((r) => (r.kind === "track" ? [r.row.id] : [])),
@@ -283,10 +287,12 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
     const drag = readTracks(e.dataTransfer);
     const item = itemAt(loaded, index);
     const target = item === undefined ? null : entryPosition(item);
-    if (!canReorder || drag === null || drag.playlistId !== view?.id || target === null) return;
-    void usePlaylists
-      .getState()
-      .reorderEntries(view.id, drag.entryPositions, target + (after ? 1 : 0));
+    if (!canReorder || drag === null || view === null || target === null) return;
+    const before = target + (after ? 1 : 0);
+    // From another list (a split pane): add there instead of reordering.
+    if (drag.playlistId === view.id)
+      void usePlaylists.getState().reorderEntries(view.id, drag.entryPositions, before);
+    else void usePlaylists.getState().addTracks(view.id, drag.trackIds, before);
   }
 
   /** Right-click selects the row first; the menu opens on the table. */
