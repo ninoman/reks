@@ -650,7 +650,7 @@ Added 2026-10-21. One PR per task; tasks 4 and 2–3 can run in parallel once 1 
    reader of playlist contents (XML export, stick size, PDB/OneLibrary
    export as plain playlists, flagged in the dry run), cycle check
    (migration 0010).
-4. [ ] **UI tags**: tag store, tag manager, "My Tags" context submenu, detail
+4. [x] **UI tags**: tag store, tag manager, "My Tags" context submenu, detail
    panel chips, column, filter-bar tag picker.
 5. [ ] **UI rule builder and smart playlists**: builder under the filter bar,
    save as smart playlist, smart lists in the tree.
