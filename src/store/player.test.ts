@@ -61,6 +61,13 @@ describe("player store", () => {
     expect(s.overview?.trackId).toBe(7);
   });
 
+  it("leaves the playing track alone when it is loaded again", async () => {
+    usePlayer.setState({ status: { ...playing, trackId: row.id } });
+    await usePlayer.getState().load(row);
+    expect(ipc.playerLoad).not.toHaveBeenCalled();
+    expect(usePlayer.getState().status.playing).toBe(true);
+  });
+
   it("keeps the shown track when a newer load won in Rust", async () => {
     usePlayer.setState({ track: { id: 3, title: "Other", artist: null } });
     vi.mocked(ipc.playerLoad).mockResolvedValue({ ...playing, trackId: 3 });

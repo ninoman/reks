@@ -109,6 +109,9 @@ export const usePlayer = create<PlayerStore>((set, get) => {
     error: null,
 
     async load(row, play = true) {
+      // Re-activating the track that is already playing keeps it going.
+      const { status } = get();
+      if (play && status.playing && status.trackId === row.id) return;
       set({ loading: row.id, error: null });
       try {
         const status = await playerLoad(row.id, play);
