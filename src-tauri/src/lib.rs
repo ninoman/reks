@@ -67,6 +67,7 @@ pub fn run() {
             commands::library_update_track,
             commands::playlists_get,
             commands::playlists_mutate,
+            commands::playlist_rule,
             commands::tags_get,
             commands::tags_mutate,
             commands::artwork_get,

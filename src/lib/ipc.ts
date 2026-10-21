@@ -479,11 +479,7 @@ export function playlistsGet(): Promise<PlaylistTree> {
   return invoke("playlists_get");
 }
 
-/**
- * The saved rule of a smart playlist, to edit it. UNVERIFIED against the
- * backend: `playlist_rule` does not exist in reks-core yet (the contract only
- * has `PlaylistNode.smart`); core has to expose it, or put `rule` on the node.
- */
+/** The saved rule of a smart playlist, to edit it. */
 export function playlistRule(id: number): Promise<RuleNode> {
   return invoke("playlist_rule", { id });
 }

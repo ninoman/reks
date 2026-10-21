@@ -9,9 +9,9 @@ use reks_core::rbxml::{
     self, ImportEvent, ImportOptions, ImportPreview, ImportReport, PrefixRemap,
 };
 use reks_core::{
-    ArtworkId, CancelToken, Facets, Library, LibraryRoot, PlaylistOp, PlaylistOutcome,
-    PlaylistTree, ScanEvent, ScanReport, Settings, SettingsPatch, TagOp, TagOutcome, TagTree,
-    TrackDetail, TrackId, TrackPage, TrackPatch, TrackQuery,
+    ArtworkId, CancelToken, Facets, Library, LibraryRoot, PlaylistId, PlaylistOp, PlaylistOutcome,
+    PlaylistTree, RuleNode, ScanEvent, ScanReport, Settings, SettingsPatch, TagOp, TagOutcome,
+    TagTree, TrackDetail, TrackId, TrackPage, TrackPatch, TrackQuery,
 };
 use reks_export_onelibrary::{OneLibraryWriter, RbVersion};
 use reks_export_rb::device::{self, DeviceInfo};
@@ -94,6 +94,12 @@ pub async fn playlists_mutate(
     op: PlaylistOp,
 ) -> CmdResult<PlaylistOutcome> {
     blocking(&state, move |lib| lib.playlist_mutate(op)).await
+}
+
+/// A smart playlist's saved rule, for editing it.
+#[tauri::command]
+pub async fn playlist_rule(state: State<'_, AppState>, id: PlaylistId) -> CmdResult<RuleNode> {
+    blocking(&state, move |lib| lib.playlist_rule(id)).await
 }
 
 /// The My Tags tree, with a track count per tag.

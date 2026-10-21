@@ -245,6 +245,18 @@ fn create_set_rule_rename_move_delete() {
 }
 
 #[test]
+fn the_saved_rule_reads_back() {
+    let env = Env::new();
+    let id = env.smart(None, "House", house(), None).unwrap();
+    assert_eq!(env.lib.playlist_rule(id).unwrap(), house());
+    let fixed = env.playlist(None, "Fixed", &[]);
+    assert!(matches!(
+        env.lib.playlist_rule(fixed),
+        Err(Error::NotASmartPlaylist(p)) if p == fixed
+    ));
+}
+
+#[test]
 fn bad_rules_and_sorts_are_rejected() {
     let env = Env::new();
     let err = env

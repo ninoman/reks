@@ -574,7 +574,7 @@ Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5)
 ### Tauri commands (`src-tauri`)
 
 `library_query`, `library_facets`, `library_track`, `library_update_track`, `playlists_get`, `tags_get`, `tags_mutate`,
-`playlists_mutate`, `scan_start` (progress via `Channel<ScanEvent>`), `scan_cancel`,
+`playlists_mutate`, `playlist_rule`, `scan_start` (progress via `Channel<ScanEvent>`), `scan_cancel`,
 `rbxml_preview(path, remap)`, `rbxml_import_start` (progress via Channel), `rbxml_import_cancel`, `rbxml_export`,
 `player_load(id, play)`, `player_play/pause/seek/volume/devices/set_device`,
 `player_state` (polled every 100 ms while playing), `artwork_get(artwork_id) -> Response(bytes)`, `overview_waveform(id) ->
@@ -653,9 +653,8 @@ Added 2026-10-21. One PR per task; tasks 4 and 2–3 can run in parallel once 1 
 4. [x] **UI tags**: tag store, tag manager, "My Tags" context submenu, detail
    panel chips, column, filter-bar tag picker.
 5. [x] **UI rule builder and smart playlists**: builder under the filter bar,
-   save as smart playlist, smart lists in the tree. Open: editing a smart list
-   needs core to expose its saved rule (`playlist_rule`, UNVERIFIED in
-   `ipc.ts`); `PlaylistNode` only says `smart`.
+   save as smart playlist, smart lists in the tree; "Edit rules" reads the
+   saved rule with `playlist_rule`.
 
 ## Acceptance criteria
 

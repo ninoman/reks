@@ -186,6 +186,21 @@ impl PlaylistOutcome {
 }
 
 impl Library {
+    /// The saved rule of a smart playlist, for editing it.
+    pub fn playlist_rule(&self, id: PlaylistId) -> Result<RuleNode> {
+        let conn = self.conn()?;
+        if !node(&conn, id)?.smart {
+            return Err(Error::NotASmartPlaylist(id));
+        }
+        let json: String = conn
+            .prepare_cached("SELECT smart_rule FROM playlist WHERE id = ?1")?
+            .query_row([id], |r| r.get(0))?;
+        serde_json::from_str(&json).map_err(|e| Error::InvalidField {
+            field: "rule",
+            reason: format!("the stored rule does not parse: {e}"),
+        })
+    }
+
     /// The playlist tree.
     pub fn playlists(&self) -> Result<PlaylistTree> {
         let conn = self.conn()?;
