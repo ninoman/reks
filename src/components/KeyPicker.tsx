@@ -16,10 +16,13 @@ export function KeyPicker({
   value,
   onChange,
   label: ariaLabel = "Key",
+  emptyLabel = "Any",
 }: {
   value: readonly Key[];
   onChange: (keys: Key[]) => void;
   label?: string;
+  /** Shown on the button while no key is ticked. */
+  emptyLabel?: string;
 }) {
   const keys = useLibrary((s) => s.facets?.keys);
   const [open, setOpen] = useState(false);
@@ -27,7 +30,7 @@ export function KeyPicker({
   const label = useKeyLabel();
   const summary =
     value.length === 0
-      ? "Any"
+      ? emptyLabel
       : value.length <= 2
         ? value.map(label).join(", ")
         : `${value.length} keys`;

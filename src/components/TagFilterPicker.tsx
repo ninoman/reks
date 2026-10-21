@@ -15,17 +15,20 @@ export function TagFilterPicker({
   ids,
   onChange,
   label = "My Tags",
+  emptyLabel = "Any",
 }: {
   ids: readonly TagId[];
   onChange: (ids: TagId[]) => void;
   label?: string;
+  /** Shown on the button while no tag is ticked. */
+  emptyLabel?: string;
 }) {
   const tree = useTags((s) => s.tree);
 
   const names = tree === null ? null : tagIndex(tree);
   const summary =
     ids.length === 0
-      ? "Any"
+      ? emptyLabel
       : ids.length === 1
         ? (names?.get(ids[0] as number)?.tag.name ?? "1 tag")
         : `${ids.length} tags`;

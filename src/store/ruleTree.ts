@@ -423,5 +423,5 @@ function itemText(item: ItemDraft, names: SummaryNames, nested: boolean): string
 /** "Tag Peak/Deep · not in playlist Warm-up · BPM is 120–128"; `null` while nothing is finished. */
 export function summarize(root: GroupDraft, names: SummaryNames): string | null {
   const text = itemText(root, names, false);
-  return text === null ? null : text.charAt(0).toUpperCase() + text.slice(1);
+  return text === null ? null : text.replace(/[a-z]/, (c) => c.toUpperCase());
 }

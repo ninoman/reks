@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { RuleNode } from "../lib/ipc";
 import {
   activeFilterCount,
   buildFilters,
@@ -34,6 +35,30 @@ describe("buildQuery", () => {
       offset: 0,
       limit: PAGE_SIZE,
     });
+  });
+
+  it("sends the rule with tag ids, next to the filters, and only while filters are on", () => {
+    const rule: RuleNode = {
+      type: "group",
+      match: "all",
+      not: false,
+      rules: [
+        { type: "filter", not: false, filter: { type: "tagAny", ids: [4, 9] } },
+        { type: "filter", not: true, filter: { type: "playlist", id: 2 } },
+      ],
+    };
+    const on = buildQuery(
+      inputs({ rule, filters: { ...noFilters, genre: "House", tagIds: [3] } }),
+      0,
+    );
+    expect(on.rule).toEqual(rule);
+    expect(on.filters).toEqual([
+      { type: "genre", genre: "House" },
+      { type: "tagAny", ids: [3] },
+    ]);
+    const off = buildQuery(inputs({ rule, filtersEnabled: false }), 0);
+    expect("rule" in off).toBe(false);
+    expect("rule" in buildQuery(inputs(), 0)).toBe(false);
   });
 
   it("trims text; blank text means no search", () => {

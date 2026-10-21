@@ -125,6 +125,7 @@ menu items `--menu-item-h`.
 | `Slider` | `size`: sm, md; one value | Radix Slider |
 | `SegmentedControl` + `Segment` | `size`; `variant`: default, control (chosen segment lit); one choice, can't be cleared (radiogroup) | Radix ToggleGroup |
 | `Chip` | removable label pill (`onRemove`, `removeLabel`) | – |
+| `Toast` | bottom-centre message with an optional action (Undo); one at a time via `store/toasts` + `ToastHost` | – |
 | `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |
 | `Kbd` | `variant`: default, inverse | – |
 | `Tooltip` | `content`, `shortcut`, `side` | Radix Tooltip |
@@ -262,6 +263,47 @@ re-queries. Pure helpers (coverage, search, create offers) are in
 - States: loading, load error with Retry, no tags yet ("Create your first
   tag"), no match for the search.
 - Dev: `npm run dev` serves tags from [`mockTags.ts`](../src/dev/mockTags.ts).
+
+## Rule builder and smart playlists (D29)
+
+The **Advanced** button in the filter bar opens the builder under it
+(`RuleBuilder` → `RuleGroup` → `RuleRow` → `RuleValueEditor`; the last three
+take props, `RuleBuilder` reads the stores). State is
+[`store/rules.ts`](../src/store/rules.ts), the tree edits are pure functions in
+[`ruleTree.ts`](../src/store/ruleTree.ts). The builder edits a *draft* (rows may
+be unfinished); `toRule` turns the finished rows into the `RuleNode` that
+`library.rule` sends with every query, ANDed with the bar, only while the
+Filters switch is on.
+
+- Plain language: a group reads "Tracks that match **all / any / none** of
+  these" (none = `any` with `not`); rows read "has / doesn't have" tag, "in /
+  not in" playlist, "is / is not" for the rest. A summary line above the
+  rows says what the conditions mean and the live `total`.
+- No Apply button: finished edits re-query after 50 ms and only when the rule
+  changed; the table keeps the old rows until the new first page lands. An
+  unfinished row is muted ("Not applied yet") and left out.
+- Three levels at most (the core allows 8); nested groups hang off an indented
+  left rule in `border`. "Last played" rows take a fixed date: a saved rule
+  cannot hold "last 30 days".
+- Keyboard: Enter in a row's fields adds a row below and focuses its field
+  Select; Delete / Backspace on the field Select of an empty row removes it.
+  Groups are `fieldset`s labelled "Group: match any".
+- The Filters badge and Advanced badge count bar and builder; **Clear all**
+  clears both with one Undo toast (`ui/Toast`, `store/toasts`).
+- Quick paths: a playlist's context menu "Show tracks not in this playlist"
+  and a tag chip's label ("Filter by tag X") add a row and open the builder.
+- **Save as smart playlist…** sends `createSmart` and clears the builder (the
+  rule lives in the playlist now). In the tree a smart list has its own icon;
+  with one shown, `SmartListHeader` offers a "Smart" badge (tooltip says why
+  it can't be edited by hand), "Updates automatically" and **Edit rules**,
+  which shows the whole collection as a live preview with the rule in the
+  builder and Save rules / Cancel (`setRule`). Dropping tracks on it, "Insert
+  divider" and "Remove from" are refused, with the reason beside them. The
+  export wizard marks smart lists and the dry run notes that they are written
+  as fixed lists.
+- States: empty builder, unfinished rows, no match (`EmptyResult`, also for a
+  smart list and an empty playlist), save errors in the dialog.
+- Dev: `mockSmart.ts` evaluates rules and smart lists like the core.
 
 ## Adding a component or variant
 

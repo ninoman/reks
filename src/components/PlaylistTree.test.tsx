@@ -10,6 +10,7 @@ vi.mock("../lib/ipc", () => ({
   playlistsMutate: vi.fn(),
   libraryFacets: vi.fn(),
   libraryQuery: vi.fn(),
+  playlistRule: vi.fn(),
 }));
 
 const ipc = await import("../lib/ipc");
@@ -17,6 +18,7 @@ const playlistsMutate = vi.mocked(ipc.playlistsMutate);
 const { useLibrary } = await import("../store/library");
 const { usePlaylists } = await import("../store/playlists");
 const { initialTree } = await import("../store/playlistTree");
+const { useRules } = await import("../store/rules");
 const { PlaylistTree } = await import("./PlaylistTree");
 const { DeleteDialog } = await import("./PlaylistDialogs");
 
@@ -201,5 +203,70 @@ describe("PlaylistTree", () => {
         position: 0,
       }),
     );
+  });
+
+  describe("smart playlists", () => {
+    const smart: PlaylistNode = {
+      ...set,
+      id: 3,
+      name: "Peak",
+      parentId: null,
+      depth: 0,
+      smart: true,
+    };
+    beforeEach(() => {
+      usePlaylists.setState({ nodes: [folder, set, smart] });
+    });
+
+    it("refuses dropped tracks and says why while they hover", () => {
+      render(<PlaylistTree />);
+      const dt = dataTransfer({
+        [TRACKS_MIME]: JSON.stringify({ trackIds: [5], playlistId: null, entryPositions: [] }),
+      });
+      fireEvent.dragOver(item("Peak"), { dataTransfer: dt });
+      expect(screen.getByText(/Follows its rules/)).toBeTruthy();
+      fireEvent.drop(item("Peak"), { dataTransfer: dt });
+      expect(playlistsMutate).not.toHaveBeenCalled();
+      expect(screen.queryByText(/Follows its rules/)).toBeNull();
+    });
+
+    it("offers Edit rules, which loads the rule into the builder", async () => {
+      const rule = {
+        type: "filter",
+        filter: { type: "neverPlayed" },
+      } as const;
+      vi.mocked(ipc.playlistRule).mockResolvedValue(rule);
+      render(<PlaylistTree />);
+      fireEvent.contextMenu(item("Peak"));
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Edit rules" }));
+      await waitFor(() => expect(useRules.getState().editing?.playlistId).toBe(3));
+      expect(useRules.getState().open).toBe(true);
+      // The collection is the edit's own view.
+      expect(useLibrary.getState().filters.playlistId).toBeNull();
+    });
+
+    it("a static playlist has no Edit rules; its menu can exclude it instead", async () => {
+      render(<PlaylistTree />);
+      fireEvent.contextMenu(item("Warm-up"));
+      await screen.findByRole("menuitem", { name: "Rename" });
+      expect(screen.queryByRole("menuitem", { name: "Edit rules" })).toBeNull();
+      fireEvent.click(screen.getByRole("menuitem", { name: "Show tracks not in this playlist" }));
+      const row = useRules.getState().root.rules[0];
+      expect(row).toMatchObject({ not: true, value: { field: "playlist", id: 2 } });
+      expect(useLibrary.getState().filters.playlistId).toBeNull();
+    });
+
+    it("leaving an edit for another playlist drops it and keeps the earlier draft", async () => {
+      vi.mocked(ipc.playlistRule).mockResolvedValue({
+        type: "filter",
+        filter: { type: "neverPlayed" },
+      });
+      render(<PlaylistTree />);
+      await useRules.getState().editSmart(smart);
+      expect(useRules.getState().editing).not.toBeNull();
+      fireEvent.click(item("Warm-up"));
+      expect(useRules.getState().editing).toBeNull();
+      expect(useLibrary.getState().filters.playlistId).toBe(2);
+    });
   });
 });

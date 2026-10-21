@@ -81,6 +81,7 @@ export function RuleValueEditor({
       return (
         <TagFilterPicker
           label="Tags"
+          emptyLabel="Choose tags…"
           ids={value.ids}
           onChange={(ids) => onChange({ field: "tag", ids })}
         />
@@ -131,6 +132,7 @@ export function RuleValueEditor({
       return (
         <KeyPicker
           label="Keys"
+          emptyLabel="Choose keys…"
           value={value.keys}
           onChange={(keys) => onChange({ field: "key", keys })}
         />

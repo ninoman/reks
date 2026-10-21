@@ -243,7 +243,9 @@ export function PlaylistTree() {
             <>
               <ContextMenuSeparator />
               <ContextMenuItem onSelect={() => excludeFromView(menuNode)}>
-                Exclude from the list
+                {menuNode.isFolder
+                  ? "Show tracks not in this folder"
+                  : "Show tracks not in this playlist"}
               </ContextMenuItem>
               <ContextMenuItem
                 onSelect={() =>

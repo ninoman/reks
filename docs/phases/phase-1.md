@@ -652,8 +652,10 @@ Added 2026-10-21. One PR per task; tasks 4 and 2–3 can run in parallel once 1 
    (migration 0010).
 4. [x] **UI tags**: tag store, tag manager, "My Tags" context submenu, detail
    panel chips, column, filter-bar tag picker.
-5. [ ] **UI rule builder and smart playlists**: builder under the filter bar,
-   save as smart playlist, smart lists in the tree.
+5. [x] **UI rule builder and smart playlists**: builder under the filter bar,
+   save as smart playlist, smart lists in the tree. Open: editing a smart list
+   needs core to expose its saved rule (`playlist_rule`, UNVERIFIED in
+   `ipc.ts`); `PlaylistNode` only says `smart`.
 
 ## Acceptance criteria
 
