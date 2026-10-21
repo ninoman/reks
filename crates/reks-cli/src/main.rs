@@ -34,6 +34,8 @@
 //!                               build ANLZ files from reks's analysis (flags: see `anlz.rs`)
 //! reks parity run|report|keyfinder [--xml <collection.xml>] [--out <dir>] [...]
 //!                               analysis parity vs rekordbox (flags: see `parity.rs`)
+//! reks keylock-render <audio> --out-dir <dir> [--ratios 0.94,1.0,1.06] [...]
+//!                               key lock listening renders and timings (flags: see `keylock/mod.rs`)
 //! ```
 
 mod adopt;
@@ -41,6 +43,7 @@ mod analyse;
 mod anlz;
 mod convert;
 mod history;
+mod keylock;
 mod onelibrary;
 mod parity;
 mod rb;
@@ -91,6 +94,7 @@ fn main() -> anyhow::Result<()> {
         [cmd, rest @ ..] if cmd == "analyse" => analyse::run(rest),
         [cmd, rest @ ..] if cmd == "anlz" => anlz::run(rest),
         [cmd, rest @ ..] if cmd == "parity" => parity::run(rest),
+        [cmd, rest @ ..] if cmd == "keylock-render" => keylock::run(rest),
         _ => bail!(
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
              | columns <audio> <out.bin> \
@@ -102,7 +106,8 @@ fn main() -> anyhow::Result<()> {
              | adopt scan <stick> --library <library.sqlite> [--json] \
              | convert plan|apply --library <library.sqlite> ... \
              | analyse <audio> [--json] | anlz build <audio> <out-dir> ...\
-             | parity run|report|keyfinder [--xml <collection.xml>] [--out <dir>] ...]"
+             | parity run|report|keyfinder [--xml <collection.xml>] [--out <dir>] ... \
+             | keylock-render <audio> --out-dir <dir> [--ratios 0.94,1.0,1.06] ...]"
         ),
     }
 }

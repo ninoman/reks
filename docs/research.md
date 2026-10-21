@@ -596,6 +596,56 @@ crates.io API `https://crates.io/api/v1/crates/<name>` for every crate above ·
 https://docs.rs/timestretch · https://docs.rs/signalsmith-stretch ·
 https://docs.rs/ssstretch · https://github.com/jefflongo/rubberband-rs
 
+### 9.3 Key lock candidates in detail (2026-10-21)
+
+Checked for phase 5 task 10 by reading each crate's published source
+(crates.io downloads) and running all three through
+`reks keylock-render` on an Apple M4 Pro, macOS 26.6.2, Apple clang 21,
+Rust 1.99.1, release build. Timings and listening steps:
+[`phases/phase-5.md`](phases/phase-5.md) task 10.
+
+| | `timestretch` 0.15.0 | `signalsmith-stretch` 0.1.3 | `rubberband` 0.1.5 + `rubberband-sys` 0.1.4 |
+|---|---|---|---|
+| Library | own (Rob Morgan) | Signalsmith Stretch **1.3.1** vendored (upstream 1.4.0, 2026-09) | Rubber Band Library **4.0.0** vendored (single-file build) |
+| Licence of library | MIT | MIT (Geraint Luff / Signalsmith Audio) | GPL-2.0-or-later (or a paid commercial licence) |
+| Licence of binding | n/a (pure Rust) | MIT (Colin Marc) | GPL-2.0-or-later (Jeff Longo) |
+| GPLv3-compatible | yes | yes | yes ("version 2 … or any later version"); already on the `deny.toml` allowlist |
+| New deps | arc-swap, ebur128, rustfft, serde_json (all MIT/Apache) | dasp 0.11 (MIT/Apache); build: cc, bindgen 0.70 | bitflags; build: cc, bindgen 0.71 |
+| Build needs | stable Rust only | C++14 compiler + libclang for bindgen | C++11 compiler + libclang; links Accelerate on macOS |
+| macOS | builds | builds (Xcode CLT) | builds (Xcode CLT) |
+| Windows | should build (pure Rust), **UNVERIFIED** | MSVC + LLVM install for libclang (`LIBCLANG_PATH`), **UNVERIFIED** | same, plus its `_WIN32`/`NOMINMAX` defines; **UNVERIFIED** |
+| Linux | should build, **UNVERIFIED** | g++/clang + `libclang-dev`, **UNVERIFIED** | same, pthreads; **UNVERIFIED** |
+| Real-time API | deck engine: lock-free controller, `process(out)` fills exactly the frames asked for | `process(in, n_in, out, n_out)`, caller paces the input | `process`/`available`/`retrieve`; works in its own hop sizes, so a deck needs an output FIFO |
+| Latency (reported) | Keylock 12.7 ms; WideKeylock 0 ms output delay but buffers source lookahead | 60 ms at 44.1 kHz (`output_latency`, default preset) after priming with `seek` | R3 46.4 ms, R2 23.2 ms (`start_delay`) |
+| Allocation in process | claims none; measured none in Keylock, **15–27 heap events per 60 s in WideKeylock** | none by reading the vendored header (`configure` sizes every buffer; `resize` stays within capacity); not a documented promise; C++ heap not measurable from Rust | library: RT-safe in real-time mode per its header docs ("performs no allocation, locking, or blocking"); **the Rust wrapper allocates a `Vec` on every `process` and `retrieve` call** and `expect`s on null; calling `rubberband-sys` directly avoids both |
+| Maintenance | 15 releases since 2026-02-26, last 2026-09-02, repo pushed 2026-10-09; single maintainer; repo carries a `CLAUDE.md` (agent-written code); 25 stars | binding: last release 2025-09-18, repo pushed 2026-06-12, 14 stars; library: active (1.4.0, repo pushed 2026-09-25, 571 stars) | binding: first release 2026-09-09, 0 stars, single maintainer, edition 2024; library: mature (since 2007), 4.0.0 is the latest (GitHub mirror pushed 2025-03-03) |
+
+Findings that matter for a deck:
+
+- `timestretch`'s `SourceProducer::demand_hint` leaves out the head's
+  lookahead: fed by it alone, `WideKeylock` underruns (512 frames in our tone
+  test). Adding `EngineProcessor::varispeed_lookahead_frames()` fixes it.
+  Its Keylock latency measured on a tone burst moves with the ratio
+  (5.7 ms at 0.94, 14.7 ms at 1.06; SOLA splices shift the burst).
+- Signalsmith Stretch is a phase vocoder with a fixed 60 ms delay; on a deck
+  the read head must run 60 ms ahead (or the waveform lag) when key lock is on.
+- Rubber Band is the reference in this field (timestretch's own CI compares
+  against it), but R3 costs ~3–4× R2 and the binding is weeks old.
+- Under GPL-3.0-or-later all three are fine. Rubber Band's GPL would bind a
+  future relicensing of reks; MIT options would not.
+
+Sources (all fetched 2026-10-21): crates.io API and crate downloads for
+`timestretch` 0.15.0, `signalsmith-stretch` 0.1.3, `rubberband` 0.1.5,
+`rubberband-sys` 0.1.4 (`https://crates.io/api/v1/crates/<name>`); their
+`build.rs`, `LICENSE*`, `COPYING` and vendored headers
+(`signalsmith-stretch.h` version 1.3.1, `RubberBandStretcher.h` RT-safety
+notes, `RUBBERBAND_VERSION "4.0.0"`); GitHub API for repo activity:
+https://github.com/robmorgan/timestretch-rs ·
+https://github.com/colinmarc/signalsmith-stretch-rs ·
+https://github.com/Signalsmith-Audio/signalsmith-stretch ·
+https://github.com/jefflongo/rubberband-rs ·
+https://github.com/breakfastquay/rubberband · https://breakfastquay.com/rubberband/
+
 ---
 
 ## 10. Play history and playlist dividers (Phases 2 and 2.5)

@@ -10,6 +10,15 @@ publish.workspace = true
 name = "reks"
 path = "src/main.rs"
 
+# Key lock engines for `reks keylock-render` (phase 5 task 10). The C++ ones
+# need a C++ compiler and libclang (bindgen), so they are opt-in.
+[features]
+default = ["keylock-timestretch"]
+keylock-timestretch = ["dep:timestretch"]
+keylock-signalsmith = ["dep:signalsmith-stretch"]
+keylock-rubberband = ["dep:rubberband"]
+keylock-all = ["keylock-timestretch", "keylock-signalsmith", "keylock-rubberband"]
+
 [dependencies]
 anyhow = { workspace = true }
 reks-analysis = { workspace = true }
@@ -20,9 +29,13 @@ reks-export-onelibrary = { workspace = true }
 reks-export-rb = { workspace = true }
 reks-mix = { workspace = true }
 rayon = { workspace = true }
+rubato = { workspace = true }
+rubberband = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+signalsmith-stretch = { workspace = true, optional = true }
 tempfile = { workspace = true }
+timestretch = { workspace = true, optional = true }
 zeroize = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

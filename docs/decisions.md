@@ -532,6 +532,8 @@ Date of decisions: 2026-10-18.
   `timestretch` (pure Rust, MIT, real-time engine, young), `signalsmith-stretch`
   (MIT, C++ built with `cc`), `rubberband` (GPL-2.0-or-later, crate weeks old),
   `soundtouch` (SPDX `LGPL-2.1`, needs a `deny.toml` note). Choose by listening test.
+  Status 2026-10-21: licences and cost checked (R§9.3), `reks keylock-render`
+  ready; the choice is pending the maintainer's listening (phase 5 task 10).
 - Rejected: live-performance scope (MIDI mapping, recording, stage reliability;
   a second product, needs its own decision); embedding Mixxx (C++/Qt
   application, not a library); WebView audio (D4); rodio for the mixer (no
