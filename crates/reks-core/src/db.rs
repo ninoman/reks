@@ -22,8 +22,8 @@ const MIGRATION_LIST: &[M<'static>] = &[
     M::up(include_str!("../migrations/0005_dividers_history.sql")),
     M::up(include_str!("../migrations/0006_grid_lock.sql")),
     M::up(include_str!("../migrations/0007_analysis.sql")),
-    M::up(include_str!("../migrations/0008_my_tags.sql")),
-    M::up(include_str!("../migrations/0009_smart_playlists.sql")),
+    M::up(include_str!("../migrations/0009_my_tags.sql")),
+    M::up(include_str!("../migrations/0010_smart_playlists.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 
@@ -391,8 +391,8 @@ mod tests {
     }
 
     #[test]
-    fn migration_8_seeds_categories_and_cascades_tags() {
-        let mut c = conn_at(7);
+    fn migration_9_seeds_categories_and_cascades_tags() {
+        let mut c = conn_at(8);
         let t = insert_track(&c, "/music/a.wav", "Alpha");
         MIGRATIONS.to_latest(&mut c).unwrap();
         let cats: Vec<String> = c
@@ -435,8 +435,8 @@ mod tests {
     }
 
     #[test]
-    fn migration_9_adds_smart_columns_and_keeps_playlists() {
-        let mut c = conn_at(8);
+    fn migration_10_adds_smart_columns_and_keeps_playlists() {
+        let mut c = conn_at(9);
         let t = insert_track(&c, "/music/a.wav", "Alpha");
         c.execute(
             "INSERT INTO playlist (id, name, sort_order, created_at, updated_at)

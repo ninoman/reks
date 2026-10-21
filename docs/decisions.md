@@ -774,7 +774,7 @@ Date of decisions: 2026-10-18.
   smart playlists".
 - Decision:
   - **My Tags** are two levels, like rekordbox and OneLibrary `myTag`:
-    categories, and tags below a category (`tag` table, migration 0008). Only
+    categories, and tags below a category (`tag` table, migration 0009). Only
     tags are assigned to tracks (`track_tag`). Names are unique per parent,
     case-insensitively. New libraries get rekordbox's categories (Genre,
     Components, Situation).
@@ -795,7 +795,7 @@ Date of decisions: 2026-10-18.
     rule never does.
   - **Smart playlists** store a rule tree (`playlist.smart_rule`, JSON
     `RuleNode`) and a sort (`smart_sort`, JSON `Sort`; default date added,
-    newest first; never playlist position), migration 0009. Ops:
+    newest first; never playlist position), migration 0010. Ops:
     `CreateSmart`, `SetRule`; the entry ops (add, remove, reorder, dividers)
     refuse a smart list (`Error::SmartPlaylist`). A playlist filter on a
     smart list means its rule; on a folder, the entries below it or any

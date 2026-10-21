@@ -635,7 +635,7 @@ Response(bytes)`, `settings_get`, `settings_set(patch)`, `library_roots`, `libra
 
 Added 2026-10-21. One PR per task; tasks 4 and 2–3 can run in parallel once 1 is in.
 
-1. [x] **Core tags**: migration 0008 (`tag`, `track_tag`, seeded categories),
+1. [x] **Core tags**: migration 0009 (`tag`, `track_tag`, seeded categories),
    `reks-core::tag` (`Library::tags`, `Library::tag_mutate`: create, rename,
    delete, move, assign, unassign), `TrackRow::tags`, `Filter::TagAny`, the
    `tags_get` / `tags_mutate` commands, and tags read from XML Comments
@@ -647,7 +647,7 @@ Added 2026-10-21. One PR per task; tasks 4 and 2–3 can run in parallel once 1 
    `CreateSmart` / `SetRule` ops, smart lists resolved in queries and in every
    reader of playlist contents (XML export, stick size, PDB/OneLibrary
    export as plain playlists, flagged in the dry run), cycle check
-   (migration 0009).
+   (migration 0010).
 4. [ ] **UI tags**: tag store, tag manager, "My Tags" context submenu, detail
    panel chips, column, filter-bar tag picker.
 5. [ ] **UI rule builder and smart playlists**: builder under the filter bar,
