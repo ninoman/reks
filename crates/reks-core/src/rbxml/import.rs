@@ -33,10 +33,14 @@ use crate::fileinfo::{self, kind_from_extension, library_path, probe_cols, FileI
 use crate::keys::Key;
 use crate::playlist::{self, Entry};
 use crate::scan::{CancelToken, TrackId};
+use crate::tag::{self, TagId};
 use crate::timefmt;
 
 /// Grid and cue rows written by this import carry this `source`.
 const SOURCE: &str = "rekordbox";
+
+/// The category that tags read from Comments are created in.
+pub const IMPORTED_TAG_CATEGORY: &str = "Imported";
 
 /// Replace a path prefix in every `Location` (the music folder moved since
 /// rekordbox exported the XML). Compared component-wise.
@@ -145,6 +149,11 @@ pub struct ImportReport {
     pub playlist_entries: usize,
     /// Playlist entries whose track has no library row.
     pub playlist_entries_skipped: usize,
+    /// My Tags created from `/* … */` in Comments (D29), in the
+    /// [`IMPORTED_TAG_CATEGORY`] category.
+    pub tags_created: usize,
+    /// Track–tag links added from Comments.
+    pub tags_assigned: usize,
     /// Deepest folder containing every file not found, if that is deeper than
     /// a filesystem root: the `from` to suggest for a [`PrefixRemap`] when the
     /// music folder has moved.
@@ -305,6 +314,7 @@ pub fn import(
         by_location: row_of_location,
     };
     imp.write_playlists(&tx, &c.playlists, &rows)?;
+    imp.write_comment_tags(&tx, &c.tracks, &rows.by_xml)?;
     // The baseline is frozen (D23): PlayCount and LastPlayed set it only
     // for tracks this import created; every written track's cache follows.
     let mut written: Vec<TrackId> = rows.by_xml.values().copied().collect();
@@ -769,6 +779,51 @@ impl Import<'_> {
             ":artwork_id": info.and_then(|i| i.artwork_id),
             ":rb_track_id": t.track_id, ":rb_location": t.location, ":now": now,
         })?;
+        Ok(())
+    }
+
+    /// Tags named in each track's Comments: an existing tag of that name
+    /// (any category) or a new one under [`IMPORTED_TAG_CATEGORY`]. The
+    /// comment itself is stored as it is.
+    fn write_comment_tags(
+        &mut self,
+        tx: &Transaction<'_>,
+        tracks: &[XmlTrack],
+        rows: &HashMap<u32, TrackId>,
+    ) -> Result<()> {
+        let now = timefmt::now_utc();
+        let mut category: Option<TagId> = None;
+        for t in tracks {
+            let Some(&id) = rows.get(&t.track_id) else {
+                continue;
+            };
+            let names = tag::parse_comment_tags(t.comments.as_deref().unwrap_or(""));
+            let mut ids = Vec::with_capacity(names.len());
+            for name in &names {
+                let found = tag::find_by_name(tx, name)?;
+                let tag_id = match found {
+                    Some(g) => g,
+                    None => {
+                        let cat = match category {
+                            Some(c) => c,
+                            None => {
+                                let c =
+                                    tag::find_or_create_category(tx, IMPORTED_TAG_CATEGORY, &now)?;
+                                category = Some(c);
+                                c
+                            }
+                        };
+                        self.report.tags_created += 1;
+                        tag::create_tag(tx, cat, name, &now)?
+                    }
+                };
+                ids.push(tag_id);
+            }
+            if !ids.is_empty() {
+                self.report.tags_assigned +=
+                    usize::try_from(tag::assign(tx, &[id], &ids)?).unwrap_or(0);
+            }
+        }
         Ok(())
     }
 

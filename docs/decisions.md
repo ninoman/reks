@@ -767,6 +767,35 @@ Date of decisions: 2026-10-18.
   (a later "merge devices" action fixes it); Windows/Linux serial reads
   UNVERIFIED on a real stick (Phase 2 task 1).
 
+## D29. My Tags, rule-tree filters and smart playlists
+
+- Date: 2026-10-21. Status: accepted (maintainer's plan). Tasks:
+  [`phases/phase-1.md`](phases/phase-1.md) "My Tags, advanced filtering and
+  smart playlists".
+- Decision:
+  - **My Tags** are two levels, like rekordbox and OneLibrary `myTag`:
+    categories, and tags below a category (`tag` table, migration 0008). Only
+    tags are assigned to tracks (`track_tag`). Names are unique per parent,
+    case-insensitively. New libraries get rekordbox's categories (Genre,
+    Components, Situation).
+  - **XML import** reads tags from Comments: rekordbox's "Add My Tag to
+    Comments" writes `/* Tag A / Tag B */` at its start
+    (`tag::parse_comment_tags`). Comments carry no category, so a name that
+    exists in any category is reused and a new one goes under "Imported".
+    The comment itself is kept as it is. The format is **UNVERIFIED** until it
+    is checked against the maintainer's real `collection.xml`.
+  - **Filters** become a rule tree: nested all/any groups, and every rule or
+    group can be negated. NOT is compiled as `NOT coalesce((cond), 0)`, so
+    "genre is not X" keeps tracks with no genre. (Lands with the rule-tree task.)
+  - **Smart playlists** store a rule tree. At export they become plain
+    playlists of the tracks they match at that moment; nothing smart is ever
+    written to a stick. (Lands with the smart-playlist task.)
+- Rejected: free-form multi-level tags (OneLibrary and rekordbox have two
+  levels); writing tags into audio files (Phase 1 non-goal); a smart-playlist
+  format on the stick (players have none).
+- Risks: the Comments format (UNVERIFIED above); how OneLibrary `myTag` rows
+  map at export is not designed yet (Phase 4).
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

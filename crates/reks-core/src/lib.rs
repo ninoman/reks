@@ -23,6 +23,7 @@ pub mod rbxml;
 pub mod scan;
 pub mod secret;
 pub mod settings;
+pub mod tag;
 pub mod timefmt;
 pub mod track;
 
@@ -46,6 +47,7 @@ pub use query::{
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
 pub use secret::OneLibraryKey;
 pub use settings::{AnlzPreference, LibraryRoot, Settings, SettingsPatch, UiState};
+pub use tag::{TagCategory, TagId, TagInfo, TagOp, TagOutcome, TagTree};
 pub use track::{ArtworkInfo, BeatgridSummary, Cue, Track, TrackDetail, TrackPatch};
 
 /// Crate version, from Cargo metadata.

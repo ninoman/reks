@@ -25,7 +25,7 @@ pub use export::{
 };
 pub use import::{
     import, preview, ImportEvent, ImportOptions, ImportPreview, ImportReport, ImportStage,
-    ImportWarning, PrefixRemap, Unmatched, UnmatchedReason, PREVIEW_SAMPLE,
+    ImportWarning, PrefixRemap, Unmatched, UnmatchedReason, IMPORTED_TAG_CATEGORY, PREVIEW_SAMPLE,
 };
 pub use location::{location_to_path, path_to_location};
 pub use parse::{parse, parse_file};

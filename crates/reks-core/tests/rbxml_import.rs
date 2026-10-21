@@ -12,7 +12,7 @@ use reks_core::rbxml::{
     self, import, path_to_location, preview, Collection, Extra, ImportEvent, ImportOptions,
     ImportReport, PositionMark, PrefixRemap, Tempo, UnmatchedReason, XmlNode, XmlTrack,
 };
-use reks_core::{scan, CancelToken, DuplicateMode, Library, PlaylistOp, PlaylistOutcome};
+use reks_core::{scan, CancelToken, DuplicateMode, Library, PlaylistOp, PlaylistOutcome, TagOp};
 use rusqlite::types::Value;
 
 const XML_PREFIX: &str = "/Users/reks/Music/reks fixtures";
@@ -520,6 +520,49 @@ fn reimport_after_playlist_edits_still_matches() {
         .map(|n| n.id)
         .collect();
     assert_eq!(order, vec![folder, lossless, mine, all]);
+}
+
+#[test]
+fn comment_tags_become_my_tags() {
+    let env = Env::new();
+    // An existing tag of the same name is reused, whatever its category.
+    let genre = env.lib.tags().unwrap().categories[0].id;
+    let deep = env
+        .lib
+        .tag_mutate(TagOp::CreateTag {
+            category_id: genre,
+            name: "Deep".into(),
+            position: None,
+        })
+        .unwrap()
+        .created_id
+        .unwrap();
+    let mut c = small_collection();
+    c.tracks[0].comments = Some("/* deep / Peak */ ok".into());
+    c.tracks[1].comments = Some("/* Peak */".into());
+    let report = env.import(&c, fixture_remap());
+    assert_eq!((report.tags_created, report.tags_assigned), (1, 3));
+
+    let tree = env.lib.tags().unwrap();
+    let imported = tree.categories.last().unwrap();
+    assert_eq!(imported.name, rbxml::IMPORTED_TAG_CATEGORY);
+    assert_eq!(imported.tags.len(), 1);
+    assert_eq!(
+        (imported.tags[0].name.as_str(), imported.tags[0].track_count),
+        ("Peak", 2)
+    );
+    let peak = imported.tags[0].id;
+    let first = env.lib.track(env.track_id(c.tracks[0].track_id)).unwrap();
+    assert_eq!(first.track.row.tags, vec![deep, peak]);
+    // The comment is stored as it is.
+    assert_eq!(
+        first.track.row.comment.as_deref(),
+        Some("/* deep / Peak */ ok")
+    );
+
+    // A second import adds nothing.
+    let again = env.import(&c, fixture_remap());
+    assert_eq!((again.tags_created, again.tags_assigned), (0, 0));
 }
 
 #[test]

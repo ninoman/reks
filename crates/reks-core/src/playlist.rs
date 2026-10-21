@@ -576,7 +576,7 @@ pub(crate) fn write_entries(
 }
 
 /// Trimmed, non-empty, no control characters (the track-edit text rules).
-fn valid_name(name: &str) -> Result<String> {
+pub(crate) fn valid_name(name: &str) -> Result<String> {
     match track::text("name", Some(name), false)? {
         Value::Text(s) => Ok(s),
         _ => Err(Error::InvalidField {
@@ -608,7 +608,7 @@ fn valid_label(label: &str) -> Result<String> {
 }
 
 /// An insertion index into a list of `len`: `0..=len`.
-fn index(i: u32, len: usize) -> Result<usize> {
+pub(crate) fn index(i: u32, len: usize) -> Result<usize> {
     let at = usize::try_from(i).unwrap_or(usize::MAX);
     if at > len {
         return Err(Error::IndexOutOfRange {
@@ -635,10 +635,10 @@ fn entry_set(positions: &[u32], len: usize) -> Result<BTreeSet<usize>> {
     positions.iter().map(|&p| entry_index(p, len)).collect()
 }
 
-fn to_i64(n: usize) -> i64 {
+pub(crate) fn to_i64(n: usize) -> i64 {
     i64::try_from(n).unwrap_or(i64::MAX)
 }
 
-fn to_u32(n: usize) -> u32 {
+pub(crate) fn to_u32(n: usize) -> u32 {
     u32::try_from(n).unwrap_or(u32::MAX)
 }

@@ -10,8 +10,8 @@ use reks_core::rbxml::{
 };
 use reks_core::{
     ArtworkId, CancelToken, Facets, Library, LibraryRoot, PlaylistOp, PlaylistOutcome,
-    PlaylistTree, ScanEvent, ScanReport, Settings, SettingsPatch, TrackDetail, TrackId, TrackPage,
-    TrackPatch, TrackQuery,
+    PlaylistTree, ScanEvent, ScanReport, Settings, SettingsPatch, TagOp, TagOutcome, TagTree,
+    TrackDetail, TrackId, TrackPage, TrackPatch, TrackQuery,
 };
 use reks_export_onelibrary::{OneLibraryWriter, RbVersion};
 use reks_export_rb::device::{self, DeviceInfo};
@@ -94,6 +94,18 @@ pub async fn playlists_mutate(
     op: PlaylistOp,
 ) -> CmdResult<PlaylistOutcome> {
     blocking(&state, move |lib| lib.playlist_mutate(op)).await
+}
+
+/// The My Tags tree, with a track count per tag.
+#[tauri::command]
+pub async fn tags_get(state: State<'_, AppState>) -> CmdResult<TagTree> {
+    blocking(&state, |lib| lib.tags()).await
+}
+
+/// Applies one tag edit (tree or track links).
+#[tauri::command]
+pub async fn tags_mutate(state: State<'_, AppState>, op: TagOp) -> CmdResult<TagOutcome> {
+    blocking(&state, move |lib| lib.tag_mutate(op)).await
 }
 
 /// Artwork image bytes, sent raw (an `ArrayBuffer` in the UI).

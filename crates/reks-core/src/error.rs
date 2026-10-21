@@ -60,6 +60,18 @@ pub enum Error {
         parent: crate::query::PlaylistId,
     },
 
+    /// No tag or tag category with this id.
+    #[error("tag {0} not found")]
+    TagNotFound(crate::tag::TagId),
+
+    /// The op needs a tag, and this id is a category.
+    #[error("{0} is a tag category, not a tag")]
+    NotATag(crate::tag::TagId),
+
+    /// The op needs a category, and this id is a tag.
+    #[error("{0} is a tag, not a tag category")]
+    NotATagCategory(crate::tag::TagId),
+
     /// An entry position or sibling index outside the list.
     #[error("index {index} out of range (length {len})")]
     IndexOutOfRange { index: u32, len: u32 },

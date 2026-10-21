@@ -12,7 +12,7 @@ use crate::artwork::ArtworkId;
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::keys::Key;
-use crate::query::{track_row, TrackRow, ROW_COLUMNS};
+use crate::query::{fill_tags, track_row, TrackRow, ROW_COLUMNS};
 use crate::rbxml::TRACK_COLOURS;
 use crate::scan::TrackId;
 use crate::timefmt::now_utc;
@@ -191,7 +191,7 @@ impl Library {
 }
 
 fn detail(conn: &Connection, id: TrackId) -> Result<TrackDetail> {
-    let track = conn
+    let mut track = conn
         .query_row(
             &format!(
                 "SELECT {ROW_COLUMNS}, t.path, t.file_size, t.file_mtime, t.album_artist,
@@ -240,6 +240,7 @@ fn detail(conn: &Connection, id: TrackId) -> Result<TrackDetail> {
         )
         .optional()?
         .ok_or(Error::TrackNotFound(id))?;
+    fill_tags(conn, std::slice::from_mut(&mut track.row))?;
 
     let cues = conn
         .prepare_cached(

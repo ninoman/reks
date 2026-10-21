@@ -459,14 +459,16 @@ fn serde_shapes() {
             {"type": "missing", "missing": false},
             {"type": "neverPlayed"},
             {"type": "playCountRange", "min": 1, "max": 5},
-            {"type": "playedSince", "date": "2026-01-01"}
+            {"type": "playedSince", "date": "2026-01-01"},
+            {"type": "tagAny", "ids": [3, 4]}
         ],
         "sort": {"column": "dateAdded", "descending": true},
         "offset": 200,
         "limit": 200
     }"#;
     let q: TrackQuery = serde_json::from_str(json).unwrap();
-    assert_eq!(q.filters.len(), 10);
+    assert_eq!(q.filters.len(), 11);
+    assert_eq!(q.filters[10], Filter::TagAny { ids: vec![3, 4] });
     assert_eq!(q.filters[7], Filter::NeverPlayed);
     assert_eq!(
         q.filters[1],
@@ -514,6 +516,7 @@ fn serde_shapes() {
             "playCount",
             "rating",
             "remixer",
+            "tags",
             "title",
             "year"
         ]

@@ -17,6 +17,7 @@ use crate::error::Result;
 use crate::keys::{Key, Mode};
 use crate::rbxml::TRACK_COLOURS;
 use crate::scan::TrackId;
+use crate::tag::{tags_of, TagId};
 
 /// Row id in the `playlist` table.
 pub type PlaylistId = i64;
@@ -75,6 +76,8 @@ pub enum Filter {
     PlayCountRange { min: u32, max: u32 },
     /// Last played on or after `date` (`YYYY-MM-DD`).
     PlayedSince { date: String },
+    /// Has at least one of these My Tags (none listed: matches nothing).
+    TagAny { ids: Vec<TagId> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -141,6 +144,8 @@ pub struct TrackRow {
     /// The entry's position in a playlist view (one row per entry, so a
     /// track in the playlist twice is two rows); `None` elsewhere.
     pub entry_position: Option<i64>,
+    /// My Tags, in display order (category, then tag).
+    pub tags: Vec<TagId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -246,13 +251,14 @@ impl Library {
         params.push(Value::Integer(i64::from(q.limit.clamp(1, MAX_PAGE))));
         params.push(Value::Integer(i64::from(q.offset)));
         let mut stmt = conn.prepare_cached(&sql)?;
-        let rows = stmt
+        let mut rows = stmt
             .query_map(params_from_iter(&params), |r| {
                 let mut row = track_row(r)?;
                 row.entry_position = r.get(21)?;
                 Ok(row)
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
+        fill_tags(&conn, &mut rows)?;
 
         let divider_view = view.is_some_and(|id| q.shows_dividers(id));
         let dividers = match view {
@@ -309,6 +315,19 @@ impl Library {
     }
 }
 
+/// Sets `tags` on every row (one query for the page).
+pub(crate) fn fill_tags(conn: &Connection, rows: &mut [TrackRow]) -> Result<()> {
+    let ids: Vec<TrackId> = rows.iter().map(|r| r.id).collect();
+    let mut by_track: HashMap<TrackId, Vec<TagId>> = HashMap::new();
+    for (track, tag) in tags_of(conn, &ids)? {
+        by_track.entry(track).or_default().push(tag);
+    }
+    for row in rows {
+        row.tags = by_track.get(&row.id).cloned().unwrap_or_default();
+    }
+    Ok(())
+}
+
 pub(crate) fn track_row(r: &Row<'_>) -> rusqlite::Result<TrackRow> {
     Ok(TrackRow {
         id: r.get(0)?,
@@ -333,6 +352,7 @@ pub(crate) fn track_row(r: &Row<'_>) -> rusqlite::Result<TrackRow> {
         needs_analysis: r.get(19)?,
         last_played: r.get(20)?,
         entry_position: None,
+        tags: Vec::new(),
     })
 }
 
@@ -443,6 +463,18 @@ fn where_clause(q: &TrackQuery, view: Option<PlaylistId>) -> Where {
             Filter::PlayedSince { date } => {
                 conds.push("t.last_played >= ?".into());
                 params.push(Value::Text(date.clone()));
+            }
+            Filter::TagAny { ids } => {
+                if ids.is_empty() {
+                    conds.push("0".into());
+                } else {
+                    conds.push(format!(
+                        "EXISTS (SELECT 1 FROM track_tag tt WHERE tt.track_id = t.id
+                           AND tt.tag_id IN ({}))",
+                        placeholders(ids.len())
+                    ));
+                    params.extend(ids.iter().map(|&id| Value::Integer(id)));
+                }
             }
         }
     }

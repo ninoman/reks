@@ -36,7 +36,8 @@ reks library with nothing lost that Phase 2 needs for export.
 - No reading of rekordbox `master.db` (encrypted; out of scope entirely).
 - No tag *writing* to audio files. The library DB is the source of truth.
 - No streaming services, no DVS, no mixing features.
-- No smart playlists / "My Tags" (schema leaves room; UI later).
+- Smart playlists and "My Tags" came later: see the task section
+  "My Tags, advanced filtering and smart playlists" below (D29).
 
 ## Data structures and interfaces
 
@@ -570,7 +571,7 @@ Player rules (task 11, [`reks-mix`](../../crates/reks-mix/src/), D5)
 
 ### Tauri commands (`src-tauri`)
 
-`library_query`, `library_facets`, `library_track`, `library_update_track`, `playlists_get`,
+`library_query`, `library_facets`, `library_track`, `library_update_track`, `playlists_get`, `tags_get`, `tags_mutate`,
 `playlists_mutate`, `scan_start` (progress via `Channel<ScanEvent>`), `scan_cancel`,
 `rbxml_preview(path, remap)`, `rbxml_import_start` (progress via Channel), `rbxml_import_cancel`, `rbxml_export`,
 `player_load(id, play)`, `player_play/pause/seek/volume/devices/set_device`,
@@ -629,6 +630,27 @@ Response(bytes)`, `settings_get`, `settings_set(patch)`, `library_roots`, `libra
 14. [x] **Polish + release pipeline**: app icon, window state persistence, unsigned
     dev builds via `tauri-action` on tags (signing is Phase 2+ concern; see
     decisions.md).
+
+### My Tags, advanced filtering and smart playlists (D29)
+
+Added 2026-10-21. One PR per task; tasks 4 and 2–3 can run in parallel once 1 is in.
+
+1. [x] **Core tags**: migration 0008 (`tag`, `track_tag`, seeded categories),
+   `reks-core::tag` (`Library::tags`, `Library::tag_mutate`: create, rename,
+   delete, move, assign, unassign), `TrackRow::tags`, `Filter::TagAny`, the
+   `tags_get` / `tags_mutate` commands, and tags read from XML Comments
+   (`ImportReport::tags_created` / `tags_assigned`).
+2. [ ] **Core rule tree**: `RuleNode` (all/any groups, NOT on every node),
+   `TrackQuery::rule` ANDed with the filters, NOT-with-NULL rule, depth 8 /
+   200 nodes limit.
+3. [ ] **Core smart playlists**: `playlist.smart_rule` / `smart_sort`,
+   `CreateSmart` / `SetRule` ops, smart lists resolved in queries and in every
+   reader of playlist contents (XML export, stick size, PDB/OneLibrary
+   export as plain playlists), cycle check.
+4. [ ] **UI tags**: tag store, tag manager, "My Tags" context submenu, detail
+   panel chips, column, filter-bar tag picker.
+5. [ ] **UI rule builder and smart playlists**: builder under the filter bar,
+   save as smart playlist, smart lists in the tree.
 
 ## Acceptance criteria
 

@@ -22,6 +22,7 @@ const MIGRATION_LIST: &[M<'static>] = &[
     M::up(include_str!("../migrations/0005_dividers_history.sql")),
     M::up(include_str!("../migrations/0006_grid_lock.sql")),
     M::up(include_str!("../migrations/0007_analysis.sql")),
+    M::up(include_str!("../migrations/0008_my_tags.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 
@@ -386,6 +387,50 @@ mod tests {
             )
             .unwrap();
         assert_eq!(idx, 1);
+    }
+
+    #[test]
+    fn migration_8_seeds_categories_and_cascades_tags() {
+        let mut c = conn_at(7);
+        let t = insert_track(&c, "/music/a.wav", "Alpha");
+        MIGRATIONS.to_latest(&mut c).unwrap();
+        let cats: Vec<String> = c
+            .prepare("SELECT name FROM tag WHERE parent_id IS NULL ORDER BY sort_order")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(cats, ["Genre", "Components", "Situation"]);
+        let genre: i64 = c
+            .query_row("SELECT id FROM tag WHERE name = 'Genre'", [], |r| r.get(0))
+            .unwrap();
+        c.execute(
+            "INSERT INTO tag (parent_id, name, sort_order, created_at, updated_at)
+             VALUES (?1, 'Deep', 0, 'x', 'x')",
+            [genre],
+        )
+        .unwrap();
+        let dup = c.execute(
+            "INSERT INTO tag (parent_id, name, sort_order, created_at, updated_at)
+             VALUES (?1, 'DEEP', 1, 'x', 'x')",
+            [genre],
+        );
+        assert!(dup.is_err(), "names are unique per parent, any case");
+        let dup_cat = c.execute(
+            "INSERT INTO tag (parent_id, name, sort_order, created_at, updated_at)
+             VALUES (NULL, 'genre', 3, 'x', 'x')",
+            [],
+        );
+        assert!(dup_cat.is_err(), "category names are unique too");
+        c.execute(
+            "INSERT INTO track_tag (track_id, tag_id) SELECT ?1, id FROM tag WHERE name = 'Deep'",
+            [t],
+        )
+        .unwrap();
+        c.execute("DELETE FROM tag WHERE id = ?1", [genre]).unwrap();
+        assert_eq!(count(&c, "track_tag"), 0);
+        assert_eq!(count(&c, "tag"), 2);
     }
 
     #[test]
