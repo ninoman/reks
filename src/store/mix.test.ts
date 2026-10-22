@@ -226,13 +226,13 @@ describe("mix store", () => {
     const s = useMix.getState();
     s.setChannel(2, "xfadeAssign", "y");
     s.setChannel(0, "cue", true);
-    s.setFilter("y", "link", true);
+    s.setFilter("y", "highPass", true);
     s.setMaster("level", 0.6);
     s.nudge(1, -1);
     expect(vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0])).toEqual([
       { type: "channel", ch: 2, param: "xfadeAssign", value: 1 },
       { type: "channel", ch: 0, param: "cue", value: 1 },
-      { type: "filter", unit: "y", param: "link", value: 1 },
+      { type: "filter", unit: "y", param: "highPass", value: 1 },
       { type: "master", param: "level", value: 0.6 },
       { type: "nudge", deck: 1, ratio: 0.96 },
     ]);

@@ -232,7 +232,7 @@ fn eq_and_fader_controls_reach_the_strip() {
 }
 
 #[test]
-fn link_makes_filter_y_follow_x() {
+fn each_filter_unit_has_its_own_freq() {
     let mut g = Graph::new(RATE).unwrap();
     play(&mut g, 0, tone(RATE, 2_000.0, 0.5));
     channel(&mut g, 0, ChannelParam::FilterAssign, 1.0);
@@ -246,11 +246,11 @@ fn link_makes_filter_y_follow_x() {
     };
     let open = level(&mut g);
     assert!(open > 0.45, "{open}");
-    // LINK: Y follows X's FREQ.
+    // The channel is on Y: X's FREQ leaves it alone, Y's closes it.
     filter(&mut g, FilterUnit::X, FilterParam::Freq, 0.0);
-    assert!((level(&mut g) - open).abs() < 1e-3, "not linked yet");
-    filter(&mut g, FilterUnit::Y, FilterParam::Link, 1.0);
-    assert!(level(&mut g) < 0.01, "linked to 30 Hz");
+    assert!((level(&mut g) - open).abs() < 1e-3, "X moved Y");
+    filter(&mut g, FilterUnit::Y, FilterParam::Freq, 0.0);
+    assert!(level(&mut g) < 0.01, "Y at 30 Hz");
 }
 
 #[test]

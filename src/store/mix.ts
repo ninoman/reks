@@ -125,7 +125,6 @@ export interface FilterValues {
   bandPass: boolean;
   lowPass: boolean;
   on: boolean;
-  link: boolean;
 }
 
 export interface MasterValues {
@@ -274,7 +273,6 @@ const DEFAULT_FILTER: FilterValues = {
   bandPass: false,
   lowPass: true,
   on: false,
-  link: false,
 };
 
 export const DEFAULT_CONFIG: MixConfig = {
@@ -315,7 +313,6 @@ function mixerControls(s: MixStore): MixControl[] {
   for (const unit of ["x", "y"] as const) {
     const f = s.filters[unit];
     for (const k of Object.keys(f) as (keyof FilterValues)[]) {
-      if (k === "link" && unit === "x") continue;
       const v = f[k];
       out.push({
         type: "filter",

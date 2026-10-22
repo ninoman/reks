@@ -768,15 +768,7 @@ export type ChannelParam =
 
 export type FilterUnit = "x" | "y";
 
-export type FilterParam =
-  | "freq"
-  | "resonance"
-  | "highPass"
-  | "bandPass"
-  | "lowPass"
-  | "on"
-  /** Unit Y only: Y follows X's FREQ. */
-  | "link";
+export type FilterParam = "freq" | "resonance" | "highPass" | "bandPass" | "lowPass" | "on";
 
 export type MasterParam = "level" | "cueLevel" | "cueMix" | "splitCue" | "cuePostEq";
 

@@ -21,27 +21,6 @@ pub struct FilterModes {
     pub hp: bool,
 }
 
-/// The FREQ knobs of both units plus LINK, as the UI sends them.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FilterPanel {
-    /// FREQ knobs, 0..=1.
-    pub freq_x: f32,
-    pub freq_y: f32,
-    /// LINK: unit Y follows unit X's FREQ.
-    pub link: bool,
-}
-
-impl FilterPanel {
-    /// Effective FREQ knob values `(x, y)`. Pure; the graph feeds the result
-    /// to [`Filter::set_freq`]. LINK makes Y follow X.
-    pub fn effective_freq(&self) -> (f32, f32) {
-        (
-            self.freq_x,
-            if self.link { self.freq_x } else { self.freq_y },
-        )
-    }
-}
-
 /// One stereo filter unit.
 #[derive(Debug, Clone)]
 pub struct Filter {
@@ -393,17 +372,5 @@ mod tests {
         // A 50 Hz sine at 0.5 moves at most 0.0033 per sample; allow some
         // filter shape on top, but nothing like a step.
         assert!(max_step < 0.01, "max step {max_step}");
-    }
-
-    #[test]
-    fn link_makes_y_follow_x() {
-        let mut p = FilterPanel {
-            freq_x: 0.2,
-            freq_y: 0.8,
-            link: false,
-        };
-        assert_eq!(p.effective_freq(), (0.2, 0.8));
-        p.link = true;
-        assert_eq!(p.effective_freq(), (0.2, 0.2));
     }
 }
