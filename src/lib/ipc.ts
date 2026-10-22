@@ -651,9 +651,21 @@ export interface DeckView {
   cuePreview: boolean;
   sync: boolean;
   syncBar: boolean;
-  /** Following the leader's tempo and phase. */
+  /** Following the master's tempo and phase. */
   locked: boolean;
   quantise: boolean;
+  /** This deck is the sync master (`MixState.masterDeck`). */
+  master: boolean;
+  /** The active beat loop; null when not looping. */
+  loopRegion: LoopView | null;
+}
+
+/** An active beat loop, in ms of the track. */
+export interface LoopView {
+  startMs: number;
+  /** Where playback jumps back to `startMs`. */
+  endMs: number;
+  beats: number;
 }
 
 /** A peak meter: `level` linear (1 = 0 dBFS); `clip` reached 0 dBFS since the last state. */
@@ -670,8 +682,13 @@ export interface MixState {
   bufferFrames: number | null;
   deviceLost: boolean;
   xruns: number;
-  leader: number | null;
-  leaderChosen: boolean;
+  /**
+   * The sync master deck; null when nobody is master. The first deck with a
+   * grid to play takes it, or the one sent `takeMaster`. When it stops, ends
+   * or is unloaded, a playing synced deck takes over at its current tempo
+   * (its `tempo` changes to match); with none, nobody is master.
+   */
+  masterDeck: number | null;
   decks: DeckView[];
   /** Channel meters, after EQ and filter, before the fader. */
   meters: MeterView[];
@@ -740,8 +757,17 @@ export type MixControl =
   /** Pitch bend while held; 1 releases it. */
   | { type: "nudge"; deck: number; ratio: number }
   | { type: "sync"; deck: number; on: boolean; bar: boolean }
-  /** null: automatic leader. */
-  | { type: "leader"; deck: number | null }
+  /** MASTER: this deck becomes the sync master until it stops, ends or is unloaded. */
+  | { type: "takeMaster"; deck: number }
+  /** Signed beats along the grid (1/8 … 32, as `BEAT_JUMP_SIZES`); during a loop the loop moves too. */
+  | { type: "beatJump"; deck: number; beats: number }
+  /** FINE: a fixed 10 ms. */
+  | { type: "fineJump"; deck: number; forward: boolean }
+  /** Loop of `beats` (1/8 … 32, as `BEAT_LOOP_SIZES`) from the playhead, from the beat with quantise. */
+  | { type: "beatLoop"; deck: number; beats: number }
+  | { type: "loopExit"; deck: number }
+  /** Halve (`double: false`) or double the active loop. */
+  | { type: "loopResize"; deck: number; double: boolean }
   | { type: "quantise"; deck: number; on: boolean }
   | { type: "channel"; ch: number; param: ChannelParam; value: number }
   | { type: "filter"; unit: FilterUnit; param: FilterParam; value: number }
@@ -749,6 +775,11 @@ export type MixControl =
   | { type: "master"; param: MasterParam; value: number }
   /** The player's volume slider, 0..1 (squared taper in Rust), on top of the master level. */
   | { type: "volume"; value: number };
+
+/** Beat jump sizes, as on rekordbox; FINE is `fineJump`. */
+export const BEAT_JUMP_SIZES = [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16, 32] as const;
+/** Beat loop sizes. */
+export const BEAT_LOOP_SIZES = [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16, 32] as const;
 
 export function mixDeviceOptions(device: string | null): Promise<MixDeviceOptions> {
   return invoke("mix_device_options", { device });

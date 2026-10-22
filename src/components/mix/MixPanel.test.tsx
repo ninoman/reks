@@ -39,6 +39,8 @@ const idleDeck: DeckView = {
   syncBar: false,
   locked: false,
   quantise: false,
+  master: false,
+  loopRegion: null,
   cuePreview: false,
 };
 
@@ -49,8 +51,7 @@ const state = (over: Partial<MixState> = {}): MixState => ({
   bufferFrames: 256,
   deviceLost: false,
   xruns: 0,
-  leader: null,
-  leaderChosen: false,
+  masterDeck: null,
   decks: [idleDeck, idleDeck, idleDeck, idleDeck],
   meters: Array.from({ length: 4 }, () => ({ level: 0, clip: false })),
   masterMeter: { level: 0, clip: false },

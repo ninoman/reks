@@ -33,6 +33,28 @@ pub const RAMP_MS: u32 = 5;
 /// instant; a listening choice, not a measured rekordbox value.
 pub const SEEK_XFADE_MS: u32 = 20;
 
+/// Crossfade at a loop's end, from the head running on past it to the
+/// loop start: short, so even a 1/8-beat loop (about 60 ms at 128 BPM) is
+/// mostly loop, long enough not to click. A listening choice.
+pub const LOOP_XFADE_MS: u32 = 4;
+
+/// FINE beat jump. A fixed time, not a share of the beat; rekordbox's own
+/// FINE amount is not documented (UNVERIFIED).
+pub const FINE_JUMP_MS: u32 = 10;
+
+/// Shortest and longest beat loop (halve/double stop here).
+pub const LOOP_MIN_BEATS: f64 = 1.0 / 32.0;
+pub const LOOP_MAX_BEATS: f64 = 512.0;
+
+/// An active loop, in the deck's source frames.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LoopRegion {
+    pub start: i64,
+    /// Where it jumps back to `start`.
+    pub end: i64,
+    pub beats: f64,
+}
+
 /// One deck as the UI sees it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DeckState {
@@ -68,6 +90,10 @@ pub struct DeckState {
     /// have a grid).
     pub locked: bool,
     pub quantise: bool,
+    /// This deck is the sync master ([`EngineState::master_deck`]).
+    pub master: bool,
+    /// The active loop, if any.
+    pub loop_region: Option<LoopRegion>,
 }
 
 impl Default for DeckState {
@@ -90,6 +116,8 @@ impl Default for DeckState {
             sync_bar: false,
             locked: false,
             quantise: false,
+            master: false,
+            loop_region: None,
         }
     }
 }
@@ -98,11 +126,11 @@ impl Default for DeckState {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct EngineState {
     pub decks: [DeckState; DECKS],
-    /// The sync leader: the chosen deck, else the loaded deck with a grid
-    /// that has been playing longest (kept while everything is stopped).
-    pub leader: Option<u8>,
-    /// The leader was chosen with [`Control::Leader`].
-    pub leader_chosen: bool,
+    /// The sync master (leader), as on a CDJ: the deck that took it with
+    /// [`Control::TakeMaster`], else the first deck with a grid to play.
+    /// When it stops, ends or is unloaded, the role passes to a playing
+    /// synced deck, which keeps its tempo; with none, nobody is master.
+    pub master_deck: Option<u8>,
     pub volume: f32,
     /// Channel meters, after EQ and filter, before the fader.
     pub channels: [MeterState; DECKS],
@@ -156,12 +184,14 @@ impl Ramp {
 #[derive(Debug)]
 pub struct Graph {
     decks: [Deck; DECKS],
-    /// Chosen leader; `None` for automatic.
-    leader: Option<usize>,
-    /// The automatic leader, kept while no deck plays.
-    auto_leader: Option<usize>,
+    /// The sync master.
+    master: Option<usize>,
+    /// The master was playing at the last block, so stopping hands it on.
+    master_playing: bool,
+    /// The master's track was replaced or unloaded since the last block.
+    master_unloaded: bool,
     engine_rate: f64,
-    /// Counts play starts, for the automatic leader.
+    /// Counts play starts, for electing a master.
     clock: u64,
     mixer: Mixer,
     /// One block per deck, the mixer's input.
@@ -177,8 +207,9 @@ impl Graph {
             .ok_or(Error::Resampler)?;
         Ok(Self {
             decks: decks.try_into().map_err(|_| Error::Resampler)?,
-            leader: None,
-            auto_leader: None,
+            master: None,
+            master_playing: false,
+            master_unloaded: false,
             engine_rate: f64::from(sample_rate.max(1)),
             clock: 0,
             mixer: Mixer::new(sample_rate),
@@ -192,11 +223,25 @@ impl Graph {
         if self.mixer.apply(&c) {
             return None;
         }
-        if let Control::Leader { deck } = &c {
-            self.leader = deck.map(usize::from).filter(|&d| d < DECKS);
+        if let Control::TakeMaster { deck } = c {
+            let i = usize::from(deck);
+            if let Some(d) = self.decks.get_mut(i).filter(|d| has_grid(d)) {
+                // A follower taking over keeps the tempo it matched.
+                if let Some(tempo) = d.matched.take() {
+                    d.set_tempo(tempo);
+                }
+                self.master = Some(i);
+                self.master_playing = self.decks[i].playing();
+                self.master_unloaded = false;
+            }
             return None;
         }
         let deck = c.deck()?;
+        if matches!(c, Control::Load { .. } | Control::Unload { .. })
+            && self.master == Some(usize::from(deck))
+        {
+            self.master_unloaded = true;
+        }
         self.clock += 1;
         match self.decks.get_mut(usize::from(deck)) {
             Some(d) => d.apply(c, self.clock),
@@ -211,9 +256,11 @@ impl Graph {
     pub fn state(&mut self) -> EngineState {
         let (channels, master) = self.mixer.meters();
         EngineState {
-            decks: std::array::from_fn(|i| self.decks[i].state()),
-            leader: self.current_leader().map(|d| d as u8),
-            leader_chosen: self.leader.is_some(),
+            decks: std::array::from_fn(|i| DeckState {
+                master: self.master == Some(i),
+                ..self.decks[i].state()
+            }),
+            master_deck: self.master.map(|d| d as u8),
             volume: self.mixer.volume(),
             channels,
             master,
@@ -226,57 +273,93 @@ impl Graph {
         self.mixer.latency()
     }
 
-    fn current_leader(&self) -> Option<usize> {
-        self.leader.or(self.auto_leader)
-    }
-
-    /// The automatic leader: the loaded deck with a grid that has been
-    /// playing longest; the previous one while nothing plays.
-    fn update_auto_leader(&mut self) {
-        let has_grid = |d: &Deck| d.src().is_some_and(|s| !s.beats().is_empty());
-        let playing = self
-            .decks
+    /// A playing deck with a grid to take the master role: a synced one
+    /// first, then the one playing longest.
+    fn elect(&self, except: Option<usize>) -> Option<usize> {
+        self.decks
             .iter()
             .enumerate()
-            .filter(|(_, d)| d.playing() && has_grid(d))
-            .min_by_key(|(_, d)| d.started)
-            .map(|(i, _)| i);
-        self.auto_leader = playing.or(self.auto_leader.filter(|&i| has_grid(&self.decks[i])));
+            .filter(|&(i, d)| Some(i) != except && d.playing() && has_grid(d))
+            .min_by_key(|(_, d)| (!d.locked, d.started))
+            .map(|(i, _)| i)
     }
 
-    /// Sets every deck's speed for the next block: the leader and unsynced
+    /// Hands the master role on when the master stopped, ended or lost its
+    /// track, and elects one when there is none.
+    fn update_master(&mut self) {
+        if let Some(m) = self.master {
+            let d = &self.decks[m];
+            let lost = std::mem::take(&mut self.master_unloaded)
+                || !has_grid(d)
+                || (self.master_playing && !d.playing());
+            if lost {
+                self.hand_off(m);
+            }
+        }
+        if self.master.is_none() {
+            self.master = self.elect(None);
+        }
+        self.master_playing = self.master.is_some_and(|m| self.decks[m].playing());
+    }
+
+    /// The old master's followers keep the tempo they matched: the new
+    /// master on its tempo fader, and with no new master every follower
+    /// left, so nothing changes speed.
+    fn hand_off(&mut self, from: usize) {
+        let next = self.elect(Some(from));
+        for (i, d) in self.decks.iter_mut().enumerate() {
+            if i == from || next.is_some_and(|n| n != i) {
+                continue;
+            }
+            if let Some(tempo) = d.matched.take() {
+                d.set_tempo(tempo);
+            }
+        }
+        self.master = next;
+    }
+
+    /// Sets every deck's speed for the next block: the master and unsynced
     /// decks at their own speed, followers from [`sync::follow`].
     fn plan(&mut self) {
-        self.update_auto_leader();
-        let leader = self.current_leader();
-        let lead = leader.and_then(|i| {
+        self.update_master();
+        let master = self.master;
+        let lead = master.and_then(|i| {
             let d = &mut self.decks[i];
             let speed = d.own_speed();
             d.set_speed(speed);
             let src = d.src()?;
-            sync::Lead::new(src.beats(), d.position(), d.step(), d.playing())
+            sync::Lead::new(
+                src.beats(),
+                d.position(),
+                d.step(),
+                d.playing(),
+                d.loop_beats(),
+            )
         });
         for (i, d) in self.decks.iter_mut().enumerate() {
-            if Some(i) == leader {
+            if Some(i) == master {
                 d.locked = false;
+                d.matched = None;
                 continue;
             }
-            let plan = match (&lead, d.sync, d.src()) {
-                (Some(lead), true, Some(src)) => sync::follow(
-                    lead,
-                    &sync::Follower {
-                        beats: src.beats(),
-                        position: d.position(),
-                        rate_ratio: d.rate_ratio(),
-                        playing: d.playing(),
-                        bar: d.sync_bar,
-                        nudge: d.nudge,
-                    },
-                    self.engine_rate,
+            let me = d.src().map(|src| sync::Follower {
+                beats: src.beats(),
+                position: d.position(),
+                rate_ratio: d.rate_ratio(),
+                playing: d.playing(),
+                bar: d.sync_bar,
+                nudge: d.nudge,
+                looping: d.loop_beats().is_some(),
+            });
+            let (plan, matched) = match (&lead, d.sync, me) {
+                (Some(lead), true, Some(me)) => (
+                    sync::follow(lead, &me, self.engine_rate),
+                    sync::matched_speed(lead, &me),
                 ),
-                _ => None,
+                _ => (None, None),
             };
             d.locked = plan.is_some();
+            d.matched = matched;
             match plan {
                 None => {
                     let speed = d.own_speed();
@@ -330,6 +413,10 @@ impl Graph {
             self.mixer.process(&mut self.inputs, block, phones);
         }
     }
+}
+
+fn has_grid(d: &Deck) -> bool {
+    d.src().is_some_and(|s| !s.beats().is_empty())
 }
 
 /// Renders interleaved stereo into `out` with no device. Retired sources
@@ -673,15 +760,15 @@ mod tests {
             bar: true,
         });
         g.apply(Control::Quantise { deck: 1, on: true });
-        g.apply(Control::Leader { deck: Some(2) });
         let st = g.state();
         let d = st.decks[1];
         assert_eq!((d.tempo, d.nudge), (1.08, 1.0));
         assert!(d.sync && d.sync_bar && d.quantise);
         assert_eq!(st.decks[2].tempo, TEMPO_MAX);
-        assert_eq!((st.leader, st.leader_chosen), (Some(2), true));
-        g.apply(Control::Leader { deck: Some(7) });
-        assert_eq!((g.state().leader, g.state().leader_chosen), (None, false));
+        // Only a deck with a grid can take master.
+        g.apply(Control::TakeMaster { deck: 2 });
+        g.apply(Control::TakeMaster { deck: 7 });
+        assert_eq!(g.state().master_deck, None);
     }
 
     /// 120 BPM at 48 kHz (24,000 frames a beat) from frame 0, with hot cue
@@ -942,7 +1029,7 @@ mod tests {
     }
 
     #[test]
-    fn the_leader_is_the_deck_playing_longest_unless_chosen() {
+    fn the_master_is_the_first_deck_to_play_until_another_takes_it() {
         let mut g = Graph::new(RATE).unwrap();
         for deck in 0..3 {
             g.apply(Control::Load {
@@ -954,27 +1041,125 @@ mod tests {
             deck: 3,
             src: ramp_source(480_000),
         });
-        assert_eq!(g.state().leader, None);
-        // Deck 3 has no grid, so it never leads.
+        assert_eq!(g.state().master_deck, None);
+        // Deck 3 has no grid, so it is never master.
         for deck in [3, 2, 1] {
             g.apply(Control::Play { deck });
         }
         render_frames(&mut g, 64);
-        assert_eq!(g.state().leader, Some(2));
-        g.apply(Control::Pause { deck: 2 });
+        let st = g.state();
+        assert_eq!(st.master_deck, Some(2));
+        assert!(st.decks[2].master && !st.decks[1].master);
+        // A paused deck can take master and keeps it while paused.
+        g.apply(Control::TakeMaster { deck: 0 });
+        render_frames(&mut g, 64);
+        assert_eq!(g.state().master_deck, Some(0));
+        // Loading a new track on the master hands it on.
+        g.apply(Control::Load {
+            deck: 0,
+            src: gridded(480_000),
+        });
+        render_frames(&mut g, 64);
+        assert_eq!(g.state().master_deck, Some(2));
+    }
+
+    /// Deck 0 master at +6% tempo, playing; deck 1 synced to it, playing
+    /// (or paused) at its own fader 1.0.
+    fn master_and_follower(follower_plays: bool) -> Graph {
+        let mut g = Graph::new(RATE).unwrap();
+        g.apply(Control::Load {
+            deck: 0,
+            src: gridded(480_000),
+        });
+        g.apply(Control::Load {
+            deck: 1,
+            src: gridded(960_000),
+        });
+        g.apply(Control::Tempo {
+            deck: 0,
+            ratio: 1.06,
+        });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 64);
+        g.apply(Control::Sync {
+            deck: 1,
+            on: true,
+            bar: false,
+        });
+        if follower_plays {
+            g.apply(Control::Play { deck: 1 });
+        }
+        render_frames(&mut g, 48_000);
+        let st = g.state();
+        assert_eq!(st.master_deck, Some(0));
+        assert!(st.decks[1].locked);
+        g
+    }
+
+    #[test]
+    fn the_master_ending_hands_over_to_the_synced_deck_at_the_same_tempo() {
+        let mut g = master_and_follower(true);
+        // Deck 0's 10 s run out; deck 1 plays on.
+        render_frames(&mut g, 480_000);
+        let st = g.state();
+        assert!(!st.decks[0].playing && st.decks[1].playing);
+        assert_eq!(st.master_deck, Some(1));
+        assert!(st.decks[1].master && !st.decks[1].locked);
+        assert!(
+            (st.decks[1].speed - 1.06).abs() < 1e-9,
+            "{}",
+            st.decks[1].speed
+        );
+        assert!((st.decks[1].tempo - 1.06).abs() < 1e-9);
+        // And it stays there.
+        render_frames(&mut g, 48_000);
+        assert!((g.state().decks[1].speed - 1.06).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_master_pausing_hands_over_to_the_synced_deck_at_the_same_tempo() {
+        let mut g = master_and_follower(true);
+        g.apply(Control::Pause { deck: 0 });
         render_frames(&mut g, RAMP * 2);
-        assert_eq!(g.state().leader, Some(1));
-        // With nothing playing, the last leader keeps the tempo.
-        g.apply(Control::Pause { deck: 1 });
+        let st = g.state();
+        assert_eq!(st.master_deck, Some(1));
+        assert!((st.decks[1].speed - 1.06).abs() < 1e-9);
+        // Deck 0 plays again: deck 1 stays master; deck 0 (not synced)
+        // plays at its own tempo.
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 64);
+        assert_eq!(g.state().master_deck, Some(1));
+    }
+
+    #[test]
+    fn with_no_synced_deck_playing_nobody_is_master() {
+        let mut g = master_and_follower(false);
+        g.apply(Control::Pause { deck: 0 });
         render_frames(&mut g, RAMP * 2);
-        assert_eq!(g.state().leader, Some(1));
-        g.apply(Control::Leader { deck: Some(0) });
+        let st = g.state();
+        assert_eq!(st.master_deck, None);
+        assert!(st.decks.iter().all(|d| !d.master));
+        // The paused follower keeps the tempo it had matched.
+        assert!((st.decks[1].speed - 1.06).abs() < 1e-9);
+        assert!((st.decks[1].tempo - 1.06).abs() < 1e-9);
+        // Unloading a master with no follower playing: nobody either.
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 64);
+        assert_eq!(g.state().master_deck, Some(0));
+        g.apply(Control::Unload { deck: 0 });
+        render_frames(&mut g, RAMP * 2);
+        assert_eq!(g.state().master_deck, None);
+    }
+
+    #[test]
+    fn taking_master_from_a_follower_keeps_its_tempo() {
+        let mut g = master_and_follower(true);
+        g.apply(Control::TakeMaster { deck: 1 });
         render_frames(&mut g, 64);
         let st = g.state();
-        assert_eq!((st.leader, st.leader_chosen), (Some(0), true));
-        g.apply(Control::Leader { deck: None });
-        render_frames(&mut g, 64);
-        assert_eq!(g.state().leader, Some(1));
+        assert_eq!(st.master_deck, Some(1));
+        assert!((st.decks[1].speed - 1.06).abs() < 1e-9);
+        assert!((st.decks[0].speed - 1.06).abs() < 1e-9);
     }
 
     #[test]
@@ -1031,6 +1216,239 @@ mod tests {
         });
         render_frames(&mut g, 64);
         assert_eq!(g.state().decks[1].speed, 1.0);
+    }
+
+    fn beat_jump(g: &mut Graph, beats: f64) -> i64 {
+        g.apply(Control::BeatJump { deck: 0, beats });
+        g.state().decks[0].position
+    }
+
+    #[test]
+    fn beat_jump_moves_by_beats_and_keeps_the_place_in_the_beat() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        g.apply(Control::Seek {
+            deck: 0,
+            frame: 30_000,
+        });
+        assert_eq!(beat_jump(&mut g, 4.0), 126_000);
+        assert_eq!(beat_jump(&mut g, -0.5), 114_000);
+        g.apply(Control::Quantise { deck: 0, on: true });
+        assert_eq!(beat_jump(&mut g, 0.125), 117_000);
+        // Out of the track: ignored.
+        assert_eq!(beat_jump(&mut g, -32.0), 117_000);
+        assert_eq!(beat_jump(&mut g, 32.0), 117_000);
+        // FINE: 10 ms.
+        g.apply(Control::FineJump {
+            deck: 0,
+            forward: true,
+        });
+        assert_eq!(g.state().decks[0].position, 117_480);
+        g.apply(Control::FineJump {
+            deck: 0,
+            forward: false,
+        });
+        assert_eq!(g.state().decks[0].position, 117_000);
+        // No grid: beat jumps are ignored, FINE still works.
+        load(&mut g, ramp_source(48_000));
+        assert_eq!(beat_jump(&mut g, 1.0), 0);
+        g.apply(Control::FineJump {
+            deck: 0,
+            forward: true,
+        });
+        assert_eq!(g.state().decks[0].position, 480);
+    }
+
+    #[test]
+    fn quantised_beat_jumps_follow_a_dynamic_grid() {
+        // 4 beats at 120 BPM, then 100 BPM (28,800 frames a beat).
+        let grid = [
+            crate::GridAnchor {
+                frame: 0,
+                bpm: 120.0,
+                beat_in_bar: 1,
+                beats_per_bar: 4,
+            },
+            crate::GridAnchor {
+                frame: 96_000,
+                bpm: 100.0,
+                beat_in_bar: 1,
+                beats_per_bar: 4,
+            },
+        ];
+        let src = Arc::new(DeckSource::new(vec![0; 960_000], RATE).with_grid(&grid));
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, src);
+        g.apply(Control::Seek {
+            deck: 0,
+            frame: 84_000, // beat 3.5
+        });
+        // Unquantised: one beat of the local length.
+        assert_eq!(beat_jump(&mut g, 1.0), 108_000);
+        assert_eq!(beat_jump(&mut g, -1.0), 79_200);
+        g.apply(Control::Seek {
+            deck: 0,
+            frame: 84_000,
+        });
+        g.apply(Control::Quantise { deck: 0, on: true });
+        // Quantised: beat 4.5, half a beat into the 100 BPM part.
+        assert_eq!(beat_jump(&mut g, 1.0), 110_400);
+    }
+
+    fn region(g: &mut Graph) -> Option<(i64, i64, f64)> {
+        g.state().decks[0]
+            .loop_region
+            .map(|l| (l.start, l.end, l.beats))
+    }
+
+    #[test]
+    fn beat_loop_repeats_from_the_quantised_beat() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 30_000); // beat 1.25
+        g.apply(Control::Quantise { deck: 0, on: true });
+        g.apply(Control::BeatLoop {
+            deck: 0,
+            beats: 1.0,
+        });
+        assert_eq!(region(&mut g), Some((24_000, 48_000, 1.0)));
+        // Exact, wrap after wrap, at unit speed.
+        render_frames(&mut g, 100_000);
+        let pos = g.state().decks[0].position;
+        assert_eq!(pos, 24_000 + (130_000 - 24_000) % 24_000);
+        // Halve and double keep the start; past the new end it wraps.
+        g.apply(Control::LoopResize {
+            deck: 0,
+            double: false,
+        });
+        assert_eq!(region(&mut g), Some((24_000, 36_000, 0.5)));
+        render_frames(&mut g, 64);
+        let pos = g.state().decks[0].position;
+        assert!((24_000..36_000).contains(&pos), "{pos}");
+        g.apply(Control::LoopResize {
+            deck: 0,
+            double: true,
+        });
+        assert_eq!(region(&mut g), Some((24_000, 48_000, 1.0)));
+        // A 1/8 loop starts on the last 1/8 step.
+        g.apply(Control::BeatLoop {
+            deck: 0,
+            beats: 0.125,
+        });
+        let (start, end, _) = region(&mut g).unwrap();
+        assert_eq!(end - start, 3_000);
+        assert_eq!(start % 3_000, 0);
+        // A jump moves the loop with the head.
+        g.apply(Control::BeatJump {
+            deck: 0,
+            beats: 4.0,
+        });
+        assert_eq!(region(&mut g), Some((start + 96_000, end + 96_000, 0.125)));
+        // Exit: plays on past the end.
+        g.apply(Control::LoopExit { deck: 0 });
+        render_frames(&mut g, 10_000);
+        assert!(g.state().decks[0].position > end + 96_000);
+        assert_eq!(region(&mut g), None);
+    }
+
+    #[test]
+    fn unquantised_loops_start_at_the_head_and_seeks_out_of_them_end_them() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        g.apply(Control::Seek {
+            deck: 0,
+            frame: 30_000,
+        });
+        g.apply(Control::BeatLoop {
+            deck: 0,
+            beats: 2.0,
+        });
+        assert_eq!(region(&mut g), Some((30_000, 78_000, 2.0)));
+        // A seek inside keeps it; one outside ends it.
+        g.apply(Control::Seek {
+            deck: 0,
+            frame: 40_000,
+        });
+        assert!(region(&mut g).is_some());
+        g.apply(Control::Seek {
+            deck: 0,
+            frame: 200_000,
+        });
+        assert_eq!(region(&mut g), None);
+        // Past the end of the track: no loop. Without a grid: none either.
+        g.apply(Control::Seek {
+            deck: 0,
+            frame: 470_000,
+        });
+        g.apply(Control::BeatLoop {
+            deck: 0,
+            beats: 1.0,
+        });
+        assert_eq!(region(&mut g), None);
+        load(&mut g, ramp_source(48_000));
+        g.apply(Control::BeatLoop {
+            deck: 0,
+            beats: 1.0,
+        });
+        assert_eq!(region(&mut g), None);
+    }
+
+    #[test]
+    fn the_loop_point_crossfades_without_a_click() {
+        // 100 Hz at half scale: a 1/8-beat loop (3,000 frames) ends 6.25
+        // cycles in, a step of the full swing without the crossfade.
+        let samples = (0..480_000)
+            .flat_map(|i| {
+                let v = (f64::from(i) * 2.0 * std::f64::consts::PI / 480.0).sin() * 16_000.0;
+                [v as i16, v as i16]
+            })
+            .collect();
+        let grid = [crate::GridAnchor {
+            frame: 0,
+            bpm: 120.0,
+            beat_in_bar: 1,
+            beats_per_bar: 4,
+        }];
+        let src = Arc::new(DeckSource::new(samples, RATE).with_grid(&grid));
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, src);
+        g.apply(Control::Quantise { deck: 0, on: true });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 24_000);
+        g.apply(Control::BeatLoop {
+            deck: 0,
+            beats: 0.125,
+        });
+        let out = render_frames(&mut g, 24_000); // 8 wraps
+        let worst = out
+            .as_chunks::<2>()
+            .0
+            .windows(2)
+            .map(|w| (sample(w[1][0]) - sample(w[0][0])).abs())
+            .max()
+            .unwrap();
+        // The sine itself moves up to 210 a frame; a bare jump would be ~30,000.
+        assert!(worst < 600, "worst step {worst}");
+        let pos = g.state().decks[0].position;
+        assert!((24_000..27_000).contains(&pos), "{pos}");
+    }
+
+    #[test]
+    fn a_synced_loop_stays_in_phase_with_the_master() {
+        let mut g = master_and_follower(true);
+        g.apply(Control::Quantise { deck: 1, on: true });
+        g.apply(Control::BeatLoop {
+            deck: 1,
+            beats: 1.0,
+        });
+        // 6 s: about 13 wraps while resampling at 1.06.
+        render_frames(&mut g, 288_000);
+        let st = g.state();
+        assert!(st.decks[1].loop_region.is_some());
+        let (a, b) = (st.decks[0].beat.unwrap(), st.decks[1].beat.unwrap());
+        let off = crate::beatmap::wrap(a - b, 1.0);
+        assert!(off.abs() < 1e-3, "{off} beats");
     }
 
     #[test]

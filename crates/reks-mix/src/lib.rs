@@ -29,8 +29,8 @@ pub use engine::{
 };
 pub use error::{Error, Result};
 pub use graph::{
-    render, volume_gain, DeckSource, DeckState, EngineState, Graph, MeterState, DECKS, RAMP_MS,
-    TEMPO_MAX, TEMPO_MIN,
+    render, volume_gain, DeckSource, DeckState, EngineState, Graph, LoopRegion, MeterState, DECKS,
+    FINE_JUMP_MS, LOOP_MAX_BEATS, LOOP_MIN_BEATS, LOOP_XFADE_MS, RAMP_MS, TEMPO_MAX, TEMPO_MIN,
 };
 pub use player::{Player, PlayerState, Reopened};
 pub use routing::default_cue_routing;

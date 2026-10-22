@@ -50,7 +50,7 @@ fn synced_128_and_125_stay_within_1_ms_for_64_bars() {
     run(&mut g, &mut o, bars);
 
     let st = g.state();
-    assert_eq!(st.leader, Some(0));
+    assert_eq!(st.master_deck, Some(0));
     assert!(st.decks[1].locked);
     assert!((st.decks[1].speed - 128.0 / 125.0).abs() < 1e-3);
     // From the first beat after the sync jump's crossfade.

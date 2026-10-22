@@ -1,4 +1,5 @@
-//! One deck: transport, CDJ cue, hot cues, quantise and varispeed.
+//! One deck: transport, CDJ cue, hot cues, quantise, beat jump, beat loops
+//! and varispeed.
 //!
 //! At exactly unit step (speed 1.0 and the source at the engine's rate) the
 //! deck copies source frames, so playback is bit-exact; at any other step it
@@ -12,7 +13,10 @@ use std::f32::consts::FRAC_PI_2;
 use std::sync::Arc;
 
 use crate::control::Control;
-use crate::graph::{DeckState, Ramp, SEEK_XFADE_MS, TEMPO_MAX, TEMPO_MIN};
+use crate::graph::{
+    DeckState, LoopRegion, Ramp, FINE_JUMP_MS, LOOP_MAX_BEATS, LOOP_MIN_BEATS, LOOP_XFADE_MS,
+    SEEK_XFADE_MS, TEMPO_MAX, TEMPO_MIN,
+};
 use crate::source::DeckSource;
 use crate::varispeed::{Varispeed, MIN_STEP};
 
@@ -32,8 +36,19 @@ enum Pending {
 struct Tail {
     position: f64,
     step: f64,
-    /// Frames of the crossfade still to play, `xfade..=1`.
+    /// Frames of the crossfade still to play, `len..=1`.
     left: u32,
+    /// Length of this crossfade in frames.
+    len: u32,
+}
+
+/// An active loop, in source frames: `end` is `beats` beats after `start`
+/// on the grid.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Loop {
+    start: f64,
+    end: f64,
+    beats: f64,
 }
 
 /// Clamps a ratio control to the tempo range; non-finite values give 1.0.
@@ -70,6 +85,9 @@ pub(crate) struct Deck {
     tail: Option<Tail>,
     /// [`SEEK_XFADE_MS`] in frames.
     xfade: u32,
+    /// [`LOOP_XFADE_MS`] in frames.
+    loop_xfade: u32,
+    looping: Option<Loop>,
     cue: f64,
     /// CUE is held from the cue point; letting go returns there.
     cue_preview: bool,
@@ -82,6 +100,9 @@ pub(crate) struct Deck {
     pub(crate) started: u64,
     /// Sync is following a leader this block.
     pub(crate) locked: bool,
+    /// While locked: the tempo ratio that matches the master, without phase
+    /// bend or nudge. A deck that takes over as master keeps it.
+    pub(crate) matched: Option<f64>,
 }
 
 impl Deck {
@@ -103,6 +124,8 @@ impl Deck {
             transports: 0,
             tail: None,
             xfade: (sample_rate * SEEK_XFADE_MS / 1000).max(1),
+            loop_xfade: (sample_rate * LOOP_XFADE_MS / 1000).max(1),
+            looping: None,
             cue: 0.0,
             cue_preview: false,
             tempo: 1.0,
@@ -112,6 +135,7 @@ impl Deck {
             quantise: false,
             started: 0,
             locked: false,
+            matched: None,
         })
     }
 
@@ -154,6 +178,16 @@ impl Deck {
         self.held = step < MIN_STEP;
         self.motion.target = if self.held { 0.0 } else { 1.0 };
         self.step = crate::varispeed::clamp_step(step);
+    }
+
+    /// Length of the active loop in beats.
+    pub(crate) fn loop_beats(&self) -> Option<f64> {
+        self.looping.map(|l| l.beats)
+    }
+
+    /// Sets the tempo fader, clamped to the tempo range.
+    pub(crate) fn set_tempo(&mut self, r: f64) {
+        self.tempo = ratio(r);
     }
 
     /// Speed the deck's own controls ask for.
@@ -211,7 +245,7 @@ impl Deck {
                 None
             }
             Control::Tempo { ratio: r, .. } => {
-                self.tempo = ratio(r);
+                self.set_tempo(r);
                 None
             }
             Control::Nudge { ratio: r, .. } => {
@@ -227,7 +261,27 @@ impl Deck {
                 self.quantise = on;
                 None
             }
-            Control::Leader { .. }
+            Control::BeatJump { beats, .. } => {
+                self.beat_jump(beats);
+                None
+            }
+            Control::FineJump { forward, .. } => {
+                self.fine_jump(forward);
+                None
+            }
+            Control::BeatLoop { beats, .. } => {
+                self.beat_loop(beats);
+                None
+            }
+            Control::LoopExit { .. } => {
+                self.looping = None;
+                None
+            }
+            Control::LoopResize { double, .. } => {
+                self.resize_loop(double);
+                None
+            }
+            Control::TakeMaster { .. }
             | Control::Channel { .. }
             | Control::Filter { .. }
             | Control::Crossfader { .. }
@@ -282,6 +336,7 @@ impl Deck {
                 _ => here,
             }
             .clamp(0.0, self.frames() as f64);
+            self.leave_loop_unless(self.cue);
             self.jump(self.cue);
         }
     }
@@ -315,7 +370,9 @@ impl Deck {
         } else {
             at
         };
-        self.jump(to.clamp(0.0, self.frames() as f64));
+        let to = to.clamp(0.0, self.frames() as f64);
+        self.leave_loop_unless(to);
+        self.jump(to);
         self.play(clock);
     }
 
@@ -331,11 +388,152 @@ impl Deck {
             Some(s) if self.quantise => s.beats().snap(to),
             _ => to,
         };
+        let to = to.clamp(0.0, self.frames() as f64);
+        self.leave_loop_unless(to);
+        self.jump(to);
+    }
+
+    /// A jump out of the active loop ends it (seek, hot cue, cue).
+    fn leave_loop_unless(&mut self, to: f64) {
+        if self
+            .looping
+            .is_some_and(|l| !(l.start..l.end).contains(&to))
+        {
+            self.looping = None;
+        }
+    }
+
+    /// The grid, when the deck can take a beat jump or loop now.
+    fn grid(&self) -> Option<&crate::beatmap::BeatMap> {
+        if matches!(self.pending, Pending::Load(_)) {
+            return None;
+        }
+        Some(self.src.as_ref()?.beats()).filter(|b| !b.is_empty())
+    }
+
+    /// `frame` moved by `beats`: along the grid with quantise (so the place
+    /// in the beat is kept on dynamic grids too), else by `beats` of the
+    /// local beat length.
+    fn beats_from(&self, frame: f64, beats: f64) -> Option<f64> {
+        let map = self.grid()?;
+        if self.quantise {
+            map.frame_at(map.beat_at(frame)? + beats)
+        } else {
+            Some(frame + beats * map.period_at(frame)?)
+        }
+    }
+
+    /// Beat jump; ignored when it would leave the track. The active loop
+    /// moves with the head.
+    fn beat_jump(&mut self, beats: f64) {
+        if !beats.is_finite() || beats == 0.0 {
+            return;
+        }
+        let frames = self.frames() as f64;
+        let Some(to) = self.beats_from(self.position(), beats) else {
+            return;
+        };
+        if !(0.0..frames).contains(&to) {
+            return;
+        }
+        if let Some(l) = self.looping {
+            let start = self.beats_from(l.start, beats);
+            let end = start.and_then(|s| self.loop_end(s, l.beats));
+            let (Some(start), Some(end)) = (start, end) else {
+                return;
+            };
+            self.looping = Some(Loop { start, end, ..l });
+        }
+        self.jump(to);
+    }
+
+    /// FINE jump: a fixed time, with or without a grid.
+    fn fine_jump(&mut self, forward: bool) {
+        if matches!(self.pending, Pending::Load(_)) {
+            return;
+        }
+        let Some(src) = self.src.as_ref() else {
+            return;
+        };
+        let by = f64::from(src.sample_rate() * FINE_JUMP_MS) / 1000.0;
+        let to = self.position() + if forward { by } else { -by };
         self.jump(to.clamp(0.0, self.frames() as f64));
+    }
+
+    /// End of a loop of `beats` from `start`; `None` past the track.
+    fn loop_end(&self, start: f64, beats: f64) -> Option<f64> {
+        let map = self.grid()?;
+        let end = map.frame_at(map.beat_at(start)? + beats)?;
+        (start >= 0.0 && end <= self.frames() as f64).then_some(end)
+    }
+
+    /// Starts a loop of `beats` at the head, or with quantise at the last
+    /// grid step of `beats` (whole beats for loops of a beat or more).
+    fn beat_loop(&mut self, beats: f64) {
+        if !beats.is_finite() {
+            return;
+        }
+        let beats = beats.clamp(LOOP_MIN_BEATS, LOOP_MAX_BEATS);
+        let here = self.position();
+        let start = match self.grid() {
+            Some(map) if self.quantise => {
+                let q = beats.min(1.0);
+                let Some(b) = map.beat_at(here) else {
+                    return;
+                };
+                // Rounding must not put a head sitting on a step a step back.
+                let step = (b / q + 1e-9).floor();
+                // Before the track starts, begin at the next step instead.
+                [step, step + 1.0]
+                    .into_iter()
+                    .filter_map(|s| map.frame_at(s * q))
+                    .find(|&f| f >= 0.0)
+            }
+            Some(_) => Some(here),
+            None => None,
+        };
+        let Some(start) = start else {
+            return;
+        };
+        if let Some(end) = self.loop_end(start, beats) {
+            self.looping = Some(Loop { start, end, beats });
+        }
+    }
+
+    /// Halves or doubles the active loop, keeping its start.
+    fn resize_loop(&mut self, double: bool) {
+        let Some(l) = self.looping else {
+            return;
+        };
+        let beats = if double { l.beats * 2.0 } else { l.beats / 2.0 };
+        if !(LOOP_MIN_BEATS..=LOOP_MAX_BEATS).contains(&beats) {
+            return;
+        }
+        if let Some(end) = self.loop_end(l.start, beats) {
+            self.looping = Some(Loop { end, beats, ..l });
+        }
+    }
+
+    /// At or past the loop end: back by whole loop lengths, crossfading
+    /// over [`LOOP_XFADE_MS`] from the head running on past the end.
+    fn wrap_loop(&mut self) {
+        let Some(l) = self.looping else {
+            return;
+        };
+        let at = self.position();
+        if at >= l.end {
+            // Exact in floating point, so loop length and sync do not drift.
+            let to = l.start + (at - l.start).rem_euclid(l.end - l.start);
+            self.jump_with(to, self.loop_xfade);
+        }
     }
 
     /// Moves the head now; while audible, the old head fades out under it.
     pub(crate) fn jump(&mut self, to: f64) {
+        self.jump_with(to, self.xfade);
+    }
+
+    fn jump_with(&mut self, to: f64, xfade: u32) {
         let from = self.position();
         if self.audible() && to != from {
             // A jump during a crossfade restarts it from the head heard most
@@ -343,7 +541,8 @@ impl Deck {
             self.tail = Some(Tail {
                 position: from,
                 step: self.step,
-                left: self.xfade,
+                left: xfade,
+                len: xfade,
             });
         }
         self.resampling = false;
@@ -374,6 +573,7 @@ impl Deck {
             }
             Pending::Cue => {
                 self.stop();
+                self.leave_loop_unless(self.cue);
                 self.resampling = false;
                 self.position = self.cue;
                 None
@@ -383,6 +583,7 @@ impl Deck {
                 self.resampling = false;
                 self.position = 0.0;
                 self.cue = 0.0;
+                self.looping = None;
                 std::mem::replace(&mut self.src, src)
             }
         }
@@ -436,7 +637,7 @@ impl Deck {
                 let (mut l, mut r) = self.read(src);
                 if let Some(t) = &mut self.tail {
                     // x runs 1 -> 0: old head cos-out, new head sin-in.
-                    let x = t.left as f32 / self.xfade as f32;
+                    let x = t.left as f32 / t.len as f32;
                     let (old, new) = ((x * FRAC_PI_2).sin(), (x * FRAC_PI_2).cos());
                     let (ol, or) = src.frame_lerp(t.position);
                     l = l * new + ol * old;
@@ -461,6 +662,8 @@ impl Deck {
             }
         };
         self.src = src;
+        // After the read, so the head never rests on the loop end.
+        self.wrap_loop();
         if self.gate.settled() && self.gate.value == 0.0 {
             let action = std::mem::take(&mut self.pending);
             if let Some(old) = self.run(action) {
@@ -497,6 +700,12 @@ impl Deck {
             sync_bar: self.sync_bar,
             locked: self.locked,
             quantise: self.quantise,
+            master: false,
+            loop_region: self.looping.map(|l| LoopRegion {
+                start: l.start.round() as i64,
+                end: l.end.round() as i64,
+                beats: l.beats,
+            }),
         }
     }
 }
