@@ -5,8 +5,10 @@
  * and the player's volume, which it sends as `MixControl`s. The library's
  * player is one of these decks (`player.ts`, D30). A track loaded without
  * a grid is queued for analysis and picks the grid up when it is done. Each
- * deck's pad mode, pages and last jump / loop sizes live here. Tempo, sync
- * and every mixer law live in Rust; this only forwards.
+ * deck's pad mode, pages and last jump / loop sizes live here. Cue edits
+ * (hot cues, memory cues) go to the library through `mixCueEdit`, which
+ * returns the deck's cues. Tempo, sync and every mixer law live in Rust;
+ * this only forwards.
  */
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
@@ -17,6 +19,7 @@ import {
   type BeatMark,
   beatgridGet,
   type ChannelParam,
+  type CueEdit,
   DECKS,
   type FilterParam,
   type FilterUnit,
@@ -30,6 +33,7 @@ import {
   type MixDeviceOptions,
   type MixState,
   mixControl,
+  mixCueEdit,
   mixDeviceOptions,
   mixLoad,
   mixStart,
@@ -40,6 +44,7 @@ import { litCount } from "../lib/meterScale";
 import {
   ASSIGN_VALUE,
   type Assign,
+  adjacentCue,
   cueFits,
   DEFAULT_PAD_BEATS,
   DEFAULT_TEMPO_RANGE,
@@ -149,6 +154,8 @@ export interface MixStore {
   master: MasterValues;
   /** The player's volume slider, 0..1, on top of the master level. */
   volume: number;
+  /** Bumped per track when a deck edits its cues, so views of the track refetch them. */
+  cueRevisions: Record<number, number>;
 
   loadDevices: () => Promise<void>;
   setConfig: (patch: Partial<MixConfig>) => Promise<void>;
@@ -182,6 +189,14 @@ export interface MixStore {
   loopPad: (deck: number, beats: number) => void;
   /** Loop on at the size used last, or off. */
   toggleLoop: (deck: number) => void;
+  /** A hot cue pad or key: jumps to a set cue, sets an empty one at the playhead. */
+  hotCuePad: (deck: number, slot: number) => void;
+  /** Edits the cues of the track on `deck` in the library and on the deck. */
+  editCues: (deck: number, edit: CueEdit) => Promise<void>;
+  /** Moves the cue point and playhead to `ms` (a memory cue). */
+  callCue: (deck: number, ms: number) => void;
+  /** Memory cue call ◀ (-1) / ▶ (1) from the playhead. */
+  callAdjacentCue: (deck: number, dir: -1 | 1) => void;
   setPadMode: (deck: number, mode: PadMode) => void;
   cyclePadMode: (deck: number) => void;
   setPadPage: (deck: number, mode: PagedPadMode, page: number) => void;
@@ -439,6 +454,7 @@ export const useMix = create<MixStore>((set, get) => {
     crossfader: { pos: 0.5, curve: 0 },
     master: { level: 0.8, cueLevel: 0.7, cueMix: 0, splitCue: false, cuePostEq: false },
     volume: 1,
+    cueRevisions: {},
 
     async loadDevices() {
       try {
@@ -674,6 +690,41 @@ export const useMix = create<MixStore>((set, get) => {
           ? { type: "loopExit", deck }
           : { type: "beatLoop", deck, beats: prefs(deck).lastLoop },
       );
+    },
+
+    hotCuePad(deck, slot) {
+      const meta = get().decks[deck];
+      if (meta?.track == null || deckView(deck)?.loaded !== true) return;
+      if (meta.hotCues.some((c) => c.slot === slot)) get().send({ type: "hotCue", deck, slot });
+      else void get().editCues(deck, { type: "setHotCue", slot });
+    },
+
+    async editCues(deck, edit) {
+      const track = get().decks[deck]?.track;
+      if (track == null || get().status !== "running") return;
+      const seq = loads[deck];
+      try {
+        const cues = await mixCueEdit(deck, edit);
+        set((s) => ({
+          cueRevisions: { ...s.cueRevisions, [track.id]: (s.cueRevisions[track.id] ?? 0) + 1 },
+        }));
+        // A load since: the new track brought its own cues.
+        if (loads[deck] === seq) patchDeck(deck, cues);
+      } catch (e) {
+        set({ error: message(e) });
+      }
+    },
+
+    callCue(deck, ms) {
+      get().send({ type: "callCue", deck, ms });
+    },
+
+    callAdjacentCue(deck, dir) {
+      const v = deckView(deck);
+      const meta = get().decks[deck];
+      if (v?.loaded !== true || meta === undefined) return;
+      const ms = adjacentCue(meta.memoryCues, v.positionMs, dir);
+      if (ms !== null) get().callCue(deck, ms);
     },
 
     setPadMode(deck, mode) {

@@ -32,12 +32,18 @@ pub struct DeckAudio {
 /// A hot cue (`slot` set) or memory cue (`slot` `None`) to draw on a deck.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CueMark {
+    /// The library row ([`Cue::id`]), to rename or delete it.
+    pub id: i64,
     pub slot: Option<u8>,
     pub frame: i64,
     /// 0xRRGGBB from the library; `None` uses the deck's default colour.
     pub color_rgb: Option<u32>,
     /// The cue's name from the library (shown on its hot cue pad).
     pub name: Option<String>,
+    /// A loop's end (memory loops; a hot loop is marked by its start only).
+    pub end_frame: Option<i64>,
+    /// A memory loop playback enters by itself ([`Cue::active_loop`]).
+    pub active_loop: bool,
 }
 
 /// One `beatgrid` row in frames of the deck's audio.
@@ -110,10 +116,16 @@ fn hot_cues(cues: &[Cue]) -> Vec<&Cue> {
 /// cues and loops (no slot) by position, in frames at `rate`.
 pub fn cue_marks(cues: &[Cue], rate: u32) -> Vec<CueMark> {
     let mark = |c: &Cue| CueMark {
+        id: c.id,
         slot: c.slot,
         frame: ms_to_frame(c.start_ms, rate),
         color_rgb: c.color_rgb,
         name: c.name.clone(),
+        end_frame: c
+            .end_ms
+            .filter(|_| c.slot.is_none() && c.kind == KIND_LOOP)
+            .map(|e| ms_to_frame(e, rate)),
+        active_loop: c.active_loop && c.slot.is_none() && c.kind == KIND_LOOP,
     };
     let mut memory: Vec<CueMark> = cues
         .iter()
@@ -124,6 +136,16 @@ pub fn cue_marks(cues: &[Cue], rate: u32) -> Vec<CueMark> {
     let mut out: Vec<CueMark> = hot_cues(cues).into_iter().map(mark).collect();
     out.extend(memory);
     out
+}
+
+/// The active memory loops of `marks` as `(start, end)` frames, by start:
+/// what the engine enters by itself.
+pub fn auto_loops(marks: &[CueMark]) -> Vec<(i64, i64)> {
+    marks
+        .iter()
+        .filter(|m| m.active_loop)
+        .filter_map(|m| Some((m.frame, m.end_frame.filter(|&e| e > m.frame)?)))
+        .collect()
 }
 
 #[cfg(test)]
@@ -139,6 +161,7 @@ mod tests {
             end_ms: None,
             name: None,
             color_rgb: None,
+            active_loop: false,
         }
     }
 
@@ -206,10 +229,13 @@ mod tests {
             cue(Some(0), KIND_LOOP, 4_000.0),
         ];
         let mark = |slot, frame, color_rgb, name: Option<&str>| CueMark {
+            id: 0,
             slot,
             frame,
             color_rgb,
             name: name.map(String::from),
+            end_frame: None,
+            active_loop: false,
         };
         assert_eq!(
             cue_marks(&cues, 1_000),
@@ -221,5 +247,32 @@ mod tests {
             ],
             "load cue dropped"
         );
+    }
+
+    #[test]
+    fn memory_loops_carry_their_end_and_the_active_ones_are_auto_loops() {
+        let mut active = cue(None, KIND_LOOP, 2_000.0);
+        active.end_ms = Some(3_000.0);
+        active.active_loop = true;
+        let mut plain = cue(None, KIND_LOOP, 5_000.0);
+        plain.end_ms = Some(6_000.0);
+        let mut hot_loop = cue(Some(0), KIND_LOOP, 500.0);
+        hot_loop.end_ms = Some(900.0);
+        hot_loop.active_loop = true;
+        let marks = cue_marks(&[plain, hot_loop, active], 1_000);
+        let ends: Vec<_> = marks
+            .iter()
+            .map(|m| (m.frame, m.end_frame, m.active_loop))
+            .collect();
+        assert_eq!(
+            ends,
+            [
+                (500, None, false),
+                (2_000, Some(3_000), true),
+                (5_000, Some(6_000), false)
+            ],
+            "a hot loop is never an auto loop"
+        );
+        assert_eq!(auto_loops(&marks), [(2_000, 3_000)]);
     }
 }

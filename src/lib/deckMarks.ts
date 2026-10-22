@@ -3,7 +3,9 @@
  * which colours (pure), and drawing them on a canvas in device pixels.
  * Hot cues are a line with a flag carrying the slot letter in the cue's own
  * library colour; memory cues and the deck's cue point are a line with a
- * triangle on the bottom edge; an active loop is a shaded band.
+ * triangle on the bottom edge, a memory loop also a bar along the bottom to
+ * its end (an auto-entered one in `deck-auto-loop`, thicker); the playing
+ * loop is a shaded band.
  */
 import { formatRgb, hotCueLabel } from "./format";
 import type { HotCueView, LoopView, MemoryCueView } from "./ipc";
@@ -17,12 +19,19 @@ export interface DeckMark {
   colour: string;
   /** The hot cue letter. */
   label: string | null;
+  /** The cue's name from the library, for the hover hint. */
+  name: string | null;
+  /** A memory loop's end. */
+  endMs: number | null;
+  /** A memory loop playback enters by itself. */
+  auto: boolean;
 }
 
 /** Colours (tokens) for marks without a library colour. */
 export interface MarkColours {
   hot: string;
   memory: string;
+  autoLoop: string;
   cue: string;
 }
 
@@ -39,17 +48,58 @@ export function deckMarks(
     ...memoryCues.map((c) => ({
       kind: "memory" as const,
       ms: c.positionMs,
-      colour: colour(c.colorRgb, colours.memory),
+      colour: c.activeLoop ? colours.autoLoop : colour(c.colorRgb, colours.memory),
       label: null,
+      name: c.name,
+      endMs: c.endMs,
+      auto: c.activeLoop,
     })),
-    { kind: "cue", ms: cueMs, colour: colours.cue, label: null },
+    {
+      kind: "cue",
+      ms: cueMs,
+      colour: colours.cue,
+      label: null,
+      name: null,
+      endMs: null,
+      auto: false,
+    },
     ...hotCues.map((c) => ({
       kind: "hot" as const,
       ms: c.positionMs,
       colour: colour(c.colorRgb, colours.hot),
       label: hotCueLabel(c.slot),
+      name: c.name,
+      endMs: null,
+      auto: false,
     })),
   ];
+}
+
+/** The mark nearest `ms` within `slopMs`, hot cues first (they draw on top). */
+export function markAt(marks: DeckMark[], ms: number, slopMs: number): DeckMark | null {
+  let best: DeckMark | null = null;
+  for (const m of marks) {
+    const d = Math.abs(m.ms - ms);
+    if (d > slopMs) continue;
+    if (best === null || (m.kind === "hot") > (best.kind === "hot") || d < Math.abs(best.ms - ms))
+      best = m;
+  }
+  return best;
+}
+
+/** A mark's hover hint: "Hot cue A: Drop", "Memory cue", "Memory loop", "Auto loop", "Cue point". */
+export function markTitle(m: DeckMark): string {
+  const what =
+    m.kind === "hot"
+      ? `Hot cue ${m.label}`
+      : m.kind === "cue"
+        ? "Cue point"
+        : m.auto
+          ? "Auto loop"
+          : m.endMs !== null
+            ? "Memory loop"
+            : "Memory cue";
+  return m.name === null ? what : `${what}: ${m.name}`;
 }
 
 /** Whether text on a `#rrggbb` flag should be dark (light flag) or light. */
@@ -91,8 +141,15 @@ export function drawMarks(
   ctx.textAlign = "center";
   for (const m of marks) {
     const x = xOf(m.ms);
-    if (x < -flagH * 2 || x > width + line) continue;
+    const xEnd = m.endMs === null ? x : xOf(m.endMs);
+    if (xEnd < -flagH * 2 || x > width + line) continue;
     ctx.fillStyle = m.colour;
+    if (m.endMs !== null) {
+      // Bar along the bottom to the end, and a short end line.
+      const bar = line * (m.auto ? 3 : 1);
+      ctx.fillRect(x, height - bar, Math.max(line, xEnd - x), bar);
+      ctx.fillRect(xEnd, height - Math.round(height / 3), line, Math.round(height / 3));
+    }
     ctx.fillRect(x, 0, line, height);
     if (m.kind === "hot") {
       const w = flagH;

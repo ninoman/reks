@@ -70,6 +70,9 @@ pub struct Cue {
     pub name: Option<String>,
     /// 0xRRGGBB.
     pub color_rgb: Option<u32>,
+    /// A memory loop playback enters by itself at its start (task 17;
+    /// rekordbox's "active loop"). False for every other cue.
+    pub active_loop: bool,
 }
 
 /// The beatgrid at a glance.
@@ -244,7 +247,7 @@ fn detail(conn: &Connection, id: TrackId) -> Result<TrackDetail> {
 
     let cues = conn
         .prepare_cached(
-            "SELECT id, slot, kind, start_ms, end_ms, name, color_rgb FROM cue
+            "SELECT id, slot, kind, start_ms, end_ms, name, color_rgb, active_loop FROM cue
              WHERE track_id = ?1 ORDER BY slot IS NULL, slot, start_ms, id",
         )?
         .query_map([id], |r| {
@@ -256,6 +259,7 @@ fn detail(conn: &Connection, id: TrackId) -> Result<TrackDetail> {
                 end_ms: r.get(4)?,
                 name: r.get(5)?,
                 color_rgb: r.get(6)?,
+                active_loop: r.get(7)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

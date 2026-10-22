@@ -33,6 +33,10 @@ pub enum Error {
     #[error("track {0} not found")]
     TrackNotFound(crate::scan::TrackId),
 
+    /// No cue with this id on the track.
+    #[error("cue {0} not found")]
+    CueNotFound(i64),
+
     /// No artwork with this id.
     #[error("artwork {0} not found")]
     ArtworkNotFound(crate::artwork::ArtworkId),

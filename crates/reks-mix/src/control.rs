@@ -49,6 +49,32 @@ pub enum Control {
         deck: u8,
         slot: u8,
     },
+    /// Sets hot cue `slot` (0..[`crate::HOT_CUE_SLOTS`]) of the loaded track
+    /// at `frame`, or clears it with `None`: a cue edited on the deck, which
+    /// the app also stores in the library. Ignored while a load is pending
+    /// (the new track brings its own).
+    SetHotCue {
+        deck: u8,
+        slot: u8,
+        frame: Option<i64>,
+    },
+    /// Sets active memory loop slot `index` (0..[`crate::AUTO_LOOP_SLOTS`])
+    /// of the loaded track to `(start, end)` frames, or clears it: the app
+    /// sends every slot after an edit. Playback enters an active loop by
+    /// itself when the head reaches its start. Ignored while a load is
+    /// pending (the new track brings its own).
+    AutoLoop {
+        deck: u8,
+        index: u8,
+        region: Option<(i64, i64)>,
+    },
+    /// Memory cue call: the cue point and the head move to `frame` exactly
+    /// (no quantise); a playing deck plays on from there. UNVERIFIED against
+    /// a CDJ's CALL buttons; this is rekordbox's memory cue list.
+    CallCue {
+        deck: u8,
+        frame: i64,
+    },
     /// Tempo fader as a speed ratio, clamped to [`crate::graph::TEMPO_MIN`]..=
     /// [`crate::graph::TEMPO_MAX`]. Pitch follows tempo.
     Tempo {
@@ -146,6 +172,9 @@ impl Control {
             | Self::CueRelease { deck }
             | Self::Seek { deck, .. }
             | Self::HotCue { deck, .. }
+            | Self::SetHotCue { deck, .. }
+            | Self::CallCue { deck, .. }
+            | Self::AutoLoop { deck, .. }
             | Self::Tempo { deck, .. }
             | Self::Nudge { deck, .. }
             | Self::Sync { deck, .. }

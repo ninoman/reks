@@ -31,7 +31,10 @@ export function Tooltip({
   children: ReactElement;
 }) {
   return (
-    <TooltipPrimitive.Provider delayDuration={DELAY_MS}>
+    // Not hoverable: a hint flipped over the controls above (a pad's, over
+    // the pad mode row) closes as the pointer leaves its trigger, so it never
+    // takes the click meant for what it covers.
+    <TooltipPrimitive.Provider delayDuration={DELAY_MS} disableHoverableContent>
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>

@@ -53,7 +53,8 @@ speakers. It is a preparation tool. Nothing here is meant for playing a gig.
   outputs, effects other than the filters, DVS, streaming services.
 - Key lock in the first cut (task 10 evaluates it).
 - Master and cue on two separate audio devices (clock drift). Windows ASIO.
-- Editing grids or cues from a deck (grid editor is Phase 3 task 13).
+- Editing grids from a deck (grid editor is Phase 3 task 13). Cue editing
+  on the decks was added by task 17 (maintainer's request, 2026-10-22).
 - Analogue sound emulation. The target is the documented response:
   frequencies, slopes, ranges, curves.
 - Saving mixer state or transitions in the library DB.
@@ -461,6 +462,79 @@ pub enum Control {
     1920 × 1080, each pad mode, empty, loading, analysing → grid, error and
     BPM edit. Not checked in the Tauri WebView. CDJ-like behaviour (pad sizes, FINE,
     jump and loop feel) is UNVERIFIED on hardware.
+
+17. [x] **Cue editing on the decks** (maintainer request, 2026-10-22;
+    revised the same day: "auto cue" means memory loops playback enters by
+    itself, not a cue point chosen on load, and deleting gets a × as well
+    as Shift+click). UI: [`../ui.md`](../ui.md#cue-editing-task-17).
+    - [x] Library: `reks-core` `cue.rs`: `set_hot_cue` (empty slot only;
+      next `HOT_CUE_PALETTE` colour), `add_memory_cue` (a point, or a loop
+      with its end; the same start and end within 1 ms is the same cue),
+      `rename_cue` (trimmed, blank clears, ≤ 64 characters, no control
+      characters), `set_active_loop` (memory loops only), `delete_cue`.
+      Migration 0011 adds `cue.active_loop` (default 0; `Cue::active_loop`,
+      copied by the converter). Rows are `kind` 0 or 4, `source =
+      'manual'` (a rekordbox re-import leaves them); `updated_at` is bumped.
+    - [x] Formats (checked 2026-10-22): the rekordbox XML has no active
+      loop field (`POSITION_MARK` has `Name`, `Type`, `Start`, `End`,
+      `Num`, colour), so an XML export for rekordbox writes AUTO loops as
+      plain memory loops. In ANLZ the `.DAT` memory `PCOB`'s `PCPT`
+      `status` 4 marks the active loop ([`../research/raw-3-analysis-anlz.md`](../research/raw-3-analysis-anlz.md),
+      Deep Symmetry's anlz docs; `rekordcrate` reads it), and the `PCP2`
+      entry has no flag. The PDB holds no cues. baken-export 4.6.1 writes
+      status 4 for a memory loop whose XML `Name` starts with `[active]`
+      (its issue #210; its test matches rekordbox 7 bytes), one per track
+      (the earliest).
+    - [x] Export, behind the `export.active_loops` flag (`ExportOptions::active_loops`,
+      wizard switch "Active loops", off by default, UNVERIFIED until a
+      player enters the loop in a hardware test): the temp XML handed to
+      baken prefixes the earliest AUTO memory loop's name with `[active]`
+      (`rbxml::ActiveLoops::BakenMarker`), which baken strips. Our own ANLZ
+      builder still writes status 0: baken splices the cue lists from the
+      XML over it. OneLibrary's `cue.isActiveLoop` is not written (phase 4
+      writer unchanged).
+    - [x] Engine: `Control::SetHotCue { slot, frame: Option }` (hot cues in
+      a fixed array, filled from the source at load), `Control::CallCue
+      { frame }` (cue point and head move there exactly, playing on),
+      `Control::AutoLoop { index, region }` and `DeckSource::with_auto_loops`
+      (up to `AUTO_LOOP_SLOTS` = 8 AUTO loops per deck). A playing head
+      that reaches an AUTO loop's start (`start` in `before..now` for the
+      frame, so a head parked on the start enters too) enters it as a beat
+      loop: same wrap and `LOOP_XFADE_MS` crossfade, LOOP EXIT leaves it,
+      and it is entered again only by passing the start again. No
+      allocation (the real-time test sends the new controls).
+      `DeckSource::cue_frame` snaps a cue set at the head with quantise.
+    - [x] App: `mix_cue_edit { deck, edit: CueEdit }` writes the library,
+      then the engine (hot cue, all AUTO loop slots), and returns the
+      deck's cues. MEM while the engine reports a loop saves that loop. A
+      cue set at the playhead takes the position from the latest engine
+      state (up to one state, ~17 ms, early on a playing deck; quantise
+      snaps it to the beat either way). `MemoryCueView.endMs` /
+      `activeLoop`, `callCue` control in ms.
+    - [x] UI: empty pad sets, set pad triggers, double-click renames, × or
+      Shift+click deletes; MEM, ◀ ▶ and the memory list (jump, rename,
+      AUTO, ×) in HOT CUE mode; memory and AUTO loop marks; mark names on
+      hover; keys Alt A / Alt J (memory cue), Alt E R / Alt O P (previous /
+      next); track details refetch cues after an edit (`cueRevisions`).
+    Tests: `tests/cue_edit.rs` (round trip, memory loops and the flag,
+    refused edits), `rbxml_export.rs` `cues_edited_on_a_deck_reach_the_export`,
+    `reks-export-rb` `tests/active_loop.rs` (marker equals baken's; baken
+    finds the earliest AUTO loop only with the flag), `cue.rs` (palette,
+    names), `deck.rs` (loop ends, auto loops), `reks-anlz` `cue.rs`
+    (palette exports as distinct player colours), `source.rs` and
+    `graph.rs` (set / clear / call, entering an AUTO loop, leaving it,
+    re-entry, a parked head, live edits), the engine's real-time test,
+    `src-tauri/src/mix.rs` (`CueEdit`, `callCue`), `DeckStrip.test.tsx`
+    (empty pad sets, double-click renames, Esc cancels, Shift+click and ×
+    delete, the × follows its pad in the Tab order, memory list jump /
+    AUTO / delete), `ExportWizard.test.tsx` (Active loops off, UNVERIFIED,
+    sent), `mix.test.ts`, `mixKeys.test.ts`, `deckMarks.test.ts`,
+    `mockMix.test.ts`. Checked in headless Chrome (DPR 2) with the dev
+    mock at 1280 × 800 (4 decks) and 1440 × 900 with real pointer and key
+    events: every edit above, the × by hover and by Tab + Enter, MEM
+    during a loop, AUTO, and a deck entering the loop as it plays. Not
+    checked in the Tauri WebView. Not tried on a CDJ: memory call and
+    active loops on players are UNVERIFIED.
 
 ## Acceptance criteria
 

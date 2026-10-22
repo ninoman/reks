@@ -511,6 +511,21 @@ function OptionsStep() {
         />
       </OptionRow>
       <OptionRow
+        title="Active loops"
+        hint="Write each track's earliest AUTO memory loop as its active loop, which players enter by themselves. Not yet tested on players."
+        badge={
+          <Badge variant="muted" title="Not yet tested on a CDJ or XDJ">
+            UNVERIFIED
+          </Badge>
+        }
+      >
+        <Switch
+          aria-label="Active loops"
+          checked={o.activeLoops}
+          onCheckedChange={(v) => set({ activeLoops: v })}
+        />
+      </OptionRow>
+      <OptionRow
         title="OneLibrary"
         hint={`Also write exportLibrary.db, the library newer players read. Not tested on any player and not supported by AlphaTheta.${
           keyBuiltin

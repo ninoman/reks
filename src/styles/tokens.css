@@ -138,6 +138,8 @@
   /* Memory cues without a library colour, and the active loop's band. */
   --color-deck-memory: var(--red-500);
   --color-deck-loop: rgb(212 154 69 / 28%);
+  /* A memory loop playback enters by itself (active loop): its mark and bar. */
+  --color-deck-auto-loop: var(--indigo-500);
   /* Text on a pad filled with a data colour (hot cue): dark on light fills, light on dark. */
   --color-pad-ink-dark: var(--mist-950);
   --color-pad-ink-light: var(--mist-0);

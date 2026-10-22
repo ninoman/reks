@@ -108,7 +108,12 @@ impl BakenWriter {
             playlists: sel.playlists.clone(),
         };
         let dividers = divider_rows(plan)?;
-        let out = rbxml::export_file_with_dividers(lib, &sel, &dividers, &xml)?;
+        let active_loops = if plan.options.active_loops {
+            rbxml::ActiveLoops::BakenMarker
+        } else {
+            rbxml::ActiveLoops::Leave
+        };
+        let out = rbxml::export_file_with_dividers(lib, &sel, &dividers, active_loops, &xml)?;
         let reks_anlz = reksanlz::write_all(lib, plan, &work_dir.join("reks-anlz"))?;
         Ok(Self {
             reks_anlz,

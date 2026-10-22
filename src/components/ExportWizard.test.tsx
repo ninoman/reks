@@ -397,20 +397,24 @@ describe("ExportWizard", () => {
     );
   });
 
-  it("playlist dividers are off by default and marked UNVERIFIED", async () => {
+  it("playlist dividers and active loops are off by default and marked UNVERIFIED", async () => {
     exportPlan.mockResolvedValue(dryRun());
     await toOptions();
     const toggle = screen.getByRole("switch", { name: "Playlist dividers" });
     expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(screen.getByText("UNVERIFIED")).toBeTruthy();
+    // Dividers and active loops each carry the badge.
+    expect(screen.getAllByText("UNVERIFIED")).toHaveLength(2);
+    const loops = screen.getByRole("switch", { name: "Active loops" });
+    expect(loops.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(toggle);
+    fireEvent.click(loops);
 
     fireEvent.click(button("Dry run"));
     await screen.findByText(/Ready to export/);
     expect(exportPlan).toHaveBeenCalledWith(
       "/Volumes/REKS",
       { playlists: [3] },
-      expect.objectContaining({ dividers: true }),
+      expect.objectContaining({ dividers: true, activeLoops: true }),
       1,
     );
   });

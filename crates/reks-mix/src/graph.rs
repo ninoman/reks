@@ -940,6 +940,73 @@ mod tests {
     }
 
     #[test]
+    fn hot_cues_set_and_cleared_on_the_deck_jump_or_stay_put() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        g.apply(Control::SetHotCue {
+            deck: 0,
+            slot: 2,
+            frame: Some(96_000),
+        });
+        g.apply(Control::HotCue { deck: 0, slot: 2 });
+        let st = g.state().decks[0];
+        assert!(st.playing);
+        assert_eq!(st.position, 96_000);
+        g.apply(Control::Pause { deck: 0 });
+        g.apply(Control::SetHotCue {
+            deck: 0,
+            slot: 1,
+            frame: None,
+        });
+        g.apply(Control::HotCue { deck: 0, slot: 1 });
+        assert_eq!(
+            g.state().decks[0].position,
+            96_000,
+            "deleted: nothing happens"
+        );
+        g.apply(Control::SetHotCue {
+            deck: 0,
+            slot: 9,
+            frame: Some(1),
+        });
+        // A new load brings the source's hot cues back.
+        load(&mut g, gridded(480_000));
+        g.apply(Control::HotCue { deck: 0, slot: 1 });
+        assert_eq!(g.state().decks[0].position, 240_000);
+        g.apply(Control::Pause { deck: 0 });
+        g.apply(Control::HotCue { deck: 0, slot: 2 });
+        assert_eq!(
+            g.state().decks[0].position,
+            240_000,
+            "edit gone with the old load"
+        );
+    }
+
+    #[test]
+    fn calling_a_memory_cue_moves_the_cue_point_and_plays_on() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        g.apply(Control::Quantise { deck: 0, on: true });
+        g.apply(Control::CallCue {
+            deck: 0,
+            frame: 100_001,
+        });
+        let st = g.state().decks[0];
+        assert_eq!(
+            (st.position, st.cue, st.playing),
+            (100_001, 100_001, false),
+            "exact"
+        );
+        g.apply(Control::Play { deck: 0 });
+        g.apply(Control::CallCue {
+            deck: 0,
+            frame: 50_000,
+        });
+        let st = g.state().decks[0];
+        assert_eq!((st.position, st.cue, st.playing), (50_000, 50_000, true));
+    }
+
+    #[test]
     fn quantised_jumps_while_playing_keep_the_beat_phase() {
         let mut g = Graph::new(RATE).unwrap();
         load(&mut g, gridded(480_000));
@@ -1299,6 +1366,89 @@ mod tests {
         g.state().decks[0]
             .loop_region
             .map(|l| (l.start, l.end, l.beats))
+    }
+
+    /// `gridded`, with an active memory loop over beats 2–4.
+    fn with_auto_loop(frames: i64) -> Arc<DeckSource> {
+        let grid = [crate::GridAnchor {
+            frame: 0,
+            bpm: 120.0,
+            beat_in_bar: 1,
+            beats_per_bar: 4,
+        }];
+        let samples = (0..frames).flat_map(|i| [(i % 16_384) as i16; 2]).collect();
+        Arc::new(
+            DeckSource::new(samples, RATE)
+                .with_grid(&grid)
+                .with_auto_loops(vec![(96_000, 48_000), (48_000, 96_000)]),
+        )
+    }
+
+    #[test]
+    fn playback_enters_an_active_memory_loop_at_its_start() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, with_auto_loop(480_000));
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 40_000);
+        assert_eq!(region(&mut g), None, "not there yet");
+        render_frames(&mut g, 90_000);
+        assert_eq!(
+            region(&mut g),
+            Some((48_000, 96_000, 2.0)),
+            "the reversed one is dropped"
+        );
+        // Exact, wrap after wrap, as a beat loop.
+        assert_eq!(
+            g.state().decks[0].position,
+            48_000 + (130_000 - 48_000) % 48_000
+        );
+
+        // Left, it plays on and is not entered again from inside.
+        g.apply(Control::LoopExit { deck: 0 });
+        render_frames(&mut g, 60_000);
+        assert_eq!(region(&mut g), None);
+        assert!(g.state().decks[0].position > 96_000);
+        // Back before the start: entered again on the way through.
+        g.apply(Control::Seek {
+            deck: 0,
+            frame: 40_000,
+        });
+        render_frames(&mut g, 10_000);
+        assert_eq!(region(&mut g), Some((48_000, 96_000, 2.0)));
+    }
+
+    #[test]
+    fn a_head_parked_on_the_start_enters_and_edits_take_effect() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, with_auto_loop(480_000));
+        g.apply(Control::CallCue {
+            deck: 0,
+            frame: 48_000,
+        });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 64);
+        assert_eq!(region(&mut g), Some((48_000, 96_000, 2.0)));
+
+        // Cleared: passing its start does nothing; set elsewhere: entered there.
+        g.apply(Control::LoopExit { deck: 0 });
+        g.apply(Control::AutoLoop {
+            deck: 0,
+            index: 0,
+            region: None,
+        });
+        g.apply(Control::AutoLoop {
+            deck: 0,
+            index: 3,
+            region: Some((144_000, 156_000)),
+        });
+        g.apply(Control::Seek {
+            deck: 0,
+            frame: 40_000,
+        });
+        render_frames(&mut g, 20_000);
+        assert_eq!(region(&mut g), None);
+        render_frames(&mut g, 90_000);
+        assert_eq!(region(&mut g), Some((144_000, 156_000, 0.5)));
     }
 
     #[test]

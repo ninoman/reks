@@ -197,6 +197,7 @@ mod tests {
             end_ms,
             name: None,
             color_rgb: None,
+            active_loop: false,
         }
     }
 
@@ -221,6 +222,23 @@ mod tests {
         }
         assert_eq!(library_colour(NO_COLOUR), None);
         assert_eq!(library_colour([0x02, 0, 0, 0]), None);
+    }
+
+    /// Hot cues set on a deck (Phase 5 task 17) take `HOT_CUE_PALETTE`:
+    /// each is one of rekordbox's colours, so it exports as itself, and no
+    /// two share a player colour.
+    #[test]
+    fn deck_palette_is_rekordbox_colours() {
+        let mut codes: Vec<u8> = reks_core::HOT_CUE_PALETTE
+            .iter()
+            .map(|&rgb| {
+                assert!(HOT_CUE_COLOURS.iter().any(|c| c.1 == rgb), "{rgb:06x}");
+                hot_colour(Some(rgb))[0]
+            })
+            .collect();
+        codes.sort_unstable();
+        codes.dedup();
+        assert_eq!(codes.len(), reks_core::HOT_CUE_PALETTE.len());
     }
 
     #[test]

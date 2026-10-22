@@ -697,6 +697,8 @@ export interface MixState {
 }
 
 export interface HotCueView {
+  /** The library cue, to rename or delete it. */
+  id: number;
   /** 0..7 = A..H. */
   slot: number;
   positionMs: number;
@@ -708,9 +710,39 @@ export interface HotCueView {
 
 /** A memory cue or loop (by its start). */
 export interface MemoryCueView {
+  /** The library cue, to rename or delete it. */
+  id: number;
   positionMs: number;
+  /** A memory loop's end; null for a memory cue. */
+  endMs: number | null;
+  /** A memory loop playback enters by itself when the playhead reaches its start. */
+  activeLoop: boolean;
   colorRgb: number | null;
+  name: string | null;
 }
+
+/** A deck's cues after an edit. */
+export interface DeckCues {
+  hotCues: HotCueView[];
+  /** By position. */
+  memoryCues: MemoryCueView[];
+}
+
+/**
+ * Mirrors `src-tauri` `mix::CueEdit`: an edit to the loaded track's cues,
+ * stored in the library (so exports carry it) and applied to the deck.
+ * Cues set at the playhead snap to the beat with quantise.
+ */
+export type CueEdit =
+  /** An empty hot cue slot (0..7 = A..H) at the playhead, in the next palette colour. */
+  | { type: "setHotCue"; slot: number }
+  /** A memory cue at the playhead; while a loop plays, a memory loop of it. */
+  | { type: "addMemoryCue" }
+  /** A memory loop playback enters by itself (rekordbox's active loop), or not. */
+  | { type: "setActiveLoop"; cueId: number; on: boolean }
+  /** null or blank clears the name. */
+  | { type: "rename"; cueId: number; name: string | null }
+  | { type: "delete"; cueId: number };
 
 export interface DeckLoaded {
   deck: number;
@@ -763,6 +795,8 @@ export type MixControl =
   | { type: "cueRelease"; deck: number }
   | { type: "seek"; deck: number; ms: number }
   | { type: "hotCue"; deck: number; slot: number }
+  /** Memory cue call: the cue point and playhead move to `ms` exactly; a playing deck plays on. */
+  | { type: "callCue"; deck: number; ms: number }
   /** Speed ratio, 1 = as recorded. */
   | { type: "tempo"; deck: number; ratio: number }
   /** Pitch bend while held; 1 releases it. */
@@ -809,6 +843,11 @@ export function mixLoad(deck: number, id: number): Promise<DeckLoaded | null> {
 
 export function mixControl(control: MixControl): Promise<void> {
   return invoke("mix_control", { control });
+}
+
+/** Edits the cues of the track on `deck`; resolves to the deck's cues after it. */
+export function mixCueEdit(deck: number, edit: CueEdit): Promise<DeckCues> {
+  return invoke("mix_cue_edit", { deck, edit });
 }
 
 /** `settings_*`, `library_root*`, `cache_dir_move` (reks-core `settings.rs`). */
@@ -1092,6 +1131,8 @@ export interface ExportOptions {
   anlzPreference: AnlzPreference;
   /** Also write `exportLibrary.db` (OneLibrary, experimental, phase 4). Off by default. */
   onelibrary: boolean;
+  /** The `export.active_loops` flag: each track's earliest active memory loop as its active loop (UNVERIFIED). */
+  activeLoops: boolean;
 }
 
 /** Playlists and folders (= everything under them) to export (`plan::Selection`). */

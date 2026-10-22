@@ -11,6 +11,7 @@ vi.mock("../lib/ipc", () => ({
   mixStop: vi.fn(),
   mixLoad: vi.fn(),
   mixControl: vi.fn(),
+  mixCueEdit: vi.fn(),
   libraryTrack: vi.fn(),
   analysisReanalyse: vi.fn(),
   waveformColumns: vi.fn(),
@@ -127,7 +128,7 @@ describe("mix store", () => {
       deck: 1,
       trackId: 9,
       durationMs: 1000,
-      hotCues: [{ slot: 0, positionMs: 10, colorRgb: null, name: null }],
+      hotCues: [{ id: 1, slot: 0, positionMs: 10, colorRgb: null, name: null }],
       memoryCues: [],
     });
     await useMix.getState().load(1, { id: 9, title: "T", artist: null });
@@ -136,7 +137,7 @@ describe("mix store", () => {
     const deck = useMix.getState().decks[1];
     expect(deck?.track?.id).toBe(9);
     expect(deck?.loading).toBeNull();
-    expect(deck?.hotCues).toEqual([{ slot: 0, positionMs: 10, colorRgb: null, name: null }]);
+    expect(deck?.hotCues).toEqual([{ id: 1, slot: 0, positionMs: 10, colorRgb: null, name: null }]);
     expect(deck?.columns?.length).toBe(4);
     expect(deck?.beats).toHaveLength(1);
     expect(deck?.track).toMatchObject({ key: "Am", artworkId: 59, artworkMime: "image/jpeg" });
@@ -297,6 +298,51 @@ describe("mix store", () => {
       { type: "loopExit", deck: 0 },
       { type: "beatLoop", deck: 0, beats: 2 },
     ]);
+  });
+
+  it("cues: a pad jumps or sets; edits go to the library and the deck takes the result", async () => {
+    const track = { id: 9, title: "T", artist: null, key: null, artworkId: null, artworkMime: "" };
+    const hot = { id: 1, slot: 0, positionMs: 10, colorRgb: 0x28e214, name: null };
+    useMix.setState({
+      status: "running",
+      live: { ...running, decks: [deckView({ loaded: true, positionMs: 5_000 })] },
+      decks: useMix.getState().decks.map((d, i) => (i === 0 ? { ...d, track, hotCues: [hot] } : d)),
+    });
+    const after = {
+      hotCues: [hot, { ...hot, id: 2, slot: 1, positionMs: 5_000 }],
+      memoryCues: [
+        { id: 3, positionMs: 1_000, endMs: null, activeLoop: false, colorRgb: null, name: null },
+        { id: 4, positionMs: 9_000, endMs: null, activeLoop: false, colorRgb: null, name: "Out" },
+      ],
+    };
+    vi.mocked(ipc.mixCueEdit).mockResolvedValue(after);
+    const mix = useMix.getState();
+    mix.hotCuePad(0, 0);
+    expect(sent()).toEqual([{ type: "hotCue", deck: 0, slot: 0 }]);
+    expect(ipc.mixCueEdit).not.toHaveBeenCalled();
+
+    mix.hotCuePad(0, 1);
+    await vi.waitFor(() => expect(useMix.getState().decks[0]?.hotCues).toHaveLength(2));
+    expect(ipc.mixCueEdit).toHaveBeenCalledWith(0, { type: "setHotCue", slot: 1 });
+    expect(useMix.getState().decks[0]?.memoryCues).toEqual(after.memoryCues);
+    expect(useMix.getState().cueRevisions[9]).toBe(1);
+
+    await mix.editCues(0, { type: "rename", cueId: 4, name: "Outro" });
+    expect(ipc.mixCueEdit).toHaveBeenLastCalledWith(0, { type: "rename", cueId: 4, name: "Outro" });
+    expect(useMix.getState().cueRevisions[9]).toBe(2);
+
+    // Memory cue call from the playhead (5 s): back to 1 s, on to 9 s.
+    mix.callAdjacentCue(0, -1);
+    mix.callAdjacentCue(0, 1);
+    expect(sent().slice(1)).toEqual([
+      { type: "callCue", deck: 0, ms: 1_000 },
+      { type: "callCue", deck: 0, ms: 9_000 },
+    ]);
+
+    vi.mocked(ipc.mixCueEdit).mockRejectedValue(new Error("hot cue A is already set"));
+    await mix.editCues(0, { type: "setHotCue", slot: 0 });
+    expect(useMix.getState().error).toBe("hot cue A is already set");
+    expect(useMix.getState().decks[0]?.hotCues).toHaveLength(2);
   });
 
   it("keeps pad mode, pages and sizes across an eject", () => {

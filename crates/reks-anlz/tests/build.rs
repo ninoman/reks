@@ -54,6 +54,7 @@ fn cue(slot: Option<u8>, kind: i64, start_ms: f64, end_ms: Option<f64>) -> Cue {
         end_ms,
         name: None,
         color_rgb: None,
+        active_loop: false,
     }
 }
 
@@ -297,6 +298,7 @@ fn arb_cue(duration_ms: u64) -> impl Strategy<Value = Cue> {
             end_ms: len.map(|l| start_ms + l),
             name,
             color_rgb,
+            active_loop: false,
         })
 }
 

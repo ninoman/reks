@@ -46,7 +46,13 @@ export function useMixShortcuts(enabled: boolean) {
           mix.cyclePadMode(action.deck);
           break;
         case "hotCue":
-          mix.send({ type: "hotCue", deck: action.deck, slot: action.slot });
+          mix.hotCuePad(action.deck, action.slot);
+          break;
+        case "memoryCue":
+          void mix.editCues(action.deck, { type: "addMemoryCue" });
+          break;
+        case "callCue":
+          mix.callAdjacentCue(action.deck, action.dir);
           break;
         case "nudge":
           held.set(e.code, { type: "nudge", deck: action.deck });

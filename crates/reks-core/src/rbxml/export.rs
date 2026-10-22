@@ -99,12 +99,30 @@ impl DividerTrack {
     }
 }
 
+/// How memory loops marked active (Phase 5 task 17, [`crate::Cue::active_loop`])
+/// go into the XML, which has no field for them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ActiveLoops {
+    /// Plain memory loops (rekordbox reads the XML; the flag stays in reks).
+    #[default]
+    Leave,
+    /// The earliest active memory loop's `Name` starts with
+    /// [`BAKEN_ACTIVE_LOOP_MARKER`]: baken-export writes it as the `.DAT`
+    /// memory list's active loop (`PCPT` status 4). For the temp XML handed
+    /// to baken only, behind the `export.active_loops` flag.
+    BakenMarker,
+}
+
+/// baken-export's `collection::ACTIVE_LOOP_MARKER` (issue #210); a test in
+/// `reks-export-rb` keeps the two equal.
+pub const BAKEN_ACTIVE_LOOP_MARKER: &str = "[active]";
+
 /// Builds the collection for `sel`.
 ///
 /// Errors: an id that is not in the library ([`Error::PlaylistNotFound`]),
 /// or a selection with no playlist in it ([`Error::EmptySelection`]).
 pub fn export(lib: &Library, sel: &Selection) -> Result<XmlExport> {
-    export_with_dividers(lib, sel, &[])
+    export_with_dividers(lib, sel, &[], ActiveLoops::Leave)
 }
 
 /// [`export`], plus `dividers` as track rows at their playlist positions.
@@ -114,6 +132,7 @@ pub fn export_with_dividers(
     lib: &Library,
     sel: &Selection,
     dividers: &[DividerTrack],
+    active_loops: ActiveLoops,
 ) -> Result<XmlExport> {
     let conn = lib.conn()?;
     let nodes = load_nodes(&conn)?;
@@ -161,7 +180,7 @@ pub fn export_with_dividers(
     let mut tracks = b
         .tracks
         .iter()
-        .map(|&id| xml_track(&conn, id))
+        .map(|&id| xml_track(&conn, id, active_loops))
         .collect::<Result<Vec<_>>>()?;
     for d in &b.divider_rows {
         tracks.push(d.xml()?);
@@ -184,7 +203,7 @@ pub fn export_with_dividers(
 
 /// [`export`], written to `path` with [`super::write`].
 pub fn export_file(lib: &Library, sel: &Selection, path: &Path) -> Result<XmlExport> {
-    export_file_with_dividers(lib, sel, &[], path)
+    export_file_with_dividers(lib, sel, &[], ActiveLoops::Leave, path)
 }
 
 /// [`export_with_dividers`], written to `path` with [`super::write`].
@@ -192,9 +211,10 @@ pub fn export_file_with_dividers(
     lib: &Library,
     sel: &Selection,
     dividers: &[DividerTrack],
+    active_loops: ActiveLoops,
     path: &Path,
 ) -> Result<XmlExport> {
-    let out = export_with_dividers(lib, sel, dividers)?;
+    let out = export_with_dividers(lib, sel, dividers, active_loops)?;
     let file = std::fs::File::create(path).map_err(|source| Error::Io {
         path: path.to_path_buf(),
         source,
@@ -329,7 +349,7 @@ impl Builder<'_> {
     }
 }
 
-fn xml_track(conn: &Connection, id: TrackId) -> Result<XmlTrack> {
+fn xml_track(conn: &Connection, id: TrackId, active_loops: ActiveLoops) -> Result<XmlTrack> {
     let mut t = conn
         .prepare_cached(
             "SELECT path, kind, file_size, duration_ms, sample_rate, bit_rate_kbps,
@@ -411,24 +431,46 @@ fn xml_track(conn: &Connection, id: TrackId) -> Result<XmlTrack> {
     // Memory cues first, then hot cues by slot, as rekordbox writes them.
     t.position_marks = conn
         .prepare_cached(
-            "SELECT slot, kind, start_ms, end_ms, name, color_rgb FROM cue WHERE track_id = ?1
-             ORDER BY slot IS NOT NULL, slot, start_ms, id",
+            "SELECT slot, kind, start_ms, end_ms, name, color_rgb, active_loop FROM cue
+             WHERE track_id = ?1 ORDER BY slot IS NOT NULL, slot, start_ms, id",
         )?
         .query_map([id], |r| {
-            Ok(PositionMark {
-                num: r.get::<_, Option<i32>>(0)?.unwrap_or(-1),
-                kind: u8::try_from(r.get::<_, i64>(1)?).unwrap_or(0),
-                start: seconds(r.get(2)?),
-                end: r.get::<_, Option<f64>>(3)?.map(seconds),
-                name: r.get(4)?,
-                rgb: r.get::<_, Option<i64>>(5)?.map(|c| {
-                    let c = c as u32;
-                    ((c >> 16) as u8, (c >> 8) as u8, c as u8)
-                }),
-                extra: Default::default(),
-            })
+            Ok((
+                PositionMark {
+                    num: r.get::<_, Option<i32>>(0)?.unwrap_or(-1),
+                    kind: u8::try_from(r.get::<_, i64>(1)?).unwrap_or(0),
+                    start: seconds(r.get(2)?),
+                    end: r.get::<_, Option<f64>>(3)?.map(seconds),
+                    name: r.get(4)?,
+                    rgb: r.get::<_, Option<i64>>(5)?.map(|c| {
+                        let c = c as u32;
+                        ((c >> 16) as u8, (c >> 8) as u8, c as u8)
+                    }),
+                    extra: Default::default(),
+                },
+                r.get::<_, bool>(6)?,
+            ))
         })?
-        .collect::<rusqlite::Result<_>>()?;
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .into_iter()
+        .scan(false, |marked, (mut m, active)| {
+            // Memory loops come first, by start: the first active one is the earliest.
+            let mark = active_loops == ActiveLoops::BakenMarker
+                && active
+                && !*marked
+                && m.num == -1
+                && m.kind == 4
+                && m.end.is_some();
+            if mark {
+                *marked = true;
+                m.name = Some(match m.name.take() {
+                    Some(n) => format!("{BAKEN_ACTIVE_LOOP_MARKER} {n}"),
+                    None => BAKEN_ACTIVE_LOOP_MARKER.to_owned(),
+                });
+            }
+            Some(m)
+        })
+        .collect();
     Ok(t)
 }
 

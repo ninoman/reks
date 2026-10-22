@@ -38,6 +38,7 @@ export function readTokens(el: Element) {
     marks: {
       hot: token("--color-deck-hotcue"),
       memory: token("--color-deck-memory"),
+      autoLoop: token("--color-deck-auto-loop"),
       cue: token("--color-deck-cue"),
     },
     font: token("--font-sans"),

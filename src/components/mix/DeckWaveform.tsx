@@ -4,7 +4,8 @@
  * Cmd/Ctrl + scroll zooms; `overlay` sits on top of it: the zoom buttons,
  * sync phase and warnings) and the whole track overview under it (click or
  * arrow keys to seek). Both draw in the waveform style chosen in Settings →
- * Decks.
+ * Decks. Hovering a mark names it (native title: hot cue letter and name,
+ * memory cue name).
  *
  * Both canvases draw in device pixels from one animation-frame loop, which
  * runs the playhead on between engine states (`deckScroll.ts`) and copies
@@ -20,7 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { activeLoop, deckMarks } from "../../lib/deckMarks";
+import { activeLoop, deckMarks, markAt, markTitle } from "../../lib/deckMarks";
 import {
   followPlayhead,
   frameMs,
@@ -38,6 +39,8 @@ import { useCanvasSize } from "./useCanvasSize";
 
 /** Arrow-key seek step on the overview, ms. */
 const SEEK_STEP_MS = 2_000;
+/** How near (CSS px) the pointer must be to a mark to name it. */
+const MARK_HOVER_PX = 4;
 /** Scroll travel (px) per zoom step with Cmd/Ctrl held; a trackpad sends many small deltas. */
 const WHEEL_STEP_PX = 40;
 
@@ -226,6 +229,28 @@ export function DeckWaveform({
     onSeek(((e.clientX - rect.left) / rect.width) * durationMs);
   }
 
+  /** Names the mark under the pointer at `ms`, `msPerPx` per CSS px, in the canvas title. */
+  function hoverMark(canvas: HTMLCanvasElement, ms: number, msPerPx: number) {
+    const m = markAt(marks, ms, MARK_HOVER_PX * msPerPx);
+    const title = m === null ? "" : markTitle(m);
+    if (canvas.title !== title) canvas.title = title;
+  }
+
+  function hoverScroll(e: MouseEvent<HTMLCanvasElement>) {
+    if (scrollSize === null || scrollSize.width === 0) return;
+    const x = (e.clientX - e.currentTarget.getBoundingClientRect().left) * scrollSize.dpr;
+    const f = scrollFrame(shown.current ?? positionMs, seconds, scrollSize.width);
+    const msPerPx = (seconds * 1000 * scrollSize.dpr) / scrollSize.width;
+    hoverMark(e.currentTarget, frameMs(f, x), msPerPx);
+  }
+
+  function hoverOverview(e: MouseEvent<HTMLCanvasElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ms = ((e.clientX - rect.left) / rect.width) * durationMs;
+    hoverMark(e.currentTarget, ms, durationMs / rect.width);
+  }
+
   function overviewKey(e: KeyboardEvent<HTMLCanvasElement>) {
     const next =
       e.key === "ArrowRight"
@@ -248,7 +273,13 @@ export function DeckWaveform({
         className="group/wave relative h-(--deck-wave-h) overflow-hidden rounded-xs bg-deck"
       >
         {/* Pointer-only: the overview below is the keyboard way to seek. */}
-        <canvas ref={scroll} className="block" data-zoom={seconds} onClick={seekScroll} />
+        <canvas
+          ref={scroll}
+          className="block"
+          data-zoom={seconds}
+          onClick={seekScroll}
+          onMouseMove={hoverScroll}
+        />
         {overlay}
       </div>
       <div
@@ -265,6 +296,7 @@ export function DeckWaveform({
           aria-valuenow={Math.round(positionMs)}
           className={`block ${focusRingInset}`}
           onClick={seekOverview}
+          onMouseMove={hoverOverview}
           onKeyDown={overviewKey}
         />
       </div>

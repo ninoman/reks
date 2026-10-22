@@ -333,10 +333,12 @@ goes to the header and waveforms, the pads stop at 336 px.
   before. Bar sync leaves the deck: Settings → Decks → "Sync aligns: beat /
   bar" (default bar). The phase meter shows on synced decks other than the
   master.
-- **Pads** (same 2 × 4 in every mode; ◀ ▶ page through sizes, disabled in
-  HOT CUE; on a deck at its minimum width the mode labels drop HOT / BEAT):
+- **Pads** (same 2 × 4 in every mode; ◀ ▶ page through sizes in BEAT JUMP
+  and BEAT LOOP, and give their place to the memory cue controls in HOT
+  CUE; with the pads under 20rem the mode labels drop HOT / BEAT):
   - HOT CUE: A–H, a set pad filled with its cue's colour (`HotCueView.color`,
-    else `deck-hotcue`) and its name; empty pads dashed, dimmed, disabled.
+    else `deck-hotcue`) and its name; empty pads dashed. See
+    [Cue editing](#cue-editing-task-17).
   - BEAT JUMP: page 1 FINE (1/32 beat), 1/8, 1/4, 1/2, 1, 2, 4, 8; page 2
     1 … 128. Split pads: left half ◀ back, right half ▶ forward. Jumps keep
     the beat phase while playing.
@@ -376,7 +378,8 @@ with a key show it in their tooltip (`shortcut` from `deckKeyHint()`).
 
 **Data.** `DeckMeta`: `padMode`, `padPage`, `lastJump`, `lastLoop`,
 `analysing`, `gridPending`, `failed` (for Retry); `DeckTrack.key`,
-`artworkId`, `artworkMime` (from `library_track` on load); `HotCueView.colorRgb`
+`artworkId`, `artworkMime` (from `library_track` on load); `HotCueView.id` /
+`MemoryCueView.id` and `name` (task 17); `HotCueView.colorRgb`
 (task 15) and `name` (from `Cue.name`, through `mix_load`). From tasks 13 and
 15: `DeckView.loopRegion`, `master`, beat jump / loop / loop exit / resize /
 take-master controls; task 15's per-deck zoom became one `MixStore.waveZoom`
@@ -402,9 +405,58 @@ shown):
 | Take master | G | H |
 | Next pad mode | T | Y |
 
-Crossfader Z / X / C, Space (player deck) and waveform zoom − / + (every
-deck at once, also with the Mix panel closed) are not per deck. Mouse or
-Tab only: hot cues E–H, other pads, page arrows, Q, M, tempo range, BPM edit, eject.
+| Set memory cue at the playhead | Alt A | Alt J |
+| Previous / next memory cue | Alt E, Alt R | Alt O, Alt P |
+
+Every plain letter for each hand is taken, so the memory cue keys are Alt
+on the keys they extend (CUE, beat jump). Crossfader Z / X / C, Space
+(player deck) and waveform zoom − / + (every deck at once, also with the
+Mix panel closed) are not per deck. Mouse or Tab only: hot cues E–H, other
+pads, page arrows, Q, M, tempo range, BPM edit, eject, the memory cue list,
+renames.
+
+### Cue editing (task 17)
+
+[Phase 5 task 17](phases/phase-5.md). Every edit is written to the track's
+cues in the library first (`mix_cue_edit` → `reks-core` `cue.rs`), so it
+shows in the track's details and reaches the rekordbox XML and USB exports;
+the command returns the deck's cues and the store takes them.
+
+- **Hot cue pads** (HOT CUE mode, and keys 1–4 / 7–0): an empty (dashed)
+  pad sets its cue at the playhead (on the nearest beat with Q) in the next
+  colour of `HOT_CUE_PALETTE` (green, blue, red, yellow, purple, cyan,
+  orange, pink: rekordbox palette entries, so each exports as itself); a
+  set pad jumps as before. Double-click a set pad to rename it in place
+  (`InlineTextField`; Enter saves, Esc cancels, blank clears; up to 64
+  characters). The double-click's first click still triggers the cue, as a
+  click does. Delete with the pad's × (shown on hover or focus; a real
+  button after the pad in the Tab order) or Shift+click. The pad's tooltip
+  says all of this.
+- **Memory cues and loops** sit in the pads' top row in HOT CUE mode
+  (`DeckMemory`): **MEM** sets a memory cue at the playhead (on the beat
+  with Q), or, while a loop plays, saves that loop as a memory loop; a
+  second press at the same place adds nothing. ◀ ▶ call the cue before /
+  after the playhead (disabled at either end); the count between them
+  opens the list: click a time to jump there, double-click a name to
+  rename (`InlineText`), × to delete, and on a memory loop **AUTO**
+  (lit when on) to make playback enter it by itself when the playhead
+  reaches its start (rekordbox's active loop). A call moves the cue point
+  and the playhead there exactly; a playing deck plays on (rekordbox's
+  memory list; a CDJ's CALL is UNVERIFIED).
+- **Marks**: a memory loop draws a bar along the bottom edge to its end
+  and a short end line; an AUTO loop draws both in `deck-auto-loop`, the
+  bar thicker. Hovering a mark on either waveform names it ("Hot cue A:
+  Drop", "Memory cue", "Memory loop", "Auto loop", "Cue point"; native
+  title, `markAt` / `markTitle` in `lib/deckMarks.ts`).
+- **Export**: AUTO loops reach a USB stick only with **Active loops**
+  (UNVERIFIED badge, off by default) in the export wizard; see phase 5
+  task 17.
+- Shared pieces: `ui/InlineText.tsx` (`InlineText`, `InlineTextField`);
+  `Pad` shows its `hint` in a tooltip even without a key and takes
+  `remove` (the corner ×); hint tooltips are
+  not hoverable (`disableHoverableContent`), so one flipped over the
+  controls above its trigger closes as the pointer leaves and never takes
+  their click.
 
 ## My Tags
 

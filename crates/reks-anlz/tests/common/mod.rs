@@ -45,6 +45,7 @@ pub fn cues(ext: &[u8]) -> Vec<Cue> {
                 end_ms: c.loop_end_ms.map(f64::from),
                 name: (!c.comment.is_empty()).then_some(c.comment),
                 color_rgb: library_colour(c.hot_color),
+                active_loop: false,
             });
         }
     }
