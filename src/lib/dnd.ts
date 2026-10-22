@@ -8,6 +8,9 @@
 export const TRACKS_MIME = "application/x-reks-tracks";
 /** A node dragged inside the playlist tree. */
 export const NODE_MIME = "application/x-reks-node";
+/** A tag or a tag category dragged inside the My Tags drawer (the id is in the store's ref). */
+export const TAG_MIME = "application/x-reks-tag";
+export const TAG_CATEGORY_MIME = "application/x-reks-tag-category";
 
 export interface TrackDrag {
   trackIds: number[];

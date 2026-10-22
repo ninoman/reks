@@ -1,4 +1,4 @@
-/** The "My Tags" row under the playlist tree: opens the tag manager. */
+/** The "My Tags" row under the playlist tree: opens the My Tags drawer. */
 import { useTags } from "../store/tags";
 import { TagIcon } from "./icons";
 import { ICON, NAME, PAD, ROW } from "./treeStyles";

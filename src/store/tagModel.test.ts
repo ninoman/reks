@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import type { TagTree } from "../lib/ipc";
-import { applyTags, clickAction, coverage, creatableIn, searchTags, tagIndex } from "./tagModel";
+import {
+  applyTags,
+  clickAction,
+  coverage,
+  creatableIn,
+  dropMove,
+  searchTags,
+  tagIndex,
+} from "./tagModel";
 
 const tree: TagTree = {
   categories: [
@@ -68,5 +76,44 @@ describe("tagIndex", () => {
   it("maps tag ids to the tag and its category", () => {
     expect(tagIndex(tree).get(20)?.category.name).toBe("Situation");
     expect(tagIndex(tree).get(1)).toBeUndefined();
+  });
+});
+
+describe("dropMove", () => {
+  const tag = (id: number) => ({ kind: "tag", id }) as const;
+  const cat = (id: number) => ({ kind: "category", id }) as const;
+
+  it("moves a tag below the next one, counting itself in place", () => {
+    expect(dropMove(tree, tag(10), tag(11), "after")).toEqual({
+      type: "move",
+      id: 10,
+      categoryId: 1,
+      position: 2,
+    });
+  });
+  it("is a no-op where the tag already is", () => {
+    expect(dropMove(tree, tag(10), tag(11), "before")).toBeNull();
+    expect(dropMove(tree, tag(11), tag(10), "after")).toBeNull();
+    expect(dropMove(tree, tag(10), tag(10), "before")).toBeNull();
+  });
+  it("moves a tag beside a tag of another category, or to the end of a category", () => {
+    expect(dropMove(tree, tag(10), tag(20), "before")).toEqual({
+      type: "move",
+      id: 10,
+      categoryId: 2,
+      position: 0,
+    });
+    expect(dropMove(tree, tag(10), cat(3), "into")).toEqual({
+      type: "move",
+      id: 10,
+      categoryId: 3,
+      position: 0,
+    });
+  });
+  it("reorders categories among themselves only", () => {
+    expect(dropMove(tree, cat(1), cat(3), "after")).toEqual({ type: "move", id: 1, position: 3 });
+    expect(dropMove(tree, cat(3), cat(1), "before")).toEqual({ type: "move", id: 3, position: 0 });
+    expect(dropMove(tree, cat(1), cat(2), "before")).toBeNull();
+    expect(dropMove(tree, cat(1), tag(20), "before")).toBeNull();
   });
 });
