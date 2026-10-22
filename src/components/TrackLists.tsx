@@ -3,7 +3,8 @@
  * panes opened with Shift+click in the playlist tree, sharing the height
  * evenly. Once there is more than one list, each has a header with its name,
  * track count and a close button; closing the main list moves the first pane
- * up into it. The info panel slides over all of them and follows the main list.
+ * up into it. The info panel and the My Tags drawer (on top of it) slide over
+ * all of them and follow the main list.
  */
 import type { ReactNode } from "react";
 
@@ -11,11 +12,13 @@ import { useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
 import { usePanes } from "../store/panes";
 import { usePlaylists } from "../store/playlists";
+import { useTags } from "../store/tags";
 import type { ColumnSpec } from "./columns";
 import { EmptyResult } from "./EmptyResult";
 import { CloseIcon } from "./icons";
 import { LibraryStoreContext, useLibraryStore } from "./libraryStoreContext";
 import { SmartListHeader } from "./SmartListHeader";
+import { TagDrawer } from "./TagDrawer";
 import { TrackInfoPanel } from "./TrackDetailPanel";
 import { TrackTable } from "./TrackTable";
 import { IconButton } from "./ui/IconButton";
@@ -24,6 +27,7 @@ import { Sheet } from "./ui/Sheet";
 export function TrackLists({ columns }: { columns: ColumnSpec[] }) {
   const panes = usePanes((s) => s.panes);
   const infoOpen = usePanels((s) => s.infoOpen);
+  const tagsOpen = useTags((s) => s.managerOpen);
   const nodes = usePlaylists((s) => s.nodes);
   const mainId = useLibrary((s) => s.filters.playlistId);
   const nameOf = (id: number | null) => nodes.find((n) => n.id === id)?.name ?? "Collection";
@@ -48,6 +52,9 @@ export function TrackLists({ columns }: { columns: ColumnSpec[] }) {
       ))}
       <Sheet open={infoOpen}>
         <TrackInfoPanel />
+      </Sheet>
+      <Sheet open={tagsOpen}>
+        <TagDrawer />
       </Sheet>
     </div>
   );

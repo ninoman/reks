@@ -1,17 +1,16 @@
 /**
- * The track's My Tags in the info panel: removable chips and a picker to add
- * more. Tags come from the loaded table row, so the chips follow edits made
+ * The track's My Tags in the info panel: removable chips and an "Edit tags"
+ * button that opens the My Tags drawer over the panel (attach, add, rename,
+ * delete). Tags come from the loaded table row, so the chips follow edits made
  * from the context menu too. A chip's name is looked up in the tag tree.
  */
 import { useLibrary } from "../store/library";
 import { useRules } from "../store/rules";
 import { tagIndex } from "../store/tagModel";
 import { useTags } from "../store/tags";
-import { PlusIcon } from "./icons";
-import { TagPicker } from "./TagPicker";
+import { TagIcon } from "./icons";
 import { Button } from "./ui/Button";
 import { Chip } from "./ui/Chip";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/Popover";
 
 export function TrackTags({ trackId, fallback }: { trackId: number; fallback: number[] }) {
   const tree = useTags((s) => s.tree);
@@ -25,7 +24,7 @@ export function TrackTags({ trackId, fallback }: { trackId: number; fallback: nu
   });
   const tags = rowTags ?? fallback;
   const names = tree === null ? null : tagIndex(tree);
-  const { assign, unassign, createAndAssign } = useTags.getState();
+  const { unassign, openManager } = useTags.getState();
 
   return (
     <section aria-label="My Tags">
@@ -55,23 +54,10 @@ export function TrackTags({ trackId, fallback }: { trackId: number; fallback: nu
         {tags.length === 0 && tree !== null && (
           <span className="text-xs text-fg-muted">No tags yet.</span>
         )}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button size="xs" variant="outline">
-              <PlusIcon />
-              Add tag
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent>
-            <TagPicker
-              coverageOf={(id) => (tags.includes(id) ? "all" : "none")}
-              onToggle={(id, cov) =>
-                void (cov === "all" ? unassign([trackId], [id]) : assign([trackId], [id]))
-              }
-              onCreate={(categoryId, name) => void createAndAssign(categoryId, name, [trackId])}
-            />
-          </PopoverContent>
-        </Popover>
+        <Button size="xs" variant="outline" onClick={openManager}>
+          <TagIcon />
+          Edit tags
+        </Button>
       </div>
     </section>
   );

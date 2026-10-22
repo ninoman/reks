@@ -100,8 +100,9 @@ export function createMockTags(trackCount: number) {
         const ci = cats.findIndex((c) => c.id === op.id);
         if (ci >= 0) {
           if (op.categoryId != null) throw new Error("a category has no parent");
+          // Like reks-core: `position` counts the node where it still is.
           const [c] = cats.splice(ci, 1);
-          place(cats, c as Cat, op.position);
+          place(cats, c as Cat, ci < op.position ? op.position - 1 : op.position);
         } else {
           const loc = tagLoc(op.id);
           if (loc === undefined) throw new Error(`unknown id ${op.id}`);
@@ -113,7 +114,8 @@ export function createMockTags(trackCount: number) {
             place(loc.cat.tags, moved, loc.index);
             throw new Error(`a tag named "${moved.name}" already exists here`);
           }
-          place(target.tags, moved, op.position);
+          const same = target === loc.cat && loc.index < op.position;
+          place(target.tags, moved, same ? op.position - 1 : op.position);
         }
         changed = 1;
         break;

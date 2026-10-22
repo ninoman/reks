@@ -193,6 +193,24 @@ fn creates_categories_and_tags_at_positions() {
 }
 
 #[test]
+fn move_position_counts_the_node_in_place() {
+    let env = Env::new();
+    let genre = env.tree().categories[0].id;
+    let a = env.tag(genre, "A");
+    env.tag(genre, "B");
+    env.tag(genre, "C");
+    // One step down: before the tag two below, as the UI sends it.
+    env.mutate(TagOp::Move {
+        id: a,
+        category_id: Some(genre),
+        position: 2,
+    });
+    let order: Vec<_> = env.outline()[0].1.iter().map(|(n, _)| n.clone()).collect();
+    assert_eq!(order, ["B", "A", "C"]);
+    env.assert_dense();
+}
+
+#[test]
 fn rename_move_and_delete() {
     let env = Env::new();
     let genre = env.tree().categories[0].id;

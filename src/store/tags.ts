@@ -1,6 +1,6 @@
 /**
- * My Tags (Zustand): the tag tree from `tags_get`, the manager dialog's open
- * state, and every edit through `tags_mutate`. Naming and uniqueness rules
+ * My Tags (Zustand): the tag tree from `tags_get`, whether the My Tags drawer
+ * is open, and every edit through `tags_mutate`. Naming and uniqueness rules
  * live in reks-core; this forwards what the user did and shows what came
  * back. Assigning updates the loaded rows in place (selection and scroll stay
  * put, so several tags can be ticked in a row); deleting a tag re-queries,
@@ -38,6 +38,7 @@ export interface TagsState {
   clearError(): void;
   openManager(): void;
   closeManager(): void;
+  toggleManager(): void;
 }
 
 export const useTags = create<TagsState>()((set, get) => {
@@ -107,6 +108,9 @@ export const useTags = create<TagsState>()((set, get) => {
     },
     closeManager() {
       set({ managerOpen: false });
+    },
+    toggleManager() {
+      set((s) => ({ managerOpen: !s.managerOpen }));
     },
   };
 });

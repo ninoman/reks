@@ -28,6 +28,13 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
   const activeFilters = useLibrary((s) => activeFilterCount(s.filters) + ruleLeafCount(s.rule));
   const filtersEnabled = useLibrary((s) => s.filtersEnabled);
   const { filterBarOpen, infoOpen, toggleFilterBar, toggleInfo } = usePanels();
+  const tagsOpen = useTags((s) => s.managerOpen);
+  // The tag drawer covers the info panel: the info button brings info to the front first.
+  const infoShown = infoOpen && !tagsOpen;
+  function onInfo() {
+    if (tagsOpen) useTags.getState().closeManager();
+    if (!tagsOpen || !infoOpen) toggleInfo();
+  }
 
   return (
     <div className="flex h-(--toolbar-h) shrink-0 items-center gap-2 border-b border-border px-2.5">
@@ -54,14 +61,19 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
       <span className="flex-1" />
       <AnalysisIndicator />
       <ColumnChooser table={table} />
-      <Tooltip content="Manage My Tags">
-        <IconButton size="sm" aria-label="My Tags" onClick={() => useTags.getState().openManager()}>
+      <Tooltip content={tagsOpen ? "Hide My Tags" : "Show My Tags"}>
+        <IconButton
+          size="sm"
+          aria-pressed={tagsOpen}
+          aria-label="My Tags"
+          onClick={() => useTags.getState().toggleManager()}
+        >
           <TagIcon />
         </IconButton>
       </Tooltip>
       <Separator orientation="vertical" className="my-2.5" />
-      <Tooltip content={infoOpen ? "Hide track info" : "Show track info"}>
-        <IconButton size="sm" aria-pressed={infoOpen} aria-label="Track info" onClick={toggleInfo}>
+      <Tooltip content={infoShown ? "Hide track info" : "Show track info"}>
+        <IconButton size="sm" aria-pressed={infoShown} aria-label="Track info" onClick={onInfo}>
           <InfoIcon />
         </IconButton>
       </Tooltip>

@@ -3,8 +3,8 @@
  * playlist and Histories trees on the left (an open history session replaces
  * the toolbar, filters and table); toolbar, filter bar and track table in the
  * middle, with Shift+clicked playlists split under it (`TrackLists`) and the
- * track info panel sliding over the tables' right edge when its toolbar
- * button is on; the mix panel (decks and mixer) under them when the Mix
+ * track info panel and the My Tags drawer sliding over the tables' right edge
+ * when their toolbar buttons are on; the mix panel (decks and mixer) under them when the Mix
  * button is on, with its own shortcuts (`src/lib/mixKeys.ts`), otherwise the
  * player deck alone (D30), under the player's header row (volume, output,
  * Mix). Space plays and pauses the player deck wherever focus is, except in
@@ -33,7 +33,6 @@ import { PlaylistTree } from "./components/PlaylistTree";
 import { RuleBuilder } from "./components/RuleBuilder";
 import { SessionView } from "./components/SessionView";
 import { SettingsDialog } from "./components/SettingsDialog";
-import { TagManagerDialog } from "./components/TagManagerDialog";
 import { TagsSidebarEntry } from "./components/TagsSidebarEntry";
 import { ToastHost } from "./components/ToastHost";
 import { TrackLists } from "./components/TrackLists";
@@ -158,7 +157,6 @@ export default function App() {
       <AdoptDialog />
       <ExportWizard />
       <ConvertDialog />
-      <TagManagerDialog />
       <HistoryImportDialog />
       <ToastHost />
     </div>

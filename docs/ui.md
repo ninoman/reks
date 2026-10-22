@@ -467,15 +467,26 @@ edit through `tags_mutate`; assigning patches the loaded table rows in place
 re-queries. Pure helpers (coverage, search, create offers) are in
 [`tagModel.ts`](../src/store/tagModel.ts).
 
-- `TagManagerDialog` (toolbar tag button, sidebar "My Tags" row, "Manage tags…"):
-  rename in place, up/down reorder, delete with a confirmation, add rows.
+- `TagDrawer`: a `Sheet` on the right, over the info panel (toolbar tag
+  button, sidebar "My Tags" row, "Manage tags…", the info panel's "Edit
+  tags"). Attach and manage in one place: a checkbox per tag for the main
+  list's selection, following it live (`tagTargets.ts`; mixed when only some
+  tracks have it; no checkboxes with nothing selected), names shown as text that a click turns into a field
+  (`InlineText` `editOn="click"`), drag a row's grip to reorder
+  (`useTagDnd.ts`; a tag dropped on another category's tag or header moves
+  there, categories reorder among themselves; `dropMove` in `tagModel.ts`
+  turns the drop into a `move`; mouse only), × per row deletes after a
+  confirmation, add rows; a tag added while
+  tracks are selected is attached to them. `move` positions count the node
+  where it still is (reks-core). Escape or × closes it; the info button
+  brings the info panel back to the front.
 - `TagSubmenu`: "My Tags" in the track context menu. One checkbox per tag
   for the whole selection; a tag only some selected tracks have is mixed and a
   click adds it to all; the menu stays open; the search field offers
   "Create 'X' in <category>".
 - `TagPicker` (Popover body, search + checkboxes by category): the filter bar's
-  My Tags field (`FilterState.tagIds` → `tagAny`, counted in the Filters badge)
-  and the info panel's `TrackTags` chip editor.
+  My Tags field (`FilterState.tagIds` → `tagAny`, counted in the Filters badge).
+- `TrackTags`: the info panel's removable chips and the "Edit tags" button.
 - "My Tags" table column, hidden until switched on.
 - States: loading, load error with Retry, no tags yet ("Create your first
   tag"), no match for the search.

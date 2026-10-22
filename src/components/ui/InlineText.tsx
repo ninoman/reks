@@ -1,6 +1,6 @@
 /**
  * A short text (a name) edited in place, like `InlineNumber`: double-click
- * the text, or Enter while it has focus, to type. Enter or leaving the
+ * the text (or click, with `editOn="click"`), or Enter while it has focus, to type. Enter or leaving the
  * field commits, Esc cancels. The committed text is trimmed; blank commits
  * `null` (no name). `InlineTextField` is the field alone, for a host that
  * opens it itself (a hot cue pad on double-click).
@@ -89,6 +89,8 @@ export interface InlineTextProps {
   "aria-label": string;
   /** Native `title` hint for the shown text. */
   title?: string;
+  /** What opens the field; a plain click suits rows where a click does nothing else. */
+  editOn?: "click" | "doubleClick";
   className?: string | undefined;
 }
 
@@ -100,6 +102,7 @@ export function InlineText({
   disabled = false,
   "aria-label": label,
   title,
+  editOn = "doubleClick",
   className,
 }: InlineTextProps) {
   const [editing, setEditing] = useState(false);
@@ -124,7 +127,8 @@ export function InlineText({
       aria-label={label}
       title={title}
       disabled={disabled}
-      onDoubleClick={() => setEditing(true)}
+      onClick={editOn === "click" ? () => setEditing(true) : undefined}
+      onDoubleClick={editOn === "doubleClick" ? () => setEditing(true) : undefined}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -133,6 +137,7 @@ export function InlineText({
       }}
       className={cn(
         "w-full min-w-0 cursor-default truncate rounded-xs border border-transparent px-0.5 text-left",
+        editOn === "click" && !disabled && "cursor-text hover:bg-hover",
         focusRing,
         disabledState,
         value === null && "text-fg-subtle",
