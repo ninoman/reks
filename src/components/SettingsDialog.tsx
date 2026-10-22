@@ -1,7 +1,7 @@
 /**
  * Settings (phase 1 task 13) in one view, grouped: Folders (library folders,
  * cache folder), Playback (output device, sample rate, buffer, headphone
- * cue: `OutputSettings`), Display (key notation), Decks
+ * cue: `OutputSettings`), Display (theme, key notation), Decks
  * (the waveform style of the player deck and the Mix view, what SYNC
  * aligns). Values
  * live in Rust (`useSettings`); the library window's own state (columns,
@@ -12,7 +12,7 @@ import { type ReactNode, useRef, useState } from "react";
 
 import { cn } from "../lib/cn";
 
-import type { DeckWaveform, KeyNotation, SyncAlign } from "../lib/ipc";
+import type { DeckWaveform, KeyNotation, SyncAlign, Theme } from "../lib/ipc";
 import { useScan } from "../store/scan";
 import { useSettings } from "../store/settings";
 import { OutputSettings } from "./OutputSettings";
@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "./ui/Dialog";
 import { Segment, SegmentedControl } from "./ui/SegmentedControl";
+import { Swatch } from "./ui/Swatch";
 
 const item = "px-4 py-3.5";
 const itemTitle = "m-0 text-sm font-semibold";
@@ -43,6 +44,25 @@ const NOTATIONS: { id: KeyNotation; label: string; example: string }[] = [
   { id: "classical", label: "Classical", example: "Am, F#, Db" },
   { id: "camelot", label: "Camelot", example: "8A, 2B, 3B" },
   { id: "openKey", label: "Open Key", example: "1m, 7d, 8d" },
+];
+
+/** Each theme with its canvas and accent colours (tokens.css `--color-theme-*`). */
+const THEME_CHOICES: { id: Theme; label: string; canvas: string; accent: string }[] = [
+  {
+    id: "graphite",
+    label: "Graphite",
+    canvas: "bg-theme-graphite",
+    accent: "bg-theme-graphite-accent",
+  },
+  { id: "paper", label: "Paper", canvas: "bg-theme-paper", accent: "bg-theme-paper-accent" },
+  {
+    id: "midnight",
+    label: "Midnight",
+    canvas: "bg-theme-midnight",
+    accent: "bg-theme-midnight-accent",
+  },
+  { id: "dusk", label: "Dusk", canvas: "bg-theme-dusk", accent: "bg-theme-dusk-accent" },
+  { id: "booth", label: "Booth", canvas: "bg-theme-booth", accent: "bg-theme-booth-accent" },
 ];
 
 const SYNC_ALIGNS: { id: SyncAlign; label: string }[] = [
@@ -113,6 +133,7 @@ function SettingsBody() {
             <OutputSettings itemClassName={item} />
           </Group>
           <Group title="Display">
+            <ThemeChoice theme={settings.theme} />
             <KeyNotationChoice notation={settings.keyNotation} />
           </Group>
           <Group title="Decks">
@@ -195,6 +216,34 @@ function LibraryFolders() {
           {scanning ? "Scanning…" : "Rescan all"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function ThemeChoice({ theme }: { theme: Theme }) {
+  return (
+    <div className={item}>
+      <h5 className={itemTitle}>Theme</h5>
+      <p className={hint}>
+        Paper is light; Booth is black with the most contrast, for dark rooms. Graphite is the
+        default.
+      </p>
+      <SegmentedControl
+        className="mt-2.5"
+        aria-label="Theme"
+        value={theme}
+        onValueChange={(v) => void useSettings.getState().update({ theme: v as Theme })}
+      >
+        {THEME_CHOICES.map((t) => (
+          <Segment key={t.id} value={t.id}>
+            <span className="inline-flex overflow-hidden rounded-[2px] ring-1 ring-border-strong">
+              <Swatch size="sm" className={cn(t.canvas, "rounded-none")} />
+              <Swatch size="sm" className={cn(t.accent, "rounded-none")} />
+            </span>
+            {t.label}
+          </Segment>
+        ))}
+      </SegmentedControl>
     </div>
   );
 }

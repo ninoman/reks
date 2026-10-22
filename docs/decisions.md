@@ -785,8 +785,15 @@ Date of decisions: 2026-10-18.
   272) on neutrals tinted towards it (`--mist-*`, hue 285). Every text and
   button pair passes AA in both themes, including `fg-muted` on the light
   canvas (4.6:1; the warm one was 3.9:1).
-- Decision: tokens CSS-first in `src/styles/tokens.css` (`@theme`, light and dark
-  via `prefers-color-scheme`); Tailwind CSS v4 (`@tailwindcss/vite`) utilities;
+- Themes (2026-10-22, maintainer's call): the light/dark pair that followed
+  the system became five themes picked in Settings (`display.theme`):
+  Graphite (default: Claude's warm dark neutrals, ivory accent), Paper (light,
+  rose), Midnight (navy, blue), Dusk (plum, lavender), Booth (black, light grey;
+  for dark rooms). Cool accents on the warm neutrals were tried and dropped.
+  The deck follows the theme too (Paper's is light). Palettes, contrast
+  checks: [`ui.md`](ui.md#ui-design-system).
+- Decision: tokens CSS-first in `src/styles/tokens.css` (`@theme`, one block
+  per theme under `:root[data-theme]`); Tailwind CSS v4 (`@tailwindcss/vite`) utilities;
   `class-variance-authority` for variants and `clsx` + `tailwind-merge` as `cn()`;
   Radix Primitives for behaviour (Dialog, DropdownMenu, ContextMenu, Popover,
   Tooltip, Switch, Slider, ToggleGroup, ScrollArea, Slot) in `src/components/ui/`.

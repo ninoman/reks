@@ -1,56 +1,145 @@
 /*
  * Design tokens: the one place that sets how reks looks. See docs/ui.md.
  *
- * 1. Primitive palette (plain :root): raw colours, no utilities generated.
- *    The only hex values in src/ live here.
+ * 1. Primitive palettes (plain :root): raw colours, one palette per theme plus
+ *    the shared deck and data colours. The only hex values in src/ live here.
  * 2. Semantic tokens (@theme): what components use (`bg-surface`, `text-fg-muted`,
  *    `rounded-md`, `shadow-overlay`...). Tailwind's default palette is dropped.
- * 3. Dark theme: the semantic colours again, under prefers-color-scheme.
+ *    The colours here are the default theme, Graphite.
+ * 3. The other themes: the semantic colours again, under `:root[data-theme]`
+ *    (set from Settings → Display, src/lib/theme.ts).
  * 4. Control sizes, rows, layers, motion (plain :root, read as `h-(--ctl-h-sm)`).
  */
 
-/* 1. Primitive palette ------------------------------------------------------ */
+/* 1. Primitive palettes ----------------------------------------------------- */
 :root {
-  --mist-0: #ffffff;
-  --mist-25: #f9f9fe;
-  --mist-50: #f6f6fb;
-  --mist-75: #ebebf0;
-  --mist-100: #ededf2;
-  --mist-200: #e4e4e9;
-  --mist-300: #ccccd1;
-  --mist-400: #9c9ca0;
-  --mist-500: #717178;
-  --mist-600: #57575f;
-  --mist-700: #424249;
-  --mist-750: #35353c;
-  --mist-775: #2e2e35;
-  --mist-800: #28282f;
-  --mist-850: #24242b;
-  --mist-900: #1f1f25;
-  --mist-925: #1c1c23;
-  --mist-950: #18181f;
+  /* Graphite: Claude's warm neutrals, ivory accent. */
+  --graphite-950: #141413;
+  --graphite-900: #1f1e1d;
+  --graphite-875: #232220;
+  --graphite-850: #262624;
+  --graphite-825: #2d2c2a;
+  --graphite-800: #30302e;
+  --graphite-750: #3d3d3a;
+  --graphite-725: #3f3e3b;
+  --graphite-700: #4d4c47;
+  --graphite-600: #5e5d59;
+  --graphite-500: #7c7a73;
+  --graphite-400: #a8a69d;
+  --graphite-200: #d6d3c6;
+  --graphite-150: #dedbd2;
+  --graphite-100: #e8e5d9;
+  --graphite-75: #f5f3ea;
+  --graphite-50: #faf9f5;
+  --graphite-red: #f2756d;
+  --graphite-green: #62c290;
+  --graphite-amber: #e2aa58;
 
-  --indigo-500: #839cff;
-  --indigo-550: #5164f0;
-  --indigo-600: #4250db;
-  --indigo-650: #353fc1;
-  --indigo-700: #2c34a6;
+  /* Paper: the same warm neutrals, light, rose accent. */
+  --paper-0: #ffffff;
+  --paper-25: #faf9f5;
+  --paper-50: #f5f4ee;
+  --paper-75: #f0eee6;
+  --paper-100: #ebe9e1;
+  --paper-125: #e8e6dc;
+  --paper-150: #e4e1d5;
+  --paper-175: #e3e1d8;
+  --paper-300: #cbc8bc;
+  --paper-350: #b9b5a8;
+  --paper-400: #8c8a82;
+  --paper-600: #65645e;
+  --paper-800: #3d3d3a;
+  --paper-900: #1f1e1d;
+  --paper-950: #141413;
+  --paper-rose-500: #a54f70;
+  --paper-rose-600: #984565;
+  --paper-rose-700: #843a57;
+  --paper-red: #b5342c;
+  --paper-green: #1d7651;
+  --paper-amber-600: #a8731a;
+  --paper-amber-700: #8f5c0d;
 
+  /* Midnight: cool navy, blue accent. */
+  --midnight-975: #0e0f15;
+  --midnight-950: #13141c;
+  --midnight-925: #161722;
+  --midnight-900: #1a1b26;
+  --midnight-875: #1f2130;
+  --midnight-850: #222433;
+  --midnight-800: #2c2f42;
+  --midnight-775: #2b3250;
+  --midnight-750: #30334a;
+  --midnight-700: #3b3f57;
+  --midnight-600: #4a4f6a;
+  --midnight-500: #6c7293;
+  --midnight-400: #959cbb;
+  --midnight-100: #d6dbf2;
+  --midnight-50: #e4e8fb;
+  --midnight-blue-400: #90b3fa;
+  --midnight-blue-500: #7aa2f7;
+  --midnight-blue-600: #668fe8;
+  --midnight-red: #f7768e;
+  --midnight-green: #73d39a;
+  --midnight-amber: #e0af68;
+
+  /* Dusk: plum, lavender accent. */
+  --dusk-975: #13111c;
+  --dusk-950: #191724;
+  --dusk-925: #1c1a29;
+  --dusk-900: #1f1d2e;
+  --dusk-875: #232036;
+  --dusk-850: #26233a;
+  --dusk-800: #312d48;
+  --dusk-775: #36324f;
+  --dusk-750: #393552;
+  --dusk-700: #433f5f;
+  --dusk-600: #524e6b;
+  --dusk-500: #76728f;
+  --dusk-400: #a29ebf;
+  --dusk-100: #e0def4;
+  --dusk-50: #ecebf8;
+  --dusk-lavender-400: #d2bbee;
+  --dusk-lavender-500: #c4a7e7;
+  --dusk-lavender-600: #b293dc;
+  --dusk-red: #eb6f92;
+  --dusk-green: #a6d189;
+  --dusk-gold: #f6c177;
+
+  /* Booth: black, high contrast, light grey accent. */
+  --booth-1000: #000000;
+  --booth-975: #0a0a0a;
+  --booth-950: #0e0e0e;
+  --booth-925: #171717;
+  --booth-900: #1a1a1a;
+  --booth-875: #242424;
+  --booth-850: #2a2a2a;
+  --booth-800: #333333;
+  --booth-700: #505050;
+  --booth-600: #5c5c5c;
+  --booth-500: #7a7a7a;
+  --booth-400: #ababab;
+  --booth-200: #c8c8c8;
+  --booth-150: #e2e2e2;
+  --booth-100: #e6e6e6;
+  --booth-0: #ffffff;
+  --booth-red: #ff6170;
+  --booth-green: #4ade80;
+  --booth-amber: #fbbf24;
+
+  /* Deck marks, the same in every theme (they are what the marks mean). */
   --red-500: #e85a7c;
-  --red-600: #cf2d56;
   --green-500: #3fb58a;
-  --green-600: #1f8a65;
   --amber-500: #d49a45;
-  --amber-600: #c08532;
-  --amber-700: #9a6516;
+  --indigo-500: #839cff;
+  --indigo-600: #4250db;
 
-  /* Mixer level LEDs (DJM-style column), the same in both themes. */
+  /* Mixer level LEDs (DJM-style column); white is themed (a light deck needs dark). */
   --led-red: #ff3d3d;
   --led-white: #f4f4f8;
   --led-blue: #4f7bff;
   --led-lime: #c3e03a;
 
-  /* Grid editor waveform: 3-band on a dark deck in both themes (like the players). */
+  /* Waveforms: 3-band low/mid and high; the high band is themed like the LED. */
   --wave-low: #2f7bff;
   --wave-mid: #f29a2e;
   --wave-high: #f4f4f8;
@@ -60,6 +149,7 @@
   --wave-rgb-high: #2f6bff;
   --wave-blue: #1f6fff;
   --wave-blue-high: #d6e8ff;
+  --wave-blue-deep: #0a2a6b;
 
   /* rekordbox track colours (names from reks-core rbxml::TRACK_COLOURS); data, not theme. */
   --rb-pink: #ff007f;
@@ -72,7 +162,7 @@
   --rb-purple: #660099;
 }
 
-/* 2. Semantic tokens (light) ------------------------------------------------ */
+/* 2. Semantic tokens (Graphite, the default) -------------------------------- */
 @theme static {
   --color-*: initial;
   --font-*: initial;
@@ -80,47 +170,47 @@
   --radius-*: initial;
   --shadow-*: initial;
 
-  --color-bg: var(--mist-25);
-  --color-bg-subtle: var(--mist-100);
-  --color-row-alt: var(--mist-50);
-  --color-surface: var(--mist-0);
-  --color-surface-strong: var(--mist-200);
-  --color-hover: rgb(36 36 43 / 6%);
-  --color-selected: var(--mist-200);
-  --color-selected-fg: var(--mist-850);
-  --color-knob: var(--mist-0);
-  --color-knob-mark: var(--mist-850);
+  --color-bg: var(--graphite-900);
+  --color-bg-subtle: var(--graphite-850);
+  --color-row-alt: var(--graphite-875);
+  --color-surface: var(--graphite-800);
+  --color-surface-strong: var(--graphite-750);
+  --color-hover: rgb(250 249 245 / 6%);
+  --color-selected: var(--graphite-750);
+  --color-selected-fg: var(--graphite-50);
+  --color-knob: var(--graphite-100);
+  --color-knob-mark: var(--graphite-900);
 
-  --color-fg: var(--mist-850);
-  --color-fg-muted: var(--mist-500);
-  --color-fg-subtle: var(--mist-400);
+  --color-fg: var(--graphite-150);
+  --color-fg-muted: var(--graphite-400);
+  --color-fg-subtle: var(--graphite-500);
 
-  --color-border: var(--mist-200);
-  --color-border-subtle: var(--mist-100);
-  --color-border-strong: var(--mist-300);
+  --color-border: var(--graphite-725);
+  --color-border-subtle: var(--graphite-825);
+  --color-border-strong: var(--graphite-700);
 
   /* `accent`: text, lines, rings. `accent-solid`: filled controls, with `accent-fg` on top. */
-  --color-accent: var(--indigo-600);
-  --color-accent-solid: var(--indigo-600);
-  --color-accent-solid-hover: var(--indigo-650);
-  --color-accent-solid-active: var(--indigo-700);
-  --color-accent-fg: var(--mist-0);
+  --color-accent: var(--graphite-50);
+  --color-accent-solid: var(--graphite-100);
+  --color-accent-solid-hover: var(--graphite-75);
+  --color-accent-solid-active: var(--graphite-200);
+  --color-accent-fg: var(--graphite-950);
 
-  --color-danger: var(--red-600);
-  --color-danger-fg: var(--mist-0);
-  --color-success: var(--green-600);
-  --color-warning: var(--amber-700);
-  --color-rating: var(--amber-600);
+  --color-danger: var(--graphite-red);
+  --color-danger-fg: var(--graphite-950);
+  --color-success: var(--graphite-green);
+  --color-warning: var(--graphite-amber);
+  --color-rating: var(--graphite-amber);
 
   --color-focus-ring: var(--color-accent);
-  --color-overlay: rgb(24 24 31 / 32%);
+  --color-overlay: rgb(0 0 0 / 50%);
 
   --color-waveform-played: var(--color-accent);
-  --color-waveform-rest: var(--mist-400);
+  --color-waveform-rest: var(--graphite-600);
   --color-waveform-playhead: var(--color-fg);
-  /* Grid editor (the same in both themes: it draws on its own dark deck). */
-  --color-deck: var(--mist-950);
-  --color-deck-fg: var(--mist-75);
+  /* The deck: the panel the grid editor and the decks draw waveforms on. */
+  --color-deck: var(--graphite-950);
+  --color-deck-fg: var(--graphite-400);
   --color-waveform-low: var(--wave-low);
   --color-waveform-mid: var(--wave-mid);
   --color-waveform-high: var(--wave-high);
@@ -131,8 +221,8 @@
   --color-waveform-blue-high: var(--wave-blue-high);
   --color-grid-beat: rgb(235 235 240 / 38%);
   --color-grid-downbeat: var(--red-500);
-  --color-grid-cursor: var(--indigo-500);
-  /* Deck markers on the same dark deck: cue point and hot cues. */
+  --color-grid-cursor: var(--color-accent);
+  /* Deck markers: cue point and hot cues. */
   --color-deck-cue: var(--amber-500);
   --color-deck-hotcue: var(--green-500);
   /* Memory cues without a library colour, and the active loop's band. */
@@ -140,7 +230,6 @@
   --color-deck-loop: rgb(212 154 69 / 28%);
   /* A memory loop playback enters by itself (active loop): its mark and bar. */
   --color-deck-auto-loop: var(--indigo-500);
-  /* Text on a pad filled with a data colour (hot cue): dark on light fills, light on dark. */
   /* Level meter LEDs, on the deck colour: +10 red, +6/+3 white, 0 blue, below lime. */
   --color-led-clip: var(--led-red);
   --color-led-hot: var(--led-white);
@@ -148,8 +237,8 @@
   --color-led-normal: var(--led-lime);
 
   /* A hardware-style switch that is on (mixer buttons, assign switches): lit. */
-  --color-lit: var(--indigo-600);
-  --color-lit-fg: var(--mist-0);
+  --color-lit: var(--graphite-100);
+  --color-lit-fg: var(--graphite-950);
 
   --color-track-pink: var(--rb-pink);
   --color-track-red: var(--rb-red);
@@ -159,6 +248,18 @@
   --color-track-aqua: var(--rb-aqua);
   --color-track-blue: var(--rb-blue);
   --color-track-purple: var(--rb-purple);
+
+  /* Each theme's canvas and accent, for the Settings theme picker (the same in every theme). */
+  --color-theme-graphite: var(--graphite-900);
+  --color-theme-graphite-accent: var(--graphite-100);
+  --color-theme-paper: var(--paper-25);
+  --color-theme-paper-accent: var(--paper-rose-500);
+  --color-theme-midnight: var(--midnight-950);
+  --color-theme-midnight-accent: var(--midnight-blue-500);
+  --color-theme-dusk: var(--dusk-950);
+  --color-theme-dusk-accent: var(--dusk-lavender-500);
+  --color-theme-booth: var(--booth-1000);
+  --color-theme-booth-accent: var(--booth-100);
 
   /* Type: system faces (no bundled fonts); 13px body; nothing bolder than 600. */
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -182,50 +283,169 @@
   --radius-full: 9999px;
 
   /* Hairline depth; only floating layers (menus, popovers, dialogs, sheet) cast a shadow. */
-  --shadow-overlay: 0 8px 24px rgb(36 36 43 / 12%), 0 1px 3px rgb(36 36 43 / 8%);
+  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 45%), 0 1px 3px rgb(0 0 0 / 30%);
   /* The glow of a lit switch; the one non-overlay shadow. */
-  --shadow-lit: 0 0 8px rgb(66 80 219 / 45%);
+  --shadow-lit: 0 0 8px rgb(232 229 217 / 35%);
 
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-snap: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* 3. Dark theme ------------------------------------------------------------- */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: var(--mist-950);
-    --color-bg-subtle: var(--mist-900);
-    --color-row-alt: var(--mist-925);
-    --color-surface: var(--mist-800);
-    --color-surface-strong: var(--mist-750);
-    --color-hover: rgb(235 235 240 / 6%);
-    --color-selected: var(--mist-750);
-    --color-selected-fg: var(--mist-75);
-    --color-knob: var(--mist-75);
-    --color-knob-mark: var(--mist-900);
-    --color-fg: var(--mist-75);
-    --color-fg-muted: var(--mist-400);
-    --color-fg-subtle: var(--mist-600);
-    --color-border: var(--mist-775);
-    --color-border-subtle: var(--mist-800);
-    --color-border-strong: var(--mist-700);
-    --color-accent: var(--indigo-500);
-    --color-accent-solid: var(--indigo-600);
-    --color-accent-solid-hover: var(--indigo-550);
-    --color-accent-solid-active: var(--indigo-650);
-    --color-danger: var(--red-500);
-    --color-danger-fg: var(--mist-950);
-    --color-success: var(--green-500);
-    --color-warning: var(--amber-500);
-    --color-rating: var(--amber-500);
-    --color-overlay: rgb(0 0 0 / 50%);
-    --color-lit: var(--indigo-550);
-    --shadow-lit: 0 0 10px rgb(81 100 240 / 60%);
-    --color-waveform-rest: var(--mist-600);
-    --shadow-overlay: 0 8px 24px rgb(0 0 0 / 45%), 0 1px 3px rgb(0 0 0 / 30%);
-    color-scheme: dark;
-  }
+/* 3. Other themes ----------------------------------------------------------- */
+:root {
+  color-scheme: dark;
 }
+
+:root[data-theme="paper"] {
+  --color-bg: var(--paper-25);
+  --color-bg-subtle: var(--paper-75);
+  --color-row-alt: var(--paper-50);
+  --color-surface: var(--paper-0);
+  --color-surface-strong: var(--paper-125);
+  --color-hover: rgb(20 20 19 / 5%);
+  --color-selected: var(--paper-150);
+  --color-selected-fg: var(--paper-950);
+  --color-knob: var(--paper-0);
+  --color-knob-mark: var(--paper-900);
+  --color-fg: var(--paper-900);
+  --color-fg-muted: var(--paper-600);
+  --color-fg-subtle: var(--paper-400);
+  --color-border: var(--paper-175);
+  --color-border-subtle: var(--paper-100);
+  --color-border-strong: var(--paper-300);
+  --color-accent: var(--paper-rose-600);
+  --color-accent-solid: var(--paper-rose-500);
+  --color-accent-solid-hover: var(--paper-rose-600);
+  --color-accent-solid-active: var(--paper-rose-700);
+  --color-accent-fg: var(--paper-0);
+  --color-danger: var(--paper-red);
+  --color-danger-fg: var(--paper-0);
+  --color-success: var(--paper-green);
+  --color-warning: var(--paper-amber-700);
+  --color-rating: var(--paper-amber-600);
+  --color-overlay: rgb(20 20 19 / 32%);
+  --color-waveform-rest: var(--paper-350);
+  /* Paper's deck is light: the white high band, white LED and pale blue turn dark. */
+  --color-deck: var(--paper-75);
+  --color-deck-fg: var(--paper-600);
+  --color-waveform-high: var(--paper-800);
+  --color-waveform-blue-high: var(--wave-blue-deep);
+  --color-grid-beat: rgb(31 30 29 / 30%);
+  --color-deck-auto-loop: var(--indigo-600);
+  --color-led-hot: var(--paper-800);
+  --color-lit: var(--paper-rose-500);
+  --color-lit-fg: var(--paper-0);
+  --shadow-overlay: 0 8px 24px rgb(20 20 19 / 12%), 0 1px 3px rgb(20 20 19 / 8%);
+  --shadow-lit: 0 0 8px rgb(165 79 112 / 45%);
+  color-scheme: light;
+}
+
+:root[data-theme="midnight"] {
+  --color-bg: var(--midnight-950);
+  --color-bg-subtle: var(--midnight-900);
+  --color-row-alt: var(--midnight-925);
+  --color-surface: var(--midnight-850);
+  --color-surface-strong: var(--midnight-800);
+  --color-hover: rgb(214 219 242 / 6%);
+  --color-selected: var(--midnight-775);
+  --color-selected-fg: var(--midnight-50);
+  --color-knob: var(--midnight-100);
+  --color-knob-mark: var(--midnight-950);
+  --color-fg: var(--midnight-100);
+  --color-fg-muted: var(--midnight-400);
+  --color-fg-subtle: var(--midnight-500);
+  --color-border: var(--midnight-750);
+  --color-border-subtle: var(--midnight-875);
+  --color-border-strong: var(--midnight-700);
+  --color-accent: var(--midnight-blue-500);
+  --color-accent-solid: var(--midnight-blue-500);
+  --color-accent-solid-hover: var(--midnight-blue-400);
+  --color-accent-solid-active: var(--midnight-blue-600);
+  --color-accent-fg: var(--midnight-950);
+  --color-danger: var(--midnight-red);
+  --color-danger-fg: var(--midnight-950);
+  --color-success: var(--midnight-green);
+  --color-warning: var(--midnight-amber);
+  --color-rating: var(--midnight-amber);
+  --color-waveform-rest: var(--midnight-600);
+  --color-deck: var(--midnight-975);
+  --color-deck-fg: var(--midnight-400);
+  --color-lit: var(--midnight-blue-500);
+  --color-lit-fg: var(--midnight-950);
+  --shadow-lit: 0 0 10px rgb(122 162 247 / 50%);
+}
+
+:root[data-theme="dusk"] {
+  --color-bg: var(--dusk-950);
+  --color-bg-subtle: var(--dusk-900);
+  --color-row-alt: var(--dusk-925);
+  --color-surface: var(--dusk-850);
+  --color-surface-strong: var(--dusk-800);
+  --color-hover: rgb(224 222 244 / 6%);
+  --color-selected: var(--dusk-750);
+  --color-selected-fg: var(--dusk-50);
+  --color-knob: var(--dusk-100);
+  --color-knob-mark: var(--dusk-950);
+  --color-fg: var(--dusk-100);
+  --color-fg-muted: var(--dusk-400);
+  --color-fg-subtle: var(--dusk-500);
+  --color-border: var(--dusk-775);
+  --color-border-subtle: var(--dusk-875);
+  --color-border-strong: var(--dusk-700);
+  --color-accent: var(--dusk-lavender-500);
+  --color-accent-solid: var(--dusk-lavender-500);
+  --color-accent-solid-hover: var(--dusk-lavender-400);
+  --color-accent-solid-active: var(--dusk-lavender-600);
+  --color-accent-fg: var(--dusk-950);
+  --color-danger: var(--dusk-red);
+  --color-danger-fg: var(--dusk-950);
+  --color-success: var(--dusk-green);
+  --color-warning: var(--dusk-gold);
+  --color-rating: var(--dusk-gold);
+  --color-waveform-rest: var(--dusk-600);
+  --color-deck: var(--dusk-975);
+  --color-deck-fg: var(--dusk-400);
+  --color-lit: var(--dusk-lavender-500);
+  --color-lit-fg: var(--dusk-950);
+  --shadow-lit: 0 0 10px rgb(196 167 231 / 45%);
+}
+
+:root[data-theme="booth"] {
+  --color-bg: var(--booth-1000);
+  --color-bg-subtle: var(--booth-950);
+  --color-row-alt: var(--booth-975);
+  --color-surface: var(--booth-925);
+  --color-surface-strong: var(--booth-875);
+  --color-hover: rgb(255 255 255 / 7%);
+  --color-selected: var(--booth-800);
+  --color-selected-fg: var(--booth-0);
+  --color-knob: var(--booth-150);
+  --color-knob-mark: var(--booth-1000);
+  --color-fg: var(--booth-150);
+  --color-fg-muted: var(--booth-400);
+  --color-fg-subtle: var(--booth-500);
+  --color-border: var(--booth-850);
+  --color-border-subtle: var(--booth-900);
+  --color-border-strong: var(--booth-700);
+  --color-accent: var(--booth-0);
+  --color-accent-solid: var(--booth-100);
+  --color-accent-solid-hover: var(--booth-0);
+  --color-accent-solid-active: var(--booth-200);
+  --color-accent-fg: var(--booth-1000);
+  --color-danger: var(--booth-red);
+  --color-danger-fg: var(--booth-1000);
+  --color-success: var(--booth-green);
+  --color-warning: var(--booth-amber);
+  --color-rating: var(--booth-amber);
+  --color-overlay: rgb(0 0 0 / 65%);
+  --color-waveform-rest: var(--booth-600);
+  --color-deck: var(--booth-1000);
+  --color-deck-fg: var(--booth-400);
+  --color-lit: var(--booth-100);
+  --color-lit-fg: var(--booth-1000);
+  --shadow-lit: 0 0 8px rgb(230 230 230 / 30%);
+}
+
 /* 4. Sizes, layers, motion -------------------------------------------------- */
 :root {
   /* Control size scale: every button, input, select and segmented control reads these. */

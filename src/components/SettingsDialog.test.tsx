@@ -20,7 +20,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
 const ipc = await import("../lib/ipc");
 const dialog = await import("@tauri-apps/plugin-dialog");
-const { useSettings } = await import("../store/settings");
+const { startThemeSync, useSettings } = await import("../store/settings");
 const { useMix } = await import("../store/mix");
 const { SettingsDialog } = await import("./SettingsDialog");
 
@@ -31,6 +31,7 @@ const settings: Settings = {
   audioCue: null,
   keyNotation: "classical",
   deckWaveform: "rgb",
+  theme: "graphite",
   syncAlign: "bar",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
@@ -109,6 +110,18 @@ describe("SettingsDialog", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Camelot/ }));
     await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ keyNotation: "camelot" }));
     expect(useSettings.getState().settings?.keyNotation).toBe("camelot");
+  });
+
+  it("switches the theme and stores it", async () => {
+    const stop = startThemeSync();
+    await openDialog();
+    const display = screen.getByRole("region", { name: "Display" });
+    expect(display.querySelector('[aria-checked="true"]')?.textContent).toContain("Graphite");
+    fireEvent.click(screen.getByRole("radio", { name: /Paper/ }));
+    await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ theme: "paper" }));
+    expect(document.documentElement.dataset.theme).toBe("paper");
+    expect(localStorage.getItem("reks.theme")).toBe("paper");
+    stop();
   });
 
   it("stores the deck waveform style", async () => {

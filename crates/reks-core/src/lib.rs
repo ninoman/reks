@@ -51,7 +51,7 @@ pub use rule::{Match, RuleNode, MAX_RULE_DEPTH, MAX_RULE_NODES};
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
 pub use secret::OneLibraryKey;
 pub use settings::{
-    AnlzPreference, DeckWaveform, LibraryRoot, Settings, SettingsPatch, SyncAlign, UiState,
+    AnlzPreference, DeckWaveform, LibraryRoot, Settings, SettingsPatch, SyncAlign, Theme, UiState,
 };
 pub use tag::{TagCategory, TagId, TagInfo, TagOp, TagOutcome, TagTree};
 pub use track::{ArtworkInfo, BeatgridSummary, Cue, Track, TrackDetail, TrackPatch};

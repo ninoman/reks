@@ -169,6 +169,17 @@ describe("lit switches", () => {
     expect(cls).toContain("focus-visible:outline-focus-ring");
   });
 
+  it("a lit control icon button keeps the lit text colour (light lit fills)", () => {
+    render(
+      <IconButton variant="control" aria-pressed aria-label="Play">
+        P
+      </IconButton>,
+    );
+    const cls = screen.getByRole("button").classList;
+    expect(cls).toContain("aria-pressed:text-lit-fg");
+    expect(cls).not.toContain("aria-pressed:text-selected-fg");
+  });
+
   it("a control segmented control marks itself for its lit segments", () => {
     render(
       <SegmentedControl variant="control" value="a" onValueChange={() => {}} aria-label="seg">
