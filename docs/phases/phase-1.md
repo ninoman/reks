@@ -346,7 +346,7 @@ Notes (task 9, [`track.rs`](../../crates/reks-core/src/track.rs), [`TrackDetailP
   nothing. The 0001 `track_fts_au` trigger re-indexes FTS when a searched column changes.
 - `artwork_get(artwork_id)` returns the cached image as raw bytes (`ipc::Response`). The UI
   shows it through a Blob URL with `artwork.mime`, and shows a placeholder when there is
-  no artwork or the cache file is gone.
+  no artwork or the cache file is gone and cannot be re-extracted.
 - UI: the panel follows the primary selected row (`primaryIndex`: the focused row if it is
   selected, else the lowest selected one), so with several rows selected it shows one track.
   Bulk edit is not built yet. Save sends only the changed fields; Revert or Esc resets.
@@ -524,7 +524,9 @@ Notes (task 4, [`reks-audio`](../../crates/reks-audio/src/))
   tag frame rekordbox reads "Mix" from is UNVERIFIED.
 - Artwork: `Library::store_artwork` (`reks-core`) sniffs the bytes, de-dups by
   SHA-256 into `<cache_dir>/artwork/<sha256>.<ext>`, and stores `blob_path`
-  relative to the cache dir. A deleted cache file is rewritten on the next store.
+  relative to the cache dir. A deleted cache file is re-extracted on read from a
+  track that uses it (only bytes matching the stored SHA-256), or rewritten on the
+  next store.
 
 Scan rules (task 5, [`scan.rs`](../../crates/reks-core/src/scan.rs))
 - Picks up `mp3 m4a aac flac wav wave aif aiff`; skips dot-files and
