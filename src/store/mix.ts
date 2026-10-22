@@ -90,8 +90,6 @@ export interface DeckMeta {
   gridPending: boolean;
   // Kept across loads:
   tempoRange: TempoRange;
-  /** Scrolling waveform zoom (`DECK_ZOOM_S` index). */
-  zoom: number;
   padMode: PadMode;
   /** Page shown per paged mode (`JUMP_PAGES` / `LOOP_PAGES` index). */
   padPage: Record<PagedPadMode, number>;
@@ -101,10 +99,7 @@ export interface DeckMeta {
 }
 
 /** The deck settings a load or eject keeps. */
-type DeckPrefs = Pick<
-  DeckMeta,
-  "tempoRange" | "zoom" | "padMode" | "padPage" | "lastJump" | "lastLoop"
->;
+type DeckPrefs = Pick<DeckMeta, "tempoRange" | "padMode" | "padPage" | "lastJump" | "lastLoop">;
 
 export interface ChannelValues {
   trim: number;
@@ -145,6 +140,8 @@ export interface MixStore {
   devices: string[];
   options: MixDeviceOptions | null;
   deckCount: 2 | 4;
+  /** Scrolling waveform zoom (`DECK_ZOOM_S` index), one for every deck so they compare at a glance. */
+  waveZoom: number;
   decks: DeckMeta[];
   channels: ChannelValues[];
   filters: Record<FilterUnit, FilterValues>;
@@ -194,8 +191,8 @@ export interface MixStore {
   nudge: (deck: number, dir: -1 | 0 | 1) => void;
   setTempo: (deck: number, ratio: number) => void;
   setTempoRange: (deck: number, range: TempoRange) => void;
-  /** Zooms the deck's scrolling waveform in (1) or out (-1). */
-  zoomDeck: (deck: number, dir: -1 | 1) => void;
+  /** Zooms every deck's scrolling waveform in (1) or out (-1). */
+  zoom: (dir: -1 | 1) => void;
   setChannel: <K extends keyof ChannelValues>(
     ch: number,
     param: K,
@@ -213,7 +210,6 @@ export interface MixStore {
 
 const DEFAULT_PREFS: DeckPrefs = {
   tempoRange: DEFAULT_TEMPO_RANGE,
-  zoom: DEFAULT_DECK_ZOOM,
   padMode: "hotCue",
   padPage: { beatJump: 0, beatLoop: 0 },
   lastJump: DEFAULT_PAD_BEATS,
@@ -240,8 +236,8 @@ export function emptyDeck(): DeckMeta {
 /** An empty deck that keeps `prev`'s settings. */
 function emptyDeckFrom(prev: DeckMeta | undefined): DeckMeta {
   if (prev === undefined) return emptyDeck();
-  const { tempoRange, zoom, padMode, padPage, lastJump, lastLoop } = prev;
-  return { ...emptyDeck(), tempoRange, zoom, padMode, padPage, lastJump, lastLoop };
+  const { tempoRange, padMode, padPage, lastJump, lastLoop } = prev;
+  return { ...emptyDeck(), tempoRange, padMode, padPage, lastJump, lastLoop };
 }
 
 const DEFAULT_CHANNEL: ChannelValues = {
@@ -432,6 +428,7 @@ export const useMix = create<MixStore>((set, get) => {
     devices: [],
     options: null,
     deckCount: 2,
+    waveZoom: DEFAULT_DECK_ZOOM,
     decks: Array.from({ length: DECKS }, emptyDeck),
     // Channels 1–2 on filter X (left), 3–4 on Y (right), as in reks-mix.
     channels: Array.from({ length: DECKS }, (_, ch) => ({
@@ -709,8 +706,8 @@ export const useMix = create<MixStore>((set, get) => {
       get().send({ type: "tempo", deck, ratio });
     },
 
-    zoomDeck(deck, dir) {
-      patchDeck(deck, { zoom: stepZoom(get().decks[deck]?.zoom ?? DEFAULT_DECK_ZOOM, dir) });
+    zoom(dir) {
+      set({ waveZoom: stepZoom(get().waveZoom, dir) });
     },
 
     setTempoRange(deck, range) {

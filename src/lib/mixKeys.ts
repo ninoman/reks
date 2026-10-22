@@ -14,9 +14,9 @@
  * | loop on/off at the last loop size | F / ; |
  * | take master | G / H |
  * | next pad mode | T / Y |
- * | waveform zoom out, in | V, B / N, M |
  *
- * Crossfader: Z left, X centre, C right (a tenth per press).
+ * Crossfader: Z left, X centre, C right (a tenth per press). Waveform zoom
+ * (− / +) works with the panel closed too: `keys.ts`.
  */
 
 /** A deck action without its deck. */
@@ -29,8 +29,7 @@ export type DeckAction =
   | { type: "jump"; dir: -1 | 1 }
   | { type: "loop" }
   | { type: "master" }
-  | { type: "padMode" }
-  | { type: "zoom"; dir: -1 | 1 };
+  | { type: "padMode" };
 
 export type MixKeyAction =
   | (DeckAction & { deck: number })
@@ -52,8 +51,6 @@ const DECK_KEYS: [string, string, DeckAction][] = [
   ["KeyF", "Semicolon", { type: "loop" }],
   ["KeyG", "KeyH", { type: "master" }],
   ["KeyT", "KeyY", { type: "padMode" }],
-  ["KeyV", "KeyN", { type: "zoom", dir: -1 }],
-  ["KeyB", "KeyM", { type: "zoom", dir: 1 }],
 ];
 
 const BY_CODE = new Map<string, { side: number; action: DeckAction }>(

@@ -13,7 +13,7 @@ import { type DragEvent, useState } from "react";
 import { zoomSeconds } from "../../lib/deckScroll";
 import { hasType, readTracks, TRACKS_MIME } from "../../lib/dnd";
 import type { DeckView } from "../../lib/ipc";
-import { PLAYER_PLAY_KEY } from "../../lib/keys";
+import { PLAYER_PLAY_KEY, WAVE_ZOOM_KEY } from "../../lib/keys";
 import { type DeckAction, deckKeyHint } from "../../lib/mixKeys";
 import type { PadMode, TempoRange } from "../../lib/mixView";
 import type { DeckMeta, PagedPadMode } from "../../store/mix";
@@ -47,7 +47,7 @@ export interface DeckActions {
   setTempo: (ratio: number) => void;
   setTempoRange: (range: TempoRange) => void;
   setBpm: (bpm: number) => void;
-  /** Zooms the scrolling waveform in (1) or out (-1). */
+  /** Zooms every deck's scrolling waveform in (1) or out (-1). */
   zoom: (dir: -1 | 1) => void;
   seek: (ms: number) => void;
   eject: () => void;
@@ -60,6 +60,8 @@ export interface DeckStripProps {
   deck: number;
   view: DeckView | undefined;
   meta: DeckMeta;
+  /** Scrolling waveform zoom (`DECK_ZOOM_S` index), shared by all decks. */
+  zoom: number;
   /** The track's key in the chosen notation. */
   keyText: string | null;
   /** Beats from the master's phase; null when there is none to compare. */
@@ -95,6 +97,7 @@ export function DeckStrip({
   deck,
   view,
   meta,
+  zoom,
   keyText,
   phase,
   solo = false,
@@ -113,7 +116,7 @@ export function DeckStrip({
     positionMs: view?.positionMs ?? 0,
     durationMs: view?.durationMs ?? 0,
     playing: view?.playing ?? false,
-    viewS: zoomSeconds(meta.zoom),
+    viewS: zoomSeconds(zoom),
     seek: actions.seek,
     play: actions.play,
     pause: actions.pause,
@@ -184,15 +187,15 @@ export function DeckStrip({
               hotCues={meta.hotCues}
               memoryCues={meta.memoryCues}
               loop={view.loopRegion}
-              zoom={meta.zoom}
+              zoom={zoom}
               onSeek={actions.seek}
               onZoom={actions.zoom}
               overlay={
                 <DeckWaveformRow
                   deck={deck}
-                  zoom={meta.zoom}
-                  zoomOutKey={keyFor({ type: "zoom", dir: -1 })}
-                  zoomInKey={keyFor({ type: "zoom", dir: 1 })}
+                  zoom={zoom}
+                  zoomOutKey={WAVE_ZOOM_KEY.out}
+                  zoomInKey={WAVE_ZOOM_KEY.in}
                   onZoom={actions.zoom}
                   phaseShown={!solo && view.sync && !view.master}
                   phase={phase}

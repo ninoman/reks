@@ -75,6 +75,7 @@ function setup(props: Partial<DeckStripProps> = {}) {
       deck={1}
       view={undefined}
       meta={emptyDeck()}
+      zoom={2}
       keyText={null}
       phase={null}
       actions={actions}

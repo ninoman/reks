@@ -22,6 +22,7 @@ export function PlayerDeck() {
         deck={PLAYER_DECK}
         view={view}
         meta={meta}
+        zoom={mix.waveZoom}
         keyText={meta.track?.key == null ? null : keyLabel(meta.track.key)}
         phase={null}
         solo

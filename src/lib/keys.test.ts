@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 
-import { keepsSpace } from "./keys";
+import { keepsSpace, waveZoomKey } from "./keys";
 
 function el(html: string): HTMLElement {
   document.body.innerHTML = html;
@@ -31,5 +31,31 @@ describe("keepsSpace", () => {
     expect(keepsSpace(el('<div role="menu"><div data-target role="menuitem"></div></div>'))).toBe(
       true,
     );
+  });
+});
+
+describe("waveZoomKey", () => {
+  const press = (code: string, over: Partial<Parameters<typeof waveZoomKey>[0]> = {}) =>
+    waveZoomKey({
+      code,
+      metaKey: false,
+      ctrlKey: false,
+      altKey: false,
+      target: document.body,
+      ...over,
+    });
+
+  it("− zooms out and + in, on the main keys and the keypad", () => {
+    expect(press("Minus")).toBe(-1);
+    expect(press("Equal")).toBe(1);
+    expect(press("NumpadSubtract")).toBe(-1);
+    expect(press("NumpadAdd")).toBe(1);
+    expect(press("KeyV")).toBeNull();
+  });
+
+  it("leaves typing and the system's own zoom alone", () => {
+    expect(press("Minus", { target: el('<input data-target type="text">') })).toBeNull();
+    expect(press("Equal", { metaKey: true })).toBeNull();
+    expect(press("Minus", { ctrlKey: true })).toBeNull();
   });
 });

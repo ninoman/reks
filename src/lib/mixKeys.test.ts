@@ -31,8 +31,6 @@ describe("mixKeyAction", () => {
     expect(mixKeyAction(key("KeyH"), 2)).toEqual({ type: "master", deck: 2 });
     expect(mixKeyAction(key("KeyT"), 2)).toEqual({ type: "padMode", deck: 1 });
     expect(mixKeyAction(key("KeyY"), 2)).toEqual({ type: "padMode", deck: 2 });
-    expect(mixKeyAction(key("KeyV"), 2)).toEqual({ type: "zoom", dir: -1, deck: 1 });
-    expect(mixKeyAction(key("KeyM"), 2)).toEqual({ type: "zoom", dir: 1, deck: 2 });
   });
 
   it("Shift reaches the outer decks 1 and 4 only when four are shown", () => {
@@ -47,6 +45,9 @@ describe("mixKeyAction", () => {
     expect(mixKeyAction(key("KeyS", { metaKey: true }), 2)).toBeNull();
     expect(mixKeyAction(key("KeyZ", { shiftKey: true }), 4)).toBeNull();
     expect(mixKeyAction(key("Backquote"), 2)).toBeNull();
+    // Zoom is not a deck key: keys.ts handles it everywhere.
+    expect(mixKeyAction(key("KeyV"), 2)).toBeNull();
+    expect(mixKeyAction(key("Minus"), 2)).toBeNull();
   });
 });
 
@@ -60,8 +61,7 @@ describe("key hints", () => {
     expect(deckKeyHint({ type: "hotCue", slot: 4 }, 1)).toBeUndefined();
     expect(deckKeyHint({ type: "jump", dir: 1 }, 1)).toBe("R");
     expect(deckKeyHint({ type: "loop" }, 2)).toBe(";");
-    expect(deckKeyHint({ type: "zoom", dir: 1 }, 1)).toBe("B");
-    expect(deckKeyHint({ type: "zoom", dir: -1 }, 3)).toBe("Shift N");
+    expect(deckKeyHint({ type: "padMode" }, 3)).toBe("Shift Y");
   });
 
   it("match the table in docs/ui.md", () => {
@@ -78,8 +78,6 @@ describe("key hints", () => {
     expect(row({ type: "loop" })).toEqual(["F", ";"]);
     expect(row({ type: "master" })).toEqual(["G", "H"]);
     expect(row({ type: "padMode" })).toEqual(["T", "Y"]);
-    expect(row({ type: "zoom", dir: -1 })).toEqual(["V", "N"]);
-    expect(row({ type: "zoom", dir: 1 })).toEqual(["B", "M"]);
   });
 
   it("round-trips through mixKeyAction for every deck and action", () => {
@@ -89,7 +87,6 @@ describe("key hints", () => {
       { type: "loop" },
       { type: "master" },
       { type: "padMode" },
-      { type: "zoom", dir: -1 },
     ];
     const codeOf = (name: string) => (name === ";" ? "Semicolon" : `Key${name}`);
     for (const action of actions) {

@@ -244,20 +244,17 @@ describe("mix store", () => {
     expect(Object.keys(y)).not.toContain("vcfToXfader");
   });
 
-  it("keeps each deck's waveform zoom, across an eject, within the levels", () => {
+  it("zooms every deck's waveform together, within the levels, across an eject", () => {
     useMix.setState({ status: "running", live: running });
     const s = useMix.getState();
-    s.zoomDeck(1, 1);
-    s.zoomDeck(2, -1);
-    for (let i = 0; i < 10; i++) s.zoomDeck(3, 1);
+    expect(s.waveZoom).toBe(DEFAULT_DECK_ZOOM);
+    s.zoom(1);
     s.unload(1);
-    const zoom = useMix.getState().decks.map((d) => d.zoom);
-    expect(zoom).toEqual([
-      DEFAULT_DECK_ZOOM,
-      DEFAULT_DECK_ZOOM + 1,
-      DEFAULT_DECK_ZOOM - 1,
-      DECK_ZOOM_S.length - 1,
-    ]);
+    expect(useMix.getState().waveZoom).toBe(DEFAULT_DECK_ZOOM + 1);
+    for (let i = 0; i < 10; i++) s.zoom(1);
+    expect(useMix.getState().waveZoom).toBe(DECK_ZOOM_S.length - 1);
+    for (let i = 0; i < 10; i++) s.zoom(-1);
+    expect(useMix.getState().waveZoom).toBe(0);
   });
 
   it("pads: jumps and loops remember their size; loop pads set, resize or leave", () => {

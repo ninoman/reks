@@ -238,8 +238,11 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   animation-frame loop (`mix/DeckWaveform`, `mix/deckCanvas`): the waveform
   is cached in tiles on a pixel grid fixed to the track (`lib/waveStrip.ts`)
   and copied at whole-pixel offsets; the playhead runs on between engine
-  states (`lib/deckScroll.ts`). Zoom per deck: 32/16/8/4/2 s across, 8 s by
-  default, with − / + on the view, V B / N M, or Cmd/Ctrl + scroll.
+  states (`lib/deckScroll.ts`). Zoom is one level for every deck (so they
+  compare at a glance; `MixStore.waveZoom`): 32/16/8/4/2 s across, 8 s by
+  default, with − / + on a view, the − / + keys (anywhere outside text
+  fields, dialogs and menus, Mix panel open or not; `waveZoomKey` in
+  `lib/keys.ts`), or Cmd/Ctrl + scroll.
 - Marks (`lib/deckMarks.ts`), on both views: hot cues are a flag with the
   slot letter in the cue's library colour (`deck-hotcue` without one; text
   dark or light by the flag's brightness), memory cues a triangle on the
@@ -376,7 +379,8 @@ with a key show it in their tooltip (`shortcut` from `deckKeyHint()`).
 `artworkId`, `artworkMime` (from `library_track` on load); `HotCueView.colorRgb`
 (task 15) and `name` (from `Cue.name`, through `mix_load`). From tasks 13 and
 15: `DeckView.loopRegion`, `master`, beat jump / loop / loop exit / resize /
-take-master controls, `DeckMeta.zoom`. Pure helpers in `mixView.ts`:
+take-master controls; task 15's per-deck zoom became one `MixStore.waveZoom`
+(maintainer, 2026-10-22). Pure helpers in `mixView.ts`:
 `JUMP_PAGES`, `LOOP_PAGES` (FINE = a 1/32 `beatJump`; the engine's 10 ms
 `fineJump` is unused by the deck), `formatBeats`, `snapToDetent`,
 `tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` 248,
@@ -397,10 +401,10 @@ shown):
 | Loop on / off, last loop size | F | ; |
 | Take master | G | H |
 | Next pad mode | T | Y |
-| Zoom out / in | V B | N M |
 
-Crossfader Z / X / C and Space (player deck) unchanged. Mouse or Tab only:
-hot cues E–H, other pads, page arrows, Q, M, tempo range, BPM edit, eject.
+Crossfader Z / X / C, Space (player deck) and waveform zoom − / + (every
+deck at once, also with the Mix panel closed) are not per deck. Mouse or
+Tab only: hot cues E–H, other pads, page arrows, Q, M, tempo range, BPM edit, eject.
 
 ## My Tags
 

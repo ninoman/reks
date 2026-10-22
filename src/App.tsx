@@ -38,11 +38,12 @@ import { TagsSidebarEntry } from "./components/TagsSidebarEntry";
 import { ToastHost } from "./components/ToastHost";
 import { TrackLists } from "./components/TrackLists";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
-import { keepsSpace, PLAYER_PLAY_KEY } from "./lib/keys";
+import { keepsSpace, PLAYER_PLAY_KEY, waveZoomKey } from "./lib/keys";
 import { dismissSplash } from "./lib/splash";
 import { useAnalysis } from "./store/analysis";
 import { useHistory } from "./store/history";
 import { useLibrary } from "./store/library";
+import { useMix } from "./store/mix";
 import { useMixShortcuts } from "./store/mixShortcuts";
 import { usePanels } from "./store/panels";
 import { togglePlayer } from "./store/player";
@@ -100,6 +101,12 @@ export default function App() {
       if (e.key === "," && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         useSettings.getState().setDialogOpen(true);
+        return;
+      }
+      const zoom = waveZoomKey(e);
+      if (zoom !== null) {
+        e.preventDefault();
+        useMix.getState().zoom(zoom);
         return;
       }
       if (!space) return;

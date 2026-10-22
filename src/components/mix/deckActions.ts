@@ -22,7 +22,7 @@ export function deckActions(mix: MixStore, deck: number): DeckActions {
     setTempo: (ratio) => mix.setTempo(deck, ratio),
     setTempoRange: (range) => mix.setTempoRange(deck, range),
     setBpm: (bpm) => mix.setBpm(deck, bpm),
-    zoom: (dir) => mix.zoomDeck(deck, dir),
+    zoom: (dir) => mix.zoom(dir),
     seek: (ms) => mix.send({ type: "seek", deck, ms }),
     eject: () => mix.unload(deck),
     drop: (id) => void mix.load(deck, id),

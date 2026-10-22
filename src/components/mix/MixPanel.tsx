@@ -31,9 +31,9 @@ const SHORTCUTS: [string, string][] = [
   ["F / ;", "Loop on or off at the last loop size"],
   ["G / H", "Take master"],
   ["T / Y", "Next pad mode"],
-  ["V B / N M", "Zoom the waveform out, in (or ⌘/Ctrl + scroll on it)"],
   ["Shift + key", "Same on deck 1 / 4"],
   ["Z X C", "Crossfader left, centre, right"],
+  ["− / +", "Zoom every deck's waveform out, in (or ⌘/Ctrl + scroll on one)"],
 ];
 
 function ShortcutHelp() {
@@ -95,6 +95,7 @@ export function MixPanel() {
         deck={deck}
         view={view}
         meta={meta}
+        zoom={mix.waveZoom}
         keyText={key === null ? null : keyLabel(key)}
         phase={phase}
         actions={deckActions(mix, deck)}

@@ -439,8 +439,10 @@ pub enum Control {
     - The deck's 2 × 4 pads: HOT CUE (A–H in their cue colours and names),
       BEAT JUMP (FINE = 1/32 beat … 128, split back / forward), BEAT LOOP
       (1/8 … 32; the lit size exits, another resizes). New keys E/R O/P jump,
-      F ; loop, G H take master, T Y pad mode, V B N M zoom (zoom moved off
-      E/R O/P).
+      F ; loop, G H take master, T Y pad mode.
+    - Waveform zoom is one level for all decks (maintainer, 2026-10-22;
+      replaces task 15's per-deck zoom), on the − / + keys wherever focus is
+      (not in text fields, dialogs or menus), Mix panel open or not.
     - Tempo: no Reset button (double-click or Delete; drags snap at 0%), BPM
       typed into the header steps the range up when needed; nudge uses the
       CDJ jog arrows. Master tempo (**M**) stays disabled until task 10.
@@ -449,7 +451,7 @@ pub enum Control {
       so `npx tsc --noEmit -p tsconfig.app.json` is the real check).
     Tests: `mixView.test.ts` (pages, loop pad controls, detent snap, BPM →
     tempo and range step-up), `mixKeys.test.ts` (new keys, hints match the
-    `ui.md` table, round trip), `ui.test.tsx` (`Pad` height and ink,
+    `ui.md` table, round trip), `keys.test.ts` (zoom keys), `ui.test.tsx` (`Pad` height and ink,
     `SplitPad`, `InlineNumber` commit / cancel / parse), `DeckStrip.test.tsx`
     (every state, pad modes and pages, eject on artwork, BPM edit, master),
     `mix.test.ts` (analysis on load and reload when paused, pads, BPM,
