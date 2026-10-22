@@ -58,12 +58,13 @@ describe("Knob position mark", () => {
     expect(angle(1)).toBeCloseTo(135);
   });
 
-  it("runs from near the centre out towards the rim", () => {
+  it("runs from near the centre out past the cap's rim", () => {
     const { x1, y1, x2, y2 } = knobMark(0.5);
     expect(x1).toBeCloseTo(16);
     expect(x2).toBeCloseTo(16);
     expect(y1).toBeGreaterThan(y2);
-    expect(16 - y2).toBeLessThan(10.5);
+    expect(16 - y2).toBeGreaterThan(10.5);
+    expect(16 - y2).toBeLessThan(14);
   });
 
   it("is drawn in the mark token and follows the value", () => {

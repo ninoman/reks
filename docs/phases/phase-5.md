@@ -313,7 +313,7 @@ pub enum Control {
     `mixView.test.ts`, `mixKeys.test.ts`, `DeckStrip.test.tsx`. Checked in
     the browser with the dev mock only.
 14. [x] **Mixer polish** (maintainer review, 2026-10-22):
-    - Every knob draws a position mark: a short line from the rim inwards at
+    - Every knob draws a position mark: a short line from near the centre out past the cap's rim at
       the current angle, in `fg` on the `knob` fill (both themes). One change
       in `ui/Knob.tsx` (`knobMark`), so every knob has it.
     - **VCF TO XFADER removed** (maintainer: unused, removed 2026-10-22): the
