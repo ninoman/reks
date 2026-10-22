@@ -8,12 +8,13 @@
 import { type PointerEvent, useEffect, useRef } from "react";
 
 import { SCRUB_INTERVAL_MS, SCRUB_SLOP_PX, type ScrubGrip, scrubTarget } from "../../lib/mixView";
-import { VIEW_S } from "./DeckWaveform";
 
 export interface ScrubOptions {
   positionMs: number;
   durationMs: number;
   playing: boolean;
+  /** Seconds across the zoomed view. */
+  viewS: number;
   seek: (ms: number) => void;
   play: () => void;
   pause: () => void;
@@ -65,7 +66,7 @@ export function useDeckScrub(opts: ScrubOptions) {
     const overview = canvas.getAttribute("role") === "slider";
     const grip: ScrubGrip = overview
       ? { kind: "overview", widthPx: rect.width, durationMs }
-      : { kind: "zoomed", pxPerS: rect.width / VIEW_S, fromMs: positionMs, durationMs };
+      : { kind: "zoomed", pxPerS: rect.width / live.current.viewS, fromMs: positionMs, durationMs };
     e.currentTarget.setPointerCapture?.(e.pointerId);
     drag.current = {
       pointerId: e.pointerId,
@@ -110,7 +111,10 @@ export function useDeckScrub(opts: ScrubOptions) {
     onPointerUp: onPointerEnd,
     onPointerCancel: onPointerEnd,
     onLostPointerCapture: onPointerEnd,
-    // Pointer seeks are handled here; the waveform's own click would seek twice.
-    onClickCapture: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+    // Pointer seeks are handled here; the waveform's own click would seek
+    // twice. Other clicks (the zoom buttons) go through.
+    onClickCapture: (e: { target: EventTarget; stopPropagation: () => void }) => {
+      if (e.target instanceof HTMLCanvasElement) e.stopPropagation();
+    },
   };
 }

@@ -219,15 +219,21 @@ function load(deck: number, id: number, analysed: boolean): DeckLoaded {
     quantise: prev?.view.quantise ?? true,
   };
   d.grid = analysed;
-  // Hot cues A, B and D on bars 2, 5 and 9.
+  // Hot cues A, B and D on bars 2, 5 and 9 (D without a colour); a memory cue on bar 7.
   d.hotCues = analysed ? [msAtBeat(4), msAtBeat(16), msAtBeat(32)] : [];
   const slots = [0, 1, 3];
+  const colours = [0x30d158, 0xff375f, null];
   decks[deck] = d;
   return {
     deck,
     trackId: id,
     durationMs: DURATION_MS,
-    hotCues: d.hotCues.map((positionMs, i) => ({ slot: slots[i] ?? i, positionMs })),
+    hotCues: d.hotCues.map((positionMs, i) => ({
+      slot: slots[i] ?? i,
+      positionMs,
+      colorRgb: colours[i] ?? null,
+    })),
+    memoryCues: analysed ? [{ positionMs: msAtBeat(24), colorRgb: null }] : [],
   };
 }
 

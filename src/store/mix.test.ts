@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DECK_ZOOM_S, DEFAULT_DECK_ZOOM } from "../lib/deckScroll";
 import type { CueRouting, DeckView, MixState } from "../lib/ipc";
 
 vi.mock("../lib/ipc", () => ({
@@ -108,7 +109,8 @@ describe("mix store", () => {
       deck: 1,
       trackId: 9,
       durationMs: 1000,
-      hotCues: [{ slot: 0, positionMs: 10 }],
+      hotCues: [{ slot: 0, positionMs: 10, colorRgb: null }],
+      memoryCues: [],
     });
     await useMix.getState().load(1, { id: 9, title: "T", artist: null });
     expect(ipc.mixStart).toHaveBeenCalledTimes(1);
@@ -116,7 +118,7 @@ describe("mix store", () => {
     const deck = useMix.getState().decks[1];
     expect(deck?.track?.id).toBe(9);
     expect(deck?.loading).toBeNull();
-    expect(deck?.hotCues).toEqual([{ slot: 0, positionMs: 10 }]);
+    expect(deck?.hotCues).toEqual([{ slot: 0, positionMs: 10, colorRgb: null }]);
     expect(deck?.columns?.length).toBe(4);
     expect(deck?.beats).toHaveLength(1);
   });
@@ -125,11 +127,11 @@ describe("mix store", () => {
     let first: (v: Awaited<ReturnType<typeof ipc.mixLoad>>) => void = () => {};
     vi.mocked(ipc.mixLoad)
       .mockImplementationOnce(() => new Promise((r) => (first = r)))
-      .mockResolvedValueOnce({ deck: 0, trackId: 2, durationMs: 1, hotCues: [] });
+      .mockResolvedValueOnce({ deck: 0, trackId: 2, durationMs: 1, hotCues: [], memoryCues: [] });
     useMix.setState({ status: "running", live: running });
     const a = useMix.getState().load(0, { id: 1, title: "A", artist: null });
     await useMix.getState().load(0, { id: 2, title: "B", artist: null });
-    first({ deck: 0, trackId: 1, durationMs: 1, hotCues: [] });
+    first({ deck: 0, trackId: 1, durationMs: 1, hotCues: [], memoryCues: [] });
     await a;
     expect(useMix.getState().decks[0]?.track?.id).toBe(2);
   });
@@ -152,6 +154,22 @@ describe("mix store", () => {
     expect(useMix.getState().channels[2]?.xfadeAssign).toBe("y");
   });
 
+  it("keeps each deck's waveform zoom, across an eject, within the levels", () => {
+    useMix.setState({ status: "running", live: running });
+    const s = useMix.getState();
+    s.zoomDeck(1, 1);
+    s.zoomDeck(2, -1);
+    for (let i = 0; i < 10; i++) s.zoomDeck(3, 1);
+    s.unload(1);
+    const zoom = useMix.getState().decks.map((d) => d.zoom);
+    expect(zoom).toEqual([
+      DEFAULT_DECK_ZOOM,
+      DEFAULT_DECK_ZOOM + 1,
+      DEFAULT_DECK_ZOOM - 1,
+      DECK_ZOOM_S.length - 1,
+    ]);
+  });
+
   it("sends nothing while the output is off", () => {
     useMix.getState().setCrossfader({ pos: 0 });
     expect(ipc.mixControl).not.toHaveBeenCalled();
@@ -159,7 +177,13 @@ describe("mix store", () => {
   });
 
   it("load with play plays once loaded, and leaves a deck already playing that track", async () => {
-    vi.mocked(ipc.mixLoad).mockResolvedValue({ deck: 1, trackId: 9, durationMs: 1, hotCues: [] });
+    vi.mocked(ipc.mixLoad).mockResolvedValue({
+      deck: 1,
+      trackId: 9,
+      durationMs: 1,
+      hotCues: [],
+      memoryCues: [],
+    });
     await useMix.getState().load(1, { id: 9, title: "T", artist: null }, true);
     expect(sent()).toContainEqual({ type: "play", deck: 1 });
 
@@ -179,7 +203,13 @@ describe("mix store", () => {
 
   it("a new device reopens the output with the loaded tracks where they were", async () => {
     vi.mocked(ipc.mixDeviceOptions).mockResolvedValue(options(2));
-    vi.mocked(ipc.mixLoad).mockResolvedValue({ deck: 1, trackId: 9, durationMs: 1, hotCues: [] });
+    vi.mocked(ipc.mixLoad).mockResolvedValue({
+      deck: 1,
+      trackId: 9,
+      durationMs: 1,
+      hotCues: [],
+      memoryCues: [],
+    });
     await useMix.getState().load(1, { id: 9, title: "T", artist: null });
     const decks = [
       deckView(),

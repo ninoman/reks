@@ -134,6 +134,9 @@
   /* Deck markers on the same dark deck: cue point and hot cues. */
   --color-deck-cue: var(--amber-500);
   --color-deck-hotcue: var(--green-500);
+  /* Memory cues without a library colour, and the active loop's band. */
+  --color-deck-memory: var(--red-500);
+  --color-deck-loop: rgb(212 154 69 / 28%);
   /* Level meter LEDs, on the deck colour: +10 red, +6/+3 white, 0 blue, below lime. */
   --color-led-clip: var(--led-red);
   --color-led-hot: var(--led-white);

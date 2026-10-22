@@ -20,6 +20,7 @@ export function deckActions(mix: MixStore, deck: number): DeckActions {
     nudge: (dir) => mix.nudge(deck, dir),
     setTempo: (ratio) => mix.setTempo(deck, ratio),
     setTempoRange: (range) => mix.setTempoRange(deck, range),
+    zoom: (dir) => mix.zoomDeck(deck, dir),
     seek: (ms) => mix.send({ type: "seek", deck, ms }),
     eject: () => mix.unload(deck),
     drop: (id) => void mix.load(deck, id),

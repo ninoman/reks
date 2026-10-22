@@ -654,6 +654,8 @@ export interface DeckView {
   /** Following the leader's tempo and phase. */
   locked: boolean;
   quantise: boolean;
+  /** The active loop; absent until the engine reports loops (phase 5 task 13). */
+  loop?: LoopView | null;
 }
 
 /** A peak meter: `level` linear (1 = 0 dBFS); `clip` reached 0 dBFS since the last state. */
@@ -683,6 +685,14 @@ export interface HotCueView {
   /** 0..7 = A..H. */
   slot: number;
   positionMs: number;
+  /** 0xRRGGBB from the library, null for the deck's default colour. */
+  colorRgb: number | null;
+}
+
+/** A memory cue or loop (by its start). */
+export interface MemoryCueView {
+  positionMs: number;
+  colorRgb: number | null;
 }
 
 export interface DeckLoaded {
@@ -690,6 +700,14 @@ export interface DeckLoaded {
   trackId: number;
   durationMs: number;
   hotCues: HotCueView[];
+  /** By position. */
+  memoryCues: MemoryCueView[];
+}
+
+/** An active loop on a deck, in ms. */
+export interface LoopView {
+  startMs: number;
+  endMs: number;
 }
 
 export type ChannelParam =

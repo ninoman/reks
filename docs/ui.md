@@ -52,7 +52,7 @@ is on, with `shadow-lit`), `led-*` (meter LEDs), `waveform-*`, `track-*`
 (rekordbox colours: data, the same in both themes). The grid editor draws on
 its own dark deck in both themes: `deck`, `deck-fg`, `waveform-low/mid/high`
 (3-band), `grid-beat`, `grid-downbeat`, `grid-cursor`; the mixer's decks add
-`deck-cue`, `deck-hotcue` and the other waveform styles' `waveform-rgb-*` and
+`deck-cue`, `deck-hotcue`, `deck-memory`, `deck-loop` and the other waveform styles' `waveform-rgb-*` and
 `waveform-blue(-high)`.
 
 The indigo `accent` stays scarce: primary buttons, the loaded track, the played
@@ -229,9 +229,19 @@ height).
   it has too few outputs for are disabled), opening,
   error (failed start, device lost), running. A deck is empty (how to load),
   loading, failed or loaded; a track without a grid says sync needs one.
-- Waveforms draw on the dark `deck` like the grid editor: 8 s scrolling with
-  the playhead in the middle, beat lines, cue (`deck-cue`) and hot cues
-  (`deck-hotcue`); the overview under it is the keyboard seek slider.
+- Waveforms draw on the dark `deck` like the grid editor: a scrolling view
+  with the playhead in the middle and beat lines, and the overview under it,
+  which is the keyboard seek slider. Both draw in device pixels from one
+  animation-frame loop (`mix/DeckWaveform`, `mix/deckCanvas`): the waveform
+  is cached in tiles on a pixel grid fixed to the track (`lib/waveStrip.ts`)
+  and copied at whole-pixel offsets; the playhead runs on between engine
+  states (`lib/deckScroll.ts`). Zoom per deck: 32/16/8/4/2 s across, 8 s by
+  default, with − / + on the view, E R / O P, or Cmd/Ctrl + scroll.
+- Marks (`lib/deckMarks.ts`), on both views: hot cues are a flag with the
+  slot letter in the cue's library colour (`deck-hotcue` without one; text
+  dark or light by the flag's brightness), memory cues a triangle on the
+  bottom edge (`deck-memory` without a colour), the cue point the same in
+  `deck-cue`, and an active loop a `deck-loop` band.
   Drag to skim (`mix/useDeckScrub`, a wrapper around `DeckWaveform`, which
   only draws): on the overview the playhead follows the pointer and a press
   jumps there; on the zoomed view the track moves with the pointer (drag
@@ -257,7 +267,8 @@ height).
 - Shortcuts while the panel is open ([`src/lib/mixKeys.ts`](../src/lib/mixKeys.ts),
   also under **Shortcuts** in the panel): A/S/D cue, play, sync deck 2 and
   J/K/L deck 3, the decks on screen with two (Shift: the outer decks 1 and 4), Q/W and U/I nudge while held, 1–4 and
-  7–0 hot cues A–D, Z/X/C crossfader. Space stays with the player (deck 2).
+  7–0 hot cues A–D, E/R and O/P waveform zoom out/in, Z/X/C crossfader. Space
+  stays with the player (deck 2).
 - The mixer is memoised away from the 60 Hz engine state; only the decks
   re-render with it.
 - Meters (`ui/Meter`): a DJM-style column of nine round LEDs on the deck

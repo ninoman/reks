@@ -1,27 +1,47 @@
 /**
  * A deck's waveforms on the dark deck: the scrolling view (playhead in the
- * middle, beat lines, cue and hot cue markers; click to seek) and the whole
+ * middle, beat lines, cue, memory cue and hot cue marks, the active loop;
+ * zoom with the buttons, E/R and O/P, or Cmd/Ctrl + scroll) and the whole
  * track overview under it (click or arrow keys to seek). Both draw in the
  * waveform style chosen in Settings → Decks.
+ *
+ * Both canvases draw in device pixels from one animation-frame loop, which
+ * runs the playhead on between engine states (`deckScroll.ts`) and copies
+ * pre-drawn waveform tiles (`waveStrip.ts`); React renders only feed it.
  */
-import { type KeyboardEvent, type MouseEvent, useEffect, useState } from "react";
-
-import type { BeatMark, HotCueView } from "../../lib/ipc";
 import {
-  drawBeats,
-  drawMarker,
-  drawWave,
-  prepare,
-  type WaveView,
-  wavePalette,
-} from "../../lib/waveDraw";
+  type KeyboardEvent,
+  type MouseEvent,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { deckMarks, loopRegion } from "../../lib/deckMarks";
+import {
+  DECK_ZOOM_S,
+  followPlayhead,
+  frameMs,
+  type PlayheadSample,
+  predict,
+  scrollFrame,
+  zoomSeconds,
+} from "../../lib/deckScroll";
+import type { BeatMark, HotCueView, LoopView, MemoryCueView } from "../../lib/ipc";
+import { WaveStrip } from "../../lib/waveStrip";
 import { useSettings } from "../../store/settings";
+import { MinusIcon, PlusIcon } from "../icons";
 import { focusRingInset } from "../ui/control";
+import { IconButton } from "../ui/IconButton";
+import { Tooltip } from "../ui/Tooltip";
+import { drawOverview, drawScroll, type Inputs, readTokens } from "./deckCanvas";
+import { useCanvasSize } from "./useCanvasSize";
 
-/** Seconds shown across the scrolling view. */
-export const VIEW_S = 8;
 /** Arrow-key seek step on the overview, ms. */
 const SEEK_STEP_MS = 2_000;
+/** Scroll travel (px) per zoom step with Cmd/Ctrl held; a trackpad sends many small deltas. */
+const WHEEL_STEP_PX = 40;
 
 export interface DeckWaveformProps {
   deck: number;
@@ -29,23 +49,20 @@ export interface DeckWaveformProps {
   beats: BeatMark[] | null;
   positionMs: number;
   durationMs: number;
+  playing: boolean;
+  /** Playback speed ratio while playing. */
+  speed: number;
   cueMs: number;
   hotCues: HotCueView[];
+  memoryCues: MemoryCueView[];
+  /** The active loop, if any. */
+  loop: LoopView | null;
+  /** `DECK_ZOOM_S` index. */
+  zoom: number;
   compact: boolean;
   onSeek: (ms: number) => void;
-}
-
-function useWidth(el: HTMLElement | null): number {
-  const [width, setWidth] = useState(0);
-  useEffect(() => {
-    if (el === null) return;
-    const observer = new ResizeObserver(([entry]) =>
-      setWidth(Math.floor(entry?.contentRect.width ?? 0)),
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [el]);
-  return width;
+  /** 1 zooms in, -1 out. */
+  onZoom: (dir: -1 | 1) => void;
 }
 
 export function DeckWaveform({
@@ -54,48 +71,154 @@ export function DeckWaveform({
   beats,
   positionMs,
   durationMs,
+  playing,
+  speed,
   cueMs,
   hotCues,
+  memoryCues,
+  loop,
+  zoom,
   compact,
   onSeek,
+  onZoom,
 }: DeckWaveformProps) {
   const style = useSettings((s) => s.settings?.deckWaveform ?? "rgb");
-  const [scroll, setScroll] = useState<HTMLCanvasElement | null>(null);
-  const [overview, setOverview] = useState<HTMLCanvasElement | null>(null);
-  const width = useWidth(scroll);
-  const pxPerS = width / VIEW_S;
-  const startMs = positionMs - (VIEW_S * 1000) / 2;
+  const [scrollBox, setScrollBox] = useState<HTMLDivElement | null>(null);
+  const [overviewBox, setOverviewBox] = useState<HTMLDivElement | null>(null);
+  const scroll = useRef<HTMLCanvasElement>(null);
+  const overview = useRef<HTMLCanvasElement>(null);
+  const scrollSize = useCanvasSize(scrollBox);
+  const overviewSize = useCanvasSize(overviewBox);
+  const seconds = zoomSeconds(zoom);
+
+  // Tokens are the same in both themes (the deck is always dark); read once.
+  const tokens = useMemo(() => (scrollBox === null ? null : readTokens(scrollBox)), [scrollBox]);
+  const strip = useMemo(
+    () =>
+      columns === null || tokens === null || scrollSize === null || scrollSize.width === 0
+        ? null
+        : new WaveStrip({
+            columns,
+            style,
+            palette: tokens.palette,
+            pxPerS: scrollSize.width / seconds,
+            height: scrollSize.height,
+          }),
+    [columns, style, tokens, scrollSize, seconds],
+  );
+  const overviewStrip = useMemo(
+    () =>
+      columns === null || tokens === null || overviewSize === null || durationMs <= 0
+        ? null
+        : new WaveStrip({
+            columns,
+            style,
+            palette: tokens.palette,
+            pxPerS: (overviewSize.width * 1000) / durationMs,
+            height: overviewSize.height,
+          }),
+    [columns, style, tokens, overviewSize, durationMs],
+  );
+  const marks = useMemo(
+    () => (tokens === null ? [] : deckMarks(hotCues, memoryCues, cueMs, tokens.marks)),
+    [hotCues, memoryCues, cueMs, tokens],
+  );
+
+  const loopStart = loopRegion(loop)?.startMs ?? null;
+  const loopEnd = loopRegion(loop)?.endMs ?? null;
+  const inputs = useRef<Inputs | null>(null);
+  // Bumped when anything but the playhead changes, so a still deck redraws.
+  const version = useRef(0);
+  useLayoutEffect(() => {
+    inputs.current = {
+      scrollSize,
+      overviewSize,
+      strip,
+      overviewStrip,
+      tokens,
+      beats,
+      marks,
+      loop: loopStart === null || loopEnd === null ? null : { startMs: loopStart, endMs: loopEnd },
+      seconds,
+      durationMs,
+    };
+    version.current++;
+  }, [
+    scrollSize,
+    overviewSize,
+    strip,
+    overviewStrip,
+    tokens,
+    beats,
+    marks,
+    loopStart,
+    loopEnd,
+    seconds,
+    durationMs,
+  ]);
+
+  const sample = useRef<PlayheadSample>({ positionMs, speed: 0, at: 0 });
+  useLayoutEffect(() => {
+    sample.current = { positionMs, speed: playing ? speed : 0, at: performance.now() };
+  }, [positionMs, playing, speed]);
+  /** The playhead as drawn, ms. */
+  const shown = useRef<number | null>(null);
 
   useEffect(() => {
-    if (scroll === null || width === 0) return;
-    const height = scroll.clientHeight;
-    const p = prepare(scroll, width, height);
-    if (p === null) return;
-    const v: WaveView = { startMs, pxPerS, width, height };
-    if (columns !== null) drawWave(p.ctx, wavePalette(p.token), style, columns, v);
-    if (beats !== null) drawBeats(p.ctx, p.token, beats, v);
-    for (const c of hotCues) drawMarker(p.ctx, p.token("--color-deck-hotcue"), c.positionMs, v, 2);
-    drawMarker(p.ctx, p.token("--color-deck-cue"), cueMs, v, 2);
-    drawMarker(p.ctx, p.token("--color-deck-fg"), positionMs, v, 2);
-  }, [scroll, width, style, columns, beats, hotCues, cueMs, positionMs, startMs, pxPerS]);
+    let raf = 0;
+    let last = performance.now();
+    let drawn = "";
+    function frame(now: number) {
+      raf = requestAnimationFrame(frame);
+      const s = sample.current;
+      const ms = followPlayhead(shown.current, now - last, s.speed, predict(s, now));
+      last = now;
+      const i = inputs.current;
+      shown.current = Math.min(Math.max(0, ms), i?.durationMs ?? ms);
+      if (i === null || i.tokens === null) return;
+      const at = shown.current;
+      // Redraw only when a pixel would change.
+      const scrollLeft =
+        i.scrollSize === null ? 0 : scrollFrame(at, i.seconds, i.scrollSize.width).left;
+      const overviewX =
+        i.overviewSize === null || i.durationMs <= 0
+          ? 0
+          : Math.round((at / i.durationMs) * i.overviewSize.width);
+      const key = `${version.current}:${scrollLeft}:${overviewX}`;
+      if (key === drawn) return;
+      drawn = key;
+      if (scroll.current !== null && i.scrollSize !== null)
+        drawScroll(scroll.current, i.scrollSize, i, i.tokens, at);
+      if (overview.current !== null && i.overviewSize !== null)
+        drawOverview(overview.current, i.overviewSize, i, i.tokens, at);
+    }
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
+  // Cmd/Ctrl + scroll zooms; a listener of our own as React's wheel is passive.
+  const zoomRef = useRef(onZoom);
+  zoomRef.current = onZoom;
   useEffect(() => {
-    if (overview === null || width === 0 || durationMs <= 0) return;
-    const height = overview.clientHeight;
-    const p = prepare(overview, width, height);
-    if (p === null) return;
-    const v: WaveView = { startMs: 0, pxPerS: (width * 1000) / durationMs, width, height };
-    if (columns !== null) drawWave(p.ctx, wavePalette(p.token), style, columns, v);
-    p.ctx.fillStyle = p.token("--color-overlay");
-    p.ctx.fillRect(0, 0, Math.round((positionMs / durationMs) * width), height);
-    drawMarker(p.ctx, p.token("--color-deck-cue"), cueMs, v);
-    drawMarker(p.ctx, p.token("--color-deck-fg"), positionMs, v, 2);
-  }, [overview, width, style, columns, durationMs, cueMs, positionMs]);
+    if (scrollBox === null) return;
+    let travel = 0;
+    function onWheel(e: WheelEvent) {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      travel += e.deltaY;
+      if (Math.abs(travel) < WHEEL_STEP_PX) return;
+      zoomRef.current(travel < 0 ? 1 : -1);
+      travel = 0;
+    }
+    scrollBox.addEventListener("wheel", onWheel, { passive: false });
+    return () => scrollBox.removeEventListener("wheel", onWheel);
+  }, [scrollBox]);
 
   function seekScroll(e: MouseEvent<HTMLCanvasElement>) {
-    if (pxPerS <= 0) return;
-    const x = e.clientX - e.currentTarget.getBoundingClientRect().left;
-    onSeek(Math.min(durationMs, Math.max(0, startMs + (x / pxPerS) * 1000)));
+    if (scrollSize === null || scrollSize.width === 0) return;
+    const x = (e.clientX - e.currentTarget.getBoundingClientRect().left) * scrollSize.dpr;
+    const f = scrollFrame(shown.current ?? positionMs, seconds, scrollSize.width);
+    onSeek(Math.min(durationMs, Math.max(0, frameMs(f, x))));
   }
 
   function seekOverview(e: MouseEvent<HTMLCanvasElement>) {
@@ -118,26 +241,54 @@ export function DeckWaveform({
     onSeek(Math.min(durationMs, Math.max(0, next)));
   }
 
+  const n = deck + 1;
   return (
     <div className="flex flex-col gap-px bg-deck">
-      {/* Pointer-only: the overview below is the keyboard way to seek. */}
-      <canvas
-        ref={setScroll}
-        className={compact ? "h-(--deck-wave-h-compact) w-full" : "h-(--deck-wave-h) w-full"}
-        onClick={seekScroll}
-      />
-      <canvas
-        ref={setOverview}
-        role="slider"
-        tabIndex={0}
-        aria-label={`Deck ${deck + 1} position`}
-        aria-valuemin={0}
-        aria-valuemax={Math.round(durationMs)}
-        aria-valuenow={Math.round(positionMs)}
-        className={`h-(--deck-overview-h) w-full ${focusRingInset}`}
-        onClick={seekOverview}
-        onKeyDown={overviewKey}
-      />
+      <div
+        ref={setScrollBox}
+        className={`relative ${compact ? "h-(--deck-wave-h-compact)" : "h-(--deck-wave-h)"}`}
+      >
+        {/* Pointer-only: the overview below is the keyboard way to seek. */}
+        <canvas ref={scroll} className="block" data-zoom={seconds} onClick={seekScroll} />
+        <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-70 hover:opacity-100 focus-within:opacity-100">
+          <Tooltip content="Zoom out">
+            <IconButton
+              size="xs"
+              variant="control"
+              aria-label={`Deck ${n} zoom out`}
+              disabled={zoom <= 0}
+              onClick={() => onZoom(-1)}
+            >
+              <MinusIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="Zoom in">
+            <IconButton
+              size="xs"
+              variant="control"
+              aria-label={`Deck ${n} zoom in`}
+              disabled={zoom >= DECK_ZOOM_S.length - 1}
+              onClick={() => onZoom(1)}
+            >
+              <PlusIcon />
+            </IconButton>
+          </Tooltip>
+        </div>
+      </div>
+      <div ref={setOverviewBox} className="h-(--deck-overview-h)">
+        <canvas
+          ref={overview}
+          role="slider"
+          tabIndex={0}
+          aria-label={`Deck ${n} position`}
+          aria-valuemin={0}
+          aria-valuemax={Math.round(durationMs)}
+          aria-valuenow={Math.round(positionMs)}
+          className={`block ${focusRingInset}`}
+          onClick={seekOverview}
+          onKeyDown={overviewKey}
+        />
+      </div>
     </div>
   );
 }

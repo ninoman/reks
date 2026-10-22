@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use reks_core::{DeckAudio, TrackId};
+use reks_core::{CueMark, DeckAudio, TrackId};
 use reks_mix::{DeckSource, DeckState, Engine, EngineConfig, DECKS};
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
@@ -314,6 +314,8 @@ pub struct DeckLoaded {
     pub duration_ms: f64,
     /// Hot cues set on the deck.
     pub hot_cues: Vec<HotCueView>,
+    /// Memory cues and loops (by their start), by position.
+    pub memory_cues: Vec<MemoryCueView>,
 }
 
 #[derive(Debug, Serialize)]
@@ -322,6 +324,16 @@ pub struct HotCueView {
     /// 0..7 = A..H.
     pub slot: u8,
     pub position_ms: f64,
+    /// 0xRRGGBB from the library, if set.
+    pub color_rgb: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryCueView {
+    pub position_ms: f64,
+    /// 0xRRGGBB from the library, if set.
+    pub color_rgb: Option<u32>,
 }
 
 fn deck_source(audio: DeckAudio) -> DeckSource {
@@ -365,17 +377,10 @@ pub async fn mix_load(
         s.generation[i] += 1;
         (s.generation[i], rate)
     };
-    let (src, hot_cues) = blocking(&state, move |lib| {
+    let (src, (hot_cues, memory_cues)) = blocking(&state, move |lib| {
         let audio = lib.deck_audio(id, rate)?;
-        let hot_cues = audio
-            .hot_cues
-            .iter()
-            .map(|&(slot, frame)| HotCueView {
-                slot,
-                position_ms: frames_to_ms(frame, rate),
-            })
-            .collect::<Vec<_>>();
-        Ok::<_, reks_core::Error>((Arc::new(deck_source(audio)), hot_cues))
+        let views = cue_views(&audio.marks, rate);
+        Ok::<_, reks_core::Error>((Arc::new(deck_source(audio)), views))
     })
     .await?;
     let mut s = lock(&state.mix)?;
@@ -391,7 +396,29 @@ pub async fn mix_load(
         track_id: id,
         duration_ms,
         hot_cues,
+        memory_cues,
     }))
+}
+
+/// Splits a deck's cue marks into hot and memory cue views in ms.
+fn cue_views(marks: &[CueMark], rate: u32) -> (Vec<HotCueView>, Vec<MemoryCueView>) {
+    let mut hot = Vec::new();
+    let mut memory = Vec::new();
+    for m in marks {
+        let position_ms = frames_to_ms(m.frame, rate);
+        match m.slot {
+            Some(slot) => hot.push(HotCueView {
+                slot,
+                position_ms,
+                color_rgb: m.color_rgb,
+            }),
+            None => memory.push(MemoryCueView {
+                position_ms,
+                color_rgb: m.color_rgb,
+            }),
+        }
+    }
+    (hot, memory)
 }
 
 /// A channel strip control (`reks_mix::ChannelParam`).

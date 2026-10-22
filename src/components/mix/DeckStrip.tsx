@@ -9,6 +9,7 @@
 import { type DragEvent, useState } from "react";
 
 import { cn } from "../../lib/cn";
+import { zoomSeconds } from "../../lib/deckScroll";
 import { hasType, readTracks, TRACKS_MIME } from "../../lib/dnd";
 import { hotCueLabel } from "../../lib/format";
 import type { DeckView } from "../../lib/ipc";
@@ -50,6 +51,8 @@ export interface DeckActions {
   nudge: (dir: -1 | 0 | 1) => void;
   setTempo: (ratio: number) => void;
   setTempoRange: (range: TempoRange) => void;
+  /** Zooms the scrolling waveform in (1) or out (-1). */
+  zoom: (dir: -1 | 1) => void;
   seek: (ms: number) => void;
   eject: () => void;
   drop: (trackId: number) => void;
@@ -93,6 +96,7 @@ export function DeckStrip({
     positionMs: view?.positionMs ?? 0,
     durationMs: view?.durationMs ?? 0,
     playing: view?.playing ?? false,
+    viewS: zoomSeconds(meta.zoom),
     seek: actions.seek,
     play: actions.play,
     pause: actions.pause,
@@ -174,10 +178,16 @@ export function DeckStrip({
                 beats={meta.beats}
                 positionMs={view.positionMs}
                 durationMs={view.durationMs}
+                playing={view.playing}
+                speed={view.speed}
                 cueMs={view.cueMs}
                 hotCues={meta.hotCues}
+                memoryCues={meta.memoryCues}
+                loop={view.loop ?? null}
+                zoom={meta.zoom}
                 compact={compact}
                 onSeek={actions.seek}
+                onZoom={actions.zoom}
               />
             </div>
             {(meta.viewError !== null || (meta.beats !== null && meta.beats.length === 0)) && (

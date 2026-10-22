@@ -58,7 +58,13 @@ const initial = useMix.getState();
 beforeEach(() => {
   vi.mocked(ipc.mixStart).mockResolvedValue(state([]));
   vi.mocked(ipc.mixControl).mockResolvedValue(undefined);
-  vi.mocked(ipc.mixLoad).mockResolvedValue({ deck: 1, trackId: 7, durationMs: 1, hotCues: [] });
+  vi.mocked(ipc.mixLoad).mockResolvedValue({
+    deck: 1,
+    trackId: 7,
+    durationMs: 1,
+    hotCues: [],
+    memoryCues: [],
+  });
   vi.mocked(ipc.waveformColumns).mockResolvedValue(new ArrayBuffer(0));
   vi.mocked(ipc.beatgridGet).mockRejectedValue("no grid");
 });

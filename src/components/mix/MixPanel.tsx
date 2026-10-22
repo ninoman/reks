@@ -27,6 +27,7 @@ const SHORTCUTS: [string, string][] = [
   ["D / L", "Sync deck 2 / 3"],
   ["Q W / U I", "Nudge slower, faster (hold)"],
   ["1–4 / 7–0", "Hot cues A–D"],
+  ["E R / O P", "Zoom the waveform out, in (or ⌘/Ctrl + scroll on it)"],
   ["Shift + key", "Same on deck 1 / 4"],
   ["Z X C", "Crossfader left, centre, right"],
 ];
