@@ -22,7 +22,7 @@ const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
   deckWaveform: "rgb",
   cacheDir: "/cache",
   anlzPreference: "rekordboxFirst",
-  onelibraryKeySet: false,
+  onelibraryKeyBuiltin: false,
   ui: {
     hiddenColumns: null,
     filterBarOpen: true,

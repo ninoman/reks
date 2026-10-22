@@ -1,7 +1,7 @@
 //! reks OneLibrary (`exportLibrary.db`) export (Phase 4, D14).
 //!
-//! The database is SQLCipher-encrypted with a key supplied at runtime by the
-//! user (setting or `REKS_ONELIBRARY_KEY`); this crate never stores it.
+//! The database is SQLCipher-encrypted with a key the caller passes in
+//! (`REKS_ONELIBRARY_KEY` or the built-in key); this crate never stores it.
 //! [`build::from_pdb`] turns the `export.pdb` just written into rows,
 //! [`schema`] and [`store`] put them into a database, [`reader`] reads one
 //! back, [`writer`] puts it on a stick, [`validate`] and [`diff`] check it.

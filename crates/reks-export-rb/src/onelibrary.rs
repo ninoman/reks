@@ -10,14 +10,14 @@
 //! it to `apply` with the key ([`crate::apply::OneLibraryEnv`]). Tests here
 //! use [`NoWriter`], which plans the file but blocks the export.
 //!
-//! The key comes from [`resolve_key`]: the `setting` table first, then
-//! `REKS_ONELIBRARY_KEY` (Phase 4 key policy). It is never logged and never
-//! part of a plan.
+//! The key comes from [`resolve_key`]: `REKS_ONELIBRARY_KEY`, else the key
+//! built into release builds (Phase 4 key policy). It is never logged and
+//! never part of a plan.
 
 use std::path::{Path, PathBuf};
 
 use reks_core::history::SourceSession;
-use reks_core::{Library, OneLibraryKey};
+use reks_core::OneLibraryKey;
 use serde::{Deserialize, Serialize};
 
 use crate::plan::{on_stick, ExportPlan, FileOp, OpReason, PlanError, Problem, Warning};
@@ -25,7 +25,8 @@ use crate::plan::{on_stick, ExportPlan, FileOp, OpReason, PlanError, Problem, Wa
 /// The OneLibrary database, from the stick root.
 pub const DB_PATH: &str = "/PIONEER/rekordbox/exportLibrary.db";
 
-/// The environment variable read when no key is stored (CI, testing).
+/// The environment variable that overrides the built-in key (CI, testing,
+/// builds from source).
 pub const KEY_ENV: &str = "REKS_ONELIBRARY_KEY";
 
 /// What the OneLibrary step of an export does. Part of the dry run.
@@ -126,18 +127,22 @@ pub enum OneLibraryWriteError {
     },
 }
 
-/// The key the export uses: the stored one, else `REKS_ONELIBRARY_KEY`.
-pub fn resolve_key(lib: &Library) -> Result<Option<OneLibraryKey>, reks_core::Error> {
+/// The key the export uses: `REKS_ONELIBRARY_KEY`, else the built-in one
+/// ([`reks_core::secret::builtin`]).
+pub fn resolve_key() -> Option<OneLibraryKey> {
     let env = std::env::var(KEY_ENV).ok().map(zeroize::Zeroizing::new);
-    Ok(pick_key(
-        lib.onelibrary_key()?,
+    pick_key(
         env.as_deref().map(String::as_str),
-    ))
+        reks_core::secret::builtin::key,
+    )
 }
 
 /// [`resolve_key`]'s order, on values already read.
-pub fn pick_key(stored: Option<OneLibraryKey>, env: Option<&str>) -> Option<OneLibraryKey> {
-    stored.or_else(|| env.and_then(OneLibraryKey::new))
+pub fn pick_key(
+    env: Option<&str>,
+    builtin: impl FnOnce() -> Option<OneLibraryKey>,
+) -> Option<OneLibraryKey> {
+    env.and_then(OneLibraryKey::new).or_else(builtin)
 }
 
 /// rekordbox's files next to `exportLibrary.db` that a new one must not sit
@@ -222,12 +227,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn stored_key_wins_over_the_environment() {
-        let stored = OneLibraryKey::new("stored");
-        assert_eq!(pick_key(stored, Some("env")).unwrap().expose(), "stored");
-        assert_eq!(pick_key(None, Some(" env ")).unwrap().expose(), "env");
-        assert!(pick_key(None, Some("  ")).is_none());
-        assert!(pick_key(None, None).is_none());
+    fn environment_wins_over_the_builtin() {
+        let builtin = || OneLibraryKey::new("builtin");
+        let none = || None;
+        assert_eq!(pick_key(Some(" env "), builtin).unwrap().expose(), "env");
+        assert_eq!(pick_key(Some("  "), builtin).unwrap().expose(), "builtin");
+        assert_eq!(pick_key(None, builtin).unwrap().expose(), "builtin");
+        assert!(pick_key(Some("  "), none).is_none());
+        assert!(pick_key(None, none).is_none());
     }
 
     #[test]

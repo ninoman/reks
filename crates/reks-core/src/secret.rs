@@ -1,16 +1,18 @@
-//! The OneLibrary passphrase (Phase 4 key policy, D14): supplied by the user
-//! at runtime, never committed, never logged.
+//! The OneLibrary passphrase (Phase 4 key policy, D14): built into release
+//! builds ([`builtin`]), or from `REKS_ONELIBRARY_KEY`; never committed,
+//! never logged.
 //!
 //! [`OneLibraryKey`] prints as `<redacted>` in `Debug`, has no `Serialize`
 //! (it can't reach the UI or a JSON plan) and wipes its bytes on drop.
 
+pub mod builtin;
+
 use std::fmt;
 
-use serde::{Deserialize, Deserializer};
 use zeroize::Zeroizing;
 
-/// The `exportLibrary.db` passphrase. Surrounding whitespace is trimmed (it
-/// is pasted); an empty key is not a key ([`Self::new`] returns `None`).
+/// The `exportLibrary.db` passphrase. Surrounding whitespace is trimmed; an
+/// empty key is not a key ([`Self::new`] returns `None`).
 #[derive(Clone, PartialEq, Eq)]
 pub struct OneLibraryKey(Zeroizing<String>);
 
@@ -33,15 +35,6 @@ impl fmt::Debug for OneLibraryKey {
     }
 }
 
-/// From a JSON string; an empty one is refused, so a patch that means "clear
-/// the key" sends `null`.
-impl<'de> Deserialize<'de> for OneLibraryKey {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let raw = Zeroizing::new(String::deserialize(d)?);
-        Self::new(&raw).ok_or_else(|| serde::de::Error::custom("the OneLibrary key is empty"))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,12 +50,5 @@ mod tests {
         let key = OneLibraryKey::new("s3cret").unwrap();
         let shown = format!("{key:?} {:?}", Some(&key));
         assert!(!shown.contains("s3cret"), "{shown}");
-    }
-
-    #[test]
-    fn deserializes_from_a_string() {
-        let key: OneLibraryKey = serde_json::from_str("\" k \"").unwrap();
-        assert_eq!(key.expose(), "k");
-        assert!(serde_json::from_str::<OneLibraryKey>("\"  \"").is_err());
     }
 }

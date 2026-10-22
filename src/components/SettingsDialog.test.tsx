@@ -30,7 +30,7 @@ const settings: Settings = {
   deckWaveform: "rgb",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
-  onelibraryKeySet: false,
+  onelibraryKeyBuiltin: false,
   ui: {
     hiddenColumns: null,
     filterBarOpen: true,
@@ -83,37 +83,16 @@ describe("SettingsDialog", () => {
   it("shows every setting in one view, folders together", async () => {
     await openDialog();
     const groups = screen.getAllByRole("region").map((g) => g.getAttribute("aria-label"));
-    expect(groups).toEqual(["Folders", "Playback", "Display", "Decks", "Experimental"]);
+    expect(groups).toEqual(["Folders", "Playback", "Display", "Decks"]);
     const folders = screen.getByRole("region", { name: "Folders" });
     expect(folders.textContent).toContain("/Music/House");
     expect(folders.textContent).toContain("/Users/dj/Library/Caches/reks");
     expect(screen.queryByRole("tab")).toBeNull();
   });
 
-  it("stores the OneLibrary key without showing it, and removes it", async () => {
+  it("has no OneLibrary key field: release builds have the key built in", async () => {
     await openDialog();
-    const group = screen.getByRole("region", { name: "Experimental" });
-    expect(group.textContent).toContain("experimental");
-    expect(group.textContent).toContain("AlphaTheta does not support it");
-    expect(group.textContent).toContain("reks does not include it");
-    expect(group.textContent).toContain("REKS_ONELIBRARY_KEY");
-    expect(screen.getByText("No key stored.")).toBeTruthy();
-
-    const input = screen.getByLabelText("OneLibrary key") as HTMLInputElement;
-    expect(input.type).toBe("password");
-    const save = screen.getByRole("button", { name: "Save" }) as HTMLButtonElement;
-    expect(save.disabled).toBe(true);
-    vi.mocked(ipc.settingsSet).mockResolvedValueOnce({ ...settings, onelibraryKeySet: true });
-    fireEvent.change(input, { target: { value: "  s3cret  " } });
-    fireEvent.click(save);
-    await screen.findByText("A key is stored.");
-    expect(ipc.settingsSet).toHaveBeenCalledWith({ onelibraryKey: "s3cret" });
-    expect(input.value).toBe("");
-
-    vi.mocked(ipc.settingsSet).mockResolvedValueOnce({ ...settings, onelibraryKeySet: false });
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-    await screen.findByText("No key stored.");
-    expect(ipc.settingsSet).toHaveBeenLastCalledWith({ onelibraryKey: null });
+    expect(screen.queryByLabelText("OneLibrary key")).toBeNull();
   });
 
   it("stores the key notation", async () => {

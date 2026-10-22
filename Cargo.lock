@@ -3971,7 +3971,6 @@ dependencies = [
  "signalsmith-stretch",
  "tempfile",
  "timestretch",
- "zeroize",
 ]
 
 [[package]]
