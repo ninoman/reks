@@ -1018,6 +1018,20 @@ Date of decisions: 2026-10-18.
   and synthetic PDBs; a stick written by a player's history logging is
   **UNVERIFIED** beyond the history tests.
 
+## D33. Progress tracking: GitHub Project next to the phase docs
+
+- Date: 2026-10-23 (maintainer's request).
+- Decision: the phase docs stay the plan of record (scope, design, task
+  checklists). The [reks roadmap](https://github.com/users/ninoman/projects/1)
+  Project tracks only what is open: one issue per open task, a milestone per
+  phase, `area:*` labels, and Priority, Status and Hardware fields. Each open
+  checklist item links its issue; the PR that ticks the box closes the issue
+  (`Closes #N`, see the PR template). Finished work is not back-filled as
+  issues. `needs-hw-test` issues close only with a logged result in
+  `docs/hw-test-log.md`.
+- Why: the docs carry the design and are what coding sessions read; the
+  board gives a cross-phase view of what is left without copying the plan.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

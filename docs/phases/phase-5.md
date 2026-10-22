@@ -212,7 +212,7 @@ pub enum Control {
    picks 3-band, RGB or Blue for the deck waveforms and overviews, applied
    live ([`../ui.md`](../ui.md#mix-panel-phase-5); `display.deck_waveform`
    in `reks-core` `settings.rs`). Verified in the browser with the dev mock.
-10. **Key lock evaluation**: listen to `timestretch`, `signalsmith-stretch` and
+10. **Key lock evaluation** ([#25](https://github.com/ninoman/reks/issues/25)): listen to `timestretch`, `signalsmith-stretch` and
     `rubberband` at ±6% on three techno tracks and one vocal track; record the
     choice in D21; add it as a per-deck toggle, or record why not.
     Partial (2026-10-21): research and render tool done, listening pending.
@@ -286,7 +286,7 @@ pub enum Control {
     | vocal 1 | rubberband-r2 | | | |
 
     Listener, date, headphones/speakers: _______. Choice: pending (D21).
-11. **Listening checklist** below, run and logged.
+11. **Listening checklist** below, run and logged ([#26](https://github.com/ninoman/reks/issues/26)).
 12. [x] **Deck refinements** (maintainer review of tasks 8–9, 2026-10-21):
     - Tempo ranges ±6, ±10, ±16 and WIDE (±100%), CDJ-3000; ±10 is the
       default, as on the CDJ. The engine takes tempo 0–2 (`TEMPO_MIN`/`MAX`);

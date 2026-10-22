@@ -1,0 +1,21 @@
+name: Feature or task
+description: A phase task or new feature.
+labels: ["enhancement"]
+projects: ["ninoman/1"]
+body:
+  - type: input
+    id: phase
+    attributes:
+      label: Phase doc and task
+      description: The plan of record, e.g. docs/phases/phase-3.md task 14. Leave empty for work outside the phase plan.
+  - type: textarea
+    id: what
+    attributes:
+      label: What and why
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Tests, docs and (if it touches the stick) the hardware check that close it.
