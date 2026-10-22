@@ -756,8 +756,8 @@ export interface Settings {
   ui: UiState;
   /** Whose analysis a USB export writes when rekordbox and reks both have a track. */
   anlzPreference: AnlzPreference;
-  /** A OneLibrary key is stored; the key itself never leaves Rust. */
-  onelibraryKeySet: boolean;
+  /** This build has the OneLibrary key built in; the key itself never leaves Rust. */
+  onelibraryKeyBuiltin: boolean;
 }
 
 /** Absent fields stay; `audioDevice: null` goes back to the system default. */
@@ -766,8 +766,6 @@ export interface SettingsPatch {
   keyNotation?: KeyNotation;
   ui?: UiState;
   anlzPreference?: AnlzPreference;
-  /** Stores the OneLibrary key (Settings → Experimental); `null` removes it. Never empty. */
-  onelibraryKey?: string | null;
 }
 
 export interface LibraryRoot {

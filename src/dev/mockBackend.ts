@@ -219,7 +219,8 @@ let settings: Settings = {
   keyNotation: "classical",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
-  onelibraryKeySet: false,
+  // Like a release build.
+  onelibraryKeyBuiltin: true,
   ui: {
     hiddenColumns: null,
     filterBarOpen: true,
@@ -737,11 +738,11 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
     });
   }
   // The OneLibrary step (phase 4 task 8): blocked only without the key.
-  if (opts.onelibrary && !settings.onelibraryKeySet) {
+  if (opts.onelibrary && !settings.onelibraryKeyBuiltin) {
     problems.push({
       kind: "oneLibraryKeyMissing",
       title:
-        "The OneLibrary export needs its key: paste it in Settings → Experimental or set REKS_ONELIBRARY_KEY.",
+        "This build of reks has no OneLibrary key built in: use a release build or set REKS_ONELIBRARY_KEY.",
       items: [],
     });
   }
@@ -876,7 +877,7 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
         : []),
     ],
     onelibrary:
-      opts.onelibrary && settings.onelibraryKeySet
+      opts.onelibrary && settings.onelibraryKeyBuiltin
         ? {
             title: "OneLibrary (experimental)",
             text: "Also writes exportLibrary.db for players that read OneLibrary, next to the Device Library. No player has been tested with it, and AlphaTheta does not support it. It replaces the exportLibrary.db already on the stick.",
@@ -1026,13 +1027,9 @@ mockIPC((cmd, payload) => {
       return mutate(args.op as PlaylistOp);
     case "settings_get":
       return settings;
-    case "settings_set": {
-      // Like Rust: the key is stored, never echoed back.
-      const { onelibraryKey, ...patch } = args.patch as SettingsPatch;
-      settings = { ...settings, ...patch };
-      if (onelibraryKey !== undefined) settings.onelibraryKeySet = onelibraryKey !== null;
+    case "settings_set":
+      settings = { ...settings, ...(args.patch as SettingsPatch) };
       return settings;
-    }
     case "library_roots":
       return [{ id: 1, path: "/Users/dj/Music", lastScan: "2026-10-18T19:48:00Z" }];
     case "player_devices":

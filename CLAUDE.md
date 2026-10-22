@@ -41,8 +41,9 @@ is the worst possible bug; correctness and conservative defaults beat features.
   the allowlist only with a note in `docs/decisions.md`.
 - Never copy code from unlicensed repos (e.g. `rex`, `djbooth`) even as "reference".
   Reading format documentation is fine; copying code is not.
-- Do not commit any decryption key or passphrase for vendor databases. See
-  Phase 4 for the OneLibrary key policy.
+- Do not commit any decryption key or passphrase for vendor databases. The
+  OneLibrary key reaches release builds only from a CI secret; see the Phase 4
+  key policy.
 
 ## Repo structure (target)
 

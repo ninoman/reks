@@ -408,7 +408,7 @@ function OptionRow({
 
 function OptionsStep() {
   const o = useExportWizard((s) => s.options);
-  const keySet = useSettings((s) => s.settings?.onelibraryKeySet ?? false);
+  const keyBuiltin = useSettings((s) => s.settings?.onelibraryKeyBuiltin ?? false);
   const set = (patch: Partial<ExportOptions>) => useExportWizard.getState().setOptions(patch);
   return (
     <Card>
@@ -506,7 +506,9 @@ function OptionsStep() {
       <OptionRow
         title="OneLibrary"
         hint={`Also write exportLibrary.db, the library newer players read. Not tested on any player and not supported by AlphaTheta.${
-          keySet ? "" : " Needs the key: add it in Settings → Experimental."
+          keyBuiltin
+            ? ""
+            : " This build of reks has no OneLibrary key: use a release build or set REKS_ONELIBRARY_KEY."
         }`}
         badge={
           <Badge variant="muted" title="Experimental: not tested on any player">

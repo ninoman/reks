@@ -58,7 +58,7 @@ pub fn plan_at(
     let locator = CacheLocator::for_selection(lib, sel, cache)?;
     let mut plan = plan::plan(lib, sel, &dev, opts, &locator)?;
     if opts.onelibrary {
-        let key = one::resolve_key(lib)?;
+        let key = one::resolve_key();
         plan::plan_onelibrary(&mut plan, onelibrary, key.as_ref(), lib)?;
     }
     Ok(plan)

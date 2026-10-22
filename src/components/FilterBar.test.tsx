@@ -16,7 +16,7 @@ function notation(keyNotation: "classical" | "camelot" | "openKey") {
       keyNotation,
       cacheDir: "/cache",
       anlzPreference: "rekordboxFirst",
-      onelibraryKeySet: false,
+      onelibraryKeyBuiltin: false,
       ui: {
         hiddenColumns: null,
         filterBarOpen: true,

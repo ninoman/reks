@@ -20,7 +20,7 @@ const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
   keyNotation: "camelot",
   cacheDir: "/cache",
   anlzPreference: "rekordboxFirst",
-  onelibraryKeySet: false,
+  onelibraryKeyBuiltin: false,
   ui: {
     hiddenColumns: null,
     filterBarOpen: true,

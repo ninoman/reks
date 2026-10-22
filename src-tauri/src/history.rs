@@ -130,7 +130,7 @@ pub async fn history_scan(
     let read_src = src.clone();
     let (plan, onelibrary) =
         tauri::async_runtime::spawn_blocking(move || -> Result<_, CmdError> {
-            let key = resolve_key(&lib)?;
+            let key = resolve_key();
             let (read, onelibrary) = read_both(
                 &read_src,
                 &HistoryReadOptions {
