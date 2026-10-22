@@ -488,7 +488,7 @@ describe("mix store", () => {
     ];
     useMix.setState({ live: { ...running, decks } });
     vi.mocked(ipc.mixControl).mockClear();
-    await useMix.getState().setDevice("Interface");
+    await useMix.getState().setOutput({ device: "Interface" });
     expect(ipc.mixStart).toHaveBeenCalledTimes(2);
     expect(vi.mocked(ipc.mixStart).mock.lastCall?.[0].device).toBe("Interface");
     expect(libraryId(useMix.getState().decks[1]?.track)).toBe(9);
@@ -503,7 +503,7 @@ describe("mix store", () => {
 
   it("a new device while the output is off only changes the config", async () => {
     vi.mocked(ipc.mixDeviceOptions).mockResolvedValue(options(2));
-    await useMix.getState().setDevice("Interface");
+    await useMix.getState().setOutput({ device: "Interface" });
     expect(useMix.getState().config.device).toBe("Interface");
     expect(ipc.mixStart).not.toHaveBeenCalled();
   });

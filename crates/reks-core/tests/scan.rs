@@ -1,5 +1,5 @@
 //! Folder-scan scenarios on a temp dir: add, rescan, modify, move, delete,
-//! restore, cancel, unplugged root, NFC names.
+//! restore, cancel, unplugged root, NFC names, artwork re-extraction.
 
 // Test helpers outside `#[test]` fns are not covered by clippy's allow-unwrap-in-tests.
 #![allow(clippy::unwrap_used)]
@@ -9,7 +9,8 @@ use std::path::{Path, PathBuf};
 
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
-use lofty::tag::{Accessor, Tag};
+use lofty::picture::{MimeType, Picture, PictureType};
+use lofty::tag::{Accessor, Tag, TagExt};
 use reks_core::{scan, CancelToken, Library, ScanEvent, ScanReport};
 use rusqlite::Connection;
 
@@ -302,4 +303,55 @@ fn decomposed_names_are_stored_nfc_on_macos() {
     let (_, path, _) = env.track(".wav");
     assert!(path.ends_with("Caf\u{e9}.wav"), "{path:?}");
     assert!(Path::new(&path).exists());
+}
+
+/// Embeds `cover` as the front cover of `path`.
+fn embed_cover(path: &Path, cover: &[u8]) {
+    let mut file = lofty::read_from_path(path).unwrap();
+    let tag = file.primary_tag_mut().unwrap();
+    tag.remove_picture_type(PictureType::CoverFront);
+    tag.push_picture(
+        Picture::unchecked(cover.to_vec())
+            .pic_type(PictureType::CoverFront)
+            .mime_type(MimeType::Jpeg)
+            .build(),
+    );
+    tag.save_to_path(path, WriteOptions::default()).unwrap();
+}
+
+#[test]
+fn missing_artwork_file_is_reextracted_on_read() {
+    // JPEG header up to a 3×2 SOF0 frame.
+    const COVER: &[u8] = &[
+        0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x02, 0x00, 0x03, 0x01, 0x01, 0x11, 0x00,
+        0xFF, 0xD9,
+    ];
+    let env = Env::new();
+    let path = env.add_fixture("flac", "set/art.flac");
+    embed_cover(&path, COVER);
+    env.scan();
+    let (id, _, _) = env.track("art.flac");
+    let art: i64 = env
+        .db()
+        .query_row("SELECT artwork_id FROM track WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    let cached = env.lib.artwork_path(art).unwrap().unwrap();
+
+    // A wiped cache: the read rewrites the file from the audio file.
+    std::fs::remove_dir_all(env.lib.cache_dir()).unwrap();
+    assert_eq!(env.lib.artwork(art).unwrap(), COVER);
+    assert_eq!(std::fs::read(&cached).unwrap(), COVER);
+
+    // A cover changed since the scan is not this picture: still an error.
+    std::fs::remove_file(&cached).unwrap();
+    let mut other = COVER.to_vec();
+    other[8] = 0x04;
+    embed_cover(&path, &other);
+    assert!(matches!(
+        env.lib.artwork(art),
+        Err(reks_core::Error::Io { .. })
+    ));
+    assert!(!cached.exists());
 }

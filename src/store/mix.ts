@@ -107,7 +107,7 @@ export function sameTrack(a: TrackRef | null | undefined, b: TrackRef | null | u
 const STICK_CUES_READ_ONLY = "The cues of a track on a stick can't be changed here.";
 
 /** Pad modes with pages of sizes. */
-export type PagedPadMode = Exclude<PadMode, "hotCue">;
+export type PagedPadMode = Exclude<PadMode, "hotCue" | "memory">;
 
 /** What the UI knows about a deck beyond the engine state. */
 export interface DeckMeta {
@@ -194,10 +194,10 @@ export interface MixStore {
   loadDevices: () => Promise<void>;
   setConfig: (patch: Partial<MixConfig>) => Promise<void>;
   /**
-   * Picks the output device (`null`: system default). A running output
-   * reopens on it with the loaded tracks back where they were.
+   * Changes how the output opens (device, rate, buffer, cue). A running
+   * output reopens with the loaded tracks back where they were.
    */
-  setDevice: (device: string | null) => Promise<void>;
+  setOutput: (patch: Partial<MixConfig>) => Promise<void>;
   start: () => Promise<boolean>;
   stop: () => Promise<void>;
   setDeckCount: (n: 2 | 4) => void;
@@ -523,9 +523,11 @@ export const useMix = create<MixStore>((set, get) => {
       }
     },
 
-    async setDevice(device) {
+    async setOutput(patch) {
       const s = get();
-      if (device === s.config.device) return;
+      const before = JSON.stringify(s.config);
+      await get().setConfig(patch);
+      if (JSON.stringify(get().config) === before) return;
       const resume: DeckResume[] = [];
       if (s.status === "running") {
         s.decks.forEach((meta, deck) => {
@@ -535,7 +537,6 @@ export const useMix = create<MixStore>((set, get) => {
           resume.push({ deck, track: meta.track, positionMs, playing, tempo });
         });
       }
-      await get().setConfig({ device });
       if (s.status !== "running") return;
       if (!(await get().start())) return;
       for (const r of resume) {

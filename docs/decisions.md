@@ -920,14 +920,26 @@ Date of decisions: 2026-10-18.
   (`PLAYER_DECK`, [`src/store/player.ts`](../src/store/player.ts)), one of the
   two decks the Mix panel shows by default. Double-click, Enter, Space and the
   history view play on it; it opens the output when it is off, with the saved
-  device (`audio.device`) and the start form's other choices. With the Mix
-  panel off, the bottom of the window shows that deck alone in the deck
+  output settings (`audio.*`, Settings → Playback). With the Mix
+  panel off, the window shows that deck alone in the deck
   design (scrolling and overview waveform, cue, hot cues, nudge, quantise,
   tempo fader; no sync controls) under a header row with the volume
   (`MixControl::Volume`, `ui.state.volume`), the output device and the Mix
   toggle. Changing the device reopens the output and puts each loaded deck
   back at its position, tempo and play state. The deck waveform style
   defaults to RGB (was 3-band).
+- Layout: changed 2026-10-22 (maintainer's call). The deck section (header
+  row, then the player deck or the Mix panel) sits above the library under
+  the app header, as in rekordbox and Traktor (was: along the bottom). One
+  switch, 1 deck / 2 decks / 4 decks, replaces the Mix toggle and the Mix
+  panel's own deck-count switch; the panel's status line and controls moved
+  into the header row, with Start / Stop output. The Mix panel's start form
+  is gone: the decks and mixer show with the output off, and sample rate,
+  buffer and headphone cue are saved settings (`audio.sample_rate`,
+  `audio.buffer_frames`, `audio.cue`) in Settings → Playback beside the
+  device (they were per session). The player deck alone is laid out flat
+  (CUE / PLAY and pads beside the waveforms), 162 px tall instead of 248. See
+  [`ui.md`](ui.md#player-d30).
 - Removed: the `player_*` commands, `overview_waveform` and the app's
   `reks_mix::Player` (the type stays for `reks-cli play`). The device list
   is `audio_devices`.

@@ -878,6 +878,12 @@ export interface UiState {
 export interface Settings {
   /** `null`: the system default. */
   audioDevice: string | null;
+  /** `null`: 44.1 kHz when offered, else the device's default. */
+  audioSampleRate: number | null;
+  /** `null`: the device's default buffer. */
+  audioBufferFrames: number | null;
+  /** `null` until the user picks one: each device gets its own default. */
+  audioCue: CueRouting | null;
   keyNotation: KeyNotation;
   deckWaveform: DeckWaveform;
   syncAlign: SyncAlign;
@@ -890,9 +896,12 @@ export interface Settings {
   onelibraryKeyBuiltin: boolean;
 }
 
-/** Absent fields stay; `audioDevice: null` goes back to the system default. */
+/** Absent fields stay; `null` goes back to the default (system device, automatic rate, device buffer). */
 export interface SettingsPatch {
   audioDevice?: string | null;
+  audioSampleRate?: number | null;
+  audioBufferFrames?: number | null;
+  audioCue?: CueRouting;
   keyNotation?: KeyNotation;
   deckWaveform?: DeckWaveform;
   syncAlign?: SyncAlign;

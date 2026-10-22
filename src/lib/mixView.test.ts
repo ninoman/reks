@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CueRouting } from "./ipc";
+import type { CueRouting, MixState } from "./ipc";
 import {
   cueFits,
   deckSide,
@@ -12,6 +12,7 @@ import {
   loopPadControls,
   nextPadMode,
   nextTempoRange,
+  outputSummary,
   phaseOffset,
   pickSwitches,
   scrubTarget,
@@ -77,6 +78,16 @@ describe("formatClock", () => {
   });
 });
 
+describe("outputSummary", () => {
+  const live = { device: "Speakers", sampleRate: 44_100, bufferFrames: 256, xruns: 0 } as MixState;
+  it("lists device, rate and buffer, and dropouts only when there are any", () => {
+    expect(outputSummary(live)).toBe("Speakers · 44.1 kHz · 256 frames");
+    expect(outputSummary({ ...live, bufferFrames: null, xruns: 3 })).toBe(
+      "Speakers · 44.1 kHz · 3 dropouts",
+    );
+  });
+});
+
 describe("cueFits", () => {
   it("matches the outputs a routing needs", () => {
     const outputs: CueRouting = { type: "outputs", master: [0, 1], cue: [2, 3] };
@@ -133,7 +144,8 @@ describe("scrubTarget", () => {
 
 describe("pads", () => {
   it("cycle HOT CUE, BEAT JUMP, BEAT LOOP", () => {
-    expect(nextPadMode("hotCue")).toBe("beatJump");
+    expect(nextPadMode("hotCue")).toBe("memory");
+    expect(nextPadMode("memory")).toBe("beatJump");
     expect(nextPadMode("beatJump")).toBe("beatLoop");
     expect(nextPadMode("beatLoop")).toBe("hotCue");
   });

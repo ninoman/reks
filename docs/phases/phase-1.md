@@ -346,7 +346,7 @@ Notes (task 9, [`track.rs`](../../crates/reks-core/src/track.rs), [`TrackDetailP
   nothing. The 0001 `track_fts_au` trigger re-indexes FTS when a searched column changes.
 - `artwork_get(artwork_id)` returns the cached image as raw bytes (`ipc::Response`). The UI
   shows it through a Blob URL with `artwork.mime`, and shows a placeholder when there is
-  no artwork or the cache file is gone.
+  no artwork or the cache file is gone and cannot be re-extracted.
 - UI: the panel follows the primary selected row (`primaryIndex`: the focused row if it is
   selected, else the lowest selected one), so with several rows selected it shows one track.
   Bulk edit is not built yet. Save sends only the changed fields; Revert or Esc resets.
@@ -442,7 +442,8 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
 
 ### Settings (`reks-core::settings`, task 13)
 
-- One `setting` row per key, value JSON: `audio.device` (name, absent = system default),
+- One `setting` row per key, value JSON: `audio.device` (name, absent = system default;
+  Phase 5 adds `audio.sample_rate`, `audio.buffer_frames`, `audio.cue`),
   `display.key_notation` (`classical` default, `camelot`, `openKey`), `display.deck_waveform`
   (Phase 5: `rgb` default since D30, `threeBand`, `blue`), `storage.cache_dir`
   (absent = `app_cache_dir`), `ui.state` (hidden columns, filter bar shown, filters on, track
@@ -462,7 +463,8 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
 - Window state is saved 300 ms after the last change (`startUiSync`) and restored before the
   table shows; window size and position are task 14 (window-state plugin, below).
 - UI: Settings dialog (header gear button, Cmd/Ctrl+,), one view in titled groups: Folders
-  (library folders, cache folder), Playback (output device), Display (key notation), Decks
+  (library folders, cache folder), Playback (output device; Phase 5: sample rate, buffer,
+  headphone cue), Display (key notation), Decks
   (Mix view waveform style, Phase 5), Experimental (OneLibrary key, Phase 4). A stored
   device that is not connected stays listed as such.
 - Covered by reks-core and Vitest tests; the dialog was reviewed in `cargo tauri dev`.
@@ -524,7 +526,9 @@ Notes (task 4, [`reks-audio`](../../crates/reks-audio/src/))
   tag frame rekordbox reads "Mix" from is UNVERIFIED.
 - Artwork: `Library::store_artwork` (`reks-core`) sniffs the bytes, de-dups by
   SHA-256 into `<cache_dir>/artwork/<sha256>.<ext>`, and stores `blob_path`
-  relative to the cache dir. A deleted cache file is rewritten on the next store.
+  relative to the cache dir. A deleted cache file is re-extracted on read from a
+  track that uses it (only bytes matching the stored SHA-256), or rewritten on the
+  next store.
 
 Scan rules (task 5, [`scan.rs`](../../crates/reks-core/src/scan.rs))
 - Picks up `mp3 m4a aac flac wav wave aif aiff`; skips dot-files and

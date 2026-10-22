@@ -3,7 +3,8 @@
 //!
 //! Each setting is one row whose value is JSON. A missing or unreadable value
 //! means the default (an unreadable one is logged), so a bad row never stops
-//! the app. Keys: [`AUDIO_DEVICE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`SYNC_ALIGN`],
+//! the app. Keys: [`AUDIO_DEVICE`], [`AUDIO_SAMPLE_RATE`],
+//! [`AUDIO_BUFFER_FRAMES`], [`AUDIO_CUE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`SYNC_ALIGN`],
 //! [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`].
 
 use std::path::{Path, PathBuf};
@@ -20,6 +21,12 @@ use crate::Library;
 
 /// Output device name; absent = the system default.
 pub const AUDIO_DEVICE: &str = "audio.device";
+/// Output sample rate in Hz; absent = 44.1 kHz when offered, else the device's default.
+pub const AUDIO_SAMPLE_RATE: &str = "audio.sample_rate";
+/// Output buffer in frames; absent = the device's default.
+pub const AUDIO_BUFFER_FRAMES: &str = "audio.buffer_frames";
+/// [`CueRouting`] for the headphone cue; absent = the device's own default.
+pub const AUDIO_CUE: &str = "audio.cue";
 /// [`KeyNotation`] for the table, track info and key picker.
 pub const KEY_NOTATION: &str = "display.key_notation";
 /// [`DeckWaveform`]: how the Mix view's deck waveforms are drawn.
@@ -70,6 +77,20 @@ pub enum DeckWaveform {
     Blue,
 }
 
+/// Where the mixer's headphone cue goes, as saved. The same shape as the
+/// UI's `CueRouting` and src-tauri's `CueRoutingArg` (which maps it onto
+/// `reks_mix::CueRouting`); reks-core does not depend on reks-mix.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum CueRouting {
+    /// Master only.
+    Off,
+    /// Cue in the left ear, master (mono) in the right.
+    SplitMono,
+    /// 0-based output channels for the master and the cue.
+    Outputs { master: [u16; 2], cue: [u16; 2] },
+}
+
 /// What SYNC lines up with the master besides the tempo (phase 5 task 16;
 /// replaces the deck's BAR button).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +109,10 @@ pub enum SyncAlign {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub audio_device: Option<String>,
+    pub audio_sample_rate: Option<u32>,
+    pub audio_buffer_frames: Option<u32>,
+    /// `None` until the user picks one: each device gets its own default.
+    pub audio_cue: Option<CueRouting>,
     pub key_notation: KeyNotation,
     pub deck_waveform: DeckWaveform,
     pub sync_align: SyncAlign,
@@ -132,6 +157,13 @@ pub struct SettingsPatch {
     /// `Some(None)` (JSON `null`) goes back to the system default.
     #[serde(default, deserialize_with = "present")]
     pub audio_device: Option<Option<String>>,
+    /// `Some(None)` goes back to automatic.
+    #[serde(default, deserialize_with = "present")]
+    pub audio_sample_rate: Option<Option<u32>>,
+    /// `Some(None)` goes back to the device's default.
+    #[serde(default, deserialize_with = "present")]
+    pub audio_buffer_frames: Option<Option<u32>>,
+    pub audio_cue: Option<CueRouting>,
     pub key_notation: Option<KeyNotation>,
     pub deck_waveform: Option<DeckWaveform>,
     pub sync_align: Option<SyncAlign>,
@@ -164,6 +196,9 @@ impl Library {
         let conn = self.conn()?;
         Ok(Settings {
             audio_device: get(&conn, AUDIO_DEVICE)?,
+            audio_sample_rate: get(&conn, AUDIO_SAMPLE_RATE)?,
+            audio_buffer_frames: get(&conn, AUDIO_BUFFER_FRAMES)?,
+            audio_cue: get(&conn, AUDIO_CUE)?,
             key_notation: get(&conn, KEY_NOTATION)?.unwrap_or_default(),
             deck_waveform: get(&conn, DECK_WAVEFORM)?.unwrap_or_default(),
             sync_align: get(&conn, SYNC_ALIGN)?.unwrap_or_default(),
@@ -181,6 +216,15 @@ impl Library {
             let tx = conn.transaction()?;
             if let Some(device) = patch.audio_device {
                 put(&tx, AUDIO_DEVICE, device.as_ref())?;
+            }
+            if let Some(rate) = patch.audio_sample_rate {
+                put(&tx, AUDIO_SAMPLE_RATE, rate.as_ref())?;
+            }
+            if let Some(frames) = patch.audio_buffer_frames {
+                put(&tx, AUDIO_BUFFER_FRAMES, frames.as_ref())?;
+            }
+            if let Some(cue) = patch.audio_cue {
+                put(&tx, AUDIO_CUE, Some(&cue))?;
             }
             if let Some(n) = patch.key_notation {
                 put(&tx, KEY_NOTATION, Some(&n))?;
@@ -495,6 +539,9 @@ mod tests {
         let (dir, lib) = open_temp();
         let s = lib.settings().unwrap();
         assert_eq!(s.audio_device, None);
+        assert_eq!(s.audio_sample_rate, None);
+        assert_eq!(s.audio_buffer_frames, None);
+        assert_eq!(s.audio_cue, None);
         assert_eq!(s.key_notation, KeyNotation::Classical);
         assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
         assert_eq!(s.sync_align, SyncAlign::Bar);
@@ -515,6 +562,12 @@ mod tests {
         };
         lib.update_settings(SettingsPatch {
             audio_device: Some(Some("Speakers".into())),
+            audio_sample_rate: Some(Some(48_000)),
+            audio_buffer_frames: Some(Some(256)),
+            audio_cue: Some(CueRouting::Outputs {
+                master: [0, 1],
+                cue: [2, 3],
+            }),
             key_notation: Some(KeyNotation::Camelot),
             deck_waveform: Some(DeckWaveform::ThreeBand),
             sync_align: Some(SyncAlign::Beat),
@@ -529,6 +582,15 @@ mod tests {
             })
             .unwrap();
         assert_eq!(s.audio_device.as_deref(), Some("Speakers"));
+        assert_eq!(s.audio_sample_rate, Some(48_000));
+        assert_eq!(s.audio_buffer_frames, Some(256));
+        assert_eq!(
+            s.audio_cue,
+            Some(CueRouting::Outputs {
+                master: [0, 1],
+                cue: [2, 3]
+            })
+        );
         assert_eq!(s.key_notation, KeyNotation::OpenKey);
         assert_eq!(s.deck_waveform, DeckWaveform::ThreeBand);
         assert_eq!(s.sync_align, SyncAlign::Beat);
@@ -539,10 +601,15 @@ mod tests {
         let s = lib
             .update_settings(SettingsPatch {
                 audio_device: Some(None),
+                audio_sample_rate: Some(None),
+                audio_buffer_frames: Some(None),
                 ..Default::default()
             })
             .unwrap();
         assert_eq!(s.audio_device, None);
+        assert_eq!(s.audio_sample_rate, None);
+        assert_eq!(s.audio_buffer_frames, None);
+        assert!(s.audio_cue.is_some());
     }
 
     #[test]
@@ -560,6 +627,23 @@ mod tests {
         assert_eq!(p.deck_waveform, Some(DeckWaveform::Blue));
         let p: SettingsPatch = serde_json::from_str(r#"{"syncAlign":"beat"}"#).unwrap();
         assert_eq!(p.sync_align, Some(SyncAlign::Beat));
+        let p: SettingsPatch =
+            serde_json::from_str(r#"{"audioSampleRate":null,"audioBufferFrames":512}"#).unwrap();
+        assert_eq!(p.audio_sample_rate, Some(None));
+        assert_eq!(p.audio_buffer_frames, Some(Some(512)));
+        let p: SettingsPatch =
+            serde_json::from_str(r#"{"audioCue":{"type":"outputs","master":[0,1],"cue":[2,3]}}"#)
+                .unwrap();
+        assert_eq!(
+            p.audio_cue,
+            Some(CueRouting::Outputs {
+                master: [0, 1],
+                cue: [2, 3]
+            })
+        );
+        let p: SettingsPatch =
+            serde_json::from_str(r#"{"audioCue":{"type":"splitMono"}}"#).unwrap();
+        assert_eq!(p.audio_cue, Some(CueRouting::SplitMono));
     }
 
     #[test]

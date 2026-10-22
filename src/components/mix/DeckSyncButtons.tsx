@@ -1,13 +1,11 @@
 /**
  * MASTER (lit while this deck is the sync master; a click takes master) and
- * SYNC. Both need a grid. The player deck alone (`solo`) keeps their space
- * empty, so nothing shifts.
+ * SYNC. Both need a grid. The player deck alone has neither.
  */
 import { Button } from "../ui/Button";
 
 export interface DeckSyncButtonsProps {
   deck: number;
-  solo: boolean;
   /** Loaded with a grid the engine has. */
   ready: boolean;
   master: boolean;
@@ -20,7 +18,6 @@ export interface DeckSyncButtonsProps {
 
 export function DeckSyncButtons({
   deck,
-  solo,
   ready,
   master,
   sync,
@@ -30,9 +27,8 @@ export function DeckSyncButtons({
   onSync,
 }: DeckSyncButtonsProps) {
   const n = deck + 1;
-  if (solo) return <div className="w-(--deck-sync-w) shrink-0" aria-hidden="true" />;
   return (
-    <div className="ml-auto flex w-(--deck-sync-w) shrink-0 flex-col justify-center gap-2">
+    <div className="ml-auto flex w-(--deck-sync-w) shrink-0 flex-col justify-end gap-2">
       <Button
         size="md"
         variant="control"

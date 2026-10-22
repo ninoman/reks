@@ -18,6 +18,9 @@ const { startUiSync, UI_SAVE_MS, useSettings } = await import("./settings");
 
 const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
   audioDevice: null,
+  audioSampleRate: null,
+  audioBufferFrames: null,
+  audioCue: null,
   keyNotation: "camelot",
   deckWaveform: "rgb",
   syncAlign: "bar",
