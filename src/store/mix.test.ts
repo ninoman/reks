@@ -314,8 +314,8 @@ describe("mix store", () => {
     const after = {
       hotCues: [hot, { ...hot, id: 2, slot: 1, positionMs: 5_000 }],
       memoryCues: [
-        { id: 3, positionMs: 1_000, colorRgb: null, name: null },
-        { id: 4, positionMs: 9_000, colorRgb: null, name: "Out" },
+        { id: 3, positionMs: 1_000, endMs: null, activeLoop: false, colorRgb: null, name: null },
+        { id: 4, positionMs: 9_000, endMs: null, activeLoop: false, colorRgb: null, name: "Out" },
       ],
     };
     vi.mocked(ipc.mixCueEdit).mockResolvedValue(after);

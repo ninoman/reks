@@ -254,7 +254,6 @@ describe("useExportWizard", () => {
       keyNotation: "classical",
       deckWaveform: "threeBand",
       syncAlign: "bar",
-      autoCue: true,
       cacheDir: "/cache",
       ui: {
         hiddenColumns: null,

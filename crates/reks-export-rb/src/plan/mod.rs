@@ -130,6 +130,12 @@ pub struct ExportOptions {
     /// ([`plan_onelibrary`]). Off by default; experimental and UNVERIFIED
     /// on players until a Phase 4 hardware test passes.
     pub onelibrary: bool,
+    /// The `export.active_loops` flag: the earliest memory loop marked
+    /// active in the library (task 17) goes to the stick as the track's
+    /// active loop (`PCPT` status 4, through baken's XML marker,
+    /// [`reks_core::rbxml::ActiveLoops::BakenMarker`]). Off by default and
+    /// UNVERIFIED until a player enters it in a hardware test.
+    pub active_loops: bool,
 }
 
 impl Default for ExportOptions {
@@ -146,6 +152,7 @@ impl Default for ExportOptions {
             dividers: false,
             anlz_preference: AnlzPreference::RekordboxFirst,
             onelibrary: false,
+            active_loops: false,
         }
     }
 }

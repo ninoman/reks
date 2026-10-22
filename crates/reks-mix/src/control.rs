@@ -58,6 +58,16 @@ pub enum Control {
         slot: u8,
         frame: Option<i64>,
     },
+    /// Sets active memory loop slot `index` (0..[`crate::AUTO_LOOP_SLOTS`])
+    /// of the loaded track to `(start, end)` frames, or clears it: the app
+    /// sends every slot after an edit. Playback enters an active loop by
+    /// itself when the head reaches its start. Ignored while a load is
+    /// pending (the new track brings its own).
+    AutoLoop {
+        deck: u8,
+        index: u8,
+        region: Option<(i64, i64)>,
+    },
     /// Memory cue call: the cue point and the head move to `frame` exactly
     /// (no quantise); a playing deck plays on from there. UNVERIFIED against
     /// a CDJ's CALL buttons; this is rekordbox's memory cue list.
@@ -164,6 +174,7 @@ impl Control {
             | Self::HotCue { deck, .. }
             | Self::SetHotCue { deck, .. }
             | Self::CallCue { deck, .. }
+            | Self::AutoLoop { deck, .. }
             | Self::Tempo { deck, .. }
             | Self::Nudge { deck, .. }
             | Self::Sync { deck, .. }

@@ -7,8 +7,9 @@
  * The master is handed on as in the engine (a playing synced deck takes it
  * at its tempo when the master stops); beat jumps and loops use the grid.
  * Cues live per track for the session, as the library keeps them: edits
- * (`mix_cue_edit`) set, rename and delete them, and auto cue (Settings)
- * parks a load on the first memory cue or beat.
+ * (`mix_cue_edit`) set, rename and delete them, MEM during a loop saves a
+ * memory loop, and a playing deck enters an active (AUTO) memory loop at
+ * its start.
  * The real engine is `reks-mix` (tested there); mixer controls are accepted
  * and ignored, as in the engine until phase 5 tasks 6–7.
  */
@@ -19,6 +20,8 @@ import type {
   DeckCues,
   DeckLoaded,
   DeckView,
+  LoopView,
+  MemoryCueView,
   MeterView,
   MixConfig,
   MixControl,
@@ -45,7 +48,10 @@ const PALETTE = [0x28e214, 0x305aff, 0xe62828, 0xc3af04, 0xb432ff, 0x00e0ff, 0xe
 const trackCues = new Map<number, DeckCues>();
 let nextCueId = 1;
 
-/** A track's cues; an analysed track starts with A, B and D on bars 2, 5 and 9 and a memory cue on bar 7. */
+/**
+ * A track's cues; an analysed track starts with A, B and D on bars 2, 5
+ * and 9, a memory cue on bar 7 and an auto memory loop over bar 11.
+ */
 function cuesOf(id: number, analysed: boolean): DeckCues {
   let c = trackCues.get(id);
   if (c === undefined) {
@@ -63,7 +69,10 @@ function cuesOf(id: number, analysed: boolean): DeckCues {
             hot(1, 16, 0xff375f, "Drop"),
             hot(3, 32, null, null),
           ],
-          memoryCues: [{ id: nextCueId++, positionMs: msAtBeat(24), colorRgb: null, name: null }],
+          memoryCues: [
+            memory(msAtBeat(24), null, false),
+            memory(msAtBeat(40), msAtBeat(44), true, "Break"),
+          ],
         }
       : { hotCues: [], memoryCues: [] };
     trackCues.set(id, c);
@@ -71,7 +80,16 @@ function cuesOf(id: number, analysed: boolean): DeckCues {
   return c;
 }
 
-function editCues(id: number, edit: CueEdit, atMs: number): DeckCues {
+function memory(
+  positionMs: number,
+  endMs: number | null,
+  activeLoop: boolean,
+  name: string | null = null,
+): MemoryCueView {
+  return { id: nextCueId++, positionMs, endMs, activeLoop, colorRgb: null, name };
+}
+
+function editCues(id: number, edit: CueEdit, atMs: number, loop: LoopView | null): DeckCues {
   const c = trackCues.get(id) ?? { hotCues: [], memoryCues: [] };
   let { hotCues, memoryCues } = c;
   switch (edit.type) {
@@ -86,14 +104,21 @@ function editCues(id: number, edit: CueEdit, atMs: number): DeckCues {
       hotCues.sort((a, b) => a.slot - b.slot);
       break;
     }
-    case "addMemoryCue":
-      if (!memoryCues.some((m) => Math.abs(m.positionMs - atMs) < 1)) {
-        memoryCues = [
-          ...memoryCues,
-          { id: nextCueId++, positionMs: atMs, colorRgb: null, name: null },
-        ];
+    case "addMemoryCue": {
+      const start = loop?.startMs ?? atMs;
+      const end = loop?.endMs ?? null;
+      const same = (m: MemoryCueView) =>
+        Math.abs(m.positionMs - start) < 1 && Math.abs((m.endMs ?? 0) - (end ?? 0)) < 1;
+      if (!memoryCues.some(same)) {
+        memoryCues = [...memoryCues, memory(start, end, false)];
         memoryCues.sort((a, b) => a.positionMs - b.positionMs);
       }
+      break;
+    }
+    case "setActiveLoop":
+      memoryCues = memoryCues.map((m) =>
+        m.id === edit.cueId && m.endMs !== null ? { ...m, activeLoop: edit.on } : m,
+      );
       break;
     case "rename": {
       const name = edit.name?.trim() || null;
@@ -193,7 +218,9 @@ function tick() {
     if (!v.loaded) return;
     v.speed = follows(d, i) && leadDeck ? leadDeck.view.speed : v.tempo * v.nudge;
     if (v.playing) {
+      const before = v.positionMs;
       v.positionMs += FRAME_MS * v.speed;
+      enterAutoLoop(v, before);
       const l = v.loopRegion;
       if (l && v.positionMs >= l.endMs) {
         v.positionMs = l.startMs + ((v.positionMs - l.startMs) % (l.endMs - l.startMs));
@@ -220,6 +247,23 @@ function tick() {
     v.bpm = d.grid ? GRID_BPM * v.speed : null;
     v.beat = d.grid ? beatAt(v.positionMs) : null;
   });
+}
+
+/** As `reks-mix` `Deck::enter_auto_loop`: an active memory loop whose start the head passed. */
+function enterAutoLoop(v: DeckView, before: number) {
+  if (v.loopRegion !== null || v.trackId === null) return;
+  const hit = trackCues
+    .get(v.trackId)
+    ?.memoryCues.find(
+      (m) =>
+        m.activeLoop && m.endMs !== null && m.positionMs >= before && m.positionMs < v.positionMs,
+    );
+  if (hit?.endMs == null) return;
+  v.loopRegion = {
+    startMs: hit.positionMs,
+    endMs: hit.endMs,
+    beats: (hit.endMs - hit.positionMs) / BEAT_MS,
+  };
 }
 
 function snapshot(): MixState {
@@ -396,7 +440,7 @@ function control(c: MixControl) {
   }
 }
 
-function load(deck: number, id: number, analysed: boolean, autoCue: boolean): DeckLoaded {
+function load(deck: number, id: number, analysed: boolean): DeckLoaded {
   if (config === null) throw new Error("the mixer's audio output is not started");
   const d = emptyDeck();
   const prev = decks[deck];
@@ -414,9 +458,6 @@ function load(deck: number, id: number, analysed: boolean, autoCue: boolean): De
   // A new track on the master hands the role on at the next tick.
   if (master === deck) masterPlaying = true;
   const cues = cuesOf(id, analysed);
-  const start = autoCue ? (cues.memoryCues[0]?.positionMs ?? (analysed ? FIRST_BEAT_MS : 0)) : 0;
-  d.view.positionMs = start;
-  d.view.cueMs = start;
   decks[deck] = d;
   return { deck, trackId: id, durationMs: DURATION_MS, ...cues };
 }
@@ -425,7 +466,6 @@ export function mockMix(
   cmd: string,
   args: Record<string, unknown>,
   analysed: (id: number) => boolean,
-  autoCue: () => boolean = () => false,
 ): unknown {
   switch (cmd) {
     case "mix_device_options":
@@ -467,7 +507,7 @@ export function mockMix(
     case "mix_load": {
       const deck = args.deck as number;
       const id = args.id as number;
-      const loaded = load(deck, id, analysed(id), autoCue());
+      const loaded = load(deck, id, analysed(id));
       // Decoding takes a moment.
       return new Promise((resolve) => setTimeout(() => resolve(loaded), 300));
     }
@@ -475,7 +515,7 @@ export function mockMix(
       const d = decks[args.deck as number];
       const id = d?.view.trackId;
       if (d === undefined || id == null) throw new Error("the deck is empty");
-      return editCues(id, args.edit as CueEdit, snap(d, d.view.positionMs));
+      return editCues(id, args.edit as CueEdit, snap(d, d.view.positionMs), d.view.loopRegion);
     }
     case "mix_control":
       if (config === null) throw new Error("the mixer's audio output is not started");

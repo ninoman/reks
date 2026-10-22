@@ -713,6 +713,10 @@ export interface MemoryCueView {
   /** The library cue, to rename or delete it. */
   id: number;
   positionMs: number;
+  /** A memory loop's end; null for a memory cue. */
+  endMs: number | null;
+  /** A memory loop playback enters by itself when the playhead reaches its start. */
+  activeLoop: boolean;
   colorRgb: number | null;
   name: string | null;
 }
@@ -732,7 +736,10 @@ export interface DeckCues {
 export type CueEdit =
   /** An empty hot cue slot (0..7 = A..H) at the playhead, in the next palette colour. */
   | { type: "setHotCue"; slot: number }
+  /** A memory cue at the playhead; while a loop plays, a memory loop of it. */
   | { type: "addMemoryCue" }
+  /** A memory loop playback enters by itself (rekordbox's active loop), or not. */
+  | { type: "setActiveLoop"; cueId: number; on: boolean }
   /** null or blank clears the name. */
   | { type: "rename"; cueId: number; name: string | null }
   | { type: "delete"; cueId: number };
@@ -869,8 +876,6 @@ export interface Settings {
   keyNotation: KeyNotation;
   deckWaveform: DeckWaveform;
   syncAlign: SyncAlign;
-  /** A loaded track parks on its first memory cue, else its first beat; off: at the start. */
-  autoCue: boolean;
   /** The cache dir in use. */
   cacheDir: string;
   ui: UiState;
@@ -886,7 +891,6 @@ export interface SettingsPatch {
   keyNotation?: KeyNotation;
   deckWaveform?: DeckWaveform;
   syncAlign?: SyncAlign;
-  autoCue?: boolean;
   ui?: UiState;
   anlzPreference?: AnlzPreference;
 }
@@ -1127,6 +1131,8 @@ export interface ExportOptions {
   anlzPreference: AnlzPreference;
   /** Also write `exportLibrary.db` (OneLibrary, experimental, phase 4). Off by default. */
   onelibrary: boolean;
+  /** The `export.active_loops` flag: each track's earliest active memory loop as its active loop (UNVERIFIED). */
+  activeLoops: boolean;
 }
 
 /** Playlists and folders (= everything under them) to export (`plan::Selection`). */

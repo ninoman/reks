@@ -8,7 +8,7 @@ import { memo, useEffect, useMemo } from "react";
 
 import { deckSide, phaseOffset, shownDecks } from "../../lib/mixView";
 import { useMix } from "../../store/mix";
-import { chooseOutputDevice, useKeyLabel, useSettings } from "../../store/settings";
+import { chooseOutputDevice, useKeyLabel } from "../../store/settings";
 import { Button } from "../ui/Button";
 import { Kbd } from "../ui/Kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/Popover";
@@ -37,23 +37,6 @@ const SHORTCUTS: [string, string][] = [
   ["Shift + key", "Same on deck 1 / 4"],
   ["Z X C", "Crossfader left, centre, right"],
 ];
-
-/** Auto cue (a setting, as in rekordbox's preferences): lit when on. */
-function AutoCueToggle() {
-  const on = useSettings((s) => s.settings?.autoCue ?? true);
-  return (
-    <Button
-      size="sm"
-      variant="control"
-      aria-pressed={on}
-      title="Auto cue: a loaded track waits on its first memory cue, else its first beat. Off: at the start."
-      className="text-2xs font-bold tracking-caption"
-      onClick={() => void useSettings.getState().update({ autoCue: !on })}
-    >
-      AUTO CUE
-    </Button>
-  );
-}
 
 function ShortcutHelp() {
   return (
@@ -146,7 +129,6 @@ export function MixPanel() {
           <Segment value="2">2 decks</Segment>
           <Segment value="4">4 decks</Segment>
         </SegmentedControl>
-        <AutoCueToggle />
         <ShortcutHelp />
         {running && (
           <Button size="sm" onClick={() => void mix.stop()}>

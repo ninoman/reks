@@ -61,10 +61,10 @@ fn set_rename_and_delete_round_trip() {
     );
     assert_eq!(a.color_rgb, Some(HOT_CUE_PALETTE[0]));
     assert_eq!(c.color_rgb, Some(HOT_CUE_PALETTE[1]), "next unused colour");
-    let m = env.lib.add_memory_cue(id, 2_500.0).unwrap();
+    let m = env.lib.add_memory_cue(id, 2_500.0, None).unwrap();
     assert_eq!((m.slot, m.kind, m.color_rgb), (None, 0, None));
     assert_eq!(
-        env.lib.add_memory_cue(id, 2_500.4).unwrap(),
+        env.lib.add_memory_cue(id, 2_500.4, None).unwrap(),
         m,
         "a second press at the same place adds nothing"
     );
@@ -120,11 +120,30 @@ fn refused_edits_write_nothing() {
         invalid(env.lib.set_hot_cue(id, 1, 300_001.0).unwrap_err()),
         "past the end"
     );
-    assert!(invalid(env.lib.add_memory_cue(id, f64::NAN).unwrap_err()));
+    assert!(invalid(
+        env.lib.add_memory_cue(id, f64::NAN, None).unwrap_err()
+    ));
     let long = "x".repeat(MAX_CUE_NAME_CHARS + 1);
     assert!(invalid(
         env.lib.rename_cue(id, a.id, Some(&long)).unwrap_err()
     ));
+    assert!(
+        invalid(
+            env.lib
+                .add_memory_cue(id, 2_000.0, Some(2_000.5))
+                .unwrap_err()
+        ),
+        "no length"
+    );
+    assert!(invalid(
+        env.lib
+            .add_memory_cue(id, 2_000.0, Some(400_000.0))
+            .unwrap_err()
+    ));
+    assert!(
+        invalid(env.lib.set_active_loop(id, a.id, true).unwrap_err()),
+        "a hot cue is not a memory loop"
+    );
     assert!(matches!(
         env.lib.rename_cue(other, a.id, Some("x")).unwrap_err(),
         Error::CueNotFound(_)
@@ -138,4 +157,38 @@ fn refused_edits_write_nothing() {
         Error::TrackNotFound(9_999)
     ));
     assert_eq!(env.lib.track(id).unwrap().cues, [a]);
+}
+
+#[test]
+fn memory_loops_and_their_active_flag_round_trip() {
+    let env = Env::new();
+    let id = env.track("/a.mp3");
+    let point = env.lib.add_memory_cue(id, 1_000.0, None).unwrap();
+    let lp = env.lib.add_memory_cue(id, 1_000.0, Some(2_875.0)).unwrap();
+    assert_ne!(point.id, lp.id, "a loop at a cue's start is its own row");
+    assert_eq!(
+        (lp.slot, lp.kind, lp.end_ms, lp.active_loop),
+        (None, 4, Some(2_875.0), false)
+    );
+    assert_eq!(
+        env.lib.add_memory_cue(id, 1_000.2, Some(2_875.3)).unwrap(),
+        lp,
+        "same loop"
+    );
+
+    let on = env.lib.set_active_loop(id, lp.id, true).unwrap();
+    assert!(on.active_loop);
+    let invalid = |e: Error| matches!(e, Error::InvalidField { .. });
+    assert!(invalid(
+        env.lib.set_active_loop(id, point.id, true).unwrap_err()
+    ));
+    let cues = env.lib.track(id).unwrap().cues;
+    assert_eq!(cues.iter().filter(|c| c.active_loop).count(), 1);
+    assert!(
+        !env.lib
+            .set_active_loop(id, lp.id, false)
+            .unwrap()
+            .active_loop
+    );
+    assert_eq!(env.sources(id), ["manual"; 2]);
 }

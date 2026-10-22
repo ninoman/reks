@@ -72,6 +72,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   discardHistoryConfirmed: false,
   historyChosen: false,
   dividers: false,
+  activeLoops: false,
   anlzPreference: "rekordboxFirst",
   onelibrary: false,
 };

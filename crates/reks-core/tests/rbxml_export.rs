@@ -318,7 +318,7 @@ fn cues_edited_on_a_deck_reach_the_export() {
 
     let hot = env.lib.set_hot_cue(id, free, 1_500.0).unwrap();
     env.lib.rename_cue(id, hot.id, Some(" Break ")).unwrap();
-    env.lib.add_memory_cue(id, 9_000.0).unwrap();
+    env.lib.add_memory_cue(id, 9_000.0, None).unwrap();
     env.lib.delete_cue(id, drop.id).unwrap();
 
     let out = export(&env.lib, &env.sel(&["Lossless"])).unwrap();

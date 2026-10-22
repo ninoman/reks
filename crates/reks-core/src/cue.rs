@@ -1,12 +1,14 @@
 //! Editing a track's cues from a deck (Phase 5 task 17): set a hot cue in an
-//! empty slot, add a memory cue, rename or delete either.
+//! empty slot, add a memory cue or memory loop, rename or delete any of
+//! them, and mark a memory loop active (playback enters it by itself).
 //!
 //! Rows written here use the model the import and the exporters already use
-//! ([`Cue`]): `kind` 0 (a plain cue), `slot` 0..7 for hot cues A–H and NULL
-//! for memory cues, `color_rgb` from [`HOT_CUE_PALETTE`] (hot cues only; the
-//! rekordbox XML has no memory cue colour), `source = 'manual'`, so a
-//! rekordbox XML re-import leaves them alone. A rename keeps a row's
-//! source: an imported cue stays the import's.
+//! ([`Cue`]): `kind` 0 (a cue) or 4 (a loop, with `end_ms`), `slot` 0..7 for
+//! hot cues A–H and NULL for memory cues and loops, `color_rgb` from
+//! [`HOT_CUE_PALETTE`] (hot cues only; the rekordbox XML has no memory cue
+//! colour), `source = 'manual'`, so a rekordbox XML re-import leaves them
+//! alone. A rename or the active flag keeps a row's source: an imported cue
+//! stays the import's (and a re-import replaces it, flag included).
 
 use rusqlite::{params, OptionalExtension, Transaction};
 
@@ -24,6 +26,10 @@ pub const MAX_CUE_NAME_CHARS: usize = 64;
 
 /// A memory cue this close (ms) to an existing one is the same cue.
 const SAME_CUE_MS: f64 = 1.0;
+
+/// rekordbox cue `Type` of a plain cue and of a loop ([`Cue::kind`]).
+const KIND_CUE: i64 = 0;
+const KIND_LOOP: i64 = 4;
 
 /// Colours new hot cues take, in order: entries of rekordbox's 16-colour hot
 /// cue palette (the RGB rekordbox shows), so an export maps each one to its
@@ -89,7 +95,7 @@ fn check_start(tx: &Transaction, id: TrackId, start_ms: f64) -> Result<()> {
 
 fn read_cue(tx: &Transaction, id: TrackId, cue: i64) -> Result<Cue> {
     tx.query_row(
-        "SELECT id, slot, kind, start_ms, end_ms, name, color_rgb FROM cue
+        "SELECT id, slot, kind, start_ms, end_ms, name, color_rgb, active_loop FROM cue
          WHERE id = ?1 AND track_id = ?2",
         params![cue, id],
         |r| {
@@ -101,6 +107,7 @@ fn read_cue(tx: &Transaction, id: TrackId, cue: i64) -> Result<Cue> {
                 end_ms: r.get(4)?,
                 name: r.get(5)?,
                 color_rgb: r.get(6)?,
+                active_loop: r.get(7)?,
             })
         },
     )
@@ -155,17 +162,34 @@ impl Library {
         Ok(cue)
     }
 
-    /// Adds a memory cue to track `id` at `start_ms`. A memory cue already
-    /// within 1 ms is returned as it is instead (pressing MEMORY twice).
-    pub fn add_memory_cue(&self, id: TrackId, start_ms: f64) -> Result<Cue> {
+    /// Adds a memory cue to track `id` at `start_ms`, or a memory loop when
+    /// `end_ms` is given (MEMORY pressed while a loop plays). The same cue
+    /// or loop already there (start and end within 1 ms) is returned as it
+    /// is instead (pressing MEMORY twice).
+    pub fn add_memory_cue(&self, id: TrackId, start_ms: f64, end_ms: Option<f64>) -> Result<Cue> {
         let mut conn = self.conn()?;
         let tx = conn.transaction()?;
         check_start(&tx, id, start_ms)?;
+        if let Some(end) = end_ms {
+            check_start(&tx, id, end)?;
+            if end - start_ms < SAME_CUE_MS {
+                return Err(Error::InvalidField {
+                    field: "position",
+                    reason: format!("a loop must end after it starts ({start_ms}–{end} ms)"),
+                });
+            }
+        }
+        let kind = if end_ms.is_some() {
+            KIND_LOOP
+        } else {
+            KIND_CUE
+        };
         let same: Option<i64> = tx
             .query_row(
-                "SELECT id FROM cue WHERE track_id = ?1 AND slot IS NULL AND kind = 0
-                 AND abs(start_ms - ?2) < ?3 ORDER BY id LIMIT 1",
-                params![id, start_ms, SAME_CUE_MS],
+                "SELECT id FROM cue WHERE track_id = ?1 AND slot IS NULL AND kind = ?4
+                 AND abs(start_ms - ?2) < ?3 AND abs(coalesce(end_ms, 0) - ?5) < ?3
+                 ORDER BY id LIMIT 1",
+                params![id, start_ms, SAME_CUE_MS, kind, end_ms.unwrap_or(0.0)],
                 |r| r.get(0),
             )
             .optional()?;
@@ -173,9 +197,9 @@ impl Library {
             Some(c) => c,
             None => {
                 tx.execute(
-                    "INSERT INTO cue (track_id, slot, kind, start_ms, source)
-                     VALUES (?1, NULL, 0, ?2, 'manual')",
-                    params![id, start_ms],
+                    "INSERT INTO cue (track_id, slot, kind, start_ms, end_ms, source)
+                     VALUES (?1, NULL, ?2, ?3, ?4, 'manual')",
+                    params![id, kind, start_ms, end_ms],
                 )?;
                 touch(&tx, id)?;
                 tx.last_insert_rowid()
@@ -193,6 +217,30 @@ impl Library {
         let tx = conn.transaction()?;
         read_cue(&tx, id, cue)?;
         tx.execute("UPDATE cue SET name = ?2 WHERE id = ?1", params![cue, name])?;
+        touch(&tx, id)?;
+        let out = read_cue(&tx, id, cue)?;
+        tx.commit()?;
+        Ok(out)
+    }
+
+    /// Marks memory loop `cue` of track `id` active (playback enters it by
+    /// itself when the playhead reaches its start) or not. Any number may be
+    /// marked in the library; an export takes the earliest (players hold one
+    /// per track). Refused for anything but a memory loop.
+    pub fn set_active_loop(&self, id: TrackId, cue: i64, on: bool) -> Result<Cue> {
+        let mut conn = self.conn()?;
+        let tx = conn.transaction()?;
+        let c = read_cue(&tx, id, cue)?;
+        if c.slot.is_some() || c.kind != KIND_LOOP || c.end_ms.is_none() {
+            return Err(Error::InvalidField {
+                field: "activeLoop",
+                reason: "only a memory loop can be active".into(),
+            });
+        }
+        tx.execute(
+            "UPDATE cue SET active_loop = ?2 WHERE id = ?1",
+            params![cue, on],
+        )?;
         touch(&tx, id)?;
         let out = read_cue(&tx, id, cue)?;
         tx.commit()?;

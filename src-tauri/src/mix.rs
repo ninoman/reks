@@ -363,6 +363,10 @@ pub struct MemoryCueView {
     /// The library cue, to rename or delete it.
     pub id: i64,
     pub position_ms: f64,
+    /// A memory loop's end.
+    pub end_ms: Option<f64>,
+    /// A memory loop playback enters by itself.
+    pub active_loop: bool,
     /// 0xRRGGBB from the library, if set.
     pub color_rgb: Option<u32>,
     pub name: Option<String>,
@@ -391,6 +395,7 @@ fn deck_source(audio: DeckAudio) -> DeckSource {
     DeckSource::new(audio.pcm.samples, audio.pcm.sample_rate)
         .with_grid(&anchors)
         .with_hot_cues(audio.hot_cues)
+        .with_auto_loops(reks_core::deck::auto_loops(&audio.marks))
 }
 
 fn deck_index(deck: u8) -> CmdResult<usize> {
@@ -421,9 +426,7 @@ pub async fn mix_load(
     let (src, (hot_cues, memory_cues)) = blocking(&state, move |lib| {
         let audio = lib.deck_audio(id, rate)?;
         let views = cue_views(&audio.marks, rate);
-        let start = lib.settings()?.auto_cue.then(|| audio.auto_cue_frame());
-        let src = deck_source(audio).with_start(start.unwrap_or(0));
-        Ok::<_, reks_core::Error>((Arc::new(src), views))
+        Ok::<_, reks_core::Error>((Arc::new(deck_source(audio)), views))
     })
     .await?;
     let mut s = lock(&state.mix)?;
@@ -463,6 +466,8 @@ fn cue_views(marks: &[CueMark], rate: u32) -> (Vec<HotCueView>, Vec<MemoryCueVie
             None => memory.push(MemoryCueView {
                 id: m.id,
                 position_ms,
+                end_ms: m.end_frame.map(|e| frames_to_ms(e, rate)),
+                active_loop: m.active_loop,
                 color_rgb: m.color_rgb,
                 name: m.name.clone(),
             }),
@@ -483,26 +488,38 @@ pub enum CueEdit {
     SetHotCue {
         slot: u8,
     },
-    /// A memory cue at the playhead, on the beat with quantise.
+    /// A memory cue at the playhead, on the beat with quantise; while a
+    /// loop plays, a memory loop of it.
     AddMemoryCue,
     /// `None` or blank clears the name.
     Rename {
         cue_id: i64,
         name: Option<String>,
     },
+    /// A memory loop playback enters by itself (or not).
+    SetActiveLoop {
+        cue_id: i64,
+        on: bool,
+    },
     Delete {
         cue_id: i64,
     },
 }
 
-/// The track's cues as the deck shows them, in ms at the engine rate.
-fn deck_cues(lib: &Library, id: TrackId, rate: u32) -> reks_core::Result<DeckCues> {
+/// The track's cues as the deck shows them, in ms at the engine rate, and
+/// its active memory loops in frames for the engine.
+fn deck_cues(
+    lib: &Library,
+    id: TrackId,
+    rate: u32,
+) -> reks_core::Result<(DeckCues, Vec<(i64, i64)>)> {
     let marks = reks_core::deck::cue_marks(&lib.track(id)?.cues, rate);
     let (hot_cues, memory_cues) = cue_views(&marks, rate);
-    Ok(DeckCues {
+    let cues = DeckCues {
         hot_cues,
         memory_cues,
-    })
+    };
+    Ok((cues, reks_core::deck::auto_loops(&marks)))
 }
 
 /// Applies `edit` to the track on `deck`: the library first (so the cue
@@ -517,7 +534,7 @@ pub async fn mix_cue_edit(
     edit: CueEdit,
 ) -> CmdResult<DeckCues> {
     let i = deck_index(deck)?;
-    let (id, generation, rate, at) = {
+    let (id, generation, rate, at, looping) = {
         let mut s = lock(&state.mix)?;
         let (id, src) = match &s.decks[i] {
             Some(l) => (l.track_id, Arc::clone(&l.src)),
@@ -527,21 +544,30 @@ pub async fn mix_cue_edit(
         let engine = s.engine()?;
         let rate = engine.info().sample_rate;
         let d = engine.poll_state().decks[i];
-        (id, generation, rate, src.cue_frame(d.position, d.quantise))
+        let at = src.cue_frame(d.position, d.quantise);
+        (id, generation, rate, at, d.loop_region)
     };
-    let at_ms = frames_to_ms(at, rate);
-    let (cues, engine_edit) = blocking(&state, move |lib| {
-        let engine_edit = match edit {
+    let ms = move |f: i64| frames_to_ms(f, rate);
+    let (cues, auto, hot) = blocking(&state, move |lib| {
+        let hot = match edit {
             CueEdit::SetHotCue { slot } => {
-                lib.set_hot_cue(id, slot, at_ms)?;
+                lib.set_hot_cue(id, slot, ms(at))?;
                 Some((slot, Some(at)))
             }
             CueEdit::AddMemoryCue => {
-                lib.add_memory_cue(id, at_ms)?;
+                // While a loop plays, MEMORY saves the loop (rekordbox).
+                match looping {
+                    Some(l) => lib.add_memory_cue(id, ms(l.start), Some(ms(l.end)))?,
+                    None => lib.add_memory_cue(id, ms(at), None)?,
+                };
                 None
             }
             CueEdit::Rename { cue_id, name } => {
                 lib.rename_cue(id, cue_id, name.as_deref())?;
+                None
+            }
+            CueEdit::SetActiveLoop { cue_id, on } => {
+                lib.set_active_loop(id, cue_id, on)?;
                 None
             }
             CueEdit::Delete { cue_id } => {
@@ -555,14 +581,24 @@ pub async fn mix_cue_edit(
                 slot.map(|slot| (slot, None))
             }
         };
-        Ok::<_, reks_core::Error>((deck_cues(lib, id, rate)?, engine_edit))
+        let (cues, auto) = deck_cues(lib, id, rate)?;
+        Ok::<_, reks_core::Error>((cues, auto, hot))
     })
     .await?;
     let mut s = lock(&state.mix)?;
     // The deck still holds this load (not reloaded or ejected meanwhile).
-    if let Some((slot, frame)) = engine_edit.filter(|_| s.generation[i] == generation) {
-        s.engine()?
-            .send(reks_mix::Control::SetHotCue { deck, slot, frame })?;
+    if s.generation[i] == generation {
+        let engine = s.engine()?;
+        if let Some((slot, frame)) = hot {
+            engine.send(reks_mix::Control::SetHotCue { deck, slot, frame })?;
+        }
+        for index in 0..reks_mix::AUTO_LOOP_SLOTS {
+            engine.send(reks_mix::Control::AutoLoop {
+                deck,
+                index: index as u8,
+                region: auto.get(index).copied(),
+            })?;
+        }
     }
     Ok(cues)
 }
@@ -920,6 +956,13 @@ mod tests {
             CueEdit::Rename {
                 cue_id: 5,
                 name: None
+            }
+        ));
+        assert!(matches!(
+            edit(r#"{"type":"setActiveLoop","cueId":4,"on":true}"#),
+            CueEdit::SetActiveLoop {
+                cue_id: 4,
+                on: true
             }
         ));
         assert!(matches!(

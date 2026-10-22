@@ -688,6 +688,11 @@ mod tests {
                 deck: 1,
                 frame: 60_000,
             },
+            Control::AutoLoop {
+                deck: 1,
+                index: 2,
+                region: Some((61_000, 62_000)),
+            },
             Control::Seek {
                 deck: 1,
                 frame: 50_000,

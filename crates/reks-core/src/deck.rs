@@ -29,14 +29,6 @@ pub struct DeckAudio {
     pub marks: Vec<CueMark>,
 }
 
-impl DeckAudio {
-    /// Where auto cue parks a loaded track (task 17): the first memory cue,
-    /// else the first beat of the grid, else the start.
-    pub fn auto_cue_frame(&self) -> i64 {
-        auto_cue_frame(&self.marks, &self.anchors, self.pcm.sample_rate)
-    }
-}
-
 /// A hot cue (`slot` set) or memory cue (`slot` `None`) to draw on a deck.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CueMark {
@@ -48,6 +40,10 @@ pub struct CueMark {
     pub color_rgb: Option<u32>,
     /// The cue's name from the library (shown on its hot cue pad).
     pub name: Option<String>,
+    /// A loop's end (memory loops; a hot loop is marked by its start only).
+    pub end_frame: Option<i64>,
+    /// A memory loop playback enters by itself ([`Cue::active_loop`]).
+    pub active_loop: bool,
 }
 
 /// One `beatgrid` row in frames of the deck's audio.
@@ -125,6 +121,11 @@ pub fn cue_marks(cues: &[Cue], rate: u32) -> Vec<CueMark> {
         frame: ms_to_frame(c.start_ms, rate),
         color_rgb: c.color_rgb,
         name: c.name.clone(),
+        end_frame: c
+            .end_ms
+            .filter(|_| c.slot.is_none() && c.kind == KIND_LOOP)
+            .map(|e| ms_to_frame(e, rate)),
+        active_loop: c.active_loop && c.slot.is_none() && c.kind == KIND_LOOP,
     };
     let mut memory: Vec<CueMark> = cues
         .iter()
@@ -137,22 +138,14 @@ pub fn cue_marks(cues: &[Cue], rate: u32) -> Vec<CueMark> {
     out
 }
 
-/// See [`DeckAudio::auto_cue_frame`]. `marks` as [`cue_marks`] gives them
-/// (memory cues by position after the hot cues). Before the first anchor
-/// the grid runs on at its tempo, as in the engine, so the first beat is
-/// the first anchor moved back by whole beats to just after the start.
-pub fn auto_cue_frame(marks: &[CueMark], anchors: &[DeckAnchor], rate: u32) -> i64 {
-    if let Some(m) = marks.iter().find(|m| m.slot.is_none()) {
-        return m.frame.max(0);
-    }
-    let Some(a) = anchors.iter().min_by_key(|a| a.frame) else {
-        return 0;
-    };
-    if !(a.bpm.is_finite() && a.bpm > 0.0) {
-        return 0;
-    }
-    let period = 60.0 * f64::from(rate) / a.bpm;
-    (a.frame as f64).rem_euclid(period).round() as i64
+/// The active memory loops of `marks` as `(start, end)` frames, by start:
+/// what the engine enters by itself.
+pub fn auto_loops(marks: &[CueMark]) -> Vec<(i64, i64)> {
+    marks
+        .iter()
+        .filter(|m| m.active_loop)
+        .filter_map(|m| Some((m.frame, m.end_frame.filter(|&e| e > m.frame)?)))
+        .collect()
 }
 
 #[cfg(test)]
@@ -168,6 +161,7 @@ mod tests {
             end_ms: None,
             name: None,
             color_rgb: None,
+            active_loop: false,
         }
     }
 
@@ -240,6 +234,8 @@ mod tests {
             frame,
             color_rgb,
             name: name.map(String::from),
+            end_frame: None,
+            active_loop: false,
         };
         assert_eq!(
             cue_marks(&cues, 1_000),
@@ -254,26 +250,29 @@ mod tests {
     }
 
     #[test]
-    fn auto_cue_parks_on_the_first_memory_cue_else_the_first_beat() {
-        let anchor = |frame| DeckAnchor {
-            frame,
-            bpm: 120.0,
-            beat_in_bar: 1,
-            beats_per_bar: 4,
-        };
-        let marks = cue_marks(
-            &[
-                cue(Some(0), KIND_CUE, 100.0),
-                cue(None, KIND_CUE, 3_000.0),
-                cue(None, KIND_CUE, 2_000.0),
+    fn memory_loops_carry_their_end_and_the_active_ones_are_auto_loops() {
+        let mut active = cue(None, KIND_LOOP, 2_000.0);
+        active.end_ms = Some(3_000.0);
+        active.active_loop = true;
+        let mut plain = cue(None, KIND_LOOP, 5_000.0);
+        plain.end_ms = Some(6_000.0);
+        let mut hot_loop = cue(Some(0), KIND_LOOP, 500.0);
+        hot_loop.end_ms = Some(900.0);
+        hot_loop.active_loop = true;
+        let marks = cue_marks(&[plain, hot_loop, active], 1_000);
+        let ends: Vec<_> = marks
+            .iter()
+            .map(|m| (m.frame, m.end_frame, m.active_loop))
+            .collect();
+        assert_eq!(
+            ends,
+            [
+                (500, None, false),
+                (2_000, Some(3_000), true),
+                (5_000, Some(6_000), false)
             ],
-            1_000,
+            "a hot loop is never an auto loop"
         );
-        assert_eq!(auto_cue_frame(&marks, &[anchor(1_250)], 1_000), 2_000);
-        let hot_only = cue_marks(&[cue(Some(0), KIND_CUE, 100.0)], 1_000);
-        // 120 BPM at 1 kHz: a beat is 500 frames, so 1 250 → 250.
-        assert_eq!(auto_cue_frame(&hot_only, &[anchor(1_250)], 1_000), 250);
-        assert_eq!(auto_cue_frame(&hot_only, &[anchor(40)], 1_000), 40);
-        assert_eq!(auto_cue_frame(&[], &[], 1_000), 0, "no grid: the start");
+        assert_eq!(auto_loops(&marks), [(2_000, 3_000)]);
     }
 }

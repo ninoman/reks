@@ -424,24 +424,31 @@ the command returns the deck's cues and the store takes them.
   set pad jumps as before. Double-click a set pad to rename it in place
   (`InlineTextField`; Enter saves, Esc cancels, blank clears; up to 64
   characters). The double-click's first click still triggers the cue, as a
-  click does. Shift+click deletes. The pad's tooltip says all three.
-- **Memory cues** sit in the pads' top row in HOT CUE mode (`DeckMemory`):
-  **MEM** sets one at the playhead (on the beat with Q; a second press at
-  the same place adds nothing), ◀ ▶ call the one before / after the
-  playhead (disabled at either end), and the count between them opens the
-  list: click a time to jump there, double-click a name to rename
-  (`InlineText`), × to delete. A call moves the cue point and the playhead
-  there exactly; a playing deck plays on (rekordbox's memory list; a CDJ's
-  CALL is UNVERIFIED).
-- **Marks**: hovering a mark on either waveform names it ("Hot cue A:
-  Drop", "Memory cue: Break", "Cue point"; native title, `markAt` /
-  `markTitle` in `lib/deckMarks.ts`).
-- **Auto cue** (a setting, `mix.auto_cue`, on by default): a loaded track
-  waits on its first memory cue, else its first beat, else the start; off,
-  always the start. **AUTO CUE** in the Mix header (lit when on) and
-  Settings → Decks → Auto cue change it; it applies at the next load.
+  click does. Delete with the pad's × (shown on hover or focus; a real
+  button after the pad in the Tab order) or Shift+click. The pad's tooltip
+  says all of this.
+- **Memory cues and loops** sit in the pads' top row in HOT CUE mode
+  (`DeckMemory`): **MEM** sets a memory cue at the playhead (on the beat
+  with Q), or, while a loop plays, saves that loop as a memory loop; a
+  second press at the same place adds nothing. ◀ ▶ call the cue before /
+  after the playhead (disabled at either end); the count between them
+  opens the list: click a time to jump there, double-click a name to
+  rename (`InlineText`), × to delete, and on a memory loop **AUTO**
+  (lit when on) to make playback enter it by itself when the playhead
+  reaches its start (rekordbox's active loop). A call moves the cue point
+  and the playhead there exactly; a playing deck plays on (rekordbox's
+  memory list; a CDJ's CALL is UNVERIFIED).
+- **Marks**: a memory loop draws a bar along the bottom edge to its end
+  and a short end line; an AUTO loop draws both in `deck-auto-loop`, the
+  bar thicker. Hovering a mark on either waveform names it ("Hot cue A:
+  Drop", "Memory cue", "Memory loop", "Auto loop", "Cue point"; native
+  title, `markAt` / `markTitle` in `lib/deckMarks.ts`).
+- **Export**: AUTO loops reach a USB stick only with **Active loops**
+  (UNVERIFIED badge, off by default) in the export wizard; see phase 5
+  task 17.
 - Shared pieces: `ui/InlineText.tsx` (`InlineText`, `InlineTextField`);
-  `Pad` shows its `hint` in a tooltip even without a key; hint tooltips are
+  `Pad` shows its `hint` in a tooltip even without a key and takes
+  `remove` (the corner ×); hint tooltips are
   not hoverable (`disableHoverableContent`), so one flipped over the
   controls above its trigger closes as the pointer leaves and never takes
   their click.

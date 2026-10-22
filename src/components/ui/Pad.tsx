@@ -5,13 +5,17 @@
  * else `deck-hotcue`),
  * `empty` (dashed), `lit` (the active one). `marked` is a heavy outline
  * (the size used last). They fill their grid cell, at least `--pad-h` tall.
- * A `Pad` with a `hint` or `shortcut` shows them in a tooltip.
+ * A `Pad` with a `hint` or `shortcut` shows them in a tooltip. `remove`
+ * adds a small × in its corner, shown on hover and focus and reachable
+ * with Tab after the pad (deleting a hot cue).
  */
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps, CSSProperties, ReactNode } from "react";
 import { cn } from "../../lib/cn";
 import { darkText } from "../../lib/deckMarks";
+import { CloseIcon } from "../icons";
 import { disabledState, focusRing } from "./control";
+import { IconButton } from "./IconButton";
 import { ShortcutTooltip, Tooltip } from "./Tooltip";
 
 export const padVariants = cva(
@@ -56,25 +60,55 @@ export type PadProps = ComponentProps<"button"> &
     "aria-label": string;
     shortcut?: string | undefined;
     hint?: ReactNode;
+    /** A × in the corner that removes what the pad holds; `label` names it. */
+    remove?: { label: string; onRemove: () => void } | undefined;
   };
 
-export function Pad({ tone, marked, color, className, style, shortcut, hint, ...props }: PadProps) {
+export function Pad({
+  tone,
+  marked,
+  color,
+  className,
+  style,
+  shortcut,
+  hint,
+  remove,
+  ...props
+}: PadProps) {
   const button = (
     <button
       type="button"
-      className={cn(padVariants({ tone, marked }), className)}
+      className={cn(padVariants({ tone, marked }), remove && "h-full w-full pr-5", className)}
       style={{ ...padStyle(color), ...style }}
       {...props}
     />
   );
-  if (shortcut === undefined && hint === undefined) return button;
+  const tipped =
+    shortcut === undefined && hint === undefined ? (
+      button
+    ) : (
+      <Tooltip
+        content={hint ?? props["aria-label"]}
+        {...(shortcut === undefined ? {} : { shortcut })}
+      >
+        {button}
+      </Tooltip>
+    );
+  if (remove === undefined) return tipped;
   return (
-    <Tooltip
-      content={hint ?? props["aria-label"]}
-      {...(shortcut === undefined ? {} : { shortcut })}
-    >
-      {button}
-    </Tooltip>
+    <div className="group/pad relative min-w-0" style={padStyle(color)}>
+      {tipped}
+      <IconButton
+        size="xs"
+        variant="ghost"
+        aria-label={remove.label}
+        disabled={props.disabled}
+        onClick={remove.onRemove}
+        className="absolute top-1/2 right-0.5 -translate-y-1/2 text-(color:--pad-fg,var(--color-pad-ink-dark)) opacity-0 group-focus-within/pad:opacity-100 group-hover/pad:opacity-100 hover:bg-overlay"
+      >
+        <CloseIcon />
+      </IconButton>
+    </div>
   );
 }
 

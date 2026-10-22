@@ -24,36 +24,32 @@ afterEach(() => {
 });
 
 describe("mock mixer", () => {
-  it("auto cue parks a load on the first memory cue; cue edits stay with the track", async () => {
-    const load = (id: number, autoCue: boolean) =>
-      mockMix(
-        "mix_load",
-        { deck: 2, id },
-        () => true,
-        () => autoCue,
-      ) as Promise<DeckLoaded>;
-    const p = load(50, true);
+  it("enters an AUTO memory loop at its start; MEM while looping saves the loop", async () => {
+    const p = mockMix("mix_load", { deck: 2, id: 50 }, () => true) as Promise<DeckLoaded>;
     run(300);
     const loaded = await p;
-    run(20);
-    const memory = loaded.memoryCues[0]?.positionMs;
-    expect(state().decks[2]?.positionMs).toBe(memory);
-    expect(state().decks[2]?.cueMs).toBe(memory);
+    const auto = loaded.memoryCues.find((m) => m.activeLoop);
+    if (auto?.endMs == null) throw new Error("no auto loop");
+    send({ type: "seek", deck: 2, ms: auto.positionMs - 200 });
+    send({ type: "play", deck: 2 });
+    run(400);
+    expect(state().decks[2]?.loopRegion).toMatchObject({
+      startMs: auto.positionMs,
+      endMs: auto.endMs,
+    });
 
-    send({ type: "seek", deck: 2, ms: 2_000 });
     const edit = (e: unknown) =>
       mockMix("mix_cue_edit", { deck: 2, edit: e }, () => true) as DeckCues;
-    const set = edit({ type: "setHotCue", slot: 2 });
-    expect(set.hotCues.map((h) => h.slot)).toEqual([0, 1, 2, 3]);
-    send({ type: "callCue", deck: 2, ms: 9_000 });
+    send({ type: "loopExit", deck: 2 });
+    send({ type: "beatLoop", deck: 2, beats: 2 });
+    const saved = edit({ type: "addMemoryCue" });
     run(20);
-    expect(state().decks[2]?.cueMs).toBe(9_000);
-
-    const again = load(50, false);
-    run(300);
-    expect((await again).hotCues).toHaveLength(4);
-    run(20);
-    expect(state().decks[2]?.positionMs).toBe(0);
+    const region = state().decks[2]?.loopRegion;
+    const loop = saved.memoryCues.find((m) => m.endMs !== null && !m.activeLoop);
+    expect(loop).toMatchObject({ positionMs: region?.startMs, endMs: region?.endMs });
+    const on = edit({ type: "setActiveLoop", cueId: loop?.id, on: true });
+    expect(on.memoryCues.filter((m) => m.activeLoop)).toHaveLength(2);
+    expect(edit({ type: "setHotCue", slot: 2 }).hotCues.map((h) => h.slot)).toEqual([0, 1, 2, 3]);
   });
 
   it("hands master to a playing synced deck at its tempo", () => {

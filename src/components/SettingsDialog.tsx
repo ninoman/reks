@@ -28,7 +28,6 @@ import {
 import { Field } from "./ui/Field";
 import { Segment, SegmentedControl } from "./ui/SegmentedControl";
 import { Select } from "./ui/Select";
-import { Switch } from "./ui/Switch";
 
 const item = "px-4 py-3.5";
 const itemTitle = "m-0 text-sm font-semibold";
@@ -120,7 +119,6 @@ function SettingsBody() {
           <Group title="Decks">
             <DeckWaveformChoice waveform={settings.deckWaveform} />
             <SyncAlignChoice align={settings.syncAlign} />
-            <AutoCueChoice on={settings.autoCue} />
           </Group>
         </>
       )}
@@ -302,27 +300,6 @@ function SyncAlignChoice({ align }: { align: SyncAlign }) {
           </Segment>
         ))}
       </SegmentedControl>
-    </div>
-  );
-}
-
-function AutoCueChoice({ on }: { on: boolean }) {
-  return (
-    <div className={cn(item, "flex items-start gap-3")}>
-      <div className="min-w-0 flex-1">
-        <h5 className={itemTitle} id="auto-cue-title">
-          Auto cue
-        </h5>
-        <p className={hint}>
-          A track loaded on a deck waits on its first memory cue, or its first beat when it has
-          none. Off: at the start. Also AUTO CUE on the Mix panel. On is the default.
-        </p>
-      </div>
-      <Switch
-        aria-labelledby="auto-cue-title"
-        checked={on}
-        onCheckedChange={(v) => void useSettings.getState().update({ autoCue: v })}
-      />
     </div>
   );
 }

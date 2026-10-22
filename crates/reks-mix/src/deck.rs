@@ -17,7 +17,7 @@ use crate::graph::{
     DeckState, LoopRegion, Ramp, FINE_JUMP_MS, LOOP_MAX_BEATS, LOOP_MIN_BEATS, LOOP_XFADE_MS,
     SEEK_XFADE_MS, TEMPO_MAX, TEMPO_MIN,
 };
-use crate::source::{DeckSource, HOT_CUE_SLOTS};
+use crate::source::{DeckSource, AUTO_LOOP_SLOTS, HOT_CUE_SLOTS};
 use crate::varispeed::{Varispeed, MIN_STEP};
 
 /// What a deck does once its gate has faded out.
@@ -92,6 +92,9 @@ pub(crate) struct Deck {
     /// The loaded track's hot cues by slot: the source's at load, then as
     /// edited ([`Control::SetHotCue`]).
     hot_cues: [Option<i64>; HOT_CUE_SLOTS as usize],
+    /// Active memory loops `(start, end)`: the source's at load, then as
+    /// edited ([`Control::AutoLoop`]).
+    auto_loops: [Option<(f64, f64)>; AUTO_LOOP_SLOTS],
     /// CUE is held from the cue point; letting go returns there.
     cue_preview: bool,
     pub(crate) tempo: f64,
@@ -131,6 +134,7 @@ impl Deck {
             looping: None,
             cue: 0.0,
             hot_cues: [None; HOT_CUE_SLOTS as usize],
+            auto_loops: [None; AUTO_LOOP_SLOTS],
             cue_preview: false,
             tempo: 1.0,
             nudge: 1.0,
@@ -257,6 +261,20 @@ impl Deck {
                     .filter(|_| !loading)
                 {
                     *c = frame.map(|f| f.clamp(0, frames));
+                }
+                None
+            }
+            Control::AutoLoop { index, region, .. } => {
+                let loading = matches!(self.pending, Pending::Load(_));
+                let frames = self.frames() as f64;
+                if let Some(slot) = self
+                    .auto_loops
+                    .get_mut(usize::from(index))
+                    .filter(|_| !loading)
+                {
+                    *slot = region
+                        .map(|(s, e)| (s as f64, (e as f64).min(frames)))
+                        .filter(|(s, e)| *s >= 0.0 && e > s);
                 }
                 None
             }
@@ -545,6 +563,30 @@ impl Deck {
         }
     }
 
+    /// Enters an active memory loop whose start the head passed this frame,
+    /// moving from `before` (`start` in `before..now`, so a head parked on
+    /// the start enters as it plays). From then on it is an ordinary loop:
+    /// [`Self::wrap_loop`] crossfades at its end, LOOP EXIT leaves it.
+    fn enter_auto_loop(&mut self, before: f64) {
+        if self.looping.is_some() {
+            return;
+        }
+        let now = self.position();
+        let hit = self
+            .auto_loops
+            .iter()
+            .flatten()
+            .find(|(s, _)| (before..now).contains(s))
+            .copied();
+        if let Some((start, end)) = hit {
+            let beats = self
+                .grid()
+                .and_then(|m| Some(m.beat_at(end)? - m.beat_at(start)?))
+                .unwrap_or(0.0);
+            self.looping = Some(Loop { start, end, beats });
+        }
+    }
+
     /// At or past the loop end: back by whole loop lengths, crossfading
     /// over [`LOOP_XFADE_MS`] from the head running on past the end.
     fn wrap_loop(&mut self) {
@@ -612,12 +654,15 @@ impl Deck {
             Pending::Load(src) => {
                 self.stop();
                 self.resampling = false;
-                let start = src.as_ref().map_or(0, |s| s.start()) as f64;
-                self.position = start;
-                self.cue = start;
+                self.position = 0.0;
+                self.cue = 0.0;
                 self.looping = None;
                 for (slot, c) in (0..HOT_CUE_SLOTS).zip(&mut self.hot_cues) {
                     *c = src.as_ref().and_then(|s| s.hot_cue(slot));
+                }
+                let loops = src.as_ref().map_or(&[][..], |s| s.auto_loops());
+                for (i, slot) in self.auto_loops.iter_mut().enumerate() {
+                    *slot = loops.get(i).map(|&(s, e)| (s as f64, e as f64));
                 }
                 std::mem::replace(&mut self.src, src)
             }
@@ -660,6 +705,7 @@ impl Deck {
             return (0.0, 0.0);
         }
         let gate = self.gate.next() * self.motion.next();
+        let before = self.position();
         // Out for the frame, so the head can borrow `self` mutably.
         let src = self.src.take();
         let out = match &src {
@@ -697,6 +743,9 @@ impl Deck {
             }
         };
         self.src = src;
+        if self.playing {
+            self.enter_auto_loop(before);
+        }
         // After the read, so the head never rests on the loop end.
         self.wrap_loop();
         if self.gate.settled() && self.gate.value == 0.0 {

@@ -2,7 +2,8 @@
  * A deck's pads: the mode switch (HOT CUE, BEAT JUMP, BEAT LOOP), Q, the
  * page arrows and 2 × 4 pads. HOT CUE: A–H in their cue colours; an empty
  * (dashed) pad sets its cue at the playhead, a set one jumps to it,
- * double-click renames it in place and Shift+click deletes it; the memory
+ * double-click renames it in place, its × (hover or focus) or Shift+click
+ * deletes it; the memory
  * cue controls take the page arrows' place. BEAT JUMP: split pads, back on the left, forward on
  * the right. BEAT LOOP: a loop of that size, the active size lit (press it
  * again to leave the loop). The size used last has a heavy outline: the
@@ -122,6 +123,7 @@ export function DeckPads(props: DeckPadsProps) {
             loaded={loaded}
             cues={props.memoryCues}
             positionMs={props.positionMs}
+            looping={props.loopBeats !== null}
             setKey={keyFor({ type: "memoryCue" })}
             prevKey={keyFor({ type: "callCue", dir: -1 })}
             nextKey={keyFor({ type: "callCue", dir: 1 })}
@@ -129,6 +131,7 @@ export function DeckPads(props: DeckPadsProps) {
             onCall={props.onCallCue}
             onAdjacent={props.onCallAdjacent}
             onRename={(cueId, name) => props.onEditCues({ type: "rename", cueId, name })}
+            onAutoLoop={(cueId, on) => props.onEditCues({ type: "setActiveLoop", cueId, on })}
             onDelete={(cueId) => props.onEditCues({ type: "delete", cueId })}
           />
         ) : (
@@ -194,7 +197,7 @@ function HotCuePads({ deck, loaded, hotCues, keyFor, onHotCuePad, onEditCues }: 
         hint={
           cue === undefined
             ? `Set hot cue ${letter} here`
-            : `Hot cue ${letter}${cue.name ? `: ${cue.name}` : ""} · double-click to rename · Shift+click to delete`
+            : `Hot cue ${letter}${cue.name ? `: ${cue.name}` : ""} · double-click to rename · × or Shift+click to delete`
         }
         shortcut={keyFor({ type: "hotCue", slot })}
         onClick={(e) => {
@@ -202,6 +205,14 @@ function HotCuePads({ deck, loaded, hotCues, keyFor, onHotCuePad, onEditCues }: 
           else onHotCuePad(slot);
         }}
         onDoubleClick={() => cue !== undefined && setRenaming(slot)}
+        remove={
+          cue === undefined
+            ? undefined
+            : {
+                label: `Delete deck ${n} hot cue ${letter}`,
+                onRemove: () => onEditCues({ type: "delete", cueId: cue.id }),
+              }
+        }
       >
         <b>{letter}</b>
         {cue?.name != null && (

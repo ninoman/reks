@@ -197,6 +197,7 @@ mod tests {
             end_ms,
             name: None,
             color_rgb: None,
+            active_loop: false,
         }
     }
 

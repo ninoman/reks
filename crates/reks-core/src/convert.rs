@@ -808,8 +808,9 @@ fn convert_one(
                 )?;
                 let new_id = tx.last_insert_rowid();
                 tx.execute(
-                    "INSERT INTO cue (track_id, slot, kind, start_ms, end_ms, name, color_rgb, source)
-                     SELECT ?2, slot, kind, start_ms, end_ms, name, color_rgb, source
+                    "INSERT INTO cue (track_id, slot, kind, start_ms, end_ms, name, color_rgb, source,
+                                      active_loop)
+                     SELECT ?2, slot, kind, start_ms, end_ms, name, color_rgb, source, active_loop
                      FROM cue WHERE track_id = ?1 ORDER BY id",
                     (id, new_id),
                 )?;

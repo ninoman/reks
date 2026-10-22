@@ -1,9 +1,10 @@
 /**
  * A deck's memory cues (task 17): MEM sets one at the playhead (on the beat
- * with quantise), ◀ ▶ call the one before / after the playhead, and the
- * count between them opens the list, where a cue is jumped to, renamed
- * (double-click its name) or deleted. Sits where the pad page arrows are in
- * HOT CUE mode, which has no pages.
+ * with quantise), or saves the playing loop as a memory loop; ◀ ▶ call the
+ * one before / after the playhead, and the count between them opens the
+ * list, where a cue is jumped to, renamed (double-click its name) or
+ * deleted (×), and a memory loop's AUTO makes playback enter it by itself.
+ * Sits where the pad page arrows are in HOT CUE mode, which has no pages.
  */
 import { formatPosition } from "../../lib/format";
 import type { MemoryCueView } from "../../lib/ipc";
@@ -20,6 +21,8 @@ export interface DeckMemoryProps {
   /** By position. */
   cues: MemoryCueView[];
   positionMs: number;
+  /** A loop is playing: MEM saves it. */
+  looping: boolean;
   setKey: string | undefined;
   prevKey: string | undefined;
   nextKey: string | undefined;
@@ -27,6 +30,8 @@ export interface DeckMemoryProps {
   onCall: (ms: number) => void;
   onAdjacent: (dir: -1 | 1) => void;
   onRename: (cueId: number, name: string | null) => void;
+  /** A memory loop playback enters by itself, or not. */
+  onAutoLoop: (cueId: number, on: boolean) => void;
   onDelete: (cueId: number) => void;
 }
 
@@ -35,6 +40,7 @@ export function DeckMemory({
   loaded,
   cues,
   positionMs,
+  looping,
   setKey,
   prevKey,
   nextKey,
@@ -42,6 +48,7 @@ export function DeckMemory({
   onCall,
   onAdjacent,
   onRename,
+  onAutoLoop,
   onDelete,
 }: DeckMemoryProps) {
   const n = deck + 1;
@@ -53,7 +60,7 @@ export function DeckMemory({
         variant="control"
         disabled={!loaded}
         aria-label={`Deck ${n} set memory cue`}
-        hint="Set a memory cue here"
+        hint={looping ? "Save the loop as a memory loop" : "Set a memory cue here"}
         shortcut={setKey}
         className="mr-0.5 px-1 text-2xs font-bold tracking-caption"
         onClick={onSet}
@@ -84,8 +91,15 @@ export function DeckMemory({
             {loaded ? cues.length : "–"}
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-64 p-1">
-          <MemoryList n={n} cues={cues} onCall={onCall} onRename={onRename} onDelete={onDelete} />
+        <PopoverContent align="end" className="w-72 p-1">
+          <MemoryList
+            n={n}
+            cues={cues}
+            onCall={onCall}
+            onRename={onRename}
+            onAutoLoop={onAutoLoop}
+            onDelete={onDelete}
+          />
         </PopoverContent>
       </Popover>
       <IconButton
@@ -109,12 +123,15 @@ function MemoryList({
   cues,
   onCall,
   onRename,
+  onAutoLoop,
   onDelete,
-}: Pick<DeckMemoryProps, "cues" | "onCall" | "onRename" | "onDelete"> & { n: number }) {
+}: Pick<DeckMemoryProps, "cues" | "onCall" | "onRename" | "onAutoLoop" | "onDelete"> & {
+  n: number;
+}) {
   if (cues.length === 0) {
     return (
       <p className="px-1.5 py-1 text-xs text-fg-muted">
-        No memory cues. MEM sets one at the playhead.
+        No memory cues. MEM sets one at the playhead, or saves the playing loop.
       </p>
     );
   }
@@ -122,12 +139,14 @@ function MemoryList({
     <ul aria-label={`Deck ${n} memory cues`} className="flex max-h-60 flex-col overflow-y-auto">
       {cues.map((c) => {
         const at = formatPosition(c.positionMs);
+        const what = c.endMs === null ? "memory cue" : "memory loop";
         return (
           <li key={c.id} className="flex items-center gap-1 text-xs">
             <Button
               size="xs"
               variant="ghost"
-              aria-label={`Jump to memory cue at ${at}`}
+              aria-label={`Jump to ${what} at ${at}`}
+              title={c.endMs === null ? undefined : `Loop ${at} – ${formatPosition(c.endMs)}`}
               className="shrink-0 font-mono tabular-nums"
               onClick={() => onCall(c.positionMs)}
             >
@@ -137,14 +156,27 @@ function MemoryList({
               value={c.name}
               placeholder="No name"
               maxLength={MAX_CUE_NAME_CHARS}
-              aria-label={`Name of memory cue at ${at}`}
+              aria-label={`Name of ${what} at ${at}`}
               title="Double-click to rename"
               onCommit={(name) => onRename(c.id, name)}
             />
+            {c.endMs !== null && (
+              <Button
+                size="xs"
+                variant="control"
+                aria-pressed={c.activeLoop}
+                aria-label={`Auto loop at ${at}`}
+                title="Auto loop: playback enters this loop by itself when it reaches the start"
+                className="shrink-0 px-1 text-2xs font-bold tracking-caption"
+                onClick={() => onAutoLoop(c.id, !c.activeLoop)}
+              >
+                AUTO
+              </Button>
+            )}
             <IconButton
               size="xs"
               variant="ghost"
-              aria-label={`Delete memory cue at ${at}`}
+              aria-label={`Delete ${what} at ${at}`}
               className="shrink-0"
               onClick={() => onDelete(c.id)}
             >

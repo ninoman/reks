@@ -39,8 +39,8 @@ const loadedMeta = (over: Partial<DeckMeta> = {}): DeckMeta => ({
     { id: 12, slot: 2, positionMs: 8_000, colorRgb: 0xff_00_00, name: "Drop" },
   ],
   memoryCues: [
-    { id: 21, positionMs: 6_000, colorRgb: null, name: "Break" },
-    { id: 22, positionMs: 20_000, colorRgb: null, name: null },
+    { id: 21, positionMs: 6_000, endMs: null, activeLoop: false, colorRgb: null, name: "Break" },
+    { id: 22, positionMs: 20_000, endMs: 22_000, activeLoop: false, colorRgb: null, name: null },
   ],
   columns: new Uint8Array(0),
   beats: [{ positionUs: 12_000, beatInBar: 1 }],
@@ -192,6 +192,32 @@ describe("DeckStrip", () => {
     fireEvent.keyDown(other, { key: "Escape" });
     expect(a.editCues).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("button", { name: "Deck 2 hot cue B" })).toBeTruthy();
+  });
+
+  it("deletes a hot cue from its ×, reachable with Tab", () => {
+    const a = setup({ view: view(), meta: loadedMeta() });
+    const pad = screen.getByRole("button", { name: "Deck 2 hot cue C" });
+    const x = screen.getByRole("button", { name: "Delete deck 2 hot cue C" });
+    // Next in the tab order after its pad; empty pads have none.
+    expect(pad.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete deck 2 hot cue A" })).toBeNull();
+    fireEvent.click(x);
+    expect(a.editCues).toHaveBeenLastCalledWith({ type: "delete", cueId: 12 });
+    expect(a.hotCuePad).not.toHaveBeenCalled();
+  });
+
+  it("the memory list jumps, toggles AUTO on loops and deletes from ×", () => {
+    const a = setup({ view: view(), meta: loadedMeta() });
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 memory cues (2)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Jump to memory cue at 0:06.000" }));
+    expect(a.callCue).toHaveBeenLastCalledWith(6_000);
+    expect(screen.queryByRole("button", { name: "Auto loop at 0:06.000" })).toBeNull();
+    const auto = screen.getByRole("button", { name: "Auto loop at 0:20.000" });
+    expect(auto.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(auto);
+    expect(a.editCues).toHaveBeenLastCalledWith({ type: "setActiveLoop", cueId: 22, on: true });
+    fireEvent.click(screen.getByRole("button", { name: "Delete memory loop at 0:20.000" }));
+    expect(a.editCues).toHaveBeenLastCalledWith({ type: "delete", cueId: 22 });
   });
 
   it("sets and calls memory cues in HOT CUE mode", () => {
