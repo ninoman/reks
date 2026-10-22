@@ -2,8 +2,8 @@
 //! `<cache_dir>/artwork/<sha256>.<ext>`, one `artwork` row per distinct image.
 //!
 //! `artwork.blob_path` is relative to the cache dir so the library survives a
-//! moved cache. The cache is disposable: a missing file is rewritten the next
-//! time the same picture is stored.
+//! moved cache. The cache is disposable: a missing file is rewritten from a
+//! track's audio file when it is read, or the next time the picture is stored.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -73,11 +73,56 @@ impl Library {
         Ok(rel.map(|r| self.cache_dir().join(r)))
     }
 
-    /// The stored picture's bytes. `ArtworkNotFound` for an unknown id; an
-    /// I/O error if the cache file is gone (the cache is disposable).
+    /// The stored picture's bytes. `ArtworkNotFound` for an unknown id. A
+    /// missing cache file is re-extracted from a track that uses the picture;
+    /// an I/O error if none of them still embeds it.
     pub fn artwork(&self, id: ArtworkId) -> Result<Vec<u8>> {
         let path = self.artwork_path(id)?.ok_or(Error::ArtworkNotFound(id))?;
-        std::fs::read(&path).map_err(|source| Error::Io { path, source })
+        match std::fs::read(&path) {
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+                match self.reextract_artwork(id, &path)? {
+                    Some(data) => Ok(data),
+                    None => Err(Error::Io { path, source }),
+                }
+            }
+            other => other.map_err(|source| Error::Io { path, source }),
+        }
+    }
+
+    /// Reads the picture again from the audio files of the tracks that use
+    /// it and rewrites the cache file. Only bytes matching the row's hash are
+    /// taken: a file whose cover changed since the scan is not this picture.
+    fn reextract_artwork(&self, id: ArtworkId, path: &Path) -> Result<Option<Vec<u8>>> {
+        let (sha, sources) = {
+            let conn = self.conn()?;
+            let sha: String =
+                conn.query_row("SELECT sha256 FROM artwork WHERE id = ?1", [id], |r| {
+                    r.get(0)
+                })?;
+            let mut stmt =
+                conn.prepare("SELECT path FROM track WHERE artwork_id = ?1 ORDER BY missing, id")?;
+            let sources = stmt
+                .query_map([id], |r| r.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            (sha, sources)
+        };
+        // The lock is released: reading audio files can be slow.
+        for source in sources {
+            let data = match reks_audio::embedded_artwork(Path::new(&source)) {
+                Ok(Some(pic)) => pic.data,
+                Ok(None) => continue,
+                Err(e) => {
+                    tracing::debug!(path = source, error = %e, "artwork not re-read");
+                    continue;
+                }
+            };
+            if sha256_hex(&data) == sha {
+                write_atomic(path, &data)?;
+                tracing::info!(id, from = source, "missing artwork re-extracted");
+                return Ok(Some(data));
+            }
+        }
+        Ok(None)
     }
 }
 
