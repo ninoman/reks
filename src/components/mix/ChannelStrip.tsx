@@ -1,6 +1,6 @@
 /**
  * One mixer channel, top to bottom as on the hardware: level (trim), HI /
- * MID 1 / MID 2 / LO EQ, filter assign, cue, fader, crossfader assign. Rows
+ * HM / LM / LO EQ, filter assign, cue, fader, crossfader assign. Rows
  * line up with `ChannelLegend`, which carries the captions once.
  */
 import type { ChannelValues } from "../../store/mix";
@@ -17,8 +17,8 @@ type EqParam = "eqHi" | "eqMid1" | "eqMid2" | "eqLo";
 const KNOBS: ["trim" | EqParam, string][] = [
   ["trim", "Level"],
   ["eqHi", "Hi"],
-  ["eqMid1", "Mid 1"],
-  ["eqMid2", "Mid 2"],
+  ["eqMid1", "HM"],
+  ["eqMid2", "LM"],
   ["eqLo", "Lo"],
 ];
 

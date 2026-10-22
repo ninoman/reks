@@ -26,10 +26,10 @@ speakers. It is a preparation tool. Nothing here is meant for playing a gig.
   leader's tempo and beat phase from `beatgrid` rows; bar sync also matches the
   downbeat. Varispeed: pitch follows tempo.
 - Mixer, 4 channels, modelled on the Xone:92 music channels (R§9.1):
-  - LEVEL trim (20 dB range); 4-band asymmetric EQ: HI shelf above 2.5 kHz,
-    MID 1 bell at 2 kHz, MID 2 bell at 350 Hz, LO shelf below 250 Hz; +6 dB
-    max boost; HI and LO fully cut become 12 dB/oct low-pass/high-pass (kill);
-    mids cut to −30 dB; Q narrow on boost, wide on cut.
+  - LEVEL trim (20 dB range); 4-band asymmetric EQ, the Xone:96's since
+    2026-10-22 (maintainer's call): HI shelf above 3 kHz, HI MID bell at
+    1.1 kHz, LO MID bell at 350 Hz, LO shelf below 180 Hz; HI and LO +6 dB
+    and fully cut become 12 dB/oct low-pass/high-pass (kill); mids +10 / −27 dB.
   - FILTER assign (X / off / Y), XFADE assign (X / off = direct / Y), CUE,
     channel fader.
   - Two state-variable filters, X and Y: FREQ 30 Hz–20 kHz, HP/BP/LP in any
@@ -142,7 +142,9 @@ pub enum Control {
    128/125 over 64 bars 0.0005 ms; tempo change in the follower 0.043 ms, in
    the leader 0.025 ms.
 4. [x] **EQ**: 4-band asymmetric EQ with tapers. Sine-sweep tests: knobs at noon
-   flat within ±0.1 dB; full boost +6 dB ±0.5 dB; mids full cut −30 dB ±1 dB;
+   flat within ±0.1 dB; full boost +6 dB ±0.5 dB; mids full cut −30 dB ±1 dB.
+   Changed 2026-10-22 (maintainer's call): Xone:96 bands, mids +10 / −27 dB,
+   and a mid cut that is a notch, not a kill (cut Q 0.5 → 2);
    HI/LO full cut fall at 12 dB/oct ±1 dB past the turning point; silence in,
    silence out (no NaN or denormals). Done: `reks-mix::taper` and
    `dsp::eq::ChannelEq`, in every channel strip since task 6; laws and
@@ -602,8 +604,8 @@ Record machine, OS, audio device, date and outcome in a "Mixer" table in
   out. Mitigation: allocation guard, offline render tests, soak test.
 - **Sync depends on the grid**: a wrong grid makes sync drift or sit off-beat.
   Mitigation: Phase 3 grid editor first; show sync phase on the deck.
-- **Model fidelity**: figures come from the original Xone:92 user guide; the
-  Mk2 may differ (UNVERIFIED). The filter slope is not documented
+- **Model fidelity**: figures come from the original Xone:92 user guide,
+  the EQ from the Xone:96 guide (R§9.1). The filter slope is not documented
   (UNVERIFIED); we use a 2-pole SVF.
 - **Scope creep** towards a performance app (loops, MIDI, recording, LFOs). Each
   needs its own decision (D21).

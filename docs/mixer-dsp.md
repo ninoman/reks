@@ -2,7 +2,8 @@
 
 The Phase 5 mixer's signal processing ([`phases/phase-5.md`](phases/phase-5.md)
 tasks 4–7, decision D21). Reference: the Xone:92 music section as documented in
-the original user guide ([`research.md`](research.md) §9.1). The target is the
+the original user guide, except the EQ, which follows the Xone:96 channels 1–4
+(since 2026-10-22; [`research.md`](research.md) §9.1). The target is the
 documented response, not an analogue emulation.
 
 Code: [`crates/reks-mix/src/taper.rs`](../crates/reks-mix/src/taper.rs),
@@ -21,7 +22,7 @@ the neutral position (noon for EQ and trim, closed for faders).
 | Control | Law | Source |
 |---|---|---|
 | HI / LO shelf | amplitude: boost `10^(6·(2v−1)/20)` above noon; cut `(2v)³` below (kill at 0) | range R§9.1; cut shape ours |
-| MID 1 / MID 2 | dB, linear each side: −30 at 0, 0 at noon, +6 at 1 | range R§9.1; shape ours |
+| HI MID / LO MID | dB, linear each side: −27 at 0, 0 at noon, +10 at 1 | range R§9.1; shape ours |
 | LEVEL trim | dB, linear: −10 … +10 | 20 dB range R§9.1; ±10 split **UNVERIFIED** |
 
 Parameters ramp linearly to new values over `SMOOTH_MS` = 10 ms (the plan asks
@@ -29,32 +30,38 @@ for at least 5 ms), so moving a knob through noon or to a kill does not step.
 
 ## EQ (task 4)
 
-`dsp::eq::ChannelEq`, bands in series HI → MID 1 → MID 2 → LO.
+`dsp::eq::ChannelEq`, bands in series HI → HI MID → LO MID → LO (`EqBand::Mid1` / `Mid2`).
 
-- **HI** (2.5 kHz) and **LO** (250 Hz) shelves: with `F` a fixed 2-pole low-pass
+- **HI** (3 kHz) and **LO** (180 Hz) shelves, +6 dB / kill: with `F` a fixed 2-pole low-pass
   (HI) or high-pass (LO) and `g` the shelf amplitude,
   cut is `y = F + g·(x − F)` and boost is `y = x + (g − 1)·(x − F')`.
   At `g = 1` both are exactly `x`; at `g = 0` the output is `F` alone, the
-  12 dB/oct kill. `F` is Butterworth (Q 0.707); `F'` is damped (Q 0.4) so full
+  12 dB/oct kill (the Xone:92's slope; the Xone:96 guide gives none,
+  **UNVERIFIED**). `F` is Butterworth (Q 0.707); `F'` is damped (Q 0.4) so full
   boost peaks at +6.4 dB rather than +6.8 dB. Both run all the time.
 - `F` and `F'` use Vicanek's matched second-order design (M. Vicanek,
   "Matched Second Order Digital Filters", 2016), not the bilinear transform.
   A bilinear 2.5 kHz low-pass is cramped towards Nyquist and falls at about
   14 dB/oct between 5 and 10 kHz at 44.1 kHz; the matched one falls at 11.8,
   as the analogue prototype does.
-- **MID 1** (2 kHz) and **MID 2** (350 Hz): trapezoidal SVF bells (see the
+- **HI MID** (1.1 kHz) and **LO MID** (350 Hz), +10 / −27 dB: trapezoidal SVF bells (see the
   filters section), `y = x + k·(A² − 1)·band`, `k = 1/(Q·A)`, `A = 10^(dB/40)`,
-  exactly `dB` at the centre. Q is 1.2 on boost and 0.5 on cut ("narrow on
-  boost, wide on cut"; the figures are **UNVERIFIED**, the guide gives none).
+  exactly `dB` at the centre. Q is 1.2 on boost and 2.0 on cut. Q here is the
+  width at half the gain in dB, so the earlier cut Q of 0.5 made a full cut
+  remove 10–17 dB an octave or more away and the mids acted as kills like HI
+  and LO (maintainer report, 2026-10-22). At Q 2 a full cut is a notch,
+  above −3 dB two octaves away. The Xone:92 guide asks for a low Q on cut;
+  we depart from it on the maintainer's ear. The figures are **UNVERIFIED**
+  (no guide gives any).
 
 Tests (sine measurement at 44.1, 48 and 96 kHz; `dsp::eq` tests):
 
 | Check | Tolerance | Measured where |
 |---|---|---|
 | all knobs at noon | ±0.1 dB | 20 Hz–20 kHz, 1/3 octave |
-| full boost | +6 ±0.5 dB, never above +6.5 | HI at 10 kHz, mids at centre, LO at 40 Hz; sweep 1/6 octave |
-| mid full cut | −30 ±1 dB | centre |
-| HI / LO kill slope | 12 ±1 dB/oct | HI 5→10 kHz; LO 125→62.5 and 62.5→31.25 Hz |
+| full boost | shelves +6, mids +10, ±0.5 dB; never 0.5 dB above | HI at 12 kHz, mids at centre, LO at 30 Hz; sweep 1/6 octave |
+| mid full cut | −27 ±1 dB; above −3 dB two octaves away | centre; centre ÷4 and ×4 |
+| HI / LO kill slope | 12 ±1 dB/oct | HI 6→12 kHz; LO 90→45 and 45→22.5 Hz |
 | silence | exact zeros, no NaN or subnormals | 10 s after a full-scale burst |
 
 ## Filters (task 5)

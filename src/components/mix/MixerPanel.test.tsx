@@ -29,7 +29,7 @@ describe("MixerPanel", () => {
     setup();
     for (const n of [1, 2, 3, 4]) {
       const strip = screen.getByRole("region", { name: `Channel ${n}` });
-      for (const name of ["level", "EQ Hi", "EQ Mid 1", "EQ Mid 2", "EQ Lo", "fader"]) {
+      for (const name of ["level", "EQ Hi", "EQ HM", "EQ LM", "EQ Lo", "fader"]) {
         expect(within(strip).getByRole("slider", { name: `Channel ${n} ${name}` })).toBeTruthy();
       }
     }
