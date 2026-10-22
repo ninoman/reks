@@ -1,11 +1,10 @@
 /**
- * Settings (phase 1 task 13) in one view, grouped: Folders (library folders,
- * cache folder), Playback (output device, sample rate, buffer, headphone
- * cue: `OutputSettings`), Display (theme, key notation), Decks
- * (the waveform style of the player deck and the Mix view, what SYNC
- * aligns). Values
- * live in Rust (`useSettings`); the library window's own state (columns,
- * panels, volume) is saved without asking.
+ * Settings (phase 1 task 13), one tab per group in a sidebar: Library
+ * (library folders, cache folder), Playback (output device, sample rate,
+ * buffer, headphone cue: `OutputSettings`), Display (theme, key notation),
+ * Decks (the waveform style of the player deck and the Mix view, what SYNC
+ * aligns). Values live in Rust (`useSettings`); the library window's own
+ * state (columns, panels, volume) is saved without asking.
  */
 import { open } from "@tauri-apps/plugin-dialog";
 import { type ReactNode, useRef, useState } from "react";
@@ -28,6 +27,7 @@ import {
 } from "./ui/Dialog";
 import { Segment, SegmentedControl } from "./ui/SegmentedControl";
 import { Swatch } from "./ui/Swatch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/Tabs";
 
 const item = "px-4 py-3.5";
 const itemTitle = "m-0 text-sm font-semibold";
@@ -93,17 +93,18 @@ function SettingsWindow() {
       }}
     >
       <DialogContent
-        size="md"
+        size="lg"
+        className="h-[520px]"
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           closeRef.current?.focus();
         }}
       >
-        <DialogHeader className="pt-5">
+        <DialogHeader className="border-b border-border pt-5 pb-4">
           <DialogTitle className="text-lg">Settings</DialogTitle>
         </DialogHeader>
         <SettingsBody />
-        <DialogFooter className="pt-5">
+        <DialogFooter className="border-t border-border pt-4">
           <Button variant="primary" ref={closeRef} onClick={close}>
             Close
           </Button>
@@ -113,48 +114,74 @@ function SettingsWindow() {
   );
 }
 
+type Tab = "library" | "playback" | "display" | "decks";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "library", label: "Library" },
+  { id: "playback", label: "Playback" },
+  { id: "display", label: "Display" },
+  { id: "decks", label: "Decks" },
+];
+
 function SettingsBody() {
   const settings = useSettings((s) => s.settings);
   const error = useSettings((s) => s.error);
+  const [tab, setTab] = useState<Tab>("library");
   return (
-    <DialogBody className="gap-5">
-      {error !== null && (
-        <p className="text-danger" role="alert">
-          {error}
-        </p>
-      )}
-      <Group title="Folders">
-        <LibraryFolders />
-        {settings !== null && <CacheFolder cacheDir={settings.cacheDir} />}
-      </Group>
-      {settings !== null && (
-        <>
-          <Group title="Playback">
-            <OutputSettings itemClassName={item} />
-          </Group>
-          <Group title="Display">
-            <ThemeChoice theme={settings.theme} />
-            <KeyNotationChoice notation={settings.keyNotation} />
-          </Group>
-          <Group title="Decks">
-            <DeckWaveformChoice waveform={settings.deckWaveform} />
-            <SyncAlignChoice align={settings.syncAlign} />
-          </Group>
-        </>
-      )}
-    </DialogBody>
+    <Tabs
+      orientation="vertical"
+      value={tab}
+      onValueChange={(v) => setTab(v as Tab)}
+      className="flex min-h-0 flex-1"
+    >
+      <TabsList aria-label="Settings" className="w-36 shrink-0 border-r border-border p-2">
+        {TABS.map((t) => (
+          <TabsTrigger
+            key={t.id}
+            value={t.id}
+            // Everything but the library folders needs the stored settings.
+            disabled={t.id !== "library" && settings === null}
+          >
+            {t.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      <DialogBody className="flex-1 py-4">
+        {error !== null && (
+          <p className="m-0 text-danger" role="alert">
+            {error}
+          </p>
+        )}
+        <Panel value="library">
+          <LibraryFolders />
+          {settings !== null && <CacheFolder cacheDir={settings.cacheDir} />}
+        </Panel>
+        {settings !== null && (
+          <>
+            <Panel value="playback">
+              <OutputSettings itemClassName={item} />
+            </Panel>
+            <Panel value="display">
+              <ThemeChoice theme={settings.theme} />
+              <KeyNotationChoice notation={settings.keyNotation} />
+            </Panel>
+            <Panel value="decks">
+              <DeckWaveformChoice waveform={settings.deckWaveform} />
+              <SyncAlignChoice align={settings.syncAlign} />
+            </Panel>
+          </>
+        )}
+      </DialogBody>
+    </Tabs>
   );
 }
 
-/** A titled card; its items are split by thin rules. */
-function Group({ title, children }: { title: string; children: ReactNode }) {
+/** One tab's settings in a card, split by thin rules. */
+function Panel({ value, children }: { value: Tab; children: ReactNode }) {
   return (
-    <section aria-label={title}>
-      <h4 className="mt-0 mb-2 ml-0.5 text-2xs font-semibold tracking-caption text-fg-muted uppercase">
-        {title}
-      </h4>
+    <TabsContent value={value}>
       <Card>{children}</Card>
-    </section>
+    </TabsContent>
   );
 }
 
