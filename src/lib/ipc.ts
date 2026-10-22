@@ -714,7 +714,6 @@ export type FilterParam =
   | "bandPass"
   | "lowPass"
   | "on"
-  | "vcfToXfader"
   /** Unit Y only: Y follows X's FREQ. */
   | "link";
 

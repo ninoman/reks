@@ -152,6 +152,12 @@ describe("mix store", () => {
     expect(useMix.getState().channels[2]?.xfadeAssign).toBe("y");
   });
 
+  it("has no VCF TO XFADER (removed 2026-10-22)", () => {
+    const { x, y } = useMix.getState().filters;
+    expect(Object.keys(x)).not.toContain("vcfToXfader");
+    expect(Object.keys(y)).not.toContain("vcfToXfader");
+  });
+
   it("sends nothing while the output is off", () => {
     useMix.getState().setCrossfader({ pos: 0 });
     expect(ipc.mixControl).not.toHaveBeenCalled();

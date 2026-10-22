@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { type KeyPress, mixKeyAction } from "./mixKeys";
+import { crossfaderKeyHint, deckKeyHint, type KeyPress, mixKeyAction } from "./mixKeys";
 
 const key = (code: string, mods: Partial<KeyPress> = {}): KeyPress => ({
   code,
@@ -30,5 +30,29 @@ describe("mixKeyAction", () => {
     expect(mixKeyAction(key("KeyX"), 2)).toEqual({ type: "crossfader", step: 0 });
     expect(mixKeyAction(key("KeyS", { metaKey: true }), 2)).toBeNull();
     expect(mixKeyAction(key("KeyP"), 2)).toBeNull();
+  });
+});
+
+describe("key hints", () => {
+  it("name the key that mixKeyAction maps to the same action", () => {
+    expect(deckKeyHint({ type: "play" }, 1)).toBe("S");
+    expect(deckKeyHint({ type: "play" }, 2)).toBe("K");
+    expect(deckKeyHint({ type: "play" }, 0)).toBe("Shift S");
+    expect(deckKeyHint({ type: "hotCue", slot: 2 }, 3)).toBe("Shift 9");
+    expect(deckKeyHint({ type: "nudge", dir: 1 }, 2)).toBe("I");
+    expect(deckKeyHint({ type: "hotCue", slot: 4 }, 1)).toBeUndefined();
+  });
+
+  it("round-trips through mixKeyAction for every deck", () => {
+    for (let deck = 0; deck < 4; deck++) {
+      const hint = deckKeyHint({ type: "cue" }, deck) ?? "";
+      const code = `Key${hint.replace("Shift ", "")}`;
+      const shiftKey = hint.startsWith("Shift");
+      expect(mixKeyAction(key(code, { shiftKey }), 4)).toEqual({ type: "cue", deck });
+    }
+  });
+
+  it("lists the crossfader keys", () => {
+    expect(crossfaderKeyHint()).toBe("Z X C");
   });
 });

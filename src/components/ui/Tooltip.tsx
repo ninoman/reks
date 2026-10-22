@@ -48,3 +48,24 @@ export function Tooltip({
     </TooltipPrimitive.Provider>
   );
 }
+
+/**
+ * A control's own hint: wraps `children` in a tooltip when it has a keyboard
+ * shortcut ("Play" + the key), and leaves it bare when it has none.
+ */
+export function ShortcutTooltip({
+  shortcut,
+  hint,
+  children,
+}: {
+  shortcut: string | undefined;
+  hint: ReactNode;
+  children: ReactElement;
+}) {
+  if (shortcut === undefined) return children;
+  return (
+    <Tooltip content={hint} shortcut={shortcut}>
+      {children}
+    </Tooltip>
+  );
+}

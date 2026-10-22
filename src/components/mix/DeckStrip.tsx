@@ -12,6 +12,8 @@ import { cn } from "../../lib/cn";
 import { hasType, readTracks, TRACKS_MIME } from "../../lib/dnd";
 import { hotCueLabel } from "../../lib/format";
 import type { DeckView } from "../../lib/ipc";
+import { PLAYER_PLAY_KEY } from "../../lib/keys";
+import { type DeckAction, deckKeyHint } from "../../lib/mixKeys";
 import {
   formatClock,
   formatTempo,
@@ -89,6 +91,11 @@ export function DeckStrip({
   const n = deck + 1;
   const loaded = meta.track !== null && view?.loaded === true;
   const tempo = view?.tempo ?? 1;
+  // The player deck alone has no mixer keys; Space plays deck 2 in both.
+  const keyFor = (action: DeckAction) => (solo ? undefined : deckKeyHint(action, deck));
+  const playKey = [keyFor({ type: "play" }), deck === 1 ? PLAYER_PLAY_KEY.label : undefined]
+    .filter((k) => k !== undefined)
+    .join(" / ");
   const scrub = useDeckScrub({
     positionMs: view?.positionMs ?? 0,
     durationMs: view?.durationMs ?? 0,
@@ -207,6 +214,8 @@ export function DeckStrip({
             size="sm"
             disabled={!loaded}
             aria-label={`Deck ${n} cue`}
+            hint="Cue (hold to preview)"
+            shortcut={keyFor({ type: "cue" })}
             onPointerDown={(e) => e.button === 0 && actions.cue(true)}
             onPointerUp={() => actions.cue(false)}
             onPointerCancel={() => actions.cue(false)}
@@ -228,6 +237,8 @@ export function DeckStrip({
             variant="secondary"
             disabled={!loaded}
             aria-label={view?.playing ? `Pause deck ${n}` : `Play deck ${n}`}
+            hint={view?.playing ? "Pause" : "Play"}
+            shortcut={playKey === "" ? undefined : playKey}
             onClick={actions.togglePlay}
           >
             {view?.playing ? <PauseIcon /> : <PlayIcon />}
@@ -239,6 +250,8 @@ export function DeckStrip({
                 disabled={!loaded}
                 aria-pressed={view?.sync ?? false}
                 aria-label={`Deck ${n} sync`}
+                hint="Sync"
+                shortcut={keyFor({ type: "sync" })}
                 onClick={actions.toggleSync}
               >
                 Sync
@@ -300,6 +313,8 @@ export function DeckStrip({
                 variant={set ? "secondary" : "ghost"}
                 disabled={!loaded || !set}
                 aria-label={`Deck ${n} hot cue ${hotCueLabel(slot)}`}
+                hint={`Hot cue ${hotCueLabel(slot)}`}
+                shortcut={keyFor({ type: "hotCue", slot })}
                 onClick={() => actions.hotCue(slot)}
                 className="w-(--ctl-h-sm) px-0"
               >
@@ -314,6 +329,8 @@ export function DeckStrip({
                 size="xs"
                 disabled={!loaded}
                 aria-label={`Deck ${n} nudge ${dir < 0 ? "slower" : "faster"}`}
+                hint={`Nudge ${dir < 0 ? "slower" : "faster"} (hold)`}
+                shortcut={keyFor({ type: "nudge", dir })}
                 onPointerDown={() => actions.nudge(dir)}
                 onPointerUp={() => actions.nudge(0)}
                 onPointerLeave={(e) => e.buttons !== 0 && actions.nudge(0)}

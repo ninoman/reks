@@ -78,11 +78,6 @@ impl Crossfader {
         self.curve.set(taper::unit(curve, 0.0));
     }
 
-    /// Smoothed position, for VCF TO XFADER ([`super::filter::FilterPanel`]).
-    pub fn pos(&self) -> f32 {
-        self.pos.value()
-    }
-
     /// Advances one frame and returns the side gains.
     #[inline]
     pub fn tick(&mut self) -> XfadeGains {
@@ -246,6 +241,5 @@ mod tests {
             xf.tick();
         }
         assert_eq!(xf.tick(), crossfader_gains(0.0, 0.0));
-        assert_eq!(xf.pos(), 0.0);
     }
 }

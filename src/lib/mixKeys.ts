@@ -15,7 +15,7 @@
  */
 
 /** A deck action without its deck. */
-type DeckAction =
+export type DeckAction =
   | { type: "cue" }
   | { type: "play" }
   | { type: "sync" }
@@ -70,4 +70,30 @@ export function mixKeyAction(e: KeyPress, decks: number): MixKeyAction | null {
   const hit = BY_CODE.get(e.code);
   if (hit === undefined || (e.shiftKey && decks < 4)) return null;
   return { ...hit.action, deck: HANDS[e.shiftKey ? "shift" : "plain"][hit.side] ?? 1 };
+}
+
+/** `KeyA` → "A", `Digit7` → "7". */
+const keyName = (code: string) => code.replace(/^(Key|Digit)/, "");
+
+const sameAction = (a: DeckAction, b: DeckAction) =>
+  a.type === b.type &&
+  (a.type !== "nudge" || a.dir === (b as typeof a).dir) &&
+  (a.type !== "hotCue" || a.slot === (b as typeof a).slot);
+
+/**
+ * How the key for `action` on `deck` (0-based) reads in a hint, taken from
+ * the same table as `mixKeyAction`: "S", or "Shift S" for the outer decks.
+ */
+export function deckKeyHint(action: DeckAction, deck: number): string | undefined {
+  const side = deck === 0 || deck === 1 ? 0 : 1;
+  const shift = deck === 0 || deck === 3;
+  const row = DECK_KEYS.find(([, , a]) => sameAction(a, action));
+  const code = row?.[side];
+  if (code === undefined) return undefined;
+  return `${shift ? "Shift " : ""}${keyName(code)}`;
+}
+
+/** The crossfader keys as one hint: "Z X C". */
+export function crossfaderKeyHint(): string {
+  return Object.keys(CROSSFADER).map(keyName).join(" ");
 }

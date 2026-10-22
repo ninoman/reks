@@ -129,6 +129,7 @@ menu items `--menu-item-h`.
 | `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |
 | `Kbd` | `variant`: default, inverse | – |
 | `Tooltip` | `content`, `shortcut`, `side` | Radix Tooltip |
+| Shortcut hint | `Button` / `IconButton` take `shortcut` (+ `hint`, default `aria-label`) and show it in a tooltip on hover/focus; the key text comes from `lib/mixKeys` (`deckKeyHint`, `crossfaderKeyHint`) or `lib/keys` (`PLAYER_PLAY_KEY`), never a literal | `ShortcutTooltip` |
 | `DropdownMenu*` | Content, Item (`variant`: default, danger), CheckboxItem, Separator | Radix DropdownMenu |
 | `ContextMenu*` | Content, Item, CheckboxItem (`checked="indeterminate"` shows a dash), Sub / SubTrigger / SubContent, Group / Label, Separator; wrap the whole area, not each row | Radix ContextMenu |
 | `Popover*` | Content (`align`, `sideOffset`) | Radix Popover |
@@ -268,12 +269,13 @@ height).
   Each meter subscribes to its own lit-LED count (`useMeter`,
   `mix/LiveMeter`), so it renders only when an LED changes and the memoised
   mixer still skips the 60 Hz renders.
-- Mixer switches (CUE, filter ON/HP/BP/LP/VCF/LINK, SPLIT, POST EQ) are
+- Mixer switches (CUE, filter ON/HP/BP/LP/LINK, SPLIT, POST EQ) are
   `Button variant="control"` and the assign switches `SegmentedControl
   variant="control"`: when on they are lit (`lit` fill, `lit-fg` text,
   `shadow-lit` glow), the same look for every hardware-style switch.
   HP / BP / LP and channel CUE: a click picks one, Shift+click combines
   (tooltip on each); FILTER assign starts at X for channels 1–2, Y for 3–4.
+- Knobs draw a position mark (`knobMark`, `--color-knob-mark`: dark ink on the light cap in both themes).
 - Sizes: `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-wave-h*`, `--deck-overview-h`,
   `--mixer-strip-w`, `--mixer-row-h`, `--mix-panel-max-h` (the panel scrolls
   inside 62% of the window height).

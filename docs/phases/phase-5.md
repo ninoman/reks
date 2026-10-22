@@ -33,8 +33,8 @@ speakers. It is a preparation tool. Nothing here is meant for playing a gig.
   - FILTER assign (X / off / Y), XFADE assign (X / off = direct / Y), CUE,
     channel fader.
   - Two state-variable filters, X and Y: FREQ 30 Hz–20 kHz, HP/BP/LP in any
-    combination, RESONANCE mild to wild, ON. No LFOs (D21). VCF TO
-    XFADER (crossfader sweeps the cutoff) and LINK (Y follows X's FREQ).
+    combination, RESONANCE mild to wild, ON. No LFOs (D21). LINK (Y follows X's FREQ).
+    VCF TO XFADER was dropped (task 14).
   - Crossfader with curve: progressive with a 4 dB centre dip, through to a
     near-instant cut.
   - Master level; channel and master meters; a safety limiter on master and
@@ -148,10 +148,10 @@ pub enum Control {
    tolerances in [`../mixer-dsp.md`](../mixer-dsp.md).
 5. [x] **Filters**: two state-variable filters (trapezoidal SVF from the
    published papers, our own code), mode combinations, resonance taper,
-   VCF TO XFADER, LINK. Tests: −3 dB at the set
+   LINK (VCF TO XFADER was built here and removed in task 14). Tests: −3 dB at the set
    cutoff for LP and HP at minimum resonance; stable at maximum resonance across
    30 Hz–20 kHz at 44.1, 48 and 96 kHz. Done: `dsp::filter` (`Filter`, `FilterPanel`
-   for VCF TO XFADER and LINK), wired in task 6; MILD is Butterworth, not the
+   for LINK), wired in task 6; MILD is Butterworth, not the
    hardware's likely overdamped setting ([`../mixer-dsp.md`](../mixer-dsp.md)).
    2026-10-21 (maintainer's testing): resonance halved to Q 0.707–10 (WILD
    +20 dB, was +26 dB) on a v² curve (noon +2.7 dB); a test pins the knob
@@ -312,6 +312,21 @@ pub enum Control {
     `wide_tempo_doubles_and_stands_still_at_the_ends` (`graph.rs`),
     `mixView.test.ts`, `mixKeys.test.ts`, `DeckStrip.test.tsx`. Checked in
     the browser with the dev mock only.
+14. [x] **Mixer polish** (maintainer review, 2026-10-22):
+    - Every knob draws a position mark: a short line from the rim inwards at
+      the current angle, in `fg` on the `knob` fill (both themes). One change
+      in `ui/Knob.tsx` (`knobMark`), so every knob has it.
+    - **VCF TO XFADER removed** (maintainer: unused, removed 2026-10-22): the
+      toggle, `FilterParam::VcfToXfader`, `vcfToXfader` in IPC and store, the
+      block-rate cutoff logic (`FilterPanel::effective_freq` now only applies
+      LINK) and `Crossfader::pos`. No decision in `decisions.md` named it.
+    - Shortcut hints: `Button` takes `shortcut` and shows it in a tooltip on
+      hover/focus ("Play · S"). The text comes from `mixKeys.ts`
+      (`mixKeyLabel`), so a key and its hint cannot drift apart. Applied to
+      the deck buttons (cue, play, sync, nudge, hot cues) and the crossfader
+      resets.
+    Tests: `Knob.test.tsx` (mark angle), `Button` hint rendered from the key
+    map (`ui.test.tsx`), `mixKeys.test.ts`, `mix.test.ts` (no VCF in IPC).
 
 ## Acceptance criteria
 

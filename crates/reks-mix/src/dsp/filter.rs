@@ -21,41 +21,24 @@ pub struct FilterModes {
     pub hp: bool,
 }
 
-/// The knob and switch positions of both units plus the two cross-unit
-/// switches, as the UI sends them.
+/// The FREQ knobs of both units plus LINK, as the UI sends them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FilterPanel {
     /// FREQ knobs, 0..=1.
     pub freq_x: f32,
     pub freq_y: f32,
-    /// VCF TO XFADER per unit: the crossfader drives that unit's FREQ.
-    pub to_xfader_x: bool,
-    pub to_xfader_y: bool,
     /// LINK: unit Y follows unit X's FREQ.
     pub link: bool,
 }
 
 impl FilterPanel {
-    /// Effective FREQ knob values `(x, y)` for a crossfader position (0..=1,
-    /// 0 = X side). Pure; the graph feeds the result to [`Filter::set_freq`].
-    /// LINK wins over Y's own VCF TO XFADER, so a linked pair always moves
-    /// together. Whether the hardware also stops crossfading in VCF TO
-    /// XFADER mode is UNVERIFIED; this only decides the cutoffs.
-    pub fn effective_freq(&self, xfader: f32) -> (f32, f32) {
-        let xfader = taper::unit(xfader, 0.5);
-        let x = if self.to_xfader_x {
-            xfader
-        } else {
-            self.freq_x
-        };
-        let y = if self.link {
-            x
-        } else if self.to_xfader_y {
-            xfader
-        } else {
-            self.freq_y
-        };
-        (x, y)
+    /// Effective FREQ knob values `(x, y)`. Pure; the graph feeds the result
+    /// to [`Filter::set_freq`]. LINK makes Y follow X.
+    pub fn effective_freq(&self) -> (f32, f32) {
+        (
+            self.freq_x,
+            if self.link { self.freq_x } else { self.freq_y },
+        )
     }
 }
 
@@ -413,23 +396,14 @@ mod tests {
     }
 
     #[test]
-    fn link_and_vcf_to_xfader_pick_the_cutoffs() {
+    fn link_makes_y_follow_x() {
         let mut p = FilterPanel {
             freq_x: 0.2,
             freq_y: 0.8,
-            to_xfader_x: false,
-            to_xfader_y: false,
             link: false,
         };
-        assert_eq!(p.effective_freq(0.5), (0.2, 0.8));
+        assert_eq!(p.effective_freq(), (0.2, 0.8));
         p.link = true;
-        assert_eq!(p.effective_freq(0.5), (0.2, 0.2));
-        p.to_xfader_x = true;
-        assert_eq!(p.effective_freq(0.7), (0.7, 0.7));
-        p.link = false;
-        p.to_xfader_x = false;
-        p.to_xfader_y = true;
-        assert_eq!(p.effective_freq(0.1), (0.2, 0.1));
-        assert_eq!(p.effective_freq(f32::NAN), (0.2, 0.5));
+        assert_eq!(p.effective_freq(), (0.2, 0.2));
     }
 }

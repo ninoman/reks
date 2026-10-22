@@ -20,3 +20,6 @@ export function keepsSpace(target: EventTarget | null): boolean {
   if (target instanceof HTMLInputElement && !NON_TEXT_INPUTS.has(target.type)) return true;
   return target.closest('[role="dialog"], [role="alertdialog"], [role="menu"]') !== null;
 }
+
+/** The player deck's play/pause key (`KeyboardEvent.code`) and how it reads in a hint. */
+export const PLAYER_PLAY_KEY = { code: "Space", label: "Space" } as const;

@@ -70,8 +70,6 @@ impl Mixer {
             panel: FilterPanel {
                 freq_x: 1.0,
                 freq_y: 1.0,
-                to_xfader_x: false,
-                to_xfader_y: false,
                 link: false,
             },
             modes: [lp; 2],
@@ -128,10 +126,6 @@ impl Mixer {
             FilterParam::Freq => match unit {
                 FilterUnit::X => self.panel.freq_x = value,
                 FilterUnit::Y => self.panel.freq_y = value,
-            },
-            FilterParam::VcfToXfader => match unit {
-                FilterUnit::X => self.panel.to_xfader_x = switch(value),
-                FilterUnit::Y => self.panel.to_xfader_y = switch(value),
             },
             // A panel switch: either unit's control sets it.
             FilterParam::Link => self.panel.link = switch(value),
@@ -192,9 +186,8 @@ impl Mixer {
     ) {
         let n = out.len();
         let frames = n / 2;
-        // VCF TO XFADER and LINK move the cutoff once a block; the filters
-        // smooth it.
-        let (fx, fy) = self.panel.effective_freq(self.xfader.pos());
+        // LINK moves Y's cutoff once a block; the filters smooth it.
+        let (fx, fy) = self.panel.effective_freq();
         for s in &mut self.strips {
             s.filter_mut(FilterUnit::X).set_freq(fx);
             s.filter_mut(FilterUnit::Y).set_freq(fy);

@@ -39,6 +39,7 @@ describe("MixerPanel", () => {
     expect(screen.getByRole("slider", { name: "Crossfader" })).toBeTruthy();
     // LINK is on Y only.
     expect(screen.queryByRole("button", { name: "Filter X linked to X" })).toBeNull();
+    expect(screen.queryByText("VCF")).toBeNull();
     expect(screen.getByRole("button", { name: "Filter Y linked to X" })).toBeTruthy();
   });
 
