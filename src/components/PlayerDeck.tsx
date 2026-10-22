@@ -1,7 +1,8 @@
 /**
- * The library's player when the Mix panel is off: the player deck alone,
- * in the same deck design as the Mix view (D30). Connects the mix store to
- * the presentational `DeckStrip`.
+ * The library's player when the Mix panel is off (1 deck): the player deck
+ * alone, in the same deck design as the Mix view (D30) but laid out flat
+ * (`DeckStrip` `solo`). Connects the mix store to the presentational
+ * `DeckStrip`.
  */
 import { useMix } from "../store/mix";
 import { PLAYER_DECK } from "../store/player";
@@ -17,7 +18,7 @@ export function PlayerDeck() {
   const view = mix.status === "running" ? mix.live?.decks[PLAYER_DECK] : undefined;
 
   return (
-    <div className="shrink-0 bg-bg-subtle px-3 pb-2">
+    <div className="shrink-0 px-3 pb-2">
       <DeckStrip
         deck={PLAYER_DECK}
         view={view}

@@ -23,6 +23,8 @@ export interface DeckTempoProps {
   loaded: boolean;
   tempo: number;
   range: TempoRange;
+  /** Scale marks on the fader, ends included: more on a taller deck. */
+  ticks: number;
   slowerKey: string | undefined;
   fasterKey: string | undefined;
   onTempo: (ratio: number) => void;
@@ -40,6 +42,7 @@ export function DeckTempo({
   loaded,
   tempo,
   range,
+  ticks,
   slowerKey,
   fasterKey,
   onTempo,
@@ -76,6 +79,7 @@ export function DeckTempo({
         value={tempoFader(tempo, range)}
         defaultValue={0.5}
         detent={0.5}
+        ticks={ticks}
         onValueChange={(v) => onTempo(tempoRatio(v, range))}
         aria-label={`Deck ${n} tempo`}
         valueText={formatTempo(tempo)}

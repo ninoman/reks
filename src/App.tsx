@@ -1,15 +1,16 @@
 /**
- * Library window: the app header (library-wide actions) across the top; the
- * playlist and Histories trees on the left (an open history session replaces
- * the toolbar, filters and table); toolbar, filter bar and track table in the
+ * Library window: the app header (library-wide actions) across the top; under
+ * it the deck section, as in rekordbox and Traktor: the player bar (deck
+ * layout, output status, volume, output device), then the player deck alone
+ * (1 deck, D30) or the mix panel (2 or 4 decks and the mixer, with its own
+ * shortcuts, `src/lib/mixKeys.ts`). Below that the library: the playlist and
+ * Histories trees on the left (an open history session replaces the
+ * toolbar, filters and table); toolbar, filter bar and track table in the
  * middle, with Shift+clicked playlists split under it (`TrackLists`) and the
  * track info panel and the My Tags drawer sliding over the tables' right edge
- * when their toolbar buttons are on; the mix panel (decks and mixer) under them when the Mix
- * button is on, with its own shortcuts (`src/lib/mixKeys.ts`), otherwise the
- * player deck alone (D30), under the player's header row (volume, output,
- * Mix). Space plays and pauses the player deck wherever focus is, except in
- * text fields, dialogs and menus;
- * Cmd/Ctrl+, opens Settings.
+ * when their toolbar buttons are on. Space plays and pauses the player deck
+ * wherever focus is, except in text fields, dialogs and menus; Cmd/Ctrl+,
+ * opens Settings.
  * Settings load first and restore the window state (columns, panels, volume).
  * Mounted only once the library is open (main.tsx); takes the splash down.
  */
@@ -120,6 +121,10 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       <AppHeader />
+      <div className="flex shrink-0 flex-col border-b border-border bg-bg-subtle">
+        <PlayerBar />
+        {mixOpen ? <MixPanel /> : <PlayerDeck />}
+      </div>
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-(--sidebar-w) shrink-0 flex-col border-r border-border bg-bg-subtle">
           <PlaylistTree />
@@ -147,8 +152,6 @@ export default function App() {
           )}
         </main>
       </div>
-      <PlayerBar />
-      {mixOpen ? <MixPanel /> : <PlayerDeck />}
       <DuplicateDialog />
       <DeleteDialog />
       <ImportWizard />

@@ -270,6 +270,9 @@ function mutate(op: PlaylistOp) {
 
 let settings: Settings = {
   audioDevice: null,
+  audioSampleRate: null,
+  audioBufferFrames: null,
+  audioCue: null,
   keyNotation: "classical",
   deckWaveform: "rgb",
   syncAlign: "bar",

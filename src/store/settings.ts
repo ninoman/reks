@@ -16,6 +16,7 @@ import {
   libraryRootAdd,
   libraryRootRemove,
   libraryRoots,
+  type MixConfig,
   type Settings,
   type SettingsPatch,
   settingsGet,
@@ -100,7 +101,14 @@ export const useSettings = create<SettingsStore>()((set, get) => {
         const [settings, roots] = await Promise.all([settingsGet(), libraryRoots()]);
         applyUi(settings.ui, defaultHidden);
         set({ settings, roots });
-        await useMix.getState().setConfig({ device: settings.audioDevice });
+        const { audioDevice, audioSampleRate, audioBufferFrames, audioCue } = settings;
+        await useMix.getState().setConfig({
+          device: audioDevice,
+          sampleRate: audioSampleRate,
+          bufferFrames: audioBufferFrames,
+          // Unset: each device gets its own default routing.
+          ...(audioCue === null ? {} : { cue: audioCue }),
+        });
       });
     },
     refresh: () => run(async () => set({ settings: await settingsGet() })),
@@ -168,12 +176,19 @@ export function startUiSync(): () => void {
 }
 
 /**
- * Plays through `device` from now on (`null`: system default) and stores the
- * choice; a running output reopens on it.
+ * Opens the output as `patch` says from now on (device, rate, buffer, cue)
+ * and stores the choice; a running output reopens with it. A new device goes
+ * back to its own rate and buffer, and that is stored too.
  */
-export async function chooseOutputDevice(device: string | null): Promise<void> {
-  await useMix.getState().setDevice(device);
-  await useSettings.getState().update({ audioDevice: device });
+export async function chooseOutput(patch: Partial<MixConfig>): Promise<void> {
+  await useMix.getState().setOutput(patch);
+  const c = useMix.getState().config;
+  await useSettings.getState().update({
+    audioDevice: c.device,
+    audioSampleRate: c.sampleRate,
+    audioBufferFrames: c.bufferFrames,
+    ...("cue" in patch ? { audioCue: c.cue } : {}),
+  });
 }
 
 /** A function labelling canonical keys in the notation chosen in Settings. */

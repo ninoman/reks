@@ -1,8 +1,9 @@
 /**
  * A deck's header row: deck number (lit when loaded), artwork (eject on
- * hover or focus), title and artist, key, BPM (double-click to type one)
+ * hover or focus), title and artist, key (a readout, KEY under it), BPM (double-click to type one)
  * with the tempo under it, and remaining over elapsed time.
  */
+import { cn } from "../../lib/cn";
 import { formatClock, formatTempo } from "../../lib/mixView";
 import type { DeckTrack, TrackRef } from "../../store/mix";
 import { ArtworkThumb } from "../ArtworkThumb";
@@ -81,14 +82,15 @@ export function DeckHeader({
           {shown === null ? `Deck ${n}` : (shown.artist ?? "")}
         </span>
       </div>
-      <Badge
-        variant={keyText === null ? "muted" : "neutral"}
-        size="md"
-        className="min-w-8 rounded-xs font-mono"
-        title="Key"
-      >
-        {keyText ?? "—"}
-      </Badge>
+      {/* A readout like BPM and time, not a pill: it can't be pressed. */}
+      <div className="flex min-w-8 shrink-0 flex-col items-end gap-0.5 font-mono tabular-nums">
+        <span
+          className={cn("text-sm leading-tight font-bold", keyText === null && "text-fg-subtle")}
+        >
+          {keyText ?? "—"}
+        </span>
+        <span className="text-2xs text-fg-muted">KEY</span>
+      </div>
       <div className="flex w-18 shrink-0 flex-col items-end gap-px font-mono tabular-nums">
         <InlineNumber
           value={bpm}
