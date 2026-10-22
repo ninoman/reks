@@ -7,7 +7,8 @@
 //! The payloads are kept as they are, not converted into reks's 150/s band
 //! columns: our encoders (peak-hold envelope, per-track gain, gamma curves,
 //! 3–7-bit fields) are not invertible, so a round trip through columns would
-//! only approximate rekordbox's bytes. [`crate::build`] writes these
+//! only approximate rekordbox's bytes. (That approximation is good enough to
+//! draw a deck, [`crate::deckwave`], not to write a stick.) [`crate::build`] writes these
 //! payloads back byte for byte with reks's grid and cues.
 
 use crate::read::{self, ReadError, Section};
@@ -74,7 +75,7 @@ pub fn read_waveforms(dat: &[u8], ext: &[u8], ex2: &[u8]) -> Result<Waveforms, R
     })
 }
 
-fn find<'a>(
+pub(crate) fn find<'a>(
     sections: &[Section<'a>],
     tag: [u8; 4],
     name: &'static str,
@@ -100,7 +101,11 @@ fn preview<'a>(s: Section<'a>, tag: &'static str) -> Result<&'a [u8], RbWaveErro
 }
 
 /// Payload of a section with header `len_entry_bytes`, `len_entries`.
-fn entries<'a>(s: Section<'a>, tag: &'static str, entry: usize) -> Result<&'a [u8], RbWaveError> {
+pub(crate) fn entries<'a>(
+    s: Section<'a>,
+    tag: &'static str,
+    entry: usize,
+) -> Result<&'a [u8], RbWaveError> {
     let entry_bytes = s.u32(12)? as usize;
     let count = s.u32(16)? as usize;
     let payload = payload(&s);
@@ -121,7 +126,7 @@ fn payload<'a>(s: &Section<'a>) -> &'a [u8] {
     &s.bytes[s.len_header.min(s.bytes.len())..]
 }
 
-fn chunks<const N: usize>(payload: &[u8]) -> Vec<[u8; N]> {
+pub(crate) fn chunks<const N: usize>(payload: &[u8]) -> Vec<[u8; N]> {
     payload.as_chunks::<N>().0.to_vec()
 }
 
@@ -138,7 +143,7 @@ fn fixed<const N: usize, T: Clone + std::fmt::Debug>(
 }
 
 /// PWVC: one u16 header field, three big-endian u16 gains.
-fn pwvc(s: Section<'_>) -> Result<[u16; 3], RbWaveError> {
+pub(crate) fn pwvc(s: Section<'_>) -> Result<[u16; 3], RbWaveError> {
     let p = s.payload();
     if p.len() != 6 {
         return Err(RbWaveError::Shape {

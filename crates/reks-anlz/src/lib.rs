@@ -4,12 +4,14 @@
 //! ([`grid::pqtz_beats`]), cues ([`cue`]) and encoded waveforms
 //! ([`waveform::Waveforms`]); [`write`] frames the sections; [`validate`]
 //! checks files; [`read`] decodes them (export validation, Phase 2 task 8);
-//! [`compare`] measures our files against rekordbox's. Formats:
+//! [`compare`] measures our files against rekordbox's; [`deckwave`] turns a
+//! stick's waveforms back into deck columns. Formats:
 //! `docs/research.md` §3.3 and the D9 finding in `docs/decisions.md`.
 
 pub mod build;
 pub mod compare;
 pub mod cue;
+pub mod deckwave;
 pub mod grid;
 pub mod rbwave;
 pub mod read;

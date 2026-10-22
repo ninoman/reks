@@ -79,7 +79,7 @@ export function HistoryTree() {
 
   return (
     <section
-      className="flex max-h-1/2 min-h-0 shrink-0 flex-col border-t border-border"
+      className="flex max-h-1/3 min-h-0 shrink-0 flex-col border-t border-border"
       aria-label="Histories"
     >
       <ScrollArea className="min-h-0">

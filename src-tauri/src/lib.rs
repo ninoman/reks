@@ -3,6 +3,7 @@
 
 mod adopt;
 mod analysis;
+mod browse;
 mod commands;
 mod grid;
 mod history;
@@ -81,6 +82,7 @@ pub fn run() {
             mix::mix_start,
             mix::mix_stop,
             mix::mix_load,
+            mix::mix_load_stick,
             mix::mix_control,
             mix::mix_cue_edit,
             grid::beatgrid_get,
@@ -95,6 +97,9 @@ pub fn run() {
             commands::cache_dir_move,
             commands::devices_list,
             commands::device_eject,
+            browse::device_library,
+            browse::device_beatgrid,
+            browse::device_waveform_columns,
             commands::profiles_list,
             commands::profile_identify,
             commands::profile_create,

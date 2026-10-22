@@ -91,6 +91,9 @@ export function mockGrid(
   switch (cmd) {
     case "beatgrid_get":
       return view(current());
+    // Stick tracks carry the stick's analysis: always the analysed fixture.
+    case "device_beatgrid":
+      return { ...view(initial(true)), source: "stick", locked: true };
     case "beatgrid_edit": {
       const g = edit(current(), args.edit as GridEdit);
       grids.set(id, g);
@@ -104,6 +107,7 @@ export function mockGrid(
       return Math.round(6_000_000 / ((last - first) / (taps.length - 1)));
     }
     case "waveform_columns":
+    case "device_waveform_columns":
       columns ??= fetch(columnsUrl).then((r) => r.arrayBuffer());
       return columns.then((b) => b.slice(0));
     default:

@@ -78,7 +78,7 @@ afterEach(() => {
 
 describe("player", () => {
   it("plays a track on the player deck, starting the output", async () => {
-    await playTrack({ id: 7, title: "Seven", artist: null });
+    await playTrack({ kind: "library", id: 7, title: "Seven", artist: null });
     expect(ipc.mixStart).toHaveBeenCalledTimes(1);
     expect(ipc.mixLoad).toHaveBeenCalledWith(PLAYER_DECK, 7);
     expect(ipc.mixControl).toHaveBeenCalledWith({ type: "play", deck: PLAYER_DECK });

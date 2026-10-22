@@ -17,6 +17,7 @@ import {
   type SessionPatch,
   type SessionRow,
 } from "../lib/ipc";
+import { useDeviceBrowser } from "./deviceBrowser";
 import { refreshAll } from "./panes";
 
 const MONTHS = [
@@ -187,6 +188,7 @@ export const useHistory = create<HistoryState>()((set, get) => {
       });
     },
     async open(id) {
+      useDeviceBrowser.getState().close();
       set({ openId: id, locating: null, error: null });
       try {
         const detail = await historySession(id);

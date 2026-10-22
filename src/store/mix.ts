@@ -1,6 +1,7 @@
 /**
  * Mixer (Zustand): starts and stops the `reks-mix` engine, mirrors the state
- * it streams (about 60 a second), loads library tracks onto decks with their
+ * it streams (about 60 a second), loads library tracks (or a plugged-in
+ * stick's, with the stick's grid and read-only cues) onto decks with their
  * waveform and beat lines, and keeps the mixer's knob and switch positions
  * and the player's volume, which it sends as `MixControl`s. The library's
  * player is one of these decks (`player.ts`, D30). A track loaded without
@@ -21,6 +22,8 @@ import {
   type ChannelParam,
   type CueEdit,
   DECKS,
+  deviceBeatgrid,
+  deviceWaveformColumns,
   type FilterParam,
   type FilterUnit,
   type HotCueView,
@@ -36,6 +39,7 @@ import {
   mixCueEdit,
   mixDeviceOptions,
   mixLoad,
+  mixLoadStick,
   mixStart,
   mixStop,
   waveformColumns,
@@ -58,18 +62,49 @@ import {
 
 export type EngineStatus = "stopped" | "starting" | "running" | "error";
 
-/** What a load is asked for: a library track, with what the caller already shows of it. */
-export interface TrackRef {
-  id: number;
+/** What a load request already shows of its track while it decodes. */
+interface RefText {
   title: string | null;
   artist: string | null;
 }
 
-export interface DeckTrack extends TrackRef {
+/**
+ * What a load is asked for: a library track, or a track on a plugged-in stick
+ * (`stickId` is its `export.pdb` row). A stick track plays off the stick with
+ * the stick's grid and cues, which can't be edited or analysed here.
+ */
+export type TrackRef =
+  | (RefText & { kind: "library"; id: number })
+  | (RefText & { kind: "stick"; mountPoint: string; stickId: number; key: Key | null });
+
+export type DeckTrack = TrackRef & {
   key: Key | null;
   artworkId: number | null;
   artworkMime: string;
+};
+
+/** A library track (a table row, a session entry) as a load request. */
+export function libraryRef(t: {
+  id: number;
+  title: string | null;
+  artist: string | null;
+}): TrackRef {
+  return { kind: "library", id: t.id, title: t.title, artist: t.artist };
 }
+
+/** The library id of `ref`; null for a stick track or none. */
+export function libraryId(ref: TrackRef | null | undefined): number | null {
+  return ref?.kind === "library" ? ref.id : null;
+}
+
+/** Both name the same library track, or the same track on the same stick. */
+export function sameTrack(a: TrackRef | null | undefined, b: TrackRef | null | undefined): boolean {
+  if (a == null || b == null) return false;
+  if (a.kind === "library" || b.kind === "library") return libraryId(a) === libraryId(b);
+  return a.mountPoint === b.mountPoint && a.stickId === b.stickId;
+}
+
+const STICK_CUES_READ_ONLY = "The cues of a track on a stick can't be changed here.";
 
 /** Pad modes with pages of sizes. */
 export type PagedPadMode = Exclude<PadMode, "hotCue">;
@@ -373,15 +408,15 @@ export const useMix = create<MixStore>((set, get) => {
    * just stored, putting the cue point, position and tempo back.
    */
   async function reloadForGrid(deck: number) {
-    const meta = get().decks[deck];
+    const id = libraryId(get().decks[deck]?.track);
     const v = deckView(deck);
-    if (meta?.track == null || v?.loaded !== true || v.playing) return;
+    if (id === null || v?.loaded !== true || v.playing) return;
     patchDeck(deck, { gridPending: false });
     const seq = (loads[deck] ?? 0) + 1;
     loads[deck] = seq;
     const { positionMs, cueMs, tempo } = v;
     try {
-      const loaded = await mixLoad(deck, meta.track.id);
+      const loaded = await mixLoad(deck, id);
       if (loaded === null || loads[deck] !== seq) return;
       patchDeck(deck, { hotCues: loaded.hotCues, memoryCues: loaded.memoryCues });
       if (cueMs > 0) {
@@ -397,8 +432,15 @@ export const useMix = create<MixStore>((set, get) => {
   }
 
   /** The waveform and grid of the track on `deck`, for the views. */
-  async function fetchViews(deck: number, id: number, current: () => boolean) {
-    const [columns, grid] = await Promise.allSettled([waveformColumns(id), beatgridGet(id)]);
+  async function fetchViews(deck: number, ref: TrackRef, current: () => boolean) {
+    const [columns, grid] = await Promise.allSettled(
+      ref.kind === "library"
+        ? [waveformColumns(ref.id), beatgridGet(ref.id)]
+        : [
+            deviceWaveformColumns(ref.mountPoint, ref.stickId),
+            deviceBeatgrid(ref.mountPoint, ref.stickId),
+          ],
+    );
     if (!current()) return null;
     const failed = [columns, grid].find((r) => r.status === "rejected");
     const beats = grid.status === "fulfilled" ? grid.value.beats : null;
@@ -498,7 +540,7 @@ export const useMix = create<MixStore>((set, get) => {
       if (!(await get().start())) return;
       for (const r of resume) {
         await get().load(r.deck, r.track);
-        if (get().decks[r.deck]?.track?.id !== r.track.id) continue;
+        if (!sameTrack(get().decks[r.deck]?.track, r.track)) continue;
         get().send({ type: "seek", deck: r.deck, ms: r.positionMs });
         if (r.tempo !== 1) get().send({ type: "tempo", deck: r.deck, ratio: r.tempo });
         if (r.playing) get().send({ type: "play", deck: r.deck });
@@ -540,18 +582,22 @@ export const useMix = create<MixStore>((set, get) => {
     setDeckCount: (n) => set({ deckCount: n }),
 
     async load(deck, track, play = false) {
-      const id = typeof track === "number" ? track : track.id;
+      const ref: TrackRef =
+        typeof track === "number"
+          ? { kind: "library", id: track, title: null, artist: null }
+          : track;
       // Playing the track that is already playing keeps it going.
       const v = deckView(deck);
-      if (play && v?.playing === true && get().decks[deck]?.track?.id === id) return;
+      if (play && v?.playing === true && sameTrack(get().decks[deck]?.track, ref)) return;
       const seq = (loads[deck] ?? 0) + 1;
       loads[deck] = seq;
       const current = () => loads[deck] === seq;
-      const ref: TrackRef =
-        typeof track === "number"
-          ? { id: track, title: null, artist: null }
-          : { id: track.id, title: track.title, artist: track.artist };
-      let meta: DeckTrack = { ...ref, key: null, artworkId: null, artworkMime: "" };
+      let meta: DeckTrack = {
+        ...ref,
+        key: ref.kind === "stick" ? ref.key : null,
+        artworkId: null,
+        artworkMime: "",
+      };
       patchDeck(deck, { loading: ref, error: null, failed: null });
       try {
         if (get().status !== "running") {
@@ -560,25 +606,30 @@ export const useMix = create<MixStore>((set, get) => {
           if (current()) patchDeck(deck, { loading: started ? meta : null });
           if (!started) return;
         }
-        // Key and artwork for the header; without them the deck still loads.
-        let t: Awaited<ReturnType<typeof libraryTrack>>["track"] | null = null;
-        try {
-          t = (await libraryTrack(ref.id)).track;
-        } catch {
-          // Removed meanwhile, or the library is busy: load with what we have.
+        if (ref.kind === "library") {
+          // Key and artwork for the header; without them the deck still loads.
+          let t: Awaited<ReturnType<typeof libraryTrack>>["track"] | null = null;
+          try {
+            t = (await libraryTrack(ref.id)).track;
+          } catch {
+            // Removed meanwhile, or the library is busy: load with what we have.
+          }
+          if (t !== null) {
+            meta = {
+              ...ref,
+              title: t.title,
+              artist: t.artist,
+              key: t.key,
+              artworkId: t.artwork?.id ?? null,
+              artworkMime: t.artwork?.mime ?? "",
+            };
+          }
+          if (current()) patchDeck(deck, { loading: ref.title === null ? meta : ref });
         }
-        if (t !== null) {
-          meta = {
-            id: ref.id,
-            title: t.title,
-            artist: t.artist,
-            key: t.key,
-            artworkId: t.artwork?.id ?? null,
-            artworkMime: t.artwork?.mime ?? "",
-          };
-        }
-        if (current()) patchDeck(deck, { loading: ref.title === null ? meta : ref });
-        const loaded = await mixLoad(deck, meta.id);
+        const loaded =
+          ref.kind === "library"
+            ? await mixLoad(deck, ref.id)
+            : await mixLoadStick(deck, ref.mountPoint, ref.stickId);
         if (loaded === null || !current()) return;
         patchDeck(deck, {
           track: meta,
@@ -592,12 +643,13 @@ export const useMix = create<MixStore>((set, get) => {
           gridPending: false,
         });
         if (play) get().send({ type: "play", deck });
-        const beats = await fetchViews(deck, meta.id, current);
-        if (beats === null || beats.length > 0 || !current()) return;
+        const beats = await fetchViews(deck, meta, current);
+        // A stick track keeps the stick's analysis, or none.
+        if (ref.kind === "stick" || beats === null || beats.length > 0 || !current()) return;
         // No grid yet: analyse it first; the deck plays meanwhile.
         patchDeck(deck, { analysing: true });
         try {
-          await analysisReanalyse([meta.id]);
+          await analysisReanalyse([ref.id]);
         } catch {
           // Analysis is off (no beat model): the deck says it has no grid.
           if (current()) patchDeck(deck, { analysing: false });
@@ -619,17 +671,18 @@ export const useMix = create<MixStore>((set, get) => {
       if (meta.failed !== null) return get().load(deck, meta.failed);
       if (meta.track === null) return;
       const seq = loads[deck];
-      await fetchViews(deck, meta.track.id, () => loads[deck] === seq);
+      await fetchViews(deck, meta.track, () => loads[deck] === seq);
     },
 
     analysisDone(trackId, ok) {
       get().decks.forEach((meta, deck) => {
-        if (!meta.analysing || meta.track?.id !== trackId) return;
+        const track = meta.track;
+        if (!meta.analysing || track === null || libraryId(track) !== trackId) return;
         const seq = loads[deck];
         const current = () => loads[deck] === seq;
         patchDeck(deck, { analysing: false });
         if (!ok) return;
-        void fetchViews(deck, trackId, current).then((beats) => {
+        void fetchViews(deck, track, current).then((beats) => {
           if (beats !== null && beats.length > 0 && current()) {
             patchDeck(deck, { gridPending: true });
             if (deckView(deck)?.playing === false) void reloadForGrid(deck);
@@ -693,12 +746,18 @@ export const useMix = create<MixStore>((set, get) => {
       const meta = get().decks[deck];
       if (meta?.track == null || deckView(deck)?.loaded !== true) return;
       if (meta.hotCues.some((c) => c.slot === slot)) get().send({ type: "hotCue", deck, slot });
-      else void get().editCues(deck, { type: "setHotCue", slot });
+      // An empty pad sets a cue, which a stick track can't take: the pad stays dark.
+      else if (meta.track.kind === "library")
+        void get().editCues(deck, { type: "setHotCue", slot });
     },
 
     async editCues(deck, edit) {
       const track = get().decks[deck]?.track;
       if (track == null || get().status !== "running") return;
+      if (track.kind === "stick") {
+        set({ error: STICK_CUES_READ_ONLY });
+        return;
+      }
       const seq = loads[deck];
       try {
         const cues = await mixCueEdit(deck, edit);

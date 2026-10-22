@@ -33,7 +33,15 @@ const view = (over: Partial<DeckView> = {}): DeckView => ({
 
 const loadedMeta = (over: Partial<DeckMeta> = {}): DeckMeta => ({
   ...emptyDeck(),
-  track: { id: 7, title: "Dawn", artist: "Ron Trent", key: "Am", artworkId: null, artworkMime: "" },
+  track: {
+    kind: "library",
+    id: 7,
+    title: "Dawn",
+    artist: "Ron Trent",
+    key: "Am",
+    artworkId: null,
+    artworkMime: "",
+  },
   hotCues: [
     { id: 11, slot: 1, positionMs: 4_000, colorRgb: null, name: null },
     { id: 12, slot: 2, positionMs: 8_000, colorRgb: 0xff_00_00, name: "Drop" },
@@ -102,7 +110,9 @@ describe("DeckStrip", () => {
   });
 
   it("loading: the title at once, decoding in the waveform slot", () => {
-    setup({ meta: { ...emptyDeck(), loading: { id: 3, title: "Echo", artist: null } } });
+    setup({
+      meta: { ...emptyDeck(), loading: { kind: "library", id: 3, title: "Echo", artist: null } },
+    });
     expect(screen.getByText("Loading Echo…")).toBeTruthy();
     expect(screen.getByText("Decoding…")).toBeTruthy();
   });
@@ -112,7 +122,7 @@ describe("DeckStrip", () => {
       meta: {
         ...emptyDeck(),
         error: "decode failed",
-        failed: { id: 3, title: null, artist: null },
+        failed: { kind: "library", id: 3, title: null, artist: null },
       },
     });
     expect(screen.getByRole("alert").textContent).toContain("decode failed");

@@ -16,6 +16,7 @@ import {
   playlistsGet,
   playlistsMutate,
 } from "../lib/ipc";
+import { useDeviceBrowser } from "./deviceBrowser";
 import { useHistory } from "./history";
 import { useLibrary } from "./library";
 import { allLibraries, usePanes } from "./panes";
@@ -140,6 +141,7 @@ export const usePlaylists = create<PlaylistsState>()((set, get) => {
     },
     select(id) {
       useHistory.getState().close();
+      useDeviceBrowser.getState().close();
       get().dispatch({ type: "select", id });
       const node = byId(id);
       usePanes.getState().closePlaylist(node?.id ?? null);

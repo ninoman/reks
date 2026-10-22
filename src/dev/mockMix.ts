@@ -511,9 +511,20 @@ export function mockMix(
       // Decoding takes a moment.
       return new Promise((resolve) => setTimeout(() => resolve(loaded), 300));
     }
+    case "mix_load_stick": {
+      const deck = args.deck as number;
+      // Stick tracks keep their cues under negative ids, apart from library tracks.
+      const loaded = load(deck, -(args.trackId as number), true);
+      const d = decks[deck];
+      if (d !== undefined) d.view = { ...d.view, trackId: null };
+      return new Promise((resolve) => setTimeout(() => resolve({ ...loaded, trackId: null }), 300));
+    }
     case "mix_cue_edit": {
       const d = decks[args.deck as number];
       const id = d?.view.trackId;
+      if (d?.view.loaded === true && id === null) {
+        throw new Error("The cues of a track on a stick can't be changed here.");
+      }
       if (d === undefined || id == null) throw new Error("the deck is empty");
       return editCues(id, args.edit as CueEdit, snap(d, d.view.positionMs), d.view.loopRegion);
     }

@@ -10,16 +10,19 @@ vi.mock("../lib/ipc", () => ({
   mixStart: vi.fn(),
   mixStop: vi.fn(),
   mixLoad: vi.fn(),
+  mixLoadStick: vi.fn(),
   mixControl: vi.fn(),
   mixCueEdit: vi.fn(),
   libraryTrack: vi.fn(),
   analysisReanalyse: vi.fn(),
   waveformColumns: vi.fn(),
   beatgridGet: vi.fn(),
+  deviceWaveformColumns: vi.fn(),
+  deviceBeatgrid: vi.fn(),
 }));
 
 const ipc = await import("../lib/ipc");
-const { useMix } = await import("./mix");
+const { libraryId, useMix } = await import("./mix");
 
 const running: MixState = {
   device: "Out",
@@ -131,11 +134,11 @@ describe("mix store", () => {
       hotCues: [{ id: 1, slot: 0, positionMs: 10, colorRgb: null, name: null }],
       memoryCues: [],
     });
-    await useMix.getState().load(1, { id: 9, title: "T", artist: null });
+    await useMix.getState().load(1, { kind: "library", id: 9, title: "T", artist: null });
     expect(ipc.mixStart).toHaveBeenCalledTimes(1);
     expect(ipc.mixLoad).toHaveBeenCalledWith(1, 9);
     const deck = useMix.getState().decks[1];
-    expect(deck?.track?.id).toBe(9);
+    expect(libraryId(deck?.track)).toBe(9);
     expect(deck?.loading).toBeNull();
     expect(deck?.hotCues).toEqual([{ id: 1, slot: 0, positionMs: 10, colorRgb: null, name: null }]);
     expect(deck?.columns?.length).toBe(4);
@@ -214,11 +217,11 @@ describe("mix store", () => {
       .mockImplementationOnce(() => new Promise((r) => (first = r)))
       .mockResolvedValueOnce({ deck: 0, trackId: 2, durationMs: 1, hotCues: [], memoryCues: [] });
     useMix.setState({ status: "running", live: running });
-    const a = useMix.getState().load(0, { id: 1, title: "A", artist: null });
-    await useMix.getState().load(0, { id: 2, title: "B", artist: null });
+    const a = useMix.getState().load(0, { kind: "library", id: 1, title: "A", artist: null });
+    await useMix.getState().load(0, { kind: "library", id: 2, title: "B", artist: null });
     first({ deck: 0, trackId: 1, durationMs: 1, hotCues: [], memoryCues: [] });
     await a;
-    expect(useMix.getState().decks[0]?.track?.id).toBe(2);
+    expect(libraryId(useMix.getState().decks[0]?.track)).toBe(2);
   });
 
   it("sends knob values and switches as engine values", () => {
@@ -301,7 +304,15 @@ describe("mix store", () => {
   });
 
   it("cues: a pad jumps or sets; edits go to the library and the deck takes the result", async () => {
-    const track = { id: 9, title: "T", artist: null, key: null, artworkId: null, artworkMime: "" };
+    const track = {
+      kind: "library" as const,
+      id: 9,
+      title: "T",
+      artist: null,
+      key: null,
+      artworkId: null,
+      artworkMime: "",
+    };
     const hot = { id: 1, slot: 0, positionMs: 10, colorRgb: 0x28e214, name: null };
     useMix.setState({
       status: "running",
@@ -396,6 +407,46 @@ describe("mix store", () => {
     expect(useMix.getState().crossfader.pos).toBe(0);
   });
 
+  it("a stick track loads off the stick with the stick's views, and is never analysed", async () => {
+    vi.mocked(ipc.mixLoadStick).mockResolvedValue({
+      deck: 1,
+      trackId: null,
+      durationMs: 1000,
+      hotCues: [],
+      memoryCues: [],
+    });
+    vi.mocked(ipc.deviceWaveformColumns).mockResolvedValue(new Uint8Array(4).buffer);
+    vi.mocked(ipc.deviceBeatgrid).mockResolvedValue({
+      anchors: [],
+      source: "stick",
+      locked: true,
+      beats: [],
+    });
+    const ref = {
+      kind: "stick" as const,
+      mountPoint: "/Volumes/REKS",
+      stickId: 5,
+      title: "S",
+      artist: null,
+      key: "Am",
+    };
+    await useMix.getState().load(1, ref);
+    expect(ipc.mixLoadStick).toHaveBeenCalledWith(1, "/Volumes/REKS", 5);
+    expect(ipc.deviceBeatgrid).toHaveBeenCalledWith("/Volumes/REKS", 5);
+    expect(ipc.mixLoad).not.toHaveBeenCalled();
+    expect(ipc.libraryTrack).not.toHaveBeenCalled();
+    // No grid on the stick: it stays without one.
+    expect(ipc.analysisReanalyse).not.toHaveBeenCalled();
+    const deck = useMix.getState().decks[1];
+    expect(deck?.track).toMatchObject({ kind: "stick", stickId: 5, key: "Am" });
+    expect(libraryId(deck?.track)).toBeNull();
+
+    // Its cues are the stick's.
+    await useMix.getState().editCues(1, { type: "addMemoryCue" });
+    expect(ipc.mixCueEdit).not.toHaveBeenCalled();
+    expect(useMix.getState().error).toMatch(/stick/);
+  });
+
   it("load with play plays once loaded, and leaves a deck already playing that track", async () => {
     vi.mocked(ipc.mixLoad).mockResolvedValue({
       deck: 1,
@@ -404,13 +455,13 @@ describe("mix store", () => {
       hotCues: [],
       memoryCues: [],
     });
-    await useMix.getState().load(1, { id: 9, title: "T", artist: null }, true);
+    await useMix.getState().load(1, { kind: "library", id: 9, title: "T", artist: null }, true);
     expect(sent()).toContainEqual({ type: "play", deck: 1 });
 
     const decks = [deckView(), deckView({ loaded: true, playing: true, trackId: 9 })];
     useMix.setState({ live: { ...running, decks } });
     vi.mocked(ipc.mixLoad).mockClear();
-    await useMix.getState().load(1, { id: 9, title: "T", artist: null }, true);
+    await useMix.getState().load(1, { kind: "library", id: 9, title: "T", artist: null }, true);
     expect(ipc.mixLoad).not.toHaveBeenCalled();
   });
 
@@ -430,7 +481,7 @@ describe("mix store", () => {
       hotCues: [],
       memoryCues: [],
     });
-    await useMix.getState().load(1, { id: 9, title: "T", artist: null });
+    await useMix.getState().load(1, { kind: "library", id: 9, title: "T", artist: null });
     const decks = [
       deckView(),
       deckView({ loaded: true, playing: true, trackId: 9, positionMs: 4200, tempo: 1.02 }),
@@ -440,7 +491,7 @@ describe("mix store", () => {
     await useMix.getState().setDevice("Interface");
     expect(ipc.mixStart).toHaveBeenCalledTimes(2);
     expect(vi.mocked(ipc.mixStart).mock.lastCall?.[0].device).toBe("Interface");
-    expect(useMix.getState().decks[1]?.track?.id).toBe(9);
+    expect(libraryId(useMix.getState().decks[1]?.track)).toBe(9);
     expect(sent()).toEqual(
       expect.arrayContaining([
         { type: "seek", deck: 1, ms: 4200 },

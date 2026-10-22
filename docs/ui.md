@@ -205,12 +205,43 @@ Along the bottom of the window:
   it has the deck's waveforms, cue, pads, nudge, quantise and tempo fader. Empty, it says
   to double-click a track or drag one onto it. With Mix on, the Mix panel
   takes its place and shows the same deck among the others.
-- Double-click or Enter on a row, and double-click in a history session,
-  load the track on deck 2 and play it (it keeps playing if it already is);
+- Double-click or Enter on a row, and double-click in a history session or
+  a stick list (Devices, below), load the track on deck 2 and play it (it keeps playing if it already is);
   loading opens the output when it is off. Space plays and pauses deck 2
   wherever focus is (except in text fields, dialogs and menus). The row of
   the track on deck 2 is marked as loaded; the grid editor draws deck 2's
   playhead when it shows that track.
+
+## Devices (D32)
+
+`DeviceTree` sits between the playlist tree and the Histories in the sidebar
+(each of the two lower trees takes at most a third of the sidebar). The store
+is [`deviceBrowser.ts`](../src/store/deviceBrowser.ts); everything in it is
+read-only.
+
+- Root row "Devices" with a gear that opens the USB devices dialog. While it
+  is open, the drive list refreshes every two seconds (`useDevicePolling`), so
+  a stick shows up when it is plugged in; a drive that goes away is forgotten
+  and its open list closes.
+- A drive row (USB icon, eject button on hover) opens to "Playlists" (folders
+  and playlists as on the stick) and "Histories" (sessions players logged,
+  with a count). Its library is read each time it is opened (after the first
+  time the last read stays up meanwhile, so an export shows up); states:
+  "Reading…", read error with "Try again", "No rekordbox library on this
+  drive", "No playlists", "Not played on a player yet".
+- Click a playlist or session (Up/Down with the tree focused) and
+  `StickListView` replaces the toolbar and table, as a history session does:
+  #, title, artist, genre, BPM, key, time, with a play button per row (hover
+  or focus) and double-click to play. Entries whose track the stick no longer
+  has show as "Not on the stick". The track on the player deck is marked.
+- Selecting anything in the playlist tree or a library history session closes
+  the stick list, and the other way round.
+- A stick track on a deck is a `TrackRef` of kind `stick` (`mix.ts`): its
+  grid and waveform come from `device_beatgrid` / `device_waveform_columns`
+  (the stick's own analysis, so both show at once; D32),
+  an empty hot cue pad stays dark and cue edits say the cues are the stick's.
+- Dev: `npm run dev` serves the REKS stick from
+  [`mockBrowse.ts`](../src/dev/mockBrowse.ts).
 
 ## Mix panel (phase 5)
 

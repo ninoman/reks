@@ -233,3 +233,31 @@ export function NudgeUpIcon() {
     </svg>
   );
 }
+
+/** A playlist folder (sidebar trees). */
+export function FolderIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+      <path d="M1 3.5h5l1.5 1.5H15v8.5H1z" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** A playlist (sidebar trees). */
+export function PlaylistIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+      <rect
+        x="2"
+        y="1.5"
+        width="12"
+        height="13"
+        rx="1"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <path d="M4.5 5h7M4.5 8h7M4.5 11h7" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
