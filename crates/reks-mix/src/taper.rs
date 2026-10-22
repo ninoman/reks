@@ -1,7 +1,8 @@
 //! Knob tapers: every mixer control arrives as a 0..=1 value, like a knob or
 //! fader position, and is mapped here to dB, Hz, a gain or a curve.
 //!
-//! Ranges follow the Xone:92 user guide (docs/research.md §9.1); the shape of
+//! Ranges follow the Xone:92 user guide, the EQ the Xone:96 guide
+//! (docs/research.md §9.1); the shape of
 //! each law between its end points is our choice and marked UNVERIFIED in
 //! `docs/mixer-dsp.md`. Pure functions, safe to call on the audio thread.
 
@@ -20,17 +21,19 @@ pub fn db_to_gain(db: f32) -> f32 {
     10f32.powf(db / 20.0)
 }
 
-/// Maximum boost of every EQ band (R§9.1).
-pub const EQ_BOOST_DB: f32 = 6.0;
-/// Full cut of the MID bands (R§9.1).
-pub const MID_CUT_DB: f32 = -30.0;
+/// Maximum boost of the HI and LO shelves (Xone:96, R§9.1).
+pub const SHELF_BOOST_DB: f32 = 6.0;
+/// Maximum boost of the HI MID and LO MID bands (Xone:96, R§9.1).
+pub const MID_BOOST_DB: f32 = 10.0;
+/// Full cut of the HI MID and LO MID bands (Xone:96, R§9.1).
+pub const MID_CUT_DB: f32 = -27.0;
 
-/// MID 1 / MID 2 gain in dB: linear in dB on each side of noon,
-/// −30 dB fully anticlockwise, 0 dB at noon, +6 dB fully clockwise.
+/// HI MID / LO MID gain in dB: linear in dB on each side of noon,
+/// −27 dB fully anticlockwise, 0 dB at noon, +10 dB fully clockwise.
 pub fn mid_db(value: f32) -> f32 {
     let v = unit(value, 0.5);
     if v >= 0.5 {
-        EQ_BOOST_DB * (2.0 * v - 1.0)
+        MID_BOOST_DB * (2.0 * v - 1.0)
     } else {
         MID_CUT_DB * (1.0 - 2.0 * v)
     }
@@ -43,7 +46,7 @@ pub fn mid_db(value: f32) -> f32 {
 pub fn shelf_gain(value: f32) -> f32 {
     let v = unit(value, 0.5);
     if v >= 0.5 {
-        db_to_gain(EQ_BOOST_DB * (2.0 * v - 1.0))
+        db_to_gain(SHELF_BOOST_DB * (2.0 * v - 1.0))
     } else {
         (2.0 * v).powi(3)
     }
@@ -138,12 +141,12 @@ mod tests {
     }
 
     #[test]
-    fn mid_taper_spans_minus_30_to_plus_6_with_noon_flat() {
-        assert!(close(mid_db(0.0), -30.0, 1e-5));
-        assert!(close(mid_db(0.25), -15.0, 1e-5));
+    fn mid_taper_spans_minus_27_to_plus_10_with_noon_flat() {
+        assert!(close(mid_db(0.0), -27.0, 1e-5));
+        assert!(close(mid_db(0.25), -13.5, 1e-5));
         assert_eq!(mid_db(0.5), 0.0);
-        assert!(close(mid_db(0.75), 3.0, 1e-5));
-        assert!(close(mid_db(1.0), 6.0, 1e-5));
+        assert!(close(mid_db(0.75), 5.0, 1e-5));
+        assert!(close(mid_db(1.0), 10.0, 1e-5));
         assert_eq!(mid_db(f32::NAN), 0.0);
     }
 

@@ -1,12 +1,12 @@
-//! Four-band asymmetric channel EQ (Xone:92 music channel, R§9.1).
+//! Four-band asymmetric channel EQ (Xone:96 channels 1–4, R§9.1).
 //!
-//! - HI: shelf above 2.5 kHz. `y = LP + g·(x − LP)` with a fixed 2-pole
+//! - HI: shelf above 3 kHz. `y = LP + g·(x − LP)` with a fixed 2-pole
 //!   low-pass, so g = 1 is exactly flat and g = 0 is the low-pass alone:
 //!   a 12 dB/oct kill. Boost uses `y = x + (g − 1)·(x − LP')` with a damped
 //!   low-pass (Q 0.4) so the shelf does not overshoot +6 dB.
-//! - LO: the mirror image with high-passes at 250 Hz.
-//! - MID 1 (2 kHz) and MID 2 (350 Hz): SVF bells, +6 / −30 dB, Q narrow on
-//!   boost and wide on cut.
+//! - LO: the mirror image with high-passes at 180 Hz.
+//! - HI MID (1.1 kHz) and LO MID (350 Hz): SVF bells, +10 / −27 dB.
+//!   Unlike HI and LO they never kill a band: a full cut is a deep notch.
 //!
 //! All four knobs are smoothed ([`super::smooth`]); both shelf filters run
 //! all the time so moving through noon never restarts a filter.
@@ -16,24 +16,27 @@ use super::smooth::Smoother;
 use super::svf::{SvfCoeffs, SvfState};
 use crate::taper;
 
-/// HI shelf turning point (R§9.1).
-pub const HI_HZ: f64 = 2_500.0;
-/// MID 1 centre (R§9.1).
-pub const MID1_HZ: f64 = 2_000.0;
-/// MID 2 centre (R§9.1).
+/// HI shelf turning point (Xone:96, R§9.1).
+pub const HI_HZ: f64 = 3_000.0;
+/// HI MID centre (Xone:96, R§9.1).
+pub const MID1_HZ: f64 = 1_100.0;
+/// LO MID centre (Xone:96, R§9.1).
 pub const MID2_HZ: f64 = 350.0;
-/// LO shelf turning point (R§9.1).
-pub const LO_HZ: f64 = 250.0;
+/// LO shelf turning point (Xone:96, R§9.1).
+pub const LO_HZ: f64 = 180.0;
 
-/// Q of the kill filters: Butterworth, −3 dB at the turning point.
+/// Q of the kill filters: Butterworth, −3 dB at the turning point. The
+/// 12 dB/oct slope is the Xone:92's; the Xone:96 guide gives none (UNVERIFIED).
 const KILL_Q: f64 = std::f64::consts::FRAC_1_SQRT_2;
 /// Q of the boost shelves' filters: overdamped so full boost peaks at most
 /// about +6.4 dB instead of +6.8 dB.
 const BOOST_Q: f64 = 0.4;
-/// Mid bell Q on boost ("narrow") and cut ("wide"). The guide gives no
-/// figures: UNVERIFIED.
+/// Mid bell Q on boost and cut. In this bell form Q sets the width at half
+/// the gain in dB, so a deep cut at a low Q takes out most of the spectrum
+/// and the mids sound like isolator kills. Q 2 on cut keeps a full cut
+/// above −3 dB two octaves away. The guides give no figures: UNVERIFIED.
 pub const MID_Q_BOOST: f64 = 1.2;
-pub const MID_Q_CUT: f64 = 0.5;
+pub const MID_Q_CUT: f64 = 2.0;
 
 /// One EQ knob.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -225,32 +228,47 @@ mod tests {
     }
 
     #[test]
-    fn full_boost_is_plus_6_db_within_half_a_db() {
+    fn full_boost_is_plus_6_on_shelves_and_plus_10_on_mids_within_half_a_db() {
         let cases = [
-            (EqBand::Hi, 10_000.0),
-            (EqBand::Mid1, MID1_HZ),
-            (EqBand::Mid2, MID2_HZ),
-            (EqBand::Lo, 40.0),
+            (EqBand::Hi, 12_000.0, 6.0),
+            (EqBand::Mid1, MID1_HZ, 10.0),
+            (EqBand::Mid2, MID2_HZ, 10.0),
+            (EqBand::Lo, 30.0, 6.0),
         ];
         for rate in RATES {
-            for (band, hz) in cases {
+            for (band, hz, want) in cases {
                 let db = measure(rate, band, 1.0, hz);
-                assert!((db - 6.0).abs() <= 0.5, "{band:?} at {rate}: {db:.3} dB");
+                assert!((db - want).abs() <= 0.5, "{band:?} at {rate}: {db:.3} dB");
                 // No overshoot anywhere in the band either.
                 for f in log_sweep(20.0, 20_000.0, rate, 6) {
                     let peak = measure(rate, band, 1.0, f);
-                    assert!(peak <= 6.5, "{band:?} at {rate}, {f:.0} Hz: {peak:.3} dB");
+                    assert!(
+                        peak <= want + 0.5,
+                        "{band:?} at {rate}, {f:.0} Hz: {peak:.3} dB"
+                    );
                 }
             }
         }
     }
 
     #[test]
-    fn mids_full_cut_is_minus_30_db_within_1_db() {
+    fn mids_full_cut_is_minus_27_db_within_1_db() {
         for rate in RATES {
             for (band, hz) in [(EqBand::Mid1, MID1_HZ), (EqBand::Mid2, MID2_HZ)] {
                 let db = measure(rate, band, 0.0, hz);
-                assert!((db + 30.0).abs() <= 1.0, "{band:?} at {rate}: {db:.3} dB");
+                assert!((db + 27.0).abs() <= 1.0, "{band:?} at {rate}: {db:.3} dB");
+            }
+        }
+    }
+
+    #[test]
+    fn mids_full_cut_is_a_notch_not_a_kill() {
+        for rate in RATES {
+            for (band, hz) in [(EqBand::Mid1, MID1_HZ), (EqBand::Mid2, MID2_HZ)] {
+                for f in [hz / 4.0, hz * 4.0] {
+                    let db = measure(rate, band, 0.0, f);
+                    assert!(db > -3.0, "{band:?} at {rate}, {f:.0} Hz: {db:.3} dB");
+                }
             }
         }
     }
@@ -258,7 +276,7 @@ mod tests {
     #[test]
     fn hi_and_lo_kills_fall_at_12_db_per_octave_past_the_turning_point() {
         for rate in RATES {
-            // HI: one octave from 2× to 4× the turning point (5 → 10 kHz).
+            // HI: one octave from 2× to 4× the turning point (6 → 12 kHz).
             let near = measure(rate, EqBand::Hi, 0.0, 2.0 * HI_HZ);
             let far = measure(rate, EqBand::Hi, 0.0, 4.0 * HI_HZ);
             let slope = near - far;
@@ -266,7 +284,7 @@ mod tests {
                 (slope - 12.0).abs() <= 1.0,
                 "HI at {rate}: {slope:.2} dB/oct"
             );
-            // LO: two octaves below, 125 → 62.5 Hz and 62.5 → 31.25 Hz.
+            // LO: two octaves below, 90 → 45 Hz and 45 → 22.5 Hz.
             for (near_hz, far_hz) in [(LO_HZ / 2.0, LO_HZ / 4.0), (LO_HZ / 4.0, LO_HZ / 8.0)] {
                 let slope = measure(rate, EqBand::Lo, 0.0, near_hz)
                     - measure(rate, EqBand::Lo, 0.0, far_hz);

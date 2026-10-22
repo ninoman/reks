@@ -609,6 +609,12 @@ Date of decisions: 2026-10-18.
   controls DJs use to audition a transition, so they count as preparation,
   not the live-performance scope rejected below; loop rolls, slip mode and
   saved loops still need a decision.
+- EQ: the Xone:96 channel EQ since 2026-10-22 (maintainer's call; the rest
+  of the model stays the Xone:92's). HI 3 kHz and LO 180 Hz shelves, +6 dB /
+  kill; HI MID 1.1 kHz and LO MID 350 Hz bells, +10 / −27 dB (R§9.1). The mid
+  cut is a notch (Q 2), not the Xone:92 guide's "low Q", which at full cut
+  sounded like a kill. Was: the Xone:92's 2.5 kHz / 2 kHz / 350 Hz / 250 Hz,
+  mids +6 / −30 dB.
 - Filter LFOs: dropped 2026-10-20 (maintainer's call). The Xone:92 has one
   per filter (R§9.1); reks models the filters without them. Adding them back
   needs a new decision.

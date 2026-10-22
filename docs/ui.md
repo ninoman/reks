@@ -268,7 +268,7 @@ had a start form before the output opened). `MixPanel` is the only part that rea
 ([`src/store/mix.ts`](../src/store/mix.ts)); `DeckStrip`, `DeckWaveform`,
 `MixerPanel`, `ChannelStrip`, `FilterUnit`, `MasterSection` and `SyncPhase`
 take props. The mixer follows the hardware: four channel strips (level, HI,
-MID 1, MID 2, LO, filter assign X/off/Y, cue, fader, crossfader assign) with
+HM (HI MID), LM (LO MID), LO, filter assign X/off/Y, cue, fader, crossfader assign) with
 one caption column, the master and cue section, then filter X, the crossfader
 and filter Y. Decks 1 and 2 sit left of it, 3 and 4 right. Two decks by
 default, and they are decks 2 and 3, the centre channels, as with two CDJs
