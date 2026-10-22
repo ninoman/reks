@@ -25,6 +25,7 @@ import {
 } from "../lib/format";
 import { type Cue, libraryTrack, libraryUpdateTrack, type TrackDetail } from "../lib/ipc";
 import { rowAt, useLibrary } from "../store/library";
+import { useMix } from "../store/mix";
 import { usePanels } from "../store/panels";
 import { replaceRowEverywhere } from "../store/panes";
 import { primaryIndex } from "../store/selection";
@@ -122,6 +123,20 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
       live = false;
     };
   }, [trackId, load]);
+
+  // Cues edited on a deck (task 17): refetch them, not the form.
+  const cueRevision = useMix((s) => s.cueRevisions[trackId] ?? 0);
+  useEffect(() => {
+    if (cueRevision === 0) return;
+    let live = true;
+    libraryTrack(trackId).then(
+      (d) => live && setDetail((cur) => (cur === null ? cur : { ...cur, cues: d.cues })),
+      (e: unknown) => live && setError(String(e)),
+    );
+    return () => {
+      live = false;
+    };
+  }, [trackId, cueRevision]);
 
   // A grid edit changes the summary and the track's BPM, not the form.
   const gridChanged = useCallback(() => {

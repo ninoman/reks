@@ -1,6 +1,6 @@
 import type { Channel } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MixControl, MixState } from "../lib/ipc";
+import type { DeckCues, DeckLoaded, MixControl, MixState } from "../lib/ipc";
 import { mockMix } from "./mockMix";
 
 let last: MixState | null = null;
@@ -24,6 +24,38 @@ afterEach(() => {
 });
 
 describe("mock mixer", () => {
+  it("auto cue parks a load on the first memory cue; cue edits stay with the track", async () => {
+    const load = (id: number, autoCue: boolean) =>
+      mockMix(
+        "mix_load",
+        { deck: 2, id },
+        () => true,
+        () => autoCue,
+      ) as Promise<DeckLoaded>;
+    const p = load(50, true);
+    run(300);
+    const loaded = await p;
+    run(20);
+    const memory = loaded.memoryCues[0]?.positionMs;
+    expect(state().decks[2]?.positionMs).toBe(memory);
+    expect(state().decks[2]?.cueMs).toBe(memory);
+
+    send({ type: "seek", deck: 2, ms: 2_000 });
+    const edit = (e: unknown) =>
+      mockMix("mix_cue_edit", { deck: 2, edit: e }, () => true) as DeckCues;
+    const set = edit({ type: "setHotCue", slot: 2 });
+    expect(set.hotCues.map((h) => h.slot)).toEqual([0, 1, 2, 3]);
+    send({ type: "callCue", deck: 2, ms: 9_000 });
+    run(20);
+    expect(state().decks[2]?.cueMs).toBe(9_000);
+
+    const again = load(50, false);
+    run(300);
+    expect((await again).hotCues).toHaveLength(4);
+    run(20);
+    expect(state().decks[2]?.positionMs).toBe(0);
+  });
+
   it("hands master to a playing synced deck at its tempo", () => {
     send({ type: "tempo", deck: 0, ratio: 1.06 });
     send({ type: "play", deck: 0 });

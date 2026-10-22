@@ -29,9 +29,19 @@ pub struct DeckAudio {
     pub marks: Vec<CueMark>,
 }
 
+impl DeckAudio {
+    /// Where auto cue parks a loaded track (task 17): the first memory cue,
+    /// else the first beat of the grid, else the start.
+    pub fn auto_cue_frame(&self) -> i64 {
+        auto_cue_frame(&self.marks, &self.anchors, self.pcm.sample_rate)
+    }
+}
+
 /// A hot cue (`slot` set) or memory cue (`slot` `None`) to draw on a deck.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CueMark {
+    /// The library row ([`Cue::id`]), to rename or delete it.
+    pub id: i64,
     pub slot: Option<u8>,
     pub frame: i64,
     /// 0xRRGGBB from the library; `None` uses the deck's default colour.
@@ -110,6 +120,7 @@ fn hot_cues(cues: &[Cue]) -> Vec<&Cue> {
 /// cues and loops (no slot) by position, in frames at `rate`.
 pub fn cue_marks(cues: &[Cue], rate: u32) -> Vec<CueMark> {
     let mark = |c: &Cue| CueMark {
+        id: c.id,
         slot: c.slot,
         frame: ms_to_frame(c.start_ms, rate),
         color_rgb: c.color_rgb,
@@ -124,6 +135,24 @@ pub fn cue_marks(cues: &[Cue], rate: u32) -> Vec<CueMark> {
     let mut out: Vec<CueMark> = hot_cues(cues).into_iter().map(mark).collect();
     out.extend(memory);
     out
+}
+
+/// See [`DeckAudio::auto_cue_frame`]. `marks` as [`cue_marks`] gives them
+/// (memory cues by position after the hot cues). Before the first anchor
+/// the grid runs on at its tempo, as in the engine, so the first beat is
+/// the first anchor moved back by whole beats to just after the start.
+pub fn auto_cue_frame(marks: &[CueMark], anchors: &[DeckAnchor], rate: u32) -> i64 {
+    if let Some(m) = marks.iter().find(|m| m.slot.is_none()) {
+        return m.frame.max(0);
+    }
+    let Some(a) = anchors.iter().min_by_key(|a| a.frame) else {
+        return 0;
+    };
+    if !(a.bpm.is_finite() && a.bpm > 0.0) {
+        return 0;
+    }
+    let period = 60.0 * f64::from(rate) / a.bpm;
+    (a.frame as f64).rem_euclid(period).round() as i64
 }
 
 #[cfg(test)]
@@ -206,6 +235,7 @@ mod tests {
             cue(Some(0), KIND_LOOP, 4_000.0),
         ];
         let mark = |slot, frame, color_rgb, name: Option<&str>| CueMark {
+            id: 0,
             slot,
             frame,
             color_rgb,
@@ -221,5 +251,29 @@ mod tests {
             ],
             "load cue dropped"
         );
+    }
+
+    #[test]
+    fn auto_cue_parks_on_the_first_memory_cue_else_the_first_beat() {
+        let anchor = |frame| DeckAnchor {
+            frame,
+            bpm: 120.0,
+            beat_in_bar: 1,
+            beats_per_bar: 4,
+        };
+        let marks = cue_marks(
+            &[
+                cue(Some(0), KIND_CUE, 100.0),
+                cue(None, KIND_CUE, 3_000.0),
+                cue(None, KIND_CUE, 2_000.0),
+            ],
+            1_000,
+        );
+        assert_eq!(auto_cue_frame(&marks, &[anchor(1_250)], 1_000), 2_000);
+        let hot_only = cue_marks(&[cue(Some(0), KIND_CUE, 100.0)], 1_000);
+        // 120 BPM at 1 kHz: a beat is 500 frames, so 1 250 → 250.
+        assert_eq!(auto_cue_frame(&hot_only, &[anchor(1_250)], 1_000), 250);
+        assert_eq!(auto_cue_frame(&hot_only, &[anchor(40)], 1_000), 40);
+        assert_eq!(auto_cue_frame(&[], &[], 1_000), 0, "no grid: the start");
     }
 }

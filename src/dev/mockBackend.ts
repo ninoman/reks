@@ -273,6 +273,7 @@ let settings: Settings = {
   keyNotation: "classical",
   deckWaveform: "rgb",
   syncAlign: "bar",
+  autoCue: true,
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
   // Like a release build.
@@ -1213,7 +1214,12 @@ mockIPC((cmd, payload) => {
         history(cmd, args) ??
         mockAdopt(cmd, args) ??
         mockGrid(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
-        mockMix(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
+        mockMix(
+          cmd,
+          args,
+          (id) => TRACKS[id - 1]?.needsAnalysis === false,
+          () => settings.autoCue,
+        ) ??
         null
       );
   }

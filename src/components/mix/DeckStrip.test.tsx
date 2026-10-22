@@ -35,10 +35,13 @@ const loadedMeta = (over: Partial<DeckMeta> = {}): DeckMeta => ({
   ...emptyDeck(),
   track: { id: 7, title: "Dawn", artist: "Ron Trent", key: "Am", artworkId: null, artworkMime: "" },
   hotCues: [
-    { slot: 1, positionMs: 4_000, colorRgb: null, name: null },
-    { slot: 2, positionMs: 8_000, colorRgb: 0xff_00_00, name: "Drop" },
+    { id: 11, slot: 1, positionMs: 4_000, colorRgb: null, name: null },
+    { id: 12, slot: 2, positionMs: 8_000, colorRgb: 0xff_00_00, name: "Drop" },
   ],
-  memoryCues: [],
+  memoryCues: [
+    { id: 21, positionMs: 6_000, colorRgb: null, name: "Break" },
+    { id: 22, positionMs: 20_000, colorRgb: null, name: null },
+  ],
   columns: new Uint8Array(0),
   beats: [{ positionUs: 12_000, beatInBar: 1 }],
   ...over,
@@ -54,7 +57,10 @@ function setup(props: Partial<DeckStripProps> = {}) {
       "toggleSync",
       "takeMaster",
       "toggleQuantise",
-      "hotCue",
+      "hotCuePad",
+      "editCues",
+      "callCue",
+      "callAdjacentCue",
       "beatJump",
       "loopPad",
       "setPadMode",
@@ -143,12 +149,12 @@ describe("DeckStrip", () => {
     expect(a.toggleSync).toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Deck 2 master" }));
     expect(a.takeMaster).toHaveBeenCalled();
-    // Only set hot cues are enabled.
+    // Set and empty hot cue pads both act: jump, or set at the playhead.
     const b = screen.getByRole("button", { name: "Deck 2 hot cue B" }) as HTMLButtonElement;
     const d = screen.getByRole("button", { name: "Deck 2 hot cue D" }) as HTMLButtonElement;
-    expect(d.disabled).toBe(true);
+    expect(d.disabled).toBe(false);
     fireEvent.click(b);
-    expect(a.hotCue).toHaveBeenCalledWith(1);
+    expect(a.hotCuePad).toHaveBeenCalledWith(1);
     // A named cue shows its name; its colour fills the pad.
     const drop = screen.getByRole("button", { name: "Deck 2 hot cue C" });
     expect(drop.textContent).toBe("CDrop");
@@ -159,6 +165,56 @@ describe("DeckStrip", () => {
     expect(a.setTempoRange).toHaveBeenCalledWith(0.16);
     fireEvent.keyDown(screen.getByRole("slider", { name: "Deck 2 position" }), { key: "Home" });
     expect(a.seek).toHaveBeenCalledWith(0);
+  });
+
+  it("edits hot cues: an empty pad sets, double-click renames, Shift+click deletes", () => {
+    const a = setup({ view: view(), meta: loadedMeta() });
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 hot cue A" }));
+    expect(a.hotCuePad).toHaveBeenLastCalledWith(0);
+    expect(a.editCues).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 hot cue C" }), { shiftKey: true });
+    expect(a.editCues).toHaveBeenLastCalledWith({ type: "delete", cueId: 12 });
+    expect(a.hotCuePad).toHaveBeenCalledTimes(1);
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Deck 2 hot cue C" }));
+    const field = screen.getByRole("textbox", { name: "Deck 2 hot cue C name" });
+    expect((field as HTMLInputElement).value).toBe("Drop");
+    fireEvent.change(field, { target: { value: "  Big drop " } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(a.editCues).toHaveBeenLastCalledWith({ type: "rename", cueId: 12, name: "Big drop" });
+    expect(screen.queryByRole("textbox")).toBeNull();
+
+    // Esc leaves the name as it was.
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Deck 2 hot cue B" }));
+    const other = screen.getByRole("textbox", { name: "Deck 2 hot cue B name" });
+    fireEvent.change(other, { target: { value: "Nope" } });
+    fireEvent.keyDown(other, { key: "Escape" });
+    expect(a.editCues).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("button", { name: "Deck 2 hot cue B" })).toBeTruthy();
+  });
+
+  it("sets and calls memory cues in HOT CUE mode", () => {
+    const a = setup({ view: view({ positionMs: 12_300 }), meta: loadedMeta() });
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 set memory cue" }));
+    expect(a.editCues).toHaveBeenLastCalledWith({ type: "addMemoryCue" });
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 previous memory cue" }));
+    expect(a.callAdjacentCue).toHaveBeenLastCalledWith(-1);
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 next memory cue" }));
+    expect(a.callAdjacentCue).toHaveBeenLastCalledWith(1);
+    expect(screen.getByRole("button", { name: "Deck 2 memory cues (2)" }).textContent).toBe("2");
+  });
+
+  it("disables memory call past the last cue", () => {
+    setup({ view: view({ positionMs: 25_000 }), meta: loadedMeta() });
+    const next = screen.getByRole("button", {
+      name: "Deck 2 next memory cue",
+    }) as HTMLButtonElement;
+    const prev = screen.getByRole("button", {
+      name: "Deck 2 previous memory cue",
+    }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    expect(prev.disabled).toBe(false);
   });
 
   it("nudges while held", () => {
@@ -252,12 +308,16 @@ describe("DeckStrip", () => {
     expect(a.loopPad).toHaveBeenLastCalledWith(1 / 8);
   });
 
-  it("switches pad mode; page arrows are off in HOT CUE", () => {
+  it("switches pad mode; HOT CUE shows the memory controls in place of the page arrows", () => {
     const a = setup({ view: view(), meta: loadedMeta() });
     fireEvent.click(screen.getByRole("radio", { name: "BEAT LOOP" }));
     expect(a.setPadMode).toHaveBeenCalledWith("beatLoop");
-    const next = screen.getByRole("button", { name: "Deck 2 jump sizes: next page" });
-    expect((next as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Deck 2 jump sizes: next page" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Deck 2 set memory cue" })).toBeTruthy();
+    cleanup();
+    setup({ view: view(), meta: loadedMeta({ padMode: "beatJump" }) });
+    expect(screen.getByRole("button", { name: "Deck 2 jump sizes: next page" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Deck 2 set memory cue" })).toBeNull();
   });
 
   it("ejects from the artwork", () => {

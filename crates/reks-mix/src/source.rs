@@ -14,7 +14,12 @@ pub struct DeckSource {
     beats: BeatMap,
     /// `(slot, frame)`, sorted by slot.
     hot_cues: Box<[(u8, i64)]>,
+    /// Where a load parks the head and the cue point (auto cue).
+    start: i64,
 }
+
+/// Hot cue slots A–H.
+pub const HOT_CUE_SLOTS: u8 = 8;
 
 impl DeckSource {
     /// `samples` is `L R L R …`; a trailing odd sample is dropped.
@@ -25,6 +30,7 @@ impl DeckSource {
             sample_rate,
             beats: BeatMap::default(),
             hot_cues: Box::default(),
+            start: 0,
         }
     }
 
@@ -40,6 +46,27 @@ impl DeckSource {
         cues.dedup_by_key(|c| c.0);
         self.hot_cues = cues.into();
         self
+    }
+
+    /// Parks a load at `frame` (head and cue point; clamped to the track)
+    /// instead of the start: auto cue, chosen by the app.
+    pub fn with_start(mut self, frame: i64) -> Self {
+        self.start = frame;
+        self
+    }
+
+    /// Where a load parks the head and the cue point.
+    pub fn start(&self) -> i64 {
+        self.start.clamp(0, self.frames())
+    }
+
+    /// Where a cue set at the head `position` goes: the nearest beat with
+    /// `quantise` (as the CUE button does), clamped to the track. For the
+    /// control side, which sets hot and memory cues from the last state.
+    pub fn cue_frame(&self, position: i64, quantise: bool) -> i64 {
+        let at = position as f64;
+        let at = if quantise { self.beats.snap(at) } else { at };
+        (at.round() as i64).clamp(0, self.frames())
     }
 
     /// Number of stereo frames.
@@ -132,5 +159,24 @@ mod tests {
         assert_eq!(s.hot_cue(1), Some(10));
         assert_eq!(s.hot_cue(3), Some(30));
         assert_eq!(s.hot_cue(2), None);
+    }
+
+    #[test]
+    fn cues_at_the_head_snap_with_quantise_and_stay_in_the_track() {
+        let grid = [GridAnchor {
+            frame: 100,
+            bpm: 120.0,
+            beat_in_bar: 1,
+            beats_per_bar: 4,
+        }];
+        // 120 BPM at 1 kHz: beats every 500 frames from 100.
+        let s = DeckSource::new(vec![0; 4_000], 1_000)
+            .with_grid(&grid)
+            .with_start(5_000);
+        assert_eq!(s.cue_frame(1_320, true), 1_100);
+        assert_eq!(s.cue_frame(1_320, false), 1_320);
+        assert_eq!(s.cue_frame(-30, false), 0);
+        assert_eq!(s.cue_frame(1_990, true), 2_000, "clamped to the end");
+        assert_eq!(s.start(), 2_000);
     }
 }

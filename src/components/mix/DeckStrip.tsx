@@ -12,7 +12,7 @@ import { type DragEvent, useState } from "react";
 
 import { zoomSeconds } from "../../lib/deckScroll";
 import { hasType, readTracks, TRACKS_MIME } from "../../lib/dnd";
-import type { DeckView } from "../../lib/ipc";
+import type { CueEdit, DeckView } from "../../lib/ipc";
 import { PLAYER_PLAY_KEY } from "../../lib/keys";
 import { type DeckAction, deckKeyHint } from "../../lib/mixKeys";
 import type { PadMode, TempoRange } from "../../lib/mixView";
@@ -36,7 +36,14 @@ export interface DeckActions {
   toggleSync: () => void;
   takeMaster: () => void;
   toggleQuantise: () => void;
-  hotCue: (slot: number) => void;
+  /** Jumps to a set hot cue, sets an empty one at the playhead. */
+  hotCuePad: (slot: number) => void;
+  /** Sets, renames or deletes a cue (stored in the library). */
+  editCues: (edit: CueEdit) => void;
+  /** Cue point and playhead to `ms` (a memory cue). */
+  callCue: (ms: number) => void;
+  /** The memory cue before (-1) or after the playhead. */
+  callAdjacentCue: (dir: -1 | 1) => void;
   /** Signed beats. */
   beatJump: (beats: number) => void;
   loopPad: (beats: number) => void;
@@ -221,6 +228,8 @@ export function DeckStrip({
             mode={meta.padMode}
             page={meta.padPage}
             hotCues={meta.hotCues}
+            memoryCues={meta.memoryCues}
+            positionMs={view?.positionMs ?? 0}
             loopBeats={view?.loopRegion?.beats ?? null}
             quantise={loaded && (view?.quantise ?? false)}
             lastJump={meta.lastJump}
@@ -229,7 +238,10 @@ export function DeckStrip({
             onMode={actions.setPadMode}
             onPage={actions.setPadPage}
             onQuantise={actions.toggleQuantise}
-            onHotCue={actions.hotCue}
+            onHotCuePad={actions.hotCuePad}
+            onEditCues={actions.editCues}
+            onCallCue={actions.callCue}
+            onCallAdjacent={actions.callAdjacentCue}
             onJump={actions.beatJump}
             onLoop={actions.loopPad}
           />

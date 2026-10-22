@@ -34,3 +34,4 @@ pub use graph::{
 };
 pub use player::{Player, PlayerState, Reopened};
 pub use routing::default_cue_routing;
+pub use source::HOT_CUE_SLOTS;

@@ -1,14 +1,16 @@
 //! Mixer commands (Phase 5 task 8): start and stop the `reks-mix` engine,
 //! load library tracks onto decks, forward controls, and stream the engine
-//! state to the UI on a `Channel` at about 60 Hz. Decoding and grid
-//! conversion live in `reks_core::deck`; the engine in `reks_mix`. This file
-//! only maps between their types and the UI's serde shapes.
+//! state to the UI on a `Channel` at about 60 Hz, and edit the loaded
+//! track's cues (task 17). Decoding and grid conversion live in
+//! `reks_core::deck`, cue rows in `reks_core::cue`, the engine in
+//! `reks_mix`. This file only maps between their types and the UI's serde
+//! shapes.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use reks_core::{CueMark, DeckAudio, TrackId};
+use reks_core::{CueMark, DeckAudio, Library, TrackId};
 use reks_mix::{DeckSource, DeckState, Engine, EngineConfig, DECKS};
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
@@ -37,9 +39,11 @@ struct MixSlot {
     feed: Option<Arc<AtomicBool>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct LoadedDeck {
     track_id: TrackId,
+    /// The engine's source, for where a cue set at the head goes.
+    src: Arc<DeckSource>,
 }
 
 impl MixSlot {
@@ -54,7 +58,7 @@ impl MixSlot {
             feed.store(false, Ordering::Relaxed);
         }
         self.engine = None;
-        self.decks = [None; DECKS];
+        self.decks = Default::default();
     }
 }
 
@@ -194,9 +198,9 @@ fn frames_to_ms(frames: i64, rate: u32) -> f64 {
     frames as f64 * 1000.0 / f64::from(rate.max(1))
 }
 
-fn deck_view(d: &DeckState, loaded: Option<LoadedDeck>, rate: u32) -> DeckView {
+fn deck_view(d: &DeckState, track_id: Option<TrackId>, rate: u32) -> DeckView {
     DeckView {
-        track_id: loaded.map(|l| l.track_id),
+        track_id,
         loaded: d.loaded,
         playing: d.playing,
         position_ms: frames_to_ms(d.position, rate),
@@ -222,7 +226,10 @@ fn deck_view(d: &DeckState, loaded: Option<LoadedDeck>, rate: u32) -> DeckView {
 }
 
 fn snapshot(slot: &mut MixSlot) -> Option<MixState> {
-    let decks = slot.decks;
+    let ids = slot
+        .decks
+        .each_ref()
+        .map(|d| d.as_ref().map(|l| l.track_id));
     let engine = slot.engine.as_mut()?;
     let st = engine.poll_state();
     let info = engine.info();
@@ -238,8 +245,8 @@ fn snapshot(slot: &mut MixSlot) -> Option<MixState> {
         decks: st
             .decks
             .iter()
-            .zip(decks)
-            .map(|(d, l)| deck_view(d, l, rate))
+            .zip(ids)
+            .map(|(d, id)| deck_view(d, id, rate))
             .collect(),
         meters: st.channels.iter().map(|&m| m.into()).collect(),
         master_meter: st.master.into(),
@@ -339,6 +346,8 @@ pub struct DeckLoaded {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HotCueView {
+    /// The library cue, to rename or delete it.
+    pub id: i64,
     /// 0..7 = A..H.
     pub slot: u8,
     pub position_ms: f64,
@@ -351,9 +360,21 @@ pub struct HotCueView {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryCueView {
+    /// The library cue, to rename or delete it.
+    pub id: i64,
     pub position_ms: f64,
     /// 0xRRGGBB from the library, if set.
     pub color_rgb: Option<u32>,
+    pub name: Option<String>,
+}
+
+/// A deck's cues after an edit, as `mix_load` returns them.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeckCues {
+    pub hot_cues: Vec<HotCueView>,
+    /// By position.
+    pub memory_cues: Vec<MemoryCueView>,
 }
 
 fn deck_source(audio: DeckAudio) -> DeckSource {
@@ -400,7 +421,9 @@ pub async fn mix_load(
     let (src, (hot_cues, memory_cues)) = blocking(&state, move |lib| {
         let audio = lib.deck_audio(id, rate)?;
         let views = cue_views(&audio.marks, rate);
-        Ok::<_, reks_core::Error>((Arc::new(deck_source(audio)), views))
+        let start = lib.settings()?.auto_cue.then(|| audio.auto_cue_frame());
+        let src = deck_source(audio).with_start(start.unwrap_or(0));
+        Ok::<_, reks_core::Error>((Arc::new(src), views))
     })
     .await?;
     let mut s = lock(&state.mix)?;
@@ -409,8 +432,11 @@ pub async fn mix_load(
         return Ok(None);
     }
     let duration_ms = frames_to_ms(src.frames(), rate);
-    s.engine()?.send(reks_mix::Control::Load { deck, src })?;
-    s.decks[i] = Some(LoadedDeck { track_id: id });
+    s.engine()?.send(reks_mix::Control::Load {
+        deck,
+        src: Arc::clone(&src),
+    })?;
+    s.decks[i] = Some(LoadedDeck { track_id: id, src });
     Ok(Some(DeckLoaded {
         deck,
         track_id: id,
@@ -428,18 +454,117 @@ fn cue_views(marks: &[CueMark], rate: u32) -> (Vec<HotCueView>, Vec<MemoryCueVie
         let position_ms = frames_to_ms(m.frame, rate);
         match m.slot {
             Some(slot) => hot.push(HotCueView {
+                id: m.id,
                 slot,
                 position_ms,
                 color_rgb: m.color_rgb,
                 name: m.name.clone(),
             }),
             None => memory.push(MemoryCueView {
+                id: m.id,
                 position_ms,
                 color_rgb: m.color_rgb,
+                name: m.name.clone(),
             }),
         }
     }
     (hot, memory)
+}
+
+/// A cue edit on a loaded deck (task 17), as the UI sends it.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "type"
+)]
+pub enum CueEdit {
+    /// Hot cue `slot` (empty) at the playhead, on the beat with quantise.
+    SetHotCue {
+        slot: u8,
+    },
+    /// A memory cue at the playhead, on the beat with quantise.
+    AddMemoryCue,
+    /// `None` or blank clears the name.
+    Rename {
+        cue_id: i64,
+        name: Option<String>,
+    },
+    Delete {
+        cue_id: i64,
+    },
+}
+
+/// The track's cues as the deck shows them, in ms at the engine rate.
+fn deck_cues(lib: &Library, id: TrackId, rate: u32) -> reks_core::Result<DeckCues> {
+    let marks = reks_core::deck::cue_marks(&lib.track(id)?.cues, rate);
+    let (hot_cues, memory_cues) = cue_views(&marks, rate);
+    Ok(DeckCues {
+        hot_cues,
+        memory_cues,
+    })
+}
+
+/// Applies `edit` to the track on `deck`: the library first (so the cue
+/// reaches the XML and USB exports), then the engine's hot cues. Cues set
+/// at the playhead take its position from the latest engine state, so a
+/// playing deck's cue can land up to one state (~17 ms) early; with
+/// quantise it snaps to the beat either way. Returns the deck's cues.
+#[tauri::command]
+pub async fn mix_cue_edit(
+    state: State<'_, AppState>,
+    deck: u8,
+    edit: CueEdit,
+) -> CmdResult<DeckCues> {
+    let i = deck_index(deck)?;
+    let (id, generation, rate, at) = {
+        let mut s = lock(&state.mix)?;
+        let (id, src) = match &s.decks[i] {
+            Some(l) => (l.track_id, Arc::clone(&l.src)),
+            None => return Err(CmdError(format!("deck {} is empty", i + 1))),
+        };
+        let generation = s.generation[i];
+        let engine = s.engine()?;
+        let rate = engine.info().sample_rate;
+        let d = engine.poll_state().decks[i];
+        (id, generation, rate, src.cue_frame(d.position, d.quantise))
+    };
+    let at_ms = frames_to_ms(at, rate);
+    let (cues, engine_edit) = blocking(&state, move |lib| {
+        let engine_edit = match edit {
+            CueEdit::SetHotCue { slot } => {
+                lib.set_hot_cue(id, slot, at_ms)?;
+                Some((slot, Some(at)))
+            }
+            CueEdit::AddMemoryCue => {
+                lib.add_memory_cue(id, at_ms)?;
+                None
+            }
+            CueEdit::Rename { cue_id, name } => {
+                lib.rename_cue(id, cue_id, name.as_deref())?;
+                None
+            }
+            CueEdit::Delete { cue_id } => {
+                let slot = lib
+                    .track(id)?
+                    .cues
+                    .iter()
+                    .find(|c| c.id == cue_id)
+                    .and_then(|c| c.slot);
+                lib.delete_cue(id, cue_id)?;
+                slot.map(|slot| (slot, None))
+            }
+        };
+        Ok::<_, reks_core::Error>((deck_cues(lib, id, rate)?, engine_edit))
+    })
+    .await?;
+    let mut s = lock(&state.mix)?;
+    // The deck still holds this load (not reloaded or ejected meanwhile).
+    if let Some((slot, frame)) = engine_edit.filter(|_| s.generation[i] == generation) {
+        s.engine()?
+            .send(reks_mix::Control::SetHotCue { deck, slot, frame })?;
+    }
+    Ok(cues)
 }
 
 /// A channel strip control (`reks_mix::ChannelParam`).
@@ -520,6 +645,11 @@ pub enum MixControl {
         deck: u8,
         slot: u8,
     },
+    /// Memory cue call: cue point and playhead to `ms`, exactly.
+    CallCue {
+        deck: u8,
+        ms: f64,
+    },
     Tempo {
         deck: u8,
         ratio: f64,
@@ -598,6 +728,10 @@ impl MixControl {
                 frame: reks_core::deck::ms_to_frame(ms.max(0.0), rate),
             },
             Self::HotCue { deck, slot } => Control::HotCue { deck, slot },
+            Self::CallCue { deck, ms } => Control::CallCue {
+                deck,
+                frame: reks_core::deck::ms_to_frame(ms.max(0.0), rate),
+            },
             Self::Tempo { deck, ratio } => Control::Tempo { deck, ratio },
             Self::Nudge { deck, ratio } => Control::Nudge { deck, ratio },
             Self::Sync { deck, on, bar } => Control::Sync { deck, on, bar },
@@ -693,6 +827,13 @@ mod tests {
             reks_mix::Control::HotCue { deck: 0, slot: 3 }
         ));
         assert!(matches!(
+            parse(r#"{"type":"callCue","deck":1,"ms":500}"#),
+            reks_mix::Control::CallCue {
+                deck: 1,
+                frame: 24_000
+            }
+        ));
+        assert!(matches!(
             parse(r#"{"type":"takeMaster","deck":2}"#),
             reks_mix::Control::TakeMaster { deck: 2 }
         ));
@@ -760,6 +901,34 @@ mod tests {
     }
 
     #[test]
+    fn cue_edits_parse_from_the_ui_shapes() {
+        let edit = |json: &str| serde_json::from_str::<CueEdit>(json).unwrap();
+        assert!(matches!(
+            edit(r#"{"type":"setHotCue","slot":2}"#),
+            CueEdit::SetHotCue { slot: 2 }
+        ));
+        assert!(matches!(
+            edit(r#"{"type":"addMemoryCue"}"#),
+            CueEdit::AddMemoryCue
+        ));
+        assert!(matches!(
+            edit(r#"{"type":"rename","cueId":5,"name":"Drop"}"#),
+            CueEdit::Rename { cue_id: 5, name: Some(n) } if n == "Drop"
+        ));
+        assert!(matches!(
+            edit(r#"{"type":"rename","cueId":5,"name":null}"#),
+            CueEdit::Rename {
+                cue_id: 5,
+                name: None
+            }
+        ));
+        assert!(matches!(
+            edit(r#"{"type":"delete","cueId":9}"#),
+            CueEdit::Delete { cue_id: 9 }
+        ));
+    }
+
+    #[test]
     fn cue_routing_parses() {
         let c: CueRoutingArg =
             serde_json::from_str(r#"{"type":"outputs","master":[0,1],"cue":[2,3]}"#).unwrap();
@@ -782,7 +951,7 @@ mod tests {
             bpm: Some(126.0),
             ..DeckState::default()
         };
-        let v = deck_view(&d, Some(LoadedDeck { track_id: 7 }), 48_000);
+        let v = deck_view(&d, Some(7), 48_000);
         assert_eq!(v.track_id, Some(7));
         assert_eq!(v.position_ms, 500.0);
         assert_eq!(v.duration_ms, 10_000.0);

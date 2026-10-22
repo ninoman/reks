@@ -26,6 +26,8 @@ pub const KEY_NOTATION: &str = "display.key_notation";
 pub const DECK_WAVEFORM: &str = "display.deck_waveform";
 /// [`SyncAlign`]: what a deck's SYNC lines up with the master.
 pub const SYNC_ALIGN: &str = "mix.sync_align";
+/// Auto cue (bool): a loaded track parks on its first memory cue or beat.
+pub const AUTO_CUE: &str = "mix.auto_cue";
 /// The cache dir the user chose; absent = the app's default.
 pub const CACHE_DIR: &str = "storage.cache_dir";
 /// [`UiState`].
@@ -91,6 +93,10 @@ pub struct Settings {
     pub key_notation: KeyNotation,
     pub deck_waveform: DeckWaveform,
     pub sync_align: SyncAlign,
+    /// A track loaded on a deck parks on its first memory cue, else its
+    /// first beat; off, at the start (rekordbox's Auto Cue preference). On
+    /// by default.
+    pub auto_cue: bool,
     /// The cache dir in use; changed only by [`Library::move_cache_dir`].
     pub cache_dir: PathBuf,
     pub ui: UiState,
@@ -135,6 +141,7 @@ pub struct SettingsPatch {
     pub key_notation: Option<KeyNotation>,
     pub deck_waveform: Option<DeckWaveform>,
     pub sync_align: Option<SyncAlign>,
+    pub auto_cue: Option<bool>,
     pub ui: Option<UiState>,
     pub anlz_preference: Option<AnlzPreference>,
 }
@@ -167,6 +174,7 @@ impl Library {
             key_notation: get(&conn, KEY_NOTATION)?.unwrap_or_default(),
             deck_waveform: get(&conn, DECK_WAVEFORM)?.unwrap_or_default(),
             sync_align: get(&conn, SYNC_ALIGN)?.unwrap_or_default(),
+            auto_cue: get(&conn, AUTO_CUE)?.unwrap_or(true),
             cache_dir: self.cache_dir(),
             ui: get(&conn, UI_STATE)?.unwrap_or_default(),
             anlz_preference: get(&conn, ANLZ_PREFERENCE)?.unwrap_or_default(),
@@ -190,6 +198,9 @@ impl Library {
             }
             if let Some(a) = patch.sync_align {
                 put(&tx, SYNC_ALIGN, Some(&a))?;
+            }
+            if let Some(on) = patch.auto_cue {
+                put(&tx, AUTO_CUE, Some(&on))?;
             }
             if let Some(mut ui) = patch.ui {
                 ui.volume = clamp_volume(ui.volume);
@@ -498,6 +509,7 @@ mod tests {
         assert_eq!(s.key_notation, KeyNotation::Classical);
         assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
         assert_eq!(s.sync_align, SyncAlign::Bar);
+        assert!(s.auto_cue);
         assert_eq!(s.cache_dir, dir.path().join("cache"));
         assert_eq!(s.ui, UiState::default());
         assert_eq!(s.anlz_preference, AnlzPreference::RekordboxFirst);
@@ -518,6 +530,7 @@ mod tests {
             key_notation: Some(KeyNotation::Camelot),
             deck_waveform: Some(DeckWaveform::ThreeBand),
             sync_align: Some(SyncAlign::Beat),
+            auto_cue: Some(false),
             ui: Some(ui.clone()),
             anlz_preference: Some(AnlzPreference::ReksFirst),
         })
@@ -532,6 +545,7 @@ mod tests {
         assert_eq!(s.key_notation, KeyNotation::OpenKey);
         assert_eq!(s.deck_waveform, DeckWaveform::ThreeBand);
         assert_eq!(s.sync_align, SyncAlign::Beat);
+        assert!(!s.auto_cue);
         assert_eq!(s.ui, ui);
         assert_eq!(s.anlz_preference, AnlzPreference::ReksFirst);
         assert_eq!(lib.settings().unwrap(), s);
@@ -560,6 +574,8 @@ mod tests {
         assert_eq!(p.deck_waveform, Some(DeckWaveform::Blue));
         let p: SettingsPatch = serde_json::from_str(r#"{"syncAlign":"beat"}"#).unwrap();
         assert_eq!(p.sync_align, Some(SyncAlign::Beat));
+        let p: SettingsPatch = serde_json::from_str(r#"{"autoCue":false}"#).unwrap();
+        assert_eq!(p.auto_cue, Some(false));
     }
 
     #[test]

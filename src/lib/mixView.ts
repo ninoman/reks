@@ -225,3 +225,25 @@ export function loopPadControls(
     double: steps > 0,
   }));
 }
+
+/** Longest cue name, as `reks-core` `MAX_CUE_NAME_CHARS` allows. */
+export const MAX_CUE_NAME_CHARS = 64;
+
+/** A memory cue this close to the playhead counts as "here", not before or after it. */
+export const CUE_HERE_MS = 5;
+
+/**
+ * Memory cue call ◀ / ▶: the position of the nearest memory cue before
+ * (`dir` -1) or after the playhead, skipping one it is already on; null at
+ * either end. `cues` by position.
+ */
+export function adjacentCue(
+  cues: readonly { positionMs: number }[],
+  positionMs: number,
+  dir: -1 | 1,
+): number | null {
+  if (dir > 0) return cues.find((c) => c.positionMs > positionMs + CUE_HERE_MS)?.positionMs ?? null;
+  let before: number | null = null;
+  for (const c of cues) if (c.positionMs < positionMs - CUE_HERE_MS) before = c.positionMs;
+  return before;
+}

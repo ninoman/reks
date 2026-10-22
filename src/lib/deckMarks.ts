@@ -17,6 +17,8 @@ export interface DeckMark {
   colour: string;
   /** The hot cue letter. */
   label: string | null;
+  /** The cue's name from the library, for the hover hint. */
+  name: string | null;
 }
 
 /** Colours (tokens) for marks without a library colour. */
@@ -41,15 +43,36 @@ export function deckMarks(
       ms: c.positionMs,
       colour: colour(c.colorRgb, colours.memory),
       label: null,
+      name: c.name,
     })),
-    { kind: "cue", ms: cueMs, colour: colours.cue, label: null },
+    { kind: "cue", ms: cueMs, colour: colours.cue, label: null, name: null },
     ...hotCues.map((c) => ({
       kind: "hot" as const,
       ms: c.positionMs,
       colour: colour(c.colorRgb, colours.hot),
       label: hotCueLabel(c.slot),
+      name: c.name,
     })),
   ];
+}
+
+/** The mark nearest `ms` within `slopMs`, hot cues first (they draw on top). */
+export function markAt(marks: DeckMark[], ms: number, slopMs: number): DeckMark | null {
+  let best: DeckMark | null = null;
+  for (const m of marks) {
+    const d = Math.abs(m.ms - ms);
+    if (d > slopMs) continue;
+    if (best === null || (m.kind === "hot") > (best.kind === "hot") || d < Math.abs(best.ms - ms))
+      best = m;
+  }
+  return best;
+}
+
+/** A mark's hover hint: "Hot cue A: Drop", "Memory cue", "Cue point". */
+export function markTitle(m: DeckMark): string {
+  const what =
+    m.kind === "hot" ? `Hot cue ${m.label}` : m.kind === "memory" ? "Memory cue" : "Cue point";
+  return m.name === null ? what : `${what}: ${m.name}`;
 }
 
 /** Whether text on a `#rrggbb` flag should be dark (light flag) or light. */

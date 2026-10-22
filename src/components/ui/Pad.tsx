@@ -5,13 +5,14 @@
  * else `deck-hotcue`),
  * `empty` (dashed), `lit` (the active one). `marked` is a heavy outline
  * (the size used last). They fill their grid cell, at least `--pad-h` tall.
+ * A `Pad` with a `hint` or `shortcut` shows them in a tooltip.
  */
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps, CSSProperties, ReactNode } from "react";
 import { cn } from "../../lib/cn";
 import { darkText } from "../../lib/deckMarks";
 import { disabledState, focusRing } from "./control";
-import { ShortcutTooltip } from "./Tooltip";
+import { ShortcutTooltip, Tooltip } from "./Tooltip";
 
 export const padVariants = cva(
   [
@@ -58,15 +59,22 @@ export type PadProps = ComponentProps<"button"> &
   };
 
 export function Pad({ tone, marked, color, className, style, shortcut, hint, ...props }: PadProps) {
+  const button = (
+    <button
+      type="button"
+      className={cn(padVariants({ tone, marked }), className)}
+      style={{ ...padStyle(color), ...style }}
+      {...props}
+    />
+  );
+  if (shortcut === undefined && hint === undefined) return button;
   return (
-    <ShortcutTooltip shortcut={shortcut} hint={hint ?? props["aria-label"]}>
-      <button
-        type="button"
-        className={cn(padVariants({ tone, marked }), className)}
-        style={{ ...padStyle(color), ...style }}
-        {...props}
-      />
-    </ShortcutTooltip>
+    <Tooltip
+      content={hint ?? props["aria-label"]}
+      {...(shortcut === undefined ? {} : { shortcut })}
+    >
+      {button}
+    </Tooltip>
   );
 }
 

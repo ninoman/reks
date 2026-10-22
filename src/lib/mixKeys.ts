@@ -15,8 +15,12 @@
  * | take master | G / H |
  * | next pad mode | T / Y |
  * | waveform zoom out, in | V, B / N, M |
+ * | set memory cue at the playhead | Alt A / Alt J |
+ * | previous, next memory cue | Alt E, Alt R / Alt O, Alt P |
  *
- * Crossfader: Z left, X centre, C right (a tenth per press).
+ * Alt keys sit on the keys they extend (CUE, beat jump), as every plain
+ * letter for each hand is taken. Crossfader: Z left, X centre, C right (a
+ * tenth per press).
  */
 
 /** A deck action without its deck. */
@@ -30,14 +34,16 @@ export type DeckAction =
   | { type: "loop" }
   | { type: "master" }
   | { type: "padMode" }
-  | { type: "zoom"; dir: -1 | 1 };
+  | { type: "zoom"; dir: -1 | 1 }
+  | { type: "memoryCue" }
+  | { type: "callCue"; dir: -1 | 1 };
 
 export type MixKeyAction =
   | (DeckAction & { deck: number })
   | { type: "crossfader"; step: -1 | 0 | 1 };
 
-/** `[left-hand key, right-hand key, action]`. */
-const DECK_KEYS: [string, string, DeckAction][] = [
+/** `[left-hand key, right-hand key, action, with Alt]`. */
+const DECK_KEYS: [string, string, DeckAction, boolean?][] = [
   ["KeyA", "KeyJ", { type: "cue" }],
   ["KeyS", "KeyK", { type: "play" }],
   ["KeyD", "KeyL", { type: "sync" }],
@@ -54,13 +60,20 @@ const DECK_KEYS: [string, string, DeckAction][] = [
   ["KeyT", "KeyY", { type: "padMode" }],
   ["KeyV", "KeyN", { type: "zoom", dir: -1 }],
   ["KeyB", "KeyM", { type: "zoom", dir: 1 }],
+  ["KeyA", "KeyJ", { type: "memoryCue" }, true],
+  ["KeyE", "KeyO", { type: "callCue", dir: -1 }, true],
+  ["KeyR", "KeyP", { type: "callCue", dir: 1 }, true],
 ];
 
+/** `code` or `Alt+code` → hand and action. */
 const BY_CODE = new Map<string, { side: number; action: DeckAction }>(
-  DECK_KEYS.flatMap(([left, right, action]) => [
-    [left, { side: 0, action }],
-    [right, { side: 1, action }],
-  ]),
+  DECK_KEYS.flatMap(([left, right, action, alt]) => {
+    const p = alt ? "Alt+" : "";
+    return [
+      [p + left, { side: 0, action }],
+      [p + right, { side: 1, action }],
+    ];
+  }),
 );
 
 const CROSSFADER: Record<string, -1 | 0 | 1> = { KeyZ: -1, KeyX: 0, KeyC: 1 };
@@ -81,10 +94,10 @@ const HANDS = { plain: [1, 2], shift: [0, 3] } as const;
  * Shift reaches decks 1 and 4 only when four are.
  */
 export function mixKeyAction(e: KeyPress, decks: number): MixKeyAction | null {
-  if (e.metaKey || e.ctrlKey || e.altKey) return null;
-  const step = CROSSFADER[e.code];
+  if (e.metaKey || e.ctrlKey) return null;
+  const step = e.altKey ? undefined : CROSSFADER[e.code];
   if (step !== undefined) return e.shiftKey ? null : { type: "crossfader", step };
-  const hit = BY_CODE.get(e.code);
+  const hit = BY_CODE.get(e.altKey ? `Alt+${e.code}` : e.code);
   if (hit === undefined || (e.shiftKey && decks < 4)) return null;
   return { ...hit.action, deck: HANDS[e.shiftKey ? "shift" : "plain"][hit.side] ?? 1 };
 }
@@ -108,7 +121,7 @@ export function deckKeyHint(action: DeckAction, deck: number): string | undefine
   const row = DECK_KEYS.find(([, , a]) => sameAction(a, action));
   const code = row?.[side];
   if (code === undefined) return undefined;
-  return `${shift ? "Shift " : ""}${keyName(code)}`;
+  return `${shift ? "Shift " : ""}${row?.[3] ? "Alt " : ""}${keyName(code)}`;
 }
 
 /** The crossfader keys as one hint: "Z X C". */

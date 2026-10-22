@@ -17,7 +17,7 @@ use crate::graph::{
     DeckState, LoopRegion, Ramp, FINE_JUMP_MS, LOOP_MAX_BEATS, LOOP_MIN_BEATS, LOOP_XFADE_MS,
     SEEK_XFADE_MS, TEMPO_MAX, TEMPO_MIN,
 };
-use crate::source::DeckSource;
+use crate::source::{DeckSource, HOT_CUE_SLOTS};
 use crate::varispeed::{Varispeed, MIN_STEP};
 
 /// What a deck does once its gate has faded out.
@@ -89,6 +89,9 @@ pub(crate) struct Deck {
     loop_xfade: u32,
     looping: Option<Loop>,
     cue: f64,
+    /// The loaded track's hot cues by slot: the source's at load, then as
+    /// edited ([`Control::SetHotCue`]).
+    hot_cues: [Option<i64>; HOT_CUE_SLOTS as usize],
     /// CUE is held from the cue point; letting go returns there.
     cue_preview: bool,
     pub(crate) tempo: f64,
@@ -127,6 +130,7 @@ impl Deck {
             loop_xfade: (sample_rate * LOOP_XFADE_MS / 1000).max(1),
             looping: None,
             cue: 0.0,
+            hot_cues: [None; HOT_CUE_SLOTS as usize],
             cue_preview: false,
             tempo: 1.0,
             nudge: 1.0,
@@ -244,6 +248,22 @@ impl Deck {
                 self.hot_cue(slot, clock);
                 None
             }
+            Control::SetHotCue { slot, frame, .. } => {
+                let loading = matches!(self.pending, Pending::Load(_));
+                let frames = self.frames();
+                if let Some(c) = self
+                    .hot_cues
+                    .get_mut(usize::from(slot))
+                    .filter(|_| !loading)
+                {
+                    *c = frame.map(|f| f.clamp(0, frames));
+                }
+                None
+            }
+            Control::CallCue { frame, .. } => {
+                self.call_cue(frame);
+                None
+            }
             Control::Tempo { ratio: r, .. } => {
                 self.set_tempo(r);
                 None
@@ -357,7 +377,7 @@ impl Deck {
         let Some(src) = self.src.as_ref() else {
             return;
         };
-        let Some(at) = src.hot_cue(slot) else {
+        let Some(at) = self.hot_cues.get(usize::from(slot)).copied().flatten() else {
             return;
         };
         if matches!(self.pending, Pending::Load(_)) {
@@ -374,6 +394,17 @@ impl Deck {
         self.leave_loop_unless(to);
         self.jump(to);
         self.play(clock);
+    }
+
+    /// Memory cue call: cue point and head to `frame`, exactly; playing on.
+    fn call_cue(&mut self, frame: i64) {
+        if matches!(self.pending, Pending::Load(_)) || self.src.is_none() {
+            return;
+        }
+        self.cue_preview = false;
+        self.cue = (frame as f64).clamp(0.0, self.frames() as f64);
+        self.leave_loop_unless(self.cue);
+        self.jump(self.cue);
     }
 
     /// Moves the head to `to`, clamped to the track. With quantise, a jump
@@ -581,9 +612,13 @@ impl Deck {
             Pending::Load(src) => {
                 self.stop();
                 self.resampling = false;
-                self.position = 0.0;
-                self.cue = 0.0;
+                let start = src.as_ref().map_or(0, |s| s.start()) as f64;
+                self.position = start;
+                self.cue = start;
                 self.looping = None;
+                for (slot, c) in (0..HOT_CUE_SLOTS).zip(&mut self.hot_cues) {
+                    *c = src.as_ref().and_then(|s| s.hot_cue(slot));
+                }
                 std::mem::replace(&mut self.src, src)
             }
         }

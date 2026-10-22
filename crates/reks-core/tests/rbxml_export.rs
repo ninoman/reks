@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 use reks_core::rbxml::{self, export, export_file, ImportOptions, PrefixRemap, Selection};
-use reks_core::{Error, Library, PlaylistId, PlaylistOp, PlaylistOutcome};
+use reks_core::{Error, Library, PlaylistId, PlaylistOp, PlaylistOutcome, HOT_CUE_PALETTE};
 
 const XML_PREFIX: &str = "/Users/reks/Music/reks fixtures";
 
@@ -297,4 +297,43 @@ fn smart_playlist_exports_as_a_plain_playlist() {
     let want_keys: Vec<String> = want.iter().map(i64::to_string).collect();
     assert_eq!(keys, &want_keys);
     assert_eq!(out.collection.tracks.len(), ids.len());
+}
+
+/// Phase 5 task 17: cues set, renamed and deleted from a deck are what the
+/// XML (and through it the USB export) carries, and a re-import of the
+/// rekordbox XML leaves the manual ones alone.
+#[test]
+fn cues_edited_on_a_deck_reach_the_export() {
+    let env = Env::new();
+    let lossless = env.node("Lossless");
+    let id = env.lib.playlist_track_ids(&[lossless]).unwrap()[&lossless][0];
+    let before = env.lib.track(id).unwrap().cues;
+    let drop = before
+        .iter()
+        .find(|c| c.name.as_deref() == Some("Drop"))
+        .unwrap();
+    let free = (0..8)
+        .find(|s| before.iter().all(|c| c.slot != Some(*s)))
+        .unwrap();
+
+    let hot = env.lib.set_hot_cue(id, free, 1_500.0).unwrap();
+    env.lib.rename_cue(id, hot.id, Some(" Break ")).unwrap();
+    env.lib.add_memory_cue(id, 9_000.0).unwrap();
+    env.lib.delete_cue(id, drop.id).unwrap();
+
+    let out = export(&env.lib, &env.sel(&["Lossless"])).unwrap();
+    let marks = &out.collection.tracks[0].position_marks;
+    let [r, g, b] = [16, 8, 0].map(|s| (HOT_CUE_PALETTE[0] >> s) as u8);
+    let new_hot = marks.iter().find(|m| m.num == i32::from(free)).unwrap();
+    assert_eq!(
+        (
+            new_hot.name.as_deref(),
+            new_hot.start,
+            new_hot.kind,
+            new_hot.rgb
+        ),
+        (Some("Break"), 1.5, 0, Some((r, g, b)))
+    );
+    assert!(marks.iter().any(|m| m.num == -1 && m.start == 9.0));
+    assert!(marks.iter().all(|m| m.name.as_deref() != Some("Drop")));
 }

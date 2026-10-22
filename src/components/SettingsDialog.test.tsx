@@ -29,6 +29,7 @@ const settings: Settings = {
   keyNotation: "classical",
   deckWaveform: "rgb",
   syncAlign: "bar",
+  autoCue: true,
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
   onelibraryKeyBuiltin: false,

@@ -35,6 +35,21 @@ describe("mixKeyAction", () => {
     expect(mixKeyAction(key("KeyM"), 2)).toEqual({ type: "zoom", dir: 1, deck: 2 });
   });
 
+  it("Alt on the cue and jump keys sets and calls memory cues", () => {
+    const alt = { altKey: true };
+    expect(mixKeyAction(key("KeyA", alt), 2)).toEqual({ type: "memoryCue", deck: 1 });
+    expect(mixKeyAction(key("KeyJ", alt), 2)).toEqual({ type: "memoryCue", deck: 2 });
+    expect(mixKeyAction(key("KeyE", alt), 2)).toEqual({ type: "callCue", dir: -1, deck: 1 });
+    expect(mixKeyAction(key("KeyP", alt), 2)).toEqual({ type: "callCue", dir: 1, deck: 2 });
+    expect(mixKeyAction(key("KeyO", { ...alt, shiftKey: true }), 4)).toEqual({
+      type: "callCue",
+      dir: -1,
+      deck: 3,
+    });
+    expect(mixKeyAction(key("KeyS", alt), 2)).toBeNull();
+    expect(mixKeyAction(key("KeyZ", alt), 2)).toBeNull();
+  });
+
   it("Shift reaches the outer decks 1 and 4 only when four are shown", () => {
     expect(mixKeyAction(key("KeyA", { shiftKey: true }), 4)).toEqual({ type: "cue", deck: 0 });
     expect(mixKeyAction(key("KeyL", { shiftKey: true }), 4)).toEqual({ type: "sync", deck: 3 });
@@ -80,6 +95,9 @@ describe("key hints", () => {
     expect(row({ type: "padMode" })).toEqual(["T", "Y"]);
     expect(row({ type: "zoom", dir: -1 })).toEqual(["V", "N"]);
     expect(row({ type: "zoom", dir: 1 })).toEqual(["B", "M"]);
+    expect(row({ type: "memoryCue" })).toEqual(["Alt A", "Alt J"]);
+    expect(row({ type: "callCue", dir: -1 })).toEqual(["Alt E", "Alt O"]);
+    expect(row({ type: "callCue", dir: 1 })).toEqual(["Alt R", "Alt P"]);
   });
 
   it("round-trips through mixKeyAction for every deck and action", () => {
@@ -90,14 +108,17 @@ describe("key hints", () => {
       { type: "master" },
       { type: "padMode" },
       { type: "zoom", dir: -1 },
+      { type: "memoryCue" },
+      { type: "callCue", dir: 1 },
     ];
     const codeOf = (name: string) => (name === ";" ? "Semicolon" : `Key${name}`);
     for (const action of actions) {
       for (let deck = 0; deck < 4; deck++) {
         const hint = deckKeyHint(action, deck) ?? "";
         const shiftKey = hint.startsWith("Shift");
-        const code = codeOf(hint.replace("Shift ", ""));
-        expect(mixKeyAction(key(code, { shiftKey }), 4)).toEqual({ ...action, deck });
+        const altKey = hint.includes("Alt ");
+        const code = codeOf(hint.replace("Shift ", "").replace("Alt ", ""));
+        expect(mixKeyAction(key(code, { shiftKey, altKey }), 4)).toEqual({ ...action, deck });
       }
     }
   });

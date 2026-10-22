@@ -697,6 +697,8 @@ export interface MixState {
 }
 
 export interface HotCueView {
+  /** The library cue, to rename or delete it. */
+  id: number;
   /** 0..7 = A..H. */
   slot: number;
   positionMs: number;
@@ -708,9 +710,32 @@ export interface HotCueView {
 
 /** A memory cue or loop (by its start). */
 export interface MemoryCueView {
+  /** The library cue, to rename or delete it. */
+  id: number;
   positionMs: number;
   colorRgb: number | null;
+  name: string | null;
 }
+
+/** A deck's cues after an edit. */
+export interface DeckCues {
+  hotCues: HotCueView[];
+  /** By position. */
+  memoryCues: MemoryCueView[];
+}
+
+/**
+ * Mirrors `src-tauri` `mix::CueEdit`: an edit to the loaded track's cues,
+ * stored in the library (so exports carry it) and applied to the deck.
+ * Cues set at the playhead snap to the beat with quantise.
+ */
+export type CueEdit =
+  /** An empty hot cue slot (0..7 = A..H) at the playhead, in the next palette colour. */
+  | { type: "setHotCue"; slot: number }
+  | { type: "addMemoryCue" }
+  /** null or blank clears the name. */
+  | { type: "rename"; cueId: number; name: string | null }
+  | { type: "delete"; cueId: number };
 
 export interface DeckLoaded {
   deck: number;
@@ -763,6 +788,8 @@ export type MixControl =
   | { type: "cueRelease"; deck: number }
   | { type: "seek"; deck: number; ms: number }
   | { type: "hotCue"; deck: number; slot: number }
+  /** Memory cue call: the cue point and playhead move to `ms` exactly; a playing deck plays on. */
+  | { type: "callCue"; deck: number; ms: number }
   /** Speed ratio, 1 = as recorded. */
   | { type: "tempo"; deck: number; ratio: number }
   /** Pitch bend while held; 1 releases it. */
@@ -811,6 +838,11 @@ export function mixControl(control: MixControl): Promise<void> {
   return invoke("mix_control", { control });
 }
 
+/** Edits the cues of the track on `deck`; resolves to the deck's cues after it. */
+export function mixCueEdit(deck: number, edit: CueEdit): Promise<DeckCues> {
+  return invoke("mix_cue_edit", { deck, edit });
+}
+
 /** `settings_*`, `library_root*`, `cache_dir_move` (reks-core `settings.rs`). */
 export type KeyNotation = "classical" | "camelot" | "openKey";
 
@@ -837,6 +869,8 @@ export interface Settings {
   keyNotation: KeyNotation;
   deckWaveform: DeckWaveform;
   syncAlign: SyncAlign;
+  /** A loaded track parks on its first memory cue, else its first beat; off: at the start. */
+  autoCue: boolean;
   /** The cache dir in use. */
   cacheDir: string;
   ui: UiState;
@@ -852,6 +886,7 @@ export interface SettingsPatch {
   keyNotation?: KeyNotation;
   deckWaveform?: DeckWaveform;
   syncAlign?: SyncAlign;
+  autoCue?: boolean;
   ui?: UiState;
   anlzPreference?: AnlzPreference;
 }

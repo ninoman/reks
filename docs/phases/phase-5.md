@@ -53,7 +53,8 @@ speakers. It is a preparation tool. Nothing here is meant for playing a gig.
   outputs, effects other than the filters, DVS, streaming services.
 - Key lock in the first cut (task 10 evaluates it).
 - Master and cue on two separate audio devices (clock drift). Windows ASIO.
-- Editing grids or cues from a deck (grid editor is Phase 3 task 13).
+- Editing grids from a deck (grid editor is Phase 3 task 13). Cue editing
+  on the decks was added by task 17 (maintainer's request, 2026-10-22).
 - Analogue sound emulation. The target is the documented response:
   frequencies, slopes, ranges, curves.
 - Saving mixer state or transitions in the library DB.
@@ -459,6 +460,48 @@ pub enum Control {
     1920 × 1080, each pad mode, empty, loading, analysing → grid, error and
     BPM edit. Not checked in the Tauri WebView. CDJ-like behaviour (pad sizes, FINE,
     jump and loop feel) is UNVERIFIED on hardware.
+
+17. [x] **Cue editing on the decks** (maintainer request, 2026-10-22;
+    defaults chosen without an answer: auto cue is one global setting,
+    Shift+click deletes a hot cue). UI: [`../ui.md`](../ui.md#cue-editing-task-17).
+    - [x] Library: `reks-core` `cue.rs`: `set_hot_cue` (empty slot only;
+      next `HOT_CUE_PALETTE` colour), `add_memory_cue` (a second one within
+      1 ms is the same), `rename_cue` (trimmed, blank clears, ≤ 64
+      characters, no control characters), `delete_cue`. Rows are `kind` 0,
+      `source = 'manual'` (a rekordbox re-import leaves them), the exporters'
+      model unchanged; no migration. `updated_at` is bumped.
+    - [x] Engine: `Control::SetHotCue { slot, frame: Option }` (the deck
+      keeps its hot cues in a fixed array, filled from the source at load;
+      no allocation), `Control::CallCue { frame }` (cue point and head move
+      there exactly, playing on), `DeckSource::with_start` (where a load
+      parks) and `cue_frame` (snap with quantise, clamped).
+    - [x] App: `mix_cue_edit { deck, edit: CueEdit }` writes the library,
+      then the engine, and returns the deck's cues. A cue set at the
+      playhead takes the position from the latest engine state (up to one
+      state, ~17 ms, early on a playing deck; quantise snaps it to the beat
+      either way). `mix_load` applies auto cue (`mix.auto_cue`, default on):
+      first memory cue, else first beat (`DeckAudio::auto_cue_frame`), else
+      0. `callCue` control in ms. `HotCueView.id`, `MemoryCueView.id/name`.
+    - [x] UI: empty pad sets, set pad triggers, double-click renames,
+      Shift+click deletes; MEM, ◀ ▶ and the memory list in HOT CUE mode;
+      mark names on hover; AUTO CUE in the Mix header and Settings → Decks;
+      keys Alt A / Alt J (memory cue), Alt E R / Alt O P (previous / next);
+      track details refetch cues after an edit (`cueRevisions`).
+    Tests: `tests/cue_edit.rs` (round trip, refused edits),
+    `rbxml_export.rs` `cues_edited_on_a_deck_reach_the_export`, `cue.rs`
+    (palette, names), `deck.rs` (auto cue frame), `settings.rs` (auto cue),
+    `reks-anlz` `cue.rs` (palette exports as distinct player colours),
+    `source.rs` and `graph.rs` (set / clear / call / start), the engine's
+    real-time test, `src-tauri/src/mix.rs` (`CueEdit`, `callCue`),
+    `DeckStrip.test.tsx` (empty pad sets, double-click renames, Esc
+    cancels, Shift+click deletes, memory controls), `mix.test.ts`,
+    `mixKeys.test.ts`, `deckMarks.test.ts`, `mockMix.test.ts` (auto cue on
+    load). Checked in headless Chrome (DPR 2) with the dev mock at 1280 ×
+    800 (4 decks) and 1440 × 900: every edit above with real pointer and
+    key events, the pads' top row fits at 1280, 1440 and 1920. Not checked
+    in the Tauri WebView. Cue behaviour copied from CDJs (auto cue,
+    memory call) is UNVERIFIED on hardware; exported cues are covered by
+    the existing export tests only.
 
 ## Acceptance criteria
 

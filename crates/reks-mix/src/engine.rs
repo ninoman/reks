@@ -677,7 +677,17 @@ mod tests {
                 deck: 1,
                 ratio: 0.97,
             },
+            Control::SetHotCue {
+                deck: 1,
+                slot: 3,
+                frame: Some(70_000),
+            },
             Control::HotCue { deck: 1, slot: 1 },
+            Control::HotCue { deck: 1, slot: 3 },
+            Control::CallCue {
+                deck: 1,
+                frame: 60_000,
+            },
             Control::Seek {
                 deck: 1,
                 frame: 50_000,

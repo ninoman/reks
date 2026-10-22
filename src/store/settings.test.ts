@@ -21,6 +21,7 @@ const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
   keyNotation: "camelot",
   deckWaveform: "rgb",
   syncAlign: "bar",
+  autoCue: true,
   cacheDir: "/cache",
   anlzPreference: "rekordboxFirst",
   onelibraryKeyBuiltin: false,

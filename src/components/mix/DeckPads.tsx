@@ -1,23 +1,36 @@
 /**
  * A deck's pads: the mode switch (HOT CUE, BEAT JUMP, BEAT LOOP), Q, the
- * page arrows and 2 × 4 pads. HOT CUE: A–H in their cue colours (empty ones
- * dashed and disabled). BEAT JUMP: split pads, back on the left, forward on
+ * page arrows and 2 × 4 pads. HOT CUE: A–H in their cue colours; an empty
+ * (dashed) pad sets its cue at the playhead, a set one jumps to it,
+ * double-click renames it in place and Shift+click deletes it; the memory
+ * cue controls take the page arrows' place. BEAT JUMP: split pads, back on the left, forward on
  * the right. BEAT LOOP: a loop of that size, the active size lit (press it
  * again to leave the loop). The size used last has a heavy outline: the
  * keys use it. Jumps, loops and Q wait for a grid.
  */
+import { type CSSProperties, useState } from "react";
+
 import { formatRgb, hotCueLabel } from "../../lib/format";
-import type { HotCueView } from "../../lib/ipc";
+import type { CueEdit, HotCueView, MemoryCueView } from "../../lib/ipc";
 import type { DeckAction } from "../../lib/mixKeys";
-import { formatBeats, HOT_CUE_PADS, JUMP_PAGES, LOOP_PAGES, type PadMode } from "../../lib/mixView";
+import {
+  formatBeats,
+  HOT_CUE_PADS,
+  JUMP_PAGES,
+  LOOP_PAGES,
+  MAX_CUE_NAME_CHARS,
+  type PadMode,
+} from "../../lib/mixView";
 import type { PagedPadMode } from "../../store/mix";
 import { Button } from "../ui/Button";
-import { Pad, SplitPad } from "../ui/Pad";
+import { InlineTextField } from "../ui/InlineText";
+import { Pad, padVariants, SplitPad } from "../ui/Pad";
 import { Segment, SegmentedControl } from "../ui/SegmentedControl";
 import { ShortcutTooltip } from "../ui/Tooltip";
+import { DeckMemory } from "./DeckMemory";
 import { PagePicker } from "./PagePicker";
 
-/** `prefix` drops on a narrow deck (a 1280 px window) so the labels fit on one line. */
+/** `prefix` drops on a narrow deck (pads under 20rem) so the labels and the memory controls fit on one line. */
 const MODES: { mode: PadMode; prefix: string; label: string }[] = [
   { mode: "hotCue", prefix: "HOT", label: "CUE" },
   { mode: "beatJump", prefix: "BEAT", label: "JUMP" },
@@ -40,6 +53,9 @@ export interface DeckPadsProps {
   mode: PadMode;
   page: Record<PagedPadMode, number>;
   hotCues: HotCueView[];
+  /** By position. */
+  memoryCues: MemoryCueView[];
+  positionMs: number;
   /** Beats of the active loop, null when not looping. */
   loopBeats: number | null;
   quantise: boolean;
@@ -49,7 +65,12 @@ export interface DeckPadsProps {
   onMode: (mode: PadMode) => void;
   onPage: (mode: PagedPadMode, page: number) => void;
   onQuantise: () => void;
-  onHotCue: (slot: number) => void;
+  /** Jumps to a set hot cue, sets an empty one. */
+  onHotCuePad: (slot: number) => void;
+  onEditCues: (edit: CueEdit) => void;
+  /** Cue point and playhead to a memory cue. */
+  onCallCue: (ms: number) => void;
+  onCallAdjacent: (dir: -1 | 1) => void;
   onJump: (beats: number) => void;
   onLoop: (beats: number) => void;
 }
@@ -75,9 +96,9 @@ export function DeckPads(props: DeckPadsProps) {
                 key={m.mode}
                 value={m.mode}
                 aria-label={`${m.prefix} ${m.label}`}
-                className="gap-1 px-1.5 text-2xs tracking-tight whitespace-nowrap"
+                className="gap-1 px-1 text-2xs tracking-tight whitespace-nowrap"
               >
-                <span className="hidden @[18rem]:inline">{m.prefix}</span>
+                <span className="hidden @[20rem]:inline">{m.prefix}</span>
                 {m.label}
               </Segment>
             ))}
@@ -95,13 +116,30 @@ export function DeckPads(props: DeckPadsProps) {
           Q
         </Button>
         <span className="flex-1" />
-        <PagePicker
-          page={paged === null ? 0 : page[paged]}
-          pages={paged === null ? 1 : PAGES[paged].length}
-          disabled={paged === null || !loaded || !grid}
-          label={`Deck ${n} ${paged === "beatLoop" ? "loop" : "jump"} sizes`}
-          onPage={(p) => paged !== null && onPage(paged, p)}
-        />
+        {paged === null ? (
+          <DeckMemory
+            deck={deck}
+            loaded={loaded}
+            cues={props.memoryCues}
+            positionMs={props.positionMs}
+            setKey={keyFor({ type: "memoryCue" })}
+            prevKey={keyFor({ type: "callCue", dir: -1 })}
+            nextKey={keyFor({ type: "callCue", dir: 1 })}
+            onSet={() => props.onEditCues({ type: "addMemoryCue" })}
+            onCall={props.onCallCue}
+            onAdjacent={props.onCallAdjacent}
+            onRename={(cueId, name) => props.onEditCues({ type: "rename", cueId, name })}
+            onDelete={(cueId) => props.onEditCues({ type: "delete", cueId })}
+          />
+        ) : (
+          <PagePicker
+            page={page[paged]}
+            pages={PAGES[paged].length}
+            disabled={!loaded || !grid}
+            label={`Deck ${n} ${paged === "beatLoop" ? "loop" : "jump"} sizes`}
+            onPage={(p) => onPage(paged, p)}
+          />
+        )}
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-4 grid-rows-2 gap-1">
         {mode === "hotCue" ? (
@@ -116,23 +154,54 @@ export function DeckPads(props: DeckPadsProps) {
   );
 }
 
-function HotCuePads({ deck, loaded, hotCues, keyFor, onHotCue }: DeckPadsProps) {
+function HotCuePads({ deck, loaded, hotCues, keyFor, onHotCuePad, onEditCues }: DeckPadsProps) {
   const n = deck + 1;
+  const [renaming, setRenaming] = useState<number | null>(null);
   return Array.from({ length: HOT_CUE_PADS }, (_, slot) => {
-    const cue = hotCues.find((c) => c.slot === slot);
+    const cue = loaded ? hotCues.find((c) => c.slot === slot) : undefined;
     const letter = hotCueLabel(slot);
-    const set = loaded && cue !== undefined;
+    const color = cue?.colorRgb == null ? undefined : formatRgb(cue.colorRgb);
+    if (cue !== undefined && renaming === slot) {
+      return (
+        <div
+          // biome-ignore lint/suspicious/noArrayIndexKey: hot cue slots are fixed
+          key={slot}
+          className={padVariants({ tone: "set" })}
+          style={color === undefined ? undefined : ({ "--pad-color": color } as CSSProperties)}
+        >
+          <b>{letter}</b>
+          <InlineTextField
+            initial={cue.name ?? ""}
+            maxLength={MAX_CUE_NAME_CHARS}
+            aria-label={`Deck ${n} hot cue ${letter} name`}
+            className="h-full text-2xs text-fg"
+            onDone={(commit, name) => {
+              setRenaming(null);
+              if (commit && name !== cue.name) onEditCues({ type: "rename", cueId: cue.id, name });
+            }}
+          />
+        </div>
+      );
+    }
     return (
       <Pad
         // biome-ignore lint/suspicious/noArrayIndexKey: hot cue slots are fixed
         key={slot}
-        tone={set ? "set" : "empty"}
-        color={cue?.colorRgb == null ? undefined : formatRgb(cue.colorRgb)}
-        disabled={!set}
+        tone={cue !== undefined ? "set" : "empty"}
+        color={color}
+        disabled={!loaded}
         aria-label={`Deck ${n} hot cue ${letter}`}
-        hint={`Hot cue ${letter}${cue?.name ? `: ${cue.name}` : ""}`}
+        hint={
+          cue === undefined
+            ? `Set hot cue ${letter} here`
+            : `Hot cue ${letter}${cue.name ? `: ${cue.name}` : ""} · double-click to rename · Shift+click to delete`
+        }
         shortcut={keyFor({ type: "hotCue", slot })}
-        onClick={() => onHotCue(slot)}
+        onClick={(e) => {
+          if (cue !== undefined && e.shiftKey) onEditCues({ type: "delete", cueId: cue.id });
+          else onHotCuePad(slot);
+        }}
+        onDoubleClick={() => cue !== undefined && setRenaming(slot)}
       >
         <b>{letter}</b>
         {cue?.name != null && (

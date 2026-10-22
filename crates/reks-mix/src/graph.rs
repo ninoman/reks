@@ -940,6 +940,82 @@ mod tests {
     }
 
     #[test]
+    fn hot_cues_set_and_cleared_on_the_deck_jump_or_stay_put() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        g.apply(Control::SetHotCue {
+            deck: 0,
+            slot: 2,
+            frame: Some(96_000),
+        });
+        g.apply(Control::HotCue { deck: 0, slot: 2 });
+        let st = g.state().decks[0];
+        assert!(st.playing);
+        assert_eq!(st.position, 96_000);
+        g.apply(Control::Pause { deck: 0 });
+        g.apply(Control::SetHotCue {
+            deck: 0,
+            slot: 1,
+            frame: None,
+        });
+        g.apply(Control::HotCue { deck: 0, slot: 1 });
+        assert_eq!(
+            g.state().decks[0].position,
+            96_000,
+            "deleted: nothing happens"
+        );
+        g.apply(Control::SetHotCue {
+            deck: 0,
+            slot: 9,
+            frame: Some(1),
+        });
+        // A new load brings the source's hot cues back.
+        load(&mut g, gridded(480_000));
+        g.apply(Control::HotCue { deck: 0, slot: 1 });
+        assert_eq!(g.state().decks[0].position, 240_000);
+        g.apply(Control::Pause { deck: 0 });
+        g.apply(Control::HotCue { deck: 0, slot: 2 });
+        assert_eq!(
+            g.state().decks[0].position,
+            240_000,
+            "edit gone with the old load"
+        );
+    }
+
+    #[test]
+    fn calling_a_memory_cue_moves_the_cue_point_and_plays_on() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        g.apply(Control::Quantise { deck: 0, on: true });
+        g.apply(Control::CallCue {
+            deck: 0,
+            frame: 100_001,
+        });
+        let st = g.state().decks[0];
+        assert_eq!(
+            (st.position, st.cue, st.playing),
+            (100_001, 100_001, false),
+            "exact"
+        );
+        g.apply(Control::Play { deck: 0 });
+        g.apply(Control::CallCue {
+            deck: 0,
+            frame: 50_000,
+        });
+        let st = g.state().decks[0];
+        assert_eq!((st.position, st.cue, st.playing), (50_000, 50_000, true));
+    }
+
+    #[test]
+    fn a_load_parks_on_the_sources_start() {
+        let mut g = Graph::new(RATE).unwrap();
+        let src = Arc::new(DeckSource::new(vec![0; 2 * 48_000], RATE).with_start(12_000));
+        load(&mut g, src);
+        let st = g.state().decks[0];
+        assert_eq!((st.position, st.cue), (12_000, 12_000));
+    }
+
+    #[test]
     fn quantised_jumps_while_playing_keep_the_beat_phase() {
         let mut g = Graph::new(RATE).unwrap();
         load(&mut g, gridded(480_000));
