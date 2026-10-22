@@ -113,33 +113,33 @@ Mapping from the export plan
 
 ## Tasks
 
-1. **Reference capture**: install Engine DJ Desktop (free) and export a 5-track
+1. **Reference capture** ([#27](https://github.com/ninoman/reks/issues/27)): install Engine DJ Desktop (free) and export a 5-track
    playlist to a stick at the current version and, if available, at 3.4
    (schema 2.21.0). Store `m.db` (metadata only) and `.schema` dumps in
    `fixtures/engine/ref-<schema>/`.
-2. **DDL module**: embed the captured DDL (tables, indexes, views, triggers)
+2. **DDL module** ([#28](https://github.com/ninoman/reks/issues/28)): embed the captured DDL (tables, indexes, views, triggers)
    per schema; `create_empty(schema)` test with schema diff = empty.
-3. **Blob codecs**: implement `qcompress`/`quncompress` (`flate2`), all five
+3. **Blob codecs** ([#29](https://github.com/ninoman/reks/issues/29)): implement `qcompress`/`quncompress` (`flate2`), all five
    blob structs; byte-exact round-trip tests against blobs extracted from the
    reference DB and against libdjinterop's documented examples.
-4. **Track + PerformanceData writer**: from plan; unit tests comparing to the
+4. **Track + PerformanceData writer** ([#30](https://github.com/ninoman/reks/issues/30)): from plan; unit tests comparing to the
    reference rows (ignoring ids/uuids/timestamps).
-5. **Playlist writer**: linked-list ordering; tests for empty, nested, and
+5. **Playlist writer** ([#31](https://github.com/ninoman/reks/issues/31)): linked-list ordering; tests for empty, nested, and
    reordered cases; verify with the `PlaylistPath`-style view if present.
-6. **Album art**: write `AlbumArt` rows and files per reference; UNVERIFIED hash
+6. **Album art** ([#32](https://github.com/ninoman/reks/issues/32)): write `AlbumArt` rows and files per reference; UNVERIFIED hash
    algorithm → use sha1-based 28-char URL-safe base64 and test whether Engine
    accepts/rewrites it (hardware task).
-7. **Writer orchestration**: build DB in temp, `PRAGMA integrity_check`,
+7. **Writer orchestration** ([#33](https://github.com/ninoman/reks/issues/33)): build DB in temp, `PRAGMA integrity_check`,
    fsync, copy to `Engine Library/Database2/m.db`; never write while an
    Engine DJ process is running (check process list; warn).
-8. **Reader/validator**: open our DB, decode all blobs, cross-check track count
+8. **Reader/validator** ([#34](https://github.com/ninoman/reks/issues/34)): open our DB, decode all blobs, cross-check track count
    and file existence; CLI `reks-cli engine verify <stick>`.
-9. **Planner + UI**: Engine target with schema picker and "also write Pioneer"
+9. **Planner + UI** ([#35](https://github.com/ninoman/reks/issues/35)): Engine target with schema picker and "also write Pioneer"
    combined mode; dry-run lists the DB and any stale `Engine Library` files
    (never `hm.db` or other DBs we don't write, task 11).
-10. **Hardware test**: checklist below on an Engine OS player (borrow a PRIME
+10. **Hardware test** ([#36](https://github.com/ninoman/reks/issues/36)): checklist below on an Engine OS player (borrow a PRIME
     GO or SC LIVE; also test Engine DJ Desktop reading the stick).
-11. **History (H3, D23)**: read `Engine Library/Database2/hm.db` into Phase 2.5
+11. **History (H3, D23)** ([#37](https://github.com/ninoman/reks/issues/37)): read `Engine Library/Database2/hm.db` into Phase 2.5
     sessions with `source = 'engine'`; the writer and stale cleanup never
     delete or overwrite `hm.db`; the Phase 2.5 export guard covers it.
     Location, schema and whether players write it on the stick come from a

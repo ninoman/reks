@@ -36,7 +36,8 @@ rekordbox XML parse/write/import, track queries) is tested, and the app shows th
 library in a searchable, filterable track table, filled by scanning a folder or
 importing a rekordbox XML, with a playlist tree to create, edit and reorder
 playlists.
-Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
+Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md); open work on the
+[reks roadmap](https://github.com/users/ninoman/projects/1) board (D33).
 
 ## Documentation
 

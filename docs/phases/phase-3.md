@@ -379,7 +379,7 @@ rekordbox keys (D10, "Queue"). A track rekordbox analysed has a rekordbox entry 
       mode rule that scores higher does so by calling nearly everything
       minor (D12). Key unchanged: 62.3% exact, 63.8% exact/relative.
     - [ ] Key tonic: wrong-tonic misses (15.6%; semitone up in minor the
-      largest group) before the key bar can be met.
+      largest group) before the key bar can be met ([#22](https://github.com/ninoman/reks/issues/22)).
 13. [x] **Grid editor UI**: waveform view from our columns (zoomable, 150/s),
     beat markers, set-downbeat-here, nudge ±1 ms/±10 ms, tap tempo,
     double/halve, lock grid; edits write `beatgrid` rows with `source =
@@ -403,7 +403,7 @@ rekordbox keys (D10, "Queue"). A track rekordbox analysed has a rekordbox entry 
     [grid.rs](../../src-tauri/src/grid.rs). Checked in the browser preview
     on the `sine-click-128` fixture's real columns (mock backend).
 14. **Hardware check**: export 20 reks-analysed tracks (no rekordbox data)
-    and run the Phase 2 checklist on NXS2 and CDJ-3000; log.
+    and run the Phase 2 checklist on NXS2 and CDJ-3000; log ([#23](https://github.com/ninoman/reks/issues/23)).
 
 ## Acceptance criteria
 

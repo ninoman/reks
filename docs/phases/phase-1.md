@@ -669,6 +669,8 @@ Added 2026-10-21. One PR per task; tasks 4 and 2–3 can run in parallel once 1 
 
 ## Acceptance criteria
 
+Tracked in [#16](https://github.com/ninoman/reks/issues/16).
+
 - Import of the maintainer's real `collection.xml` (~3,000 tracks) completes in
   under 60 s on a laptop, with 100% of tracks whose files exist matched, and
   the report lists every unmatched track with a reason.
