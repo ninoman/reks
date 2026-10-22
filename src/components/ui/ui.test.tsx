@@ -81,7 +81,7 @@ describe("shortcut hints", () => {
     fireEvent.focus(screen.getByRole("button", { name: "Play deck 2" }));
     const tip = await screen.findByRole("tooltip");
     expect(tip.textContent).toContain("Play");
-    expect(tip.textContent).toContain("S");
+    expect(tip.textContent).toContain("Z");
   });
 
   it("an icon button's hint falls back to its label", async () => {

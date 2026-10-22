@@ -1,22 +1,22 @@
-/** The Mix panel's keyboard shortcuts, in a popover (the keys are `lib/mixKeys`). */
+/** The Mix panel's keyboard shortcuts, in a popover (the keys are `lib/mixKeys`, rekordbox's layout). */
 import { Button } from "../ui/Button";
 import { Kbd } from "../ui/Kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/Popover";
 
 const SHORTCUTS: [string, string][] = [
-  ["A / J", "Cue deck 2 / 3 (hold on the cue point to preview)"],
-  ["S / K", "Play or pause deck 2 / 3"],
-  ["D / L", "Sync deck 2 / 3"],
-  ["Q W / U I", "Nudge slower, faster (hold)"],
-  ["1–4 / 7–0", "Hot cues A–D (any pad mode)"],
-  ["E R / O P", "Beat jump back, forward by the last jump size"],
-  ["F / ;", "Loop on or off at the last loop size"],
-  ["G / H", "Take master"],
-  ["T / Y", "Next pad mode"],
-  ["Alt A / Alt J", "Set a memory cue at the playhead"],
-  ["Alt E R / Alt O P", "Previous, next memory cue"],
-  ["Shift + key", "Same on deck 1 / 4"],
-  ["Z X C", "Crossfader left, centre, right"],
+  ["A / H", "Cue deck 2 / 3 (hold on the cue point to preview)"],
+  ["Z / N", "Play or pause deck 2 / 3"],
+  ["Q / Y", "Sync"],
+  ["Shift Q / Shift Y", "Take master"],
+  ["W E / U I", "Nudge slower, faster (hold)"],
+  ["1–4 / 6–9", "Hot cues A–D (any pad mode)"],
+  ["R T / O P", "Previous, next memory cue"],
+  ["Shift T / Shift P", "Set a memory cue at the playhead"],
+  ["⌘ R T / ⌘ O P", "Beat jump back, forward by the last jump size"],
+  ["Shift F / Shift L", "Loop on or off at the last loop size"],
+  ["Shift S / Shift J", "Next pad mode"],
+  ["⌥ + key", "Same on deck 1 / 4"],
+  ["X C V", "Crossfader left, centre, right"],
   ["− / +", "Zoom every deck's waveform out, in (or ⌘/Ctrl + scroll on one)"],
 ];
 

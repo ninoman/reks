@@ -451,28 +451,31 @@ take-master controls; task 15's per-deck zoom became one `MixStore.waveZoom`
 40, `--deck-pads-max-w` 336, `--deck-transport`, `--deck-sync-w`,
 `--deck-tempo-w`, `--pad-h` 26, `--fader-detent` 6.
 
-**Keys** (left hand deck 2, right hand deck 3, Shift: decks 1 / 4 with four
-shown):
+**Keys** follow rekordbox's default PERFORMANCE keys (Performance 1,
+[rekordbox 7.0.5 shortcut reference](https://cdn.rekordbox.com/files/20241203185020/rekordbox7.0.5_default_keyboard_shortcut_reference_EN.pdf))
+so the same fingers work in both. Left hand deck 2, right hand deck 3;
+Option (⌥) adds decks 1 / 4 with four shown (rekordbox's decks 3 / 4).
+Shift is a key's second function, ⌘ (or Ctrl) its third:
 
 | Action | Left | Right |
 |---|---|---|
-| Cue (hold) · play · sync | A · S · D | J · K · L |
-| Nudge slower / faster (hold) | Q W | U I |
-| Hot cues A–D (any pad mode) | 1–4 | 7–0 |
-| Beat jump back / forward, last jump size | E R | O P |
-| Loop on / off, last loop size | F | ; |
-| Take master | G | H |
-| Next pad mode | T | Y |
+| Cue (hold), play below it | A, Z | H, N |
+| Sync · take master | Q · Shift Q | Y · Shift Y |
+| Nudge slower / faster (hold) | W E | U I |
+| Hot cues A–D (any pad mode) | 1–4 | 6–9 |
+| Previous / next memory cue | R T | O P |
+| Set memory cue at the playhead | Shift T | Shift P |
+| Beat jump back / forward, last jump size | ⌘ R, ⌘ T | ⌘ O, ⌘ P |
+| Loop on / off, last loop size (rekordbox: auto beat loop) | Shift F | Shift L |
+| Next pad mode (no rekordbox key) | Shift S | Shift J |
 
-| Set memory cue at the playhead | Alt A | Alt J |
-| Previous / next memory cue | Alt E, Alt R | Alt O, Alt P |
-
-Every plain letter for each hand is taken, so the memory cue keys are Alt
-on the keys they extend (CUE, beat jump). Crossfader Z / X / C, Space
-(player deck) and waveform zoom − / + (every deck at once, also with the
-Mix panel closed) are not per deck. Mouse or Tab only: hot cues E–H, other
-pads, page arrows, Q, M, tempo range, BPM edit, eject, the memory cue list,
-renames.
+Crossfader X / C / V (rekordbox has none; it puts sampler slots there),
+Space (player deck) and waveform zoom − / + (every deck at once, also
+with the Mix panel closed) are not per deck. rekordbox keys we have no
+action for yet stay free: loop in / out / exit (D F G, K L ;), halve /
+double loop, slip reverse (S, J), return to start, tempo. Mouse or Tab
+only: hot cues E–H, other pads, page arrows, Q, M, tempo range, BPM edit,
+eject, the memory cue list, renames.
 
 ### Cue editing (task 17)
 
