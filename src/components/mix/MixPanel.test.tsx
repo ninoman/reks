@@ -21,7 +21,20 @@ const ipc = await import("../../lib/ipc");
 const mixStart = vi.mocked(ipc.mixStart);
 const mixControl = vi.mocked(ipc.mixControl);
 const { useMix } = await import("../../store/mix");
+const { usePanels } = await import("../../store/panels");
 const { MixPanel } = await import("./MixPanel");
+const { PlayerBar } = await import("../PlayerBar");
+
+/** The panel under its toolbar, which shows the status line and errors. */
+function renderMix() {
+  usePanels.setState({ mixOpen: true });
+  return render(
+    <>
+      <PlayerBar />
+      <MixPanel />
+    </>,
+  );
+}
 
 const idleDeck: DeckView = {
   trackId: null,
@@ -76,35 +89,24 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   useMix.setState(initial, true);
+  usePanels.setState({ mixOpen: false });
 });
 
 describe("MixPanel", () => {
-  it("stopped: offers the output settings and starts with them", async () => {
+  it("stopped: shows the decks and mixer, and starts from the bar", async () => {
     let push: ((s: MixState) => void) | undefined;
     mixStart.mockImplementation(async (_config, onState) => {
       push = onState;
       return state();
     });
-    render(<MixPanel />);
+    renderMix();
     expect(screen.getByText("Audio output off")).toBeTruthy();
-    await screen.findByRole("option", { name: "Laptop Speakers" });
-    // Two outputs: no cue on 3/4.
-    expect(
-      (screen.getByRole("option", { name: /cue on 3\/4/ }) as HTMLOptionElement).disabled,
-    ).toBe(true);
-    // Buffer sizes outside the device's range are not offered.
-    expect(screen.queryByRole("option", { name: "2048 frames" })).toBeNull();
-    fireEvent.change(screen.getByLabelText("Buffer"), { target: { value: "256" } });
-    fireEvent.change(screen.getByLabelText("Headphone cue"), { target: { value: "splitMono" } });
+    // No start form: the decks and mixer are there before the output runs.
+    expect(screen.getByRole("region", { name: "Mixer" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Deck 2" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Start output" }));
 
-    await screen.findByRole("region", { name: "Mixer" });
-    expect(mixStart.mock.calls[0]?.[0]).toEqual({
-      device: null,
-      sampleRate: null,
-      bufferFrames: 256,
-      cue: { type: "splitMono" },
-    });
+    await screen.findByRole("button", { name: "Stop output" });
     expect(screen.getByRole("status").textContent).toBe("Laptop Speakers · 48.0 kHz · 256 frames");
     // Two decks: 2 and 3, the centre channels.
     expect(screen.getByRole("region", { name: "Deck 2" })).toBeTruthy();
@@ -127,18 +129,24 @@ describe("MixPanel", () => {
     act(() => push?.(state({ deviceLost: true })));
     expect(screen.getByRole("alert").textContent).toMatch(/went away/);
     expect(screen.getByRole("button", { name: "Start output" })).toBeTruthy();
+    // The decks stay on screen, empty, ready for the next load.
+    expect(screen.getByRole("region", { name: "Deck 2" })).toBeTruthy();
   });
 
   it("shows a failed start and four decks on demand", async () => {
     mixStart.mockRejectedValueOnce(new Error("no output device"));
-    render(<MixPanel />);
+    renderMix();
     fireEvent.click(screen.getByRole("button", { name: "Start output" }));
     expect((await screen.findByRole("alert")).textContent).toBe("no output device");
 
     mixStart.mockResolvedValue(state());
     fireEvent.click(screen.getByRole("radio", { name: "4 decks" }));
     fireEvent.click(screen.getByRole("button", { name: "Start output" }));
-    await screen.findByRole("region", { name: "Deck 4" });
+    await screen.findByRole("button", { name: "Stop output" });
+    expect(screen.getByRole("region", { name: "Deck 4" })).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+
+    fireEvent.click(screen.getByRole("radio", { name: "1 deck" }));
+    expect(usePanels.getState().mixOpen).toBe(false);
   });
 });

@@ -26,6 +26,9 @@ const { SettingsDialog } = await import("./SettingsDialog");
 
 const settings: Settings = {
   audioDevice: "USB DAC",
+  audioSampleRate: null,
+  audioBufferFrames: null,
+  audioCue: null,
   keyNotation: "classical",
   deckWaveform: "rgb",
   syncAlign: "bar",
@@ -54,18 +57,23 @@ beforeEach(() => {
     defaultRate: 44_100,
     channels: 2,
     defaultCue: { type: "off" },
-    bufferFrames: null,
+    bufferFrames: [64, 1024],
   });
   vi.mocked(ipc.libraryRootRemove).mockResolvedValue();
   vi.mocked(ipc.settingsSet).mockImplementation(async (p) => ({ ...settings, ...p }) as Settings);
   vi.mocked(ipc.cacheDirMove).mockResolvedValue({ ...settings, cacheDir: "/Volumes/SSD/cache" });
 });
+const initialMix = useMix.getState();
+
 afterEach(() => {
   cleanup();
   useSettings.setState({ dialogOpen: false });
+  useMix.setState(initialMix, true);
 });
 
+/** As at start-up: the saved output reaches the mix store, then the dialog opens. */
 async function openDialog() {
+  await act(async () => useSettings.getState().load([]));
   await act(async () => useSettings.getState().setDialogOpen(true));
   render(<SettingsDialog />);
   await screen.findByText("/Music/House");
@@ -128,9 +136,39 @@ describe("SettingsDialog", () => {
     await waitFor(() => expect(select.options.length).toBe(3));
     fireEvent.change(select, { target: { value: "Built-in Output" } });
     await waitFor(() =>
-      expect(ipc.settingsSet).toHaveBeenCalledWith({ audioDevice: "Built-in Output" }),
+      expect(ipc.settingsSet).toHaveBeenCalledWith({
+        audioDevice: "Built-in Output",
+        audioSampleRate: null,
+        audioBufferFrames: null,
+      }),
     );
     expect(useMix.getState().config.device).toBe("Built-in Output");
+  });
+
+  it("stores the buffer and headphone cue, offering only what the device takes", async () => {
+    await openDialog();
+    const buffer = screen.getByRole("combobox", { name: /Buffer/ }) as HTMLSelectElement;
+    // 64…1024 frames: 2048 is not offered.
+    await waitFor(() => expect(buffer.options.length).toBe(6));
+    fireEvent.change(buffer, { target: { value: "256" } });
+    await waitFor(() =>
+      expect(ipc.settingsSet).toHaveBeenLastCalledWith(
+        expect.objectContaining({ audioBufferFrames: 256 }),
+      ),
+    );
+    expect(useMix.getState().config.bufferFrames).toBe(256);
+
+    const cue = screen.getByRole("combobox", { name: /Headphone cue/ }) as HTMLSelectElement;
+    // Two outputs: no cue on 3/4.
+    expect(
+      (screen.getByRole("option", { name: /cue on 3\/4/ }) as HTMLOptionElement).disabled,
+    ).toBe(true);
+    fireEvent.change(cue, { target: { value: "splitMono" } });
+    await waitFor(() =>
+      expect(ipc.settingsSet).toHaveBeenLastCalledWith(
+        expect.objectContaining({ audioCue: { type: "splitMono" } }),
+      ),
+    );
   });
 
   it("asks before moving the cache", async () => {

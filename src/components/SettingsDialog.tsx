@@ -1,20 +1,21 @@
 /**
  * Settings (phase 1 task 13) in one view, grouped: Folders (library folders,
- * cache folder), Playback (output device), Display (key notation), Decks
+ * cache folder), Playback (output device, sample rate, buffer, headphone
+ * cue: `OutputSettings`), Display (key notation), Decks
  * (the waveform style of the player deck and the Mix view, what SYNC
  * aligns). Values
  * live in Rust (`useSettings`); the library window's own state (columns,
  * panels, volume) is saved without asking.
  */
 import { open } from "@tauri-apps/plugin-dialog";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 
 import { cn } from "../lib/cn";
 
 import type { DeckWaveform, KeyNotation, SyncAlign } from "../lib/ipc";
-import { useMix } from "../store/mix";
 import { useScan } from "../store/scan";
-import { chooseOutputDevice, useSettings } from "../store/settings";
+import { useSettings } from "../store/settings";
+import { OutputSettings } from "./OutputSettings";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import {
@@ -25,9 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/Dialog";
-import { Field } from "./ui/Field";
 import { Segment, SegmentedControl } from "./ui/SegmentedControl";
-import { Select } from "./ui/Select";
 
 const item = "px-4 py-3.5";
 const itemTitle = "m-0 text-sm font-semibold";
@@ -111,7 +110,7 @@ function SettingsBody() {
       {settings !== null && (
         <>
           <Group title="Playback">
-            <OutputDevice device={settings.audioDevice} />
+            <OutputSettings itemClassName={item} />
           </Group>
           <Group title="Display">
             <KeyNotationChoice notation={settings.keyNotation} />
@@ -196,39 +195,6 @@ function LibraryFolders() {
           {scanning ? "Scanning…" : "Rescan all"}
         </Button>
       </div>
-    </div>
-  );
-}
-
-function OutputDevice({ device }: { device: string | null }) {
-  const devices = useMix((s) => s.devices);
-  useEffect(() => {
-    void useMix.getState().loadDevices();
-  }, []);
-
-  async function choose(value: string) {
-    await chooseOutputDevice(value === "" ? null : value);
-  }
-
-  // A chosen device that is not connected stays listed so the choice shows.
-  const options = device !== null && !devices.includes(device) ? [device, ...devices] : devices;
-  return (
-    <div className={item}>
-      <Field label="Output device" orientation="horizontal">
-        <Select
-          className="min-w-55"
-          value={device ?? ""}
-          onChange={(e) => void choose(e.target.value)}
-        >
-          <option value="">System default</option>
-          {options.map((d) => (
-            <option key={d} value={d}>
-              {d}
-              {devices.includes(d) ? "" : " (not connected)"}
-            </option>
-          ))}
-        </Select>
-      </Field>
     </div>
   );
 }

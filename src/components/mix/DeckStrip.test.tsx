@@ -207,41 +207,47 @@ describe("DeckStrip", () => {
     expect(a.hotCuePad).not.toHaveBeenCalled();
   });
 
-  it("the memory list jumps, toggles AUTO on loops and deletes from ×", () => {
-    const a = setup({ view: view(), meta: loadedMeta() });
-    fireEvent.click(screen.getByRole("button", { name: "Deck 2 memory cues (2)" }));
-    fireEvent.click(screen.getByRole("button", { name: "Jump to memory cue at 0:06.000" }));
+  it("MEMORY pads show the memory cues like hot cues: call, rename, delete, set", () => {
+    const a = setup({ view: view(), meta: loadedMeta({ padMode: "memory" }) });
+    const cue = screen.getByRole("button", { name: "Deck 2 memory cue at 0:06.0" });
+    expect(cue.textContent).toContain("Break");
+    fireEvent.click(cue);
     expect(a.callCue).toHaveBeenLastCalledWith(6_000);
-    expect(screen.queryByRole("button", { name: "Auto loop at 0:06.000" })).toBeNull();
-    const auto = screen.getByRole("button", { name: "Auto loop at 0:20.000" });
-    expect(auto.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(auto);
-    expect(a.editCues).toHaveBeenLastCalledWith({ type: "setActiveLoop", cueId: 22, on: true });
-    fireEvent.click(screen.getByRole("button", { name: "Delete memory loop at 0:20.000" }));
+    expect(
+      screen.getByRole("button", { name: "Deck 2 memory loop at 0:20.0" }).textContent,
+    ).toContain("LOOP");
+    fireEvent.click(screen.getByRole("button", { name: "Delete deck 2 memory loop at 0:20.0" }));
     expect(a.editCues).toHaveBeenLastCalledWith({ type: "delete", cueId: 22 });
-  });
-
-  it("sets and calls memory cues in HOT CUE mode", () => {
-    const a = setup({ view: view({ positionMs: 12_300 }), meta: loadedMeta() });
-    fireEvent.click(screen.getByRole("button", { name: "Deck 2 set memory cue" }));
+    fireEvent.doubleClick(cue);
+    const field = screen.getByRole("textbox", { name: "Deck 2 memory cue at 0:06.0 name" });
+    fireEvent.change(field, { target: { value: "Intro" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(a.editCues).toHaveBeenLastCalledWith({ type: "rename", cueId: 21, name: "Intro" });
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 set memory cue (pad 3)" }));
     expect(a.editCues).toHaveBeenLastCalledWith({ type: "addMemoryCue" });
-    fireEvent.click(screen.getByRole("button", { name: "Deck 2 previous memory cue" }));
-    expect(a.callAdjacentCue).toHaveBeenLastCalledWith(-1);
-    fireEvent.click(screen.getByRole("button", { name: "Deck 2 next memory cue" }));
-    expect(a.callAdjacentCue).toHaveBeenLastCalledWith(1);
-    expect(screen.getByRole("button", { name: "Deck 2 memory cues (2)" }).textContent).toBe("2");
   });
 
-  it("disables memory call past the last cue", () => {
-    setup({ view: view({ positionMs: 25_000 }), meta: loadedMeta() });
-    const next = screen.getByRole("button", {
-      name: "Deck 2 next memory cue",
-    }) as HTMLButtonElement;
-    const prev = screen.getByRole("button", {
-      name: "Deck 2 previous memory cue",
-    }) as HTMLButtonElement;
-    expect(next.disabled).toBe(true);
-    expect(prev.disabled).toBe(false);
+  it("right-click on a memory loop turns AUTO on", async () => {
+    const a = setup({ view: view(), meta: loadedMeta({ padMode: "memory" }) });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Deck 2 memory loop at 0:20.0" }));
+    fireEvent.click(await screen.findByRole("menuitemcheckbox", { name: /Auto loop/ }));
+    expect(a.editCues).toHaveBeenLastCalledWith({ type: "setActiveLoop", cueId: 22, on: true });
+  });
+
+  it("pages through memory cues eight at a time", () => {
+    const memoryCues = Array.from({ length: 10 }, (_, i) => ({
+      id: 100 + i,
+      positionMs: (i + 1) * 10_000,
+      endMs: null,
+      activeLoop: false,
+      colorRgb: null,
+      name: null,
+    }));
+    setup({ view: view(), meta: loadedMeta({ padMode: "memory", memoryCues }) });
+    expect(screen.queryByRole("button", { name: "Deck 2 memory cue at 1:30.0" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 memory cues: next page" }));
+    expect(screen.getByRole("button", { name: "Deck 2 memory cue at 1:30.0" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Deck 2 memory cue at 0:10.0" })).toBeNull();
   });
 
   it("nudges while held", () => {
@@ -335,16 +341,21 @@ describe("DeckStrip", () => {
     expect(a.loopPad).toHaveBeenLastCalledWith(1 / 8);
   });
 
-  it("switches pad mode; HOT CUE shows the memory controls in place of the page arrows", () => {
+  it("switches pad mode; every mode shows page arrows", () => {
     const a = setup({ view: view(), meta: loadedMeta() });
-    fireEvent.click(screen.getByRole("radio", { name: "BEAT LOOP" }));
+    fireEvent.click(screen.getByRole("radio", { name: "LOOP" }));
     expect(a.setPadMode).toHaveBeenCalledWith("beatLoop");
-    expect(screen.queryByRole("button", { name: "Deck 2 jump sizes: next page" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Deck 2 set memory cue" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: "MEMORY" }));
+    expect(a.setPadMode).toHaveBeenCalledWith("memory");
+    // HOT CUE keeps a disabled picker so the row doesn't shift.
+    const hot = screen.getByRole("button", { name: "Deck 2 hot cues: next page" });
+    expect((hot as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    setup({ view: view(), meta: loadedMeta({ padMode: "memory" }) });
+    expect(screen.getByRole("button", { name: "Deck 2 memory cues: next page" })).toBeTruthy();
     cleanup();
     setup({ view: view(), meta: loadedMeta({ padMode: "beatJump" }) });
     expect(screen.getByRole("button", { name: "Deck 2 jump sizes: next page" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Deck 2 set memory cue" })).toBeNull();
   });
 
   it("ejects from the artwork", () => {

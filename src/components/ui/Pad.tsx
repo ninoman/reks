@@ -1,8 +1,8 @@
 /**
  * Performance pads (decks): `Pad`, one button, and `SplitPad`, two half
- * buttons (back / forward) under one label. `tone`: `set` (filled, in
- * `color` when given: a data colour such as a hot cue's, like `Swatch`;
- * else `deck-hotcue`),
+ * buttons (back / forward) under one label. `tone`: `set` (outlined, no
+ * fill, in `color` when given: a data colour such as a hot cue's, like
+ * `Swatch`; else `deck-hotcue`),
  * `empty` (dashed), `lit` (the active one). `marked` is a heavy outline
  * (the size used last). They fill their grid cell, at least `--pad-h` tall.
  * A `Pad` with a `hint` or `shortcut` shows them in a tooltip. `remove`
@@ -12,7 +12,6 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps, CSSProperties, ReactNode } from "react";
 import { cn } from "../../lib/cn";
-import { darkText } from "../../lib/deckMarks";
 import { CloseIcon } from "../icons";
 import { disabledState, focusRing } from "./control";
 import { IconButton } from "./IconButton";
@@ -31,7 +30,7 @@ export const padVariants = cva(
         default:
           "justify-center border-border-strong bg-surface-strong text-fg hover:border-fg-subtle active:brightness-110",
         // Without `color`: the deck's hot cue colour.
-        set: "border-(color:--pad-color,var(--color-deck-hotcue)) bg-(--pad-color,var(--color-deck-hotcue)) text-(color:--pad-fg,var(--color-pad-ink-dark)) hover:brightness-110 active:brightness-95",
+        set: "border-(color:--pad-color,var(--color-deck-hotcue)) bg-transparent text-fg hover:bg-hover active:brightness-95",
         empty: "border-dashed border-border-strong bg-transparent text-fg-subtle",
         lit: "justify-center border-lit bg-lit text-lit-fg shadow-lit",
       },
@@ -43,7 +42,7 @@ export const padVariants = cva(
 );
 
 type PadStyle = VariantProps<typeof padVariants> & {
-  /** `#rrggbb` fill for `tone="set"`; text turns dark or light to stay readable. */
+  /** `#rrggbb` outline for `tone="set"`. */
   color?: string | undefined;
 };
 
@@ -51,7 +50,6 @@ function padStyle(color: string | undefined): CSSProperties | undefined {
   if (color === undefined) return undefined;
   return {
     "--pad-color": color,
-    "--pad-fg": darkText(color) ? "var(--color-pad-ink-dark)" : "var(--color-pad-ink-light)",
   } as CSSProperties;
 }
 
@@ -104,7 +102,7 @@ export function Pad({
         aria-label={remove.label}
         disabled={props.disabled}
         onClick={remove.onRemove}
-        className="absolute top-1/2 right-0.5 -translate-y-1/2 text-(color:--pad-fg,var(--color-pad-ink-dark)) opacity-0 group-focus-within/pad:opacity-100 group-hover/pad:opacity-100 hover:bg-overlay"
+        className="absolute top-1/2 right-0.5 -translate-y-1/2 text-fg opacity-0 group-focus-within/pad:opacity-100 group-hover/pad:opacity-100 hover:bg-overlay"
       >
         <CloseIcon />
       </IconButton>

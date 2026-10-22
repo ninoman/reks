@@ -3,7 +3,7 @@
  * mixer laws are in Rust, `reks-mix`).
  */
 
-import type { CueRouting } from "./ipc";
+import type { CueRouting, MixState } from "./ipc";
 
 /**
  * Tempo fader ranges (CDJ-3000), as a fraction either side of 1. WIDE is
@@ -112,6 +112,14 @@ export function formatClock(ms: number, remaining = false): string {
   return `${remaining ? "-" : ""}${m}:${String(s).padStart(2, "0")}.${t % 10}`;
 }
 
+/** The running output in one line: device, rate, buffer and any dropouts. */
+export function outputSummary(s: MixState): string {
+  const parts = [s.device, `${(s.sampleRate / 1000).toFixed(1)} kHz`];
+  if (s.bufferFrames !== null) parts.push(`${s.bufferFrames} frames`);
+  if (s.xruns > 0) parts.push(`${s.xruns} dropouts`);
+  return parts.join(" · ");
+}
+
 /** X / off / Y switch positions as the engine takes them. */
 export type Assign = "x" | "off" | "y";
 export const ASSIGN_VALUE: Record<Assign, number> = { x: 0, off: 0.5, y: 1 };
@@ -146,9 +154,9 @@ export function pickSwitches(
   return keepOne && !next.some(Boolean) ? [...on] : next;
 }
 
-/** What the deck's 2 × 4 pads do (rekordbox's pad modes, the three we have). */
-export type PadMode = "hotCue" | "beatJump" | "beatLoop";
-export const PAD_MODES: readonly PadMode[] = ["hotCue", "beatJump", "beatLoop"];
+/** What the deck's 2 × 4 pads do (rekordbox's pad modes we have, plus the memory cues). */
+export type PadMode = "hotCue" | "memory" | "beatJump" | "beatLoop";
+export const PAD_MODES: readonly PadMode[] = ["hotCue", "memory", "beatJump", "beatLoop"];
 
 /** The mode after `m`, as the pad mode key cycles. */
 export function nextPadMode(m: PadMode): PadMode {
@@ -157,6 +165,9 @@ export function nextPadMode(m: PadMode): PadMode {
 
 /** Hot cue pads: A–H, one page. */
 export const HOT_CUE_PADS = 8;
+
+/** Memory cue pads: the first eight by position; the list (count button) has them all. */
+export const MEMORY_PADS = 8;
 
 /** Beat jump sizes per page, in beats; FINE is 1/32 beat (maintainer, 2026-10-22). */
 export const JUMP_PAGES: readonly (readonly number[])[] = [

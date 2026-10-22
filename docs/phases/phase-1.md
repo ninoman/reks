@@ -442,7 +442,8 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
 
 ### Settings (`reks-core::settings`, task 13)
 
-- One `setting` row per key, value JSON: `audio.device` (name, absent = system default),
+- One `setting` row per key, value JSON: `audio.device` (name, absent = system default;
+  Phase 5 adds `audio.sample_rate`, `audio.buffer_frames`, `audio.cue`),
   `display.key_notation` (`classical` default, `camelot`, `openKey`), `display.deck_waveform`
   (Phase 5: `rgb` default since D30, `threeBand`, `blue`), `storage.cache_dir`
   (absent = `app_cache_dir`), `ui.state` (hidden columns, filter bar shown, filters on, track
@@ -462,7 +463,8 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
 - Window state is saved 300 ms after the last change (`startUiSync`) and restored before the
   table shows; window size and position are task 14 (window-state plugin, below).
 - UI: Settings dialog (header gear button, Cmd/Ctrl+,), one view in titled groups: Folders
-  (library folders, cache folder), Playback (output device), Display (key notation), Decks
+  (library folders, cache folder), Playback (output device; Phase 5: sample rate, buffer,
+  headphone cue), Display (key notation), Decks
   (Mix view waveform style, Phase 5), Experimental (OneLibrary key, Phase 4). A stored
   device that is not connected stays listed as such.
 - Covered by reks-core and Vitest tests; the dialog was reviewed in `cargo tauri dev`.

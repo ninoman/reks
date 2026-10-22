@@ -4,6 +4,8 @@
  * Arrow keys step 1%, Page Up/Down 10% (Radix); double-click the cap or
  * Delete returns to `defaultValue`. `detent` draws a tick at that value and
  * pulls drags within `--fader-detent` of it onto it (keys step past it).
+ * `ticks` draws that many evenly spaced scale marks, ends included: the ends
+ * and the detent bold, the rest thin and short.
  */
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -39,7 +41,14 @@ export type FaderProps = Omit<
     valueText?: string;
     /** 0..1: a tick here that pointer drags snap to. */
     detent?: number;
+    /** Scale marks, ends included (at least 2). */
+    ticks?: number;
   };
+
+/** Positions 0..1 of `count` marks, ends included. */
+function tickPositions(count: number): number[] {
+  return Array.from({ length: count }, (_, i) => i / (count - 1));
+}
 
 /** The `--fader-detent` zone as a fraction of the fader's travel. */
 function detentZone(el: HTMLElement, vertical: boolean): number {
@@ -56,6 +65,7 @@ export function Fader({
   defaultValue,
   valueText,
   detent,
+  ticks,
   "aria-label": label,
   ...props
 }: FaderProps) {
@@ -92,7 +102,44 @@ export function Fader({
       <SliderPrimitive.Track
         className={cn("relative grow rounded-full bg-deck", vertical ? "w-1" : "h-1")}
       />
-      {detent !== undefined && (
+      {ticks !== undefined && ticks >= 2 && (
+        // Inset by half a cap: the cap's centre stops that far from the ends.
+        <span
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute",
+            vertical
+              ? "inset-x-0 inset-y-[calc(var(--fader-cap)/2)]"
+              : "inset-x-[calc(var(--fader-cap)/2)] inset-y-0",
+          )}
+        >
+          {tickPositions(ticks).map((at) => {
+            const bold =
+              at === 0 || at === 1 || (detent !== undefined && Math.abs(at - detent) < 1e-9);
+            return (
+              <span
+                key={at}
+                data-tick={bold ? "major" : "minor"}
+                className={cn(
+                  "absolute",
+                  bold ? "bg-fg-muted" : "bg-border-strong",
+                  vertical
+                    ? cn(
+                        "left-1/2 -translate-x-1/2 translate-y-1/2",
+                        bold ? "h-0.5 w-full" : "h-px w-1/2",
+                      )
+                    : cn(
+                        "top-1/2 -translate-y-1/2 -translate-x-1/2",
+                        bold ? "h-full w-0.5" : "h-1/2 w-px",
+                      ),
+                )}
+                style={vertical ? { bottom: `${at * 100}%` } : { left: `${at * 100}%` }}
+              />
+            );
+          })}
+        </span>
+      )}
+      {detent !== undefined && ticks === undefined && (
         <span
           aria-hidden="true"
           data-detent=""

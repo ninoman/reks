@@ -535,6 +535,30 @@ pub enum Control {
     during a loop, AUTO, and a deck entering the loop as it plays. Not
     checked in the Tauri WebView. Not tried on a CDJ: memory call and
     active loops on players are UNVERIFIED.
+18. [x] **Decks on top** (maintainer request, 2026-10-22): the deck section
+    moves above the library, as in rekordbox and Traktor; one toolbar for
+    it (1 / 2 / 4 decks, output status and errors, Shortcuts, Stop output,
+    volume, device) replaces the Mix toggle and the Mix panel's header row;
+    the player deck alone puts CUE / PLAY and the pads beside the waveforms
+    (248 → 162 px). The start form is gone: decks and mixer show with the
+    output off, Start / Stop output is in the bar, and sample rate, buffer
+    and headphone cue are saved settings in Settings → Playback
+    (`reks-core` `audio.sample_rate`, `audio.buffer_frames`, `audio.cue`).
+    Pads: set hot cues are outlined in their colour, not filled; the pad
+    mode tabs are HOT CUE · MEMORY · JUMP · LOOP (chosen one outlined), with
+    a MEMORY mode whose pads are the memory cues, called, renamed and
+    deleted like hot cues, paged eight at a time, AUTO on right-click (the
+    + / count / list controls are gone); Q sits over CUE and PLAY, so the
+    mixer decks grow 248 → 260 px (bottom row 80 → 92).
+    D30, [`../ui.md`](../ui.md#player-d30). Tests: `settings.rs` (round
+    trip, `null` resets), `MixPanel.test.tsx` (decks and mixer while off,
+    start from the bar, status, errors, back to 1 deck),
+    `SettingsDialog.test.tsx` (device, buffer and cue saved; sizes and
+    routings the device can't take), `mix.test.ts` (`setOutput`),
+    `DeckStrip.test.tsx` (solo, MEMORY pads), `mixView.test.ts`
+    (`outputSummary`, pad mode order), `ui.test.tsx` (outlined pad). Checked in the dev mock at 1440 × 900, 1280 × 800
+    and 800 × 600 (1, 2 and 4 decks, light and dark). Not checked in the
+    Tauri WebView.
 
 ## Acceptance criteria
 

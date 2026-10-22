@@ -3,13 +3,16 @@
  * waveform, overview, then CUE / PLAY, the pads and MASTER / SYNC, with the
  * tempo column down the right edge. One size in 2- and 4-deck mode, the same
  * in every state: what can't act yet is disabled, not hidden. Drop a track
- * from the table to load it. `solo` is the library's player deck on its own:
- * no MASTER or SYNC (nothing to sync to), and no mixer keys.
+ * from the table to load it. `solo` is the library's player deck on its own,
+ * full window width: CUE / PLAY left of the waveforms and the pads right of
+ * them, so the deck is one row shorter; no MASTER or SYNC (nothing to sync
+ * to), and no mixer keys.
  *
  * Layout and state selection only; each row is its own component.
  */
 import { type DragEvent, useState } from "react";
 
+import { cn } from "../../lib/cn";
 import { zoomSeconds } from "../../lib/deckScroll";
 import { hasType, readTracks, TRACKS_MIME } from "../../lib/dnd";
 import type { CueEdit, DeckView } from "../../lib/ipc";
@@ -42,8 +45,6 @@ export interface DeckActions {
   editCues: (edit: CueEdit) => void;
   /** Cue point and playhead to `ms` (a memory cue). */
   callCue: (ms: number) => void;
-  /** The memory cue before (-1) or after the playhead. */
-  callAdjacentCue: (dir: -1 | 1) => void;
   /** Signed beats. */
   beatJump: (beats: number) => void;
   loopPad: (beats: number) => void;
@@ -130,6 +131,85 @@ export function DeckStrip({
   });
   const slot = slotState(meta, loaded);
 
+  const views =
+    slot !== null || view === undefined ? (
+      <DeckSlot
+        deck={deck}
+        state={slot ?? { kind: "empty" }}
+        solo={solo}
+        onRetry={actions.retry}
+        onEject={actions.eject}
+      />
+    ) : (
+      <div {...scrub} className="cursor-ew-resize touch-none">
+        <DeckWaveform
+          deck={deck}
+          columns={meta.columns}
+          beats={meta.beats}
+          positionMs={view.positionMs}
+          durationMs={view.durationMs}
+          playing={view.playing}
+          speed={view.speed}
+          cueMs={view.cueMs}
+          hotCues={meta.hotCues}
+          memoryCues={meta.memoryCues}
+          loop={view.loopRegion}
+          zoom={zoom}
+          onSeek={actions.seek}
+          onZoom={actions.zoom}
+          overlay={
+            <DeckWaveformRow
+              deck={deck}
+              zoom={zoom}
+              zoomOutKey={WAVE_ZOOM_KEY.out}
+              zoomInKey={WAVE_ZOOM_KEY.in}
+              onZoom={actions.zoom}
+              phaseShown={!solo && view.sync && !view.master}
+              phase={phase}
+              phaseHalf={view.syncBar ? 2 : 0.5}
+              warning={warning(meta, grid)}
+            />
+          }
+        />
+      </div>
+    );
+  const transport = (
+    <DeckTransport
+      deck={deck}
+      loaded={loaded}
+      playing={view?.playing ?? false}
+      cueKey={keyFor({ type: "cue" })}
+      playKey={playKey === "" ? undefined : playKey}
+      grid={grid}
+      quantise={loaded && (view?.quantise ?? false)}
+      onCue={actions.cue}
+      onTogglePlay={actions.togglePlay}
+      onQuantise={actions.toggleQuantise}
+    />
+  );
+  const pads = (
+    <DeckPads
+      deck={deck}
+      loaded={loaded}
+      grid={grid}
+      mode={meta.padMode}
+      page={meta.padPage}
+      hotCues={meta.hotCues}
+      memoryCues={meta.memoryCues}
+      loopBeats={view?.loopRegion?.beats ?? null}
+      lastJump={meta.lastJump}
+      lastLoop={meta.lastLoop}
+      keyFor={keyFor}
+      onMode={actions.setPadMode}
+      onPage={actions.setPadPage}
+      onHotCuePad={actions.hotCuePad}
+      onEditCues={actions.editCues}
+      onCallCue={actions.callCue}
+      onJump={actions.beatJump}
+      onLoop={actions.loopPad}
+    />
+  );
+
   function onDragOver(e: DragEvent) {
     if (!hasType(e.dataTransfer, TRACKS_MIME)) return;
     e.preventDefault();
@@ -152,7 +232,10 @@ export function DeckStrip({
       onDragOver={onDragOver}
       onDragLeave={() => setDropping(false)}
       onDrop={onDrop}
-      className="flex h-(--deck-h) min-w-(--deck-min-w) shrink-0 gap-2 rounded-md border border-border bg-surface p-2 data-[dropping]:border-dashed data-[dropping]:border-accent"
+      className={cn(
+        "flex min-w-(--deck-min-w) shrink-0 gap-2 rounded-md border border-border bg-surface p-2 data-[dropping]:border-dashed data-[dropping]:border-accent",
+        solo ? "h-(--deck-solo-h)" : "h-(--deck-h)",
+      )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <DeckHeader
@@ -172,94 +255,31 @@ export function DeckStrip({
           onEject={actions.eject}
         />
 
-        {slot !== null || view === undefined ? (
-          <DeckSlot
-            deck={deck}
-            state={slot ?? { kind: "empty" }}
-            solo={solo}
-            onRetry={actions.retry}
-            onEject={actions.eject}
-          />
-        ) : (
-          <div {...scrub} className="cursor-ew-resize touch-none">
-            <DeckWaveform
-              deck={deck}
-              columns={meta.columns}
-              beats={meta.beats}
-              positionMs={view.positionMs}
-              durationMs={view.durationMs}
-              playing={view.playing}
-              speed={view.speed}
-              cueMs={view.cueMs}
-              hotCues={meta.hotCues}
-              memoryCues={meta.memoryCues}
-              loop={view.loopRegion}
-              zoom={zoom}
-              onSeek={actions.seek}
-              onZoom={actions.zoom}
-              overlay={
-                <DeckWaveformRow
-                  deck={deck}
-                  zoom={zoom}
-                  zoomOutKey={WAVE_ZOOM_KEY.out}
-                  zoomInKey={WAVE_ZOOM_KEY.in}
-                  onZoom={actions.zoom}
-                  phaseShown={!solo && view.sync && !view.master}
-                  phase={phase}
-                  phaseHalf={view.syncBar ? 2 : 0.5}
-                  warning={warning(meta, grid)}
-                />
-              }
-            />
+        {solo ? (
+          <div className="flex min-h-0 flex-1 gap-2">
+            {transport}
+            <div className="min-w-0 flex-1">{views}</div>
+            <div className="flex w-(--deck-pads-max-w) shrink-0">{pads}</div>
           </div>
+        ) : (
+          <>
+            {views}
+            <div className="flex h-(--deck-bottom-h) shrink-0 gap-2">
+              {transport}
+              {pads}
+              <DeckSyncButtons
+                deck={deck}
+                ready={grid}
+                master={view?.master ?? false}
+                sync={view?.sync ?? false}
+                masterKey={keyFor({ type: "master" })}
+                syncKey={keyFor({ type: "sync" })}
+                onMaster={actions.takeMaster}
+                onSync={actions.toggleSync}
+              />
+            </div>
+          </>
         )}
-
-        <div className="flex h-(--deck-bottom-h) shrink-0 gap-2">
-          <DeckTransport
-            deck={deck}
-            loaded={loaded}
-            playing={view?.playing ?? false}
-            cueKey={keyFor({ type: "cue" })}
-            playKey={playKey === "" ? undefined : playKey}
-            onCue={actions.cue}
-            onTogglePlay={actions.togglePlay}
-          />
-          <DeckPads
-            deck={deck}
-            loaded={loaded}
-            grid={grid}
-            mode={meta.padMode}
-            page={meta.padPage}
-            hotCues={meta.hotCues}
-            memoryCues={meta.memoryCues}
-            positionMs={view?.positionMs ?? 0}
-            loopBeats={view?.loopRegion?.beats ?? null}
-            quantise={loaded && (view?.quantise ?? false)}
-            lastJump={meta.lastJump}
-            lastLoop={meta.lastLoop}
-            keyFor={keyFor}
-            onMode={actions.setPadMode}
-            onPage={actions.setPadPage}
-            onQuantise={actions.toggleQuantise}
-            onHotCuePad={actions.hotCuePad}
-            onEditCues={actions.editCues}
-            onCallCue={actions.callCue}
-            onCallAdjacent={actions.callAdjacentCue}
-            onJump={actions.beatJump}
-            onLoop={actions.loopPad}
-          />
-          <DeckSyncButtons
-            deck={deck}
-            solo={solo}
-            ready={grid}
-            master={view?.master ?? false}
-            sync={view?.sync ?? false}
-            masterKey={keyFor({ type: "master" })}
-            syncKey={keyFor({ type: "sync" })}
-            onMaster={actions.takeMaster}
-            onSync={actions.toggleSync}
-          />
-        </div>
       </div>
 
       <DeckTempo
@@ -267,6 +287,8 @@ export function DeckStrip({
         loaded={loaded}
         tempo={tempo}
         range={meta.tempoRange}
+        // The mixer decks' fader is about twice as long as the player deck's.
+        ticks={solo ? 7 : 13}
         slowerKey={keyFor({ type: "nudge", dir: -1 })}
         fasterKey={keyFor({ type: "nudge", dir: 1 })}
         onTempo={actions.setTempo}

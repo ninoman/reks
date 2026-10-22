@@ -237,7 +237,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
   function loadToDeck(deck: number) {
     const first = selectedItems().find((i) => i.kind === "track");
     if (first?.kind !== "track") return;
-    if (!usePanels.getState().mixOpen) usePanels.getState().toggleMix();
+    usePanels.getState().setMixOpen(true);
     void useMix.getState().load(deck, first.row);
   }
 

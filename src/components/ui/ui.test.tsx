@@ -197,17 +197,11 @@ describe("Pad", () => {
     }
   });
 
-  it("a data colour fills it, with text that stays readable", () => {
-    render(
-      <>
-        <Pad aria-label="light" tone="set" color="#f0f0f0" />
-        <Pad aria-label="dark" tone="set" color="#202020" />
-      </>,
-    );
-    const fg = (name: string) =>
-      screen.getByRole("button", { name }).style.getPropertyValue("--pad-fg");
-    expect(fg("light")).toContain("pad-ink-dark");
-    expect(fg("dark")).toContain("pad-ink-light");
+  it("a data colour outlines it, with no fill", () => {
+    render(<Pad aria-label="cue" tone="set" color="#f0a020" />);
+    const pad = screen.getByRole("button", { name: "cue" });
+    expect(pad.style.getPropertyValue("--pad-color")).toBe("#f0a020");
+    expect(pad.classList).toContain("bg-transparent");
   });
 
   it("a split pad is two buttons under one label", () => {

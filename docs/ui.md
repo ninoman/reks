@@ -123,7 +123,7 @@ menu items `--menu-item-h`.
 | `Switch` | `size`: sm, md | Radix Switch |
 | `Checkbox` | `size`: sm, md; `indeterminate` (mixed); native, wrap in a `<label>` (Biome knows it as an input) | native |
 | `Slider` | `size`: sm, md; one value | Radix Slider |
-| `SegmentedControl` + `Segment` | `size`; `variant`: default, control (chosen segment lit); one choice, can't be cleared (radiogroup) | Radix ToggleGroup |
+| `SegmentedControl` + `Segment` | `size`; `variant`: default, control (chosen segment lit), outline (chosen segment ringed in `accent`, no fill: mode tabs); one choice, can't be cleared (radiogroup); segment corners nest inside the outer radius (`--seg-r`) | Radix ToggleGroup |
 | `Chip` | removable label pill (`onRemove`, `removeLabel`) | – |
 | `Toast` | bottom-centre message with an optional action (Undo); one at a time via `store/toasts` + `ToastHost` | – |
 | `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |
@@ -143,8 +143,8 @@ menu items `--menu-item-h`.
 | `Swatch` | `color` (track colour name) or `style`; `size`: xs, sm, md | – |
 | `Caption` | `tone`: muted, subtle, default; small upper-case label | – |
 | `Knob` | `size`: sm, md; `bipolar` (arc from the centre), `defaultValue` (double-click / Delete); drag up/down, arrows, Page Up/Down, Home/End | own (`role="slider"`; Radix has no knob) |
-| `Fader` | `orientation`: vertical, horizontal; `defaultValue` (double-click the cap or Delete); `detent` (a tick that drags snap to within `--fader-detent`; keys step past it) | Radix Slider |
-| `Pad` + `SplitPad` | deck pads: `tone`: default, set (filled in `color`, a data colour, else `deck-hotcue`; text `pad-ink-dark/light` by brightness), empty (dashed), lit; `marked` (heavy outline); `SplitPad`: back / forward halves under one label | – |
+| `Fader` | `orientation`: vertical, horizontal; `defaultValue` (double-click the cap or Delete); `detent` (a tick that drags snap to within `--fader-detent`; keys step past it); `ticks` (evenly spaced scale marks, ends included: ends and detent bold, the rest thin and short) | Radix Slider |
+| `Pad` + `SplitPad` | deck pads: `tone`: default, set (outlined in `color`, a data colour, else `deck-hotcue`; no fill, `fg` text), empty (dashed), lit; `marked` (heavy outline); `SplitPad`: back / forward halves under one label | – |
 | `InlineNumber` | text that becomes a number field on double-click or Enter; Enter / blur commit, Esc cancels, non-numbers are dropped | native |
 
 Menus, popovers, dialogs and tooltips portal to `<body>`; tests query
@@ -193,18 +193,33 @@ There is no in-app theme setting yet; the app and splash follow the system.
 ## Player (D30)
 
 The library plays on deck 2 of the mix engine ([`src/store/player.ts`](../src/store/player.ts)).
-Along the bottom of the window:
+The deck section sits under the app header, above the library, as in
+rekordbox and Traktor (2026-10-22; it was along the bottom):
 
-- `PlayerBar`: the header row. Volume (`MixControl::Volume`, saved as
-  `ui.state.volume`), output device (stored in Settings; a running output
-  reopens on the new device with every loaded deck back where it was), the
-  **Mix** toggle, and with the Mix panel off, why the output is not playing
-  (opening, failed start, lost device).
-- Under it, `PlayerDeck` (Mix off): deck 2 alone as a `DeckStrip` with
-  `solo` (no MASTER, SYNC, phase meter or mixer keys; their space stays), so
-  it has the deck's waveforms, cue, pads, nudge, quantise and tempo fader. Empty, it says
-  to double-click a track or drag one onto it. With Mix on, the Mix panel
-  takes its place and shows the same deck among the others.
+- `PlayerBar`: the section's one toolbar. **1 deck / 2 decks / 4 decks**
+  (`Decks shown`): 1 is the player deck alone, 2 and 4 open the Mix panel
+  (`panels.mixOpen`, `MixStore.deckCount`). Then the status line: device ·
+  rate · buffer · dropouts while the output runs (`outputSummary`), "Opening
+  the audio output…", "Audio output off", or the error (failed start, lost
+  device; `role="alert"`, the only place errors show). **Start output** /
+  **Stop output** (loading a track starts it too). With the Mix panel open,
+  **Shortcuts**. Then volume (`MixControl::Volume`, saved as
+  `ui.state.volume`) and output device.
+- How the output opens is in Settings → Playback (`OutputSettings`), each
+  saved: output device (`audio.device`), sample rate (`audio.sample_rate`;
+  Automatic = 44.1 kHz when offered), buffer (`audio.buffer_frames`; only
+  sizes the device takes) and headphone cue (`audio.cue`; the device's own
+  routing until the user picks one, routings it has too few outputs for
+  disabled). A change reopens a running output with every loaded deck back
+  where it was (`MixStore.setOutput`, `chooseOutput`); a new device goes
+  back to its own rate and buffer.
+- Under it, `PlayerDeck` (1 deck): deck 2 alone as a `DeckStrip` with
+  `solo` (no MASTER, SYNC, phase meter or mixer keys), laid out flat (see
+  **Solo** under [Deck layout](#deck-layout-task-16)), with the deck's
+  waveforms, cue, pads, nudge, quantise and tempo fader. Empty, it says to
+  double-click a track or drag one onto it. With 2 or 4 decks the Mix panel
+  takes its place and shows the same deck among the others; "Load to deck N"
+  in the table opens it.
 - Double-click or Enter on a row, and double-click in a history session,
   load the track on deck 2 and play it (it keeps playing if it already is);
   loading opens the output when it is off. Space plays and pauses deck 2
@@ -214,8 +229,11 @@ Along the bottom of the window:
 
 ## Mix panel (phase 5)
 
-[`src/components/mix/`](../src/components/mix/), opened with **Mix** in the
-player bar (bottom edge), in place of the player deck. `MixPanel` is the only part that reads the store
+[`src/components/mix/`](../src/components/mix/), opened with **2 decks** or
+**4 decks** in the player bar, in place of the player deck. Its controls and
+status are in the player bar ([Player](#player-d30)), so the panel is the
+decks and mixer only, shown whether the output runs or not (2026-10-22; it
+had a start form before the output opened). `MixPanel` is the only part that reads the store
 ([`src/store/mix.ts`](../src/store/mix.ts)); `DeckStrip`, `DeckWaveform`,
 `MixerPanel`, `ChannelStrip`, `FilterUnit`, `MasterSection` and `SyncPhase`
 take props. The mixer follows the hardware: four channel strips (level, HI,
@@ -227,10 +245,10 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 (two stacked fit beside the mixer); the deck itself is described under
 [Deck layout](#deck-layout-task-16).
 
-- States: output off (start form: device, rate, buffer, cue routing; the
-  device's cue routing is preselected until the user picks one, and routings
-  it has too few outputs for are disabled), opening,
-  error (failed start, device lost), running. Deck states: see
+- States: output off (decks empty or as left, mixer set; loading a track or
+  **Start output** opens it, and the mixer's positions reach the engine on
+  start), opening, error (failed start, device lost; the decks empty),
+  running. Deck states: see
   [Deck layout](#deck-layout-task-16).
 - Waveforms draw on the dark `deck` like the grid editor: a scrolling view
   with the playhead in the middle and beat lines, and the overview under it,
@@ -274,7 +292,7 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 - Load: the table's context menu ("Load to deck N", also in playlist views)
   or drag a track onto a deck. Loading starts the output if it is off.
 - Shortcuts while the panel is open ([`src/lib/mixKeys.ts`](../src/lib/mixKeys.ts),
-  also under **Shortcuts** in the panel): the table under
+  also under **Shortcuts** in the player bar): the table under
   [Deck layout](#deck-layout-task-16). Every deck control with a key shows
   it in its tooltip (`deckKeyHint`, from the same table as the handler).
 - The mixer is memoised away from the 60 Hz engine state; only the decks
@@ -304,9 +322,9 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 Modelled on rekordbox's 2Deck Horizontal. Approved wireframe:
 <https://claude.ai/artifact/1bLg3dZwjRfL4nXbYvFdzD> (revision 3).
 
-**Size.** 248 px tall in both 2- and 4-deck mode (no compact deck). The mixer
-is 358 × 511 px, so two stacked decks (504 px) fit beside it and 4-deck mode
-costs no height. Width is what's left on each side: 441 px at a 1280 px
+**Size.** 260 px tall in both 2- and 4-deck mode (no compact deck; 248
+until Q moved over CUE and PLAY, 2026-10-22). The mixer is 358 × 511 px, so
+two stacked decks (528 px) make 4-deck mode 17 px taller than the mixer. Width is what's left on each side: 441 px at a 1280 px
 window (minimum, `--deck-min-w` 440), 521 at 1440, 761 at 1920; extra width
 goes to the header and waveforms, the pads stop at 336 px.
 
@@ -314,17 +332,17 @@ goes to the header and waveforms, the pads stop at 336 px.
 
 | Row | Contents |
 |---|---|
-| Header (40 px) | Deck number (lit when loaded) · artwork (eject ⏏ on hover or focus; dashed box without artwork) · title / artist · key (in the Settings notation) · BPM with tempo % under it · remaining over elapsed time |
+| Header (40 px) | Deck number (lit when loaded) · artwork (eject ⏏ on hover or focus; dashed box without artwork) · title / artist · key (in the Settings notation; a readout with KEY under it, not a pill) · BPM with tempo % under it · remaining over elapsed time |
 | Zoomed waveform (72 px, full width) | Playhead centred, beat lines, hot cue and loop markers, sync phase meter on the top edge when synced. Zoom − / + float top right on hover or focus-within, zoom level between them. Drag to skim |
 | Overview (20 px) | Whole track, played part shaded, hot cue ticks in cue colour, cue point, loop bar. Keyboard seek slider |
-| Bottom (80 px) | CUE and PLAY (round, 32 px) · pad mode (HOT CUE / BEAT JUMP / BEAT LOOP) · Q · page ◀ ▶ · 2 × 4 pads · MASTER and SYNC |
+| Bottom (92 px) | Q over CUE and PLAY (round, 32 px), at the bottom of their column · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · MASTER and SYNC (bottom-aligned like Q, CUE and PLAY) |
 | Tempo column (44 px) | Range button (±6 / ±10 / ±16 / WIDE) and **M** (master tempo, ghost; disabled until task 10 picks an engine) · full-height fader · nudge |
 
 - **BPM edit**: double-click (or Enter when focused) turns the BPM into a
   number field; Enter or blur saves, Esc cancels. Tempo = typed ÷ the
   track's BPM at the playhead; out of range, the range steps up to the
   smallest that fits. Disabled without a grid and while synced.
-- **Tempo fader**: detent at 0 % that drags snap to within `--fader-detent`;
+- **Tempo fader**: scale marks, bold at both ends and at 0 %, thin between: 13 on the mixer decks, 7 on the shorter player deck; detent at 0 % that drags snap to within `--fader-detent`;
   double-click or Delete resets. No Reset button.
 - **Nudge**: the CDJ jog-wheel arrows, two arcs of the wheel's lower rim
   pointing down: left (− REV, anticlockwise) slows, right (+ FWD,
@@ -333,12 +351,18 @@ goes to the header and waveforms, the pads stop at 336 px.
   before. Bar sync leaves the deck: Settings → Decks → "Sync aligns: beat /
   bar" (default bar). The phase meter shows on synced decks other than the
   master.
-- **Pads** (same 2 × 4 in every mode; ◀ ▶ page through sizes in BEAT JUMP
-  and BEAT LOOP, and give their place to the memory cue controls in HOT
-  CUE; with the pads under 20rem the mode labels drop HOT / BEAT):
-  - HOT CUE: A–H, a set pad filled with its cue's colour (`HotCueView.color`,
+- **Pads** (pad mode is a tab strip: `SegmentedControl` `variant="outline"`, four equal tabs, the chosen one outlined like the set hot cues; lit is for switches like Q, not modes; same 2 × 4 in every mode; ◀ ▶ page through sizes in BEAT JUMP
+  and BEAT LOOP, and through the memory cues in MEMORY; HOT CUE shows them disabled at 1/1 so the row doesn't shift; with the pads under 20rem the labels read CUE / MEM):
+  - HOT CUE: A–H, a set pad outlined in its cue's colour (`HotCueView.color`,
     else `deck-hotcue`) and its name; empty pads dashed. See
     [Cue editing](#cue-editing-task-17).
+  - MEMORY (added 2026-10-22, maintainer's request): the first eight
+    memory cues by position per page (`MEMORY_PADS`), shown
+    like hot cues: outlined in the cue's colour (else `deck-memory`), the
+    time, LOOP or AUTO on a memory loop, and the name. Click calls the cue,
+    double-click renames, × or Shift+click deletes, right-click toggles
+    AUTO on a memory loop; an empty pad sets a memory cue at the playhead;
+    ◀ ▶ page through them eight at a time. T / Y cycle HOT CUE → MEMORY → JUMP → LOOP.
   - BEAT JUMP: page 1 FINE (1/32 beat), 1/8, 1/4, 1/2, 1, 2, 4, 8; page 2
     1 … 128. Split pads: left half ◀ back, right half ▶ forward. Jumps keep
     the beat phase while playing.
@@ -349,7 +373,11 @@ goes to the header and waveforms, the pads stop at 336 px.
   - The size used last (jump and loop, default 4) has a heavy outline and
     carries the E/R and F hints; the keys use it. Pad mode, pages and sizes
     are kept per deck across loads.
-- **Solo** (player deck): MASTER and SYNC hidden, space kept.
+- **Solo** (player deck, full window width): no MASTER or SYNC. The header
+  stays on top; under it one row holds CUE / PLAY, the two views and the
+  pads (336 px; they grow to the views' height), so the deck is
+  `--deck-solo-h` (162 px) instead of 260. The views get the width that is
+  left (953 px at 1440, 310 at the 800 px minimum window).
 - **States**, each at full size with disabled controls rather than hidden
   ones: empty (how to load in the waveform slot), loading ("Decoding…"),
   analysing (playable; BPM, MASTER, SYNC, Q, jumps and loops wait for the
@@ -369,7 +397,7 @@ target, which state shows) composes one file per part: `DeckHeader`
 they share one animation-frame loop, so the overview is not a file of its
 own) with `DeckWaveformRow` as its overlay (zoom buttons and level,
 `SyncPhase`, the warning line), `DeckSlot` (empty / loading / analysing /
-error), `DeckTransport`, `DeckPads` (`SegmentedControl` `variant="control"`,
+error), `DeckTransport`, `DeckPads` (`SegmentedControl` tabs,
 Q, `PagePicker`, `Pad` / `SplitPad`), `DeckSyncButtons`, `DeckTempo`; `hold.ts`
 gives CUE and nudge their held handlers. Shared pieces: `ui/Pad.tsx`,
 `ui/InlineNumber.tsx`, `Fader` `detent`, `ArtworkThumb` + `useArtworkUrl`
@@ -386,11 +414,11 @@ take-master controls; task 15's per-deck zoom became one `MixStore.waveZoom`
 (maintainer, 2026-10-22). Pure helpers in `mixView.ts`:
 `JUMP_PAGES`, `LOOP_PAGES` (FINE = a 1/32 `beatJump`; the engine's 10 ms
 `fineJump` is unused by the deck), `formatBeats`, `snapToDetent`,
-`tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` 248,
+`tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` 260,
 `--deck-header-h` 40, `--deck-min-w` 440, `--deck-wave-h` 72,
-`--deck-overview-h` 20, `--deck-views-h`, `--deck-bottom-h` 80, `--deck-art`
+`--deck-overview-h` 20, `--deck-views-h`, `--deck-bottom-h` 92, `--deck-solo-h`, `--deck-art`
 40, `--deck-pads-max-w` 336, `--deck-transport`, `--deck-sync-w`,
-`--deck-tempo-w`, `--pad-h` 26, `--fader-detent` 6, `--color-pad-ink-*`.
+`--deck-tempo-w`, `--pad-h` 26, `--fader-detent` 6.
 
 **Keys** (left hand deck 2, right hand deck 3, Shift: decks 1 / 4 with four
 shown):
@@ -432,17 +460,19 @@ the command returns the deck's cues and the store takes them.
   click does. Delete with the pad's × (shown on hover or focus; a real
   button after the pad in the Tab order) or Shift+click. The pad's tooltip
   says all of this.
-- **Memory cues and loops** sit in the pads' top row in HOT CUE mode
-  (`DeckMemory`): **MEM** sets a memory cue at the playhead (on the beat
-  with Q), or, while a loop plays, saves that loop as a memory loop; a
-  second press at the same place adds nothing. ◀ ▶ call the cue before /
-  after the playhead (disabled at either end); the count between them
-  opens the list: click a time to jump there, double-click a name to
-  rename (`InlineText`), × to delete, and on a memory loop **AUTO**
-  (lit when on) to make playback enter it by itself when the playhead
-  reaches its start (rekordbox's active loop). A call moves the cue point
-  and the playhead there exactly; a playing deck plays on (rekordbox's
-  memory list; a CDJ's CALL is UNVERIFIED).
+- **Memory cues and loops** live on the MEMORY pads (`DeckPads`
+  `MemoryPads`), eight per page with ◀ page ▶ like JUMP and LOOP (the
+  page is not kept per deck; it follows the track's cues). An empty pad
+  (or Alt A / Alt J) sets a memory cue at the playhead (on the beat with
+  Q), or, while a loop plays, saves that loop as a memory loop; a second
+  press at the same place adds nothing. A pad calls its cue; double-click
+  renames; × or Shift+click deletes; right-click has Jump here, Rename,
+  **Auto loop** (memory loops: playback enters it by itself when the
+  playhead reaches its start, rekordbox's active loop) and Delete. Alt E R
+  / Alt O P call the cue before / after the playhead. A call moves the cue
+  point and the playhead there exactly; a playing deck plays on
+  (rekordbox's memory list; a CDJ's CALL is UNVERIFIED). There is no + or
+  count button and no list (2026-10-22, maintainer's call).
 - **Marks**: a memory loop draws a bar along the bottom edge to its end
   and a short end line; an AUTO loop draws both in `deck-auto-loop`, the
   bar thicker. Hovering a mark on either waveform names it ("Hot cue A:
