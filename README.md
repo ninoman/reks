@@ -53,6 +53,7 @@ Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
 | [`docs/analysis-parity/`](docs/analysis-parity/waveforms.md) | Analysis vs rekordbox: waveform calibration (method, error, pictures) |
 | [`docs/ui.md`](docs/ui.md) | UI design system: tokens, size scale, components |
 | [`docs/mixer-dsp.md`](docs/mixer-dsp.md) | Mix-prep mixer DSP: EQ, filter, crossfader and limiter laws, sources, test tolerances |
+| [`docs/releasing.md`](docs/releasing.md) | What CI runs when, and how to cut a release |
 | [`fixtures/README.md`](fixtures/README.md) | Test fixtures: generated audio signal, ffmpeg commands, sample rekordbox XML |
 
 ## Building from source
@@ -67,13 +68,14 @@ cargo tauri dev
 ```
 
 Unsigned developer builds for macOS, Windows and Linux are attached to draft
-GitHub releases when a `vX.Y.Z` tag is pushed
-([`.github/workflows/release.yml`](.github/workflows/release.yml)). They are not
-code-signed, so the OS will warn on first launch.
+GitHub releases cut with `npm run release -- X.Y.Z` (see
+[`docs/releasing.md`](docs/releasing.md)). They are not code-signed, so the OS will
+warn on first launch.
 
-Checks run by CI: `npm run lint`, `npm test`, `npm run build`,
-`cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
-`cargo test --workspace`, `cargo deny check licenses`, `npm run licenses:check`.
+Checks run by CI (Linux on PRs, all three OSes at release): `npm run lint`, `npm test`,
+`npm run build`, `cargo fmt --all --check`,
+`cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`,
+`cargo deny check licenses`, `npm run licenses:check`.
 
 ## Stack
 

@@ -1,12 +1,27 @@
 name: CI
 
+# Actions minutes are billed on this private repo, and macOS minutes count 10x and
+# Windows 2x (D31). So PRs run Linux only; the 3-OS matrix runs when release.yml
+# calls this workflow, or by hand (Actions > CI > Run workflow > all_os).
+
 on:
-  push:
-    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore: ["docs/**", "**/*.md", "LICENSE"]
+  workflow_dispatch:
+    inputs:
+      all_os:
+        description: Also run on macOS and Windows (about 13x the minutes of a Linux-only run)
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      all_os:
+        type: boolean
+        default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -16,11 +31,14 @@ env:
 jobs:
   check:
     name: ${{ matrix.os }}
+    # Draft PRs do not run; marking one ready for review does.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        os: ${{ fromJSON(inputs.all_os && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -61,27 +79,3 @@ jobs:
 
       - name: cargo test
         run: cargo test --workspace
-
-  licenses:
-    name: licence gate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # Rust: allowlist in deny.toml (docs/decisions.md D18).
-      - uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          command: check licenses
-          rust-version: "1.99.1"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: npm ci
-        run: npm ci
-
-      # npm: production dependencies only; the allowlist lives in package.json.
-      - name: npm licence check
-        run: npm run licenses:check

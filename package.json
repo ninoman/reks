@@ -12,6 +12,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "vitest run --passWithNoTests",
+    "release": "node scripts/release.mjs",
     "licenses:check": "license-checker-rseidelsohn --production --onlyAllow \"MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;Zlib;MPL-2.0;CC0-1.0;Unlicense;BlueOak-1.0.0;Python-2.0\" --excludePrivatePackages"
   },
   "dependencies": {

@@ -1,0 +1,42 @@
+name: Licences
+
+# Licence gate (D18). Only dependency changes can change the answer, so PRs run it
+# only when a manifest, lockfile or the allowlist changes; release.yml always runs it.
+
+on:
+  pull_request:
+    paths:
+      - "**/Cargo.toml"
+      - Cargo.lock
+      - package.json
+      - package-lock.json
+      - deny.toml
+      - .github/workflows/licenses.yml
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  licenses:
+    name: licence gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Rust: allowlist in deny.toml (docs/decisions.md D18).
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses
+          rust-version: "1.99.1"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      # npm: production dependencies only; the allowlist lives in package.json.
+      - name: npm licence check
+        run: npm run licenses:check

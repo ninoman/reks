@@ -917,6 +917,28 @@ Date of decisions: 2026-10-18.
   mix store's 0.8), so it is a little quieter than the old player at the
   same volume; a failed or lost output shows in the player's header row.
 
+## D31. CI budget: Linux on PRs, all OSes at release
+
+- Date: 2026-10-22. Changes how D17's and D18's CI runs are triggered.
+- Context: the repo is private, so Actions minutes are billed against the free
+  2,000/month, with macOS counted at 10x and Windows at 2x. CI ran the 3-OS
+  matrix on every PR push and every push to `main` (about 195 billed minutes
+  per run), and the quota ran out in four days (about 70 runs).
+- Decision: PRs run CI on Linux only, skip drafts and docs-only changes. The
+  licence gate runs on PRs only when a manifest, lockfile or `deny.toml`
+  changes. Pushes to `main` run nothing. A `vX.Y.Z` tag runs the version check,
+  then CI on all three OSes and the licence gate, then the release builds.
+  `npm run release -- X.Y.Z` bumps every version and tags
+  ([`docs/releasing.md`](releasing.md)). Every job has a `timeout-minutes` cap.
+- Rejected: CI on push to `main` (doubles runs, since most work arrives through
+  PRs); 3-OS on PRs (macOS alone is 10x).
+- Risks: a macOS- or Windows-only break shows up at release time, not at
+  merge time (run `ci.yml` by hand with `all_os` for platform code such as
+  audio devices or paths). Without runs on `main`, a PR cannot restore a Rust
+  cache from `main` and its first run builds from cold. Making the repo public
+  removes the minute limit for standard runners and would make this decision
+  unnecessary.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

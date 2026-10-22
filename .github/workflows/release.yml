@@ -1,9 +1,11 @@
 name: Release
 
-# Unsigned developer builds (docs/decisions.md D17). Pushing a tag `vX.Y.Z` builds the
-# app on every platform and attaches the bundles to a draft GitHub release, which the
-# maintainer reviews and publishes by hand. Signing, notarisation and the updater
-# (`latest.json`) come later; until then these builds are for developers only.
+# Unsigned developer builds (docs/decisions.md D17). `npm run release -- X.Y.Z` bumps
+# the version and tags it (docs/releasing.md); pushing the tag `vX.Y.Z` runs the full
+# checks on all three OSes (D31), then builds the app on every platform and attaches the
+# bundles to a draft GitHub release, which the maintainer reviews and publishes by hand.
+# Signing, notarisation and the updater (`latest.json`) come later; until then these
+# builds are for developers only.
 
 on:
   push:
@@ -16,9 +18,41 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Cheap and first, so a wrong tag fails before any macOS minute is spent.
+  version:
+    name: tag matches app version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tag, Cargo.toml, package.json and tauri.conf.json must agree, or the
+      # release would be named after a different version than it contains.
+      - name: Check tag matches app version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          pkg=$(node -p "require('./package.json').version")
+          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          echo "tag=$tag tauri.conf=$conf package.json=$pkg Cargo.toml=$cargo"
+          [ "$tag" = "$conf" ] && [ "$tag" = "$pkg" ] && [ "$tag" = "$cargo" ]
+
+  checks:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+    with:
+      all_os: true
+
+  licenses:
+    needs: version
+    uses: ./.github/workflows/licenses.yml
+
   build:
+    needs: [checks, licenses]
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -39,18 +73,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
-
-      # The tag, Cargo.toml, package.json and tauri.conf.json must agree, or the
-      # release would be named after a different version than it contains.
-      - name: Check tag matches app version
-        shell: bash
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          pkg=$(node -p "require('./package.json').version")
-          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
-          echo "tag=$tag tauri.conf=$conf package.json=$pkg Cargo.toml=$cargo"
-          [ "$tag" = "$conf" ] && [ "$tag" = "$pkg" ] && [ "$tag" = "$cargo" ]
 
       - name: Install Linux system dependencies (Tauri prerequisites)
         if: runner.os == 'Linux'

@@ -477,8 +477,10 @@ Notes (task 14, [`release.yml`](../../.github/workflows/release.yml), [`icons/`]
   and saves them on close, in `app_config_dir/.window-state.json`. It is not in the
   `setting` table, since it is per machine and is not a preference. A saved position
   on no connected monitor is skipped, so the window opens at the default place.
-- Release: pushing a tag `vX.Y.Z` runs `release.yml`. It first checks that the tag
-  equals the version in `Cargo.toml`, `package.json` and `tauri.conf.json`, then builds
+- Release: `npm run release -- X.Y.Z` bumps and tags ([`releasing.md`](../releasing.md));
+  pushing the tag `vX.Y.Z` runs `release.yml`. It first checks that the tag
+  equals the version in `Cargo.toml`, `package.json` and `tauri.conf.json`, runs the
+  3-OS checks and the licence gate (D31), then builds
   macOS arm64, macOS x86_64, Windows and Linux (Ubuntu 22.04) with `tauri-action@v1`
   and uploads the bundles to a draft pre-release. Builds are unsigned (D17); signing,
   notarisation and the updater come later.
