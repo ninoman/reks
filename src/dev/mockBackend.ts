@@ -8,6 +8,7 @@
 import type { Channel } from "@tauri-apps/api/core";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import type {
+  AnalysisEvent,
   ConvertDryRun,
   ConvertEvent,
   ConvertOptions,
@@ -271,6 +272,7 @@ let settings: Settings = {
   audioDevice: null,
   keyNotation: "classical",
   deckWaveform: "rgb",
+  syncAlign: "bar",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
   // Like a release build.
@@ -373,6 +375,29 @@ function query(q: TrackQuery) {
     dividers,
     dividerView,
   };
+}
+
+let analysisEvents: Channel<AnalysisEvent> | null = null;
+
+/** Analysis takes a few seconds per track in the mock, then the track has a grid. */
+const MOCK_ANALYSIS_MS = 4_000;
+
+function reanalyse(ids: number[]): number {
+  for (const id of ids) {
+    setTimeout(() => {
+      const row = TRACKS[id - 1];
+      if (row === undefined) return;
+      row.needsAnalysis = false;
+      row.bpmX100 ??= 12_800;
+      analysisEvents?.onmessage({
+        type: "analysed",
+        trackId: id,
+        cached: false,
+        stored: { grid: true, bpm: true, key: false },
+      });
+    }, MOCK_ANALYSIS_MS);
+  }
+  return ids.length;
 }
 
 function detail(id: number): TrackDetail {
@@ -1060,6 +1085,8 @@ mockIPC((cmd, payload) => {
     case "library_query":
       return query(args.query as TrackQuery);
     case "analysis_subscribe":
+      analysisEvents = args.onEvent as Channel<AnalysisEvent>;
+      return { queued: 0, running: 0, done: 0, failed: 0, total: 0, paused: false };
     case "analysis_pause":
     case "analysis_resume":
     case "analysis_cancel":
@@ -1072,7 +1099,7 @@ mockIPC((cmd, payload) => {
         paused: cmd === "analysis_pause",
       };
     case "analysis_reanalyse":
-      return (args.ids as number[]).length;
+      return reanalyse(args.ids as number[]);
     case "library_facets":
       smart.refreshCounts();
       return { genres: GENRES, keys: KEYS, colours: COLOURS, playlists: NODES } satisfies Facets;

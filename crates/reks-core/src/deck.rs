@@ -30,12 +30,14 @@ pub struct DeckAudio {
 }
 
 /// A hot cue (`slot` set) or memory cue (`slot` `None`) to draw on a deck.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CueMark {
     pub slot: Option<u8>,
     pub frame: i64,
     /// 0xRRGGBB from the library; `None` uses the deck's default colour.
     pub color_rgb: Option<u32>,
+    /// The cue's name from the library (shown on its hot cue pad).
+    pub name: Option<String>,
 }
 
 /// One `beatgrid` row in frames of the deck's audio.
@@ -111,6 +113,7 @@ pub fn cue_marks(cues: &[Cue], rate: u32) -> Vec<CueMark> {
         slot: c.slot,
         frame: ms_to_frame(c.start_ms, rate),
         color_rgb: c.color_rgb,
+        name: c.name.clone(),
     };
     let mut memory: Vec<CueMark> = cues
         .iter()
@@ -194,6 +197,7 @@ mod tests {
     fn cue_marks_list_hot_cues_with_colour_then_memory_cues_by_position() {
         let mut red = cue(Some(1), KIND_CUE, 1_000.0);
         red.color_rgb = Some(0xff_00_00);
+        red.name = Some("Drop".into());
         let cues = [
             cue(None, KIND_CUE, 3_000.0),
             red,
@@ -201,18 +205,19 @@ mod tests {
             cue(None, 3, 500.0),
             cue(Some(0), KIND_LOOP, 4_000.0),
         ];
-        let mark = |slot, frame, color_rgb| CueMark {
+        let mark = |slot, frame, color_rgb, name: Option<&str>| CueMark {
             slot,
             frame,
             color_rgb,
+            name: name.map(String::from),
         };
         assert_eq!(
             cue_marks(&cues, 1_000),
             [
-                mark(Some(0), 4_000, None),
-                mark(Some(1), 1_000, Some(0xff_00_00)),
-                mark(None, 2_000, None),
-                mark(None, 3_000, None),
+                mark(Some(0), 4_000, None, None),
+                mark(Some(1), 1_000, Some(0xff_00_00), Some("Drop")),
+                mark(None, 2_000, None, None),
+                mark(None, 3_000, None, None),
             ],
             "load cue dropped"
         );

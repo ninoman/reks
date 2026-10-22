@@ -319,10 +319,11 @@ function load(deck: number, id: number, analysed: boolean): DeckLoaded {
   d.grid = analysed;
   // A new track on the master hands the role on at the next tick.
   if (master === deck) masterPlaying = true;
-  // Hot cues A, B and D on bars 2, 5 and 9 (D without a colour); a memory cue on bar 7.
+  // Hot cues A, B and D on bars 2, 5 and 9 (D without a colour or name); a memory cue on bar 7.
   d.hotCues = analysed ? [msAtBeat(4), msAtBeat(16), msAtBeat(32)] : [];
   const slots = [0, 1, 3];
   const colours = [0x30d158, 0xff375f, null];
+  const names = ["Intro", "Drop", null];
   decks[deck] = d;
   return {
     deck,
@@ -332,6 +333,7 @@ function load(deck: number, id: number, analysed: boolean): DeckLoaded {
       slot: slots[i] ?? i,
       positionMs,
       colorRgb: colours[i] ?? null,
+      name: names[i] ?? null,
     })),
     memoryCues: analysed ? [{ positionMs: msAtBeat(24), colorRgb: null }] : [],
   };

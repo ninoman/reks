@@ -253,6 +253,7 @@ describe("useExportWizard", () => {
       audioDevice: null,
       keyNotation: "classical",
       deckWaveform: "threeBand",
+      syncAlign: "bar",
       cacheDir: "/cache",
       ui: {
         hiddenColumns: null,

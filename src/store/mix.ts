@@ -3,13 +3,16 @@
  * it streams (about 60 a second), loads library tracks onto decks with their
  * waveform and beat lines, and keeps the mixer's knob and switch positions
  * and the player's volume, which it sends as `MixControl`s. The library's
- * player is one of these decks (`player.ts`, D30). Tempo, sync and every
- * mixer law live in Rust; this only forwards.
+ * player is one of these decks (`player.ts`, D30). A track loaded without
+ * a grid is queued for analysis and picks the grid up when it is done. Each
+ * deck's pad mode, pages and last jump / loop sizes live here. Tempo, sync
+ * and every mixer law live in Rust; this only forwards.
  */
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { DEFAULT_DECK_ZOOM, stepZoom } from "../lib/deckScroll";
 import {
+  analysisReanalyse,
   audioDevices,
   type BeatMark,
   beatgridGet,
@@ -18,6 +21,7 @@ import {
   type FilterParam,
   type FilterUnit,
   type HotCueView,
+  type Key,
   libraryTrack,
   type MasterParam,
   type MemoryCueView,
@@ -37,25 +41,42 @@ import {
   ASSIGN_VALUE,
   type Assign,
   cueFits,
+  DEFAULT_PAD_BEATS,
   DEFAULT_TEMPO_RANGE,
+  loopPadControls,
   NUDGE,
+  nextPadMode,
+  type PadMode,
   type TempoRange,
+  tempoForBpm,
 } from "../lib/mixView";
 
 export type EngineStatus = "stopped" | "starting" | "running" | "error";
 
-export interface DeckTrack {
+/** What a load is asked for: a library track, with what the caller already shows of it. */
+export interface TrackRef {
   id: number;
   title: string | null;
   artist: string | null;
 }
 
+export interface DeckTrack extends TrackRef {
+  key: Key | null;
+  artworkId: number | null;
+  artworkMime: string;
+}
+
+/** Pad modes with pages of sizes. */
+export type PagedPadMode = Exclude<PadMode, "hotCue">;
+
 /** What the UI knows about a deck beyond the engine state. */
 export interface DeckMeta {
   track: DeckTrack | null;
   /** Being decoded, if any. */
-  loading: DeckTrack | null;
+  loading: TrackRef | null;
   error: string | null;
+  /** The track whose load failed, for Retry. */
+  failed: TrackRef | null;
   hotCues: HotCueView[];
   memoryCues: MemoryCueView[];
   /** Waveform columns (4 bytes each), null until fetched. */
@@ -63,10 +84,27 @@ export interface DeckMeta {
   beats: BeatMark[] | null;
   /** The waveform or grid could not be fetched (the deck still plays). */
   viewError: string | null;
+  /** Loaded without a grid and queued for analysis. */
+  analysing: boolean;
+  /** Analysis gave the track a grid the engine has not got yet: it reloads when the deck is paused. */
+  gridPending: boolean;
+  // Kept across loads:
   tempoRange: TempoRange;
-  /** Scrolling waveform zoom (`DECK_ZOOM_S` index), kept across loads. */
+  /** Scrolling waveform zoom (`DECK_ZOOM_S` index). */
   zoom: number;
+  padMode: PadMode;
+  /** Page shown per paged mode (`JUMP_PAGES` / `LOOP_PAGES` index). */
+  padPage: Record<PagedPadMode, number>;
+  /** Beats of the jump and loop used last; the keys use them. */
+  lastJump: number;
+  lastLoop: number;
 }
+
+/** The deck settings a load or eject keeps. */
+type DeckPrefs = Pick<
+  DeckMeta,
+  "tempoRange" | "zoom" | "padMode" | "padPage" | "lastJump" | "lastLoop"
+>;
 
 export interface ChannelValues {
   trim: number;
@@ -126,13 +164,32 @@ export interface MixStore {
   stop: () => Promise<void>;
   setDeckCount: (n: 2 | 4) => void;
   /** Loads `track` on `deck`, starting the output if it is off; `play` plays it once loaded. */
-  load: (deck: number, track: DeckTrack | number, play?: boolean) => Promise<void>;
+  load: (deck: number, track: TrackRef | number, play?: boolean) => Promise<void>;
   unload: (deck: number) => void;
+  /** Loads the track that failed again, or fetches a failed waveform again. */
+  retry: (deck: number) => Promise<void>;
+  /** A track's analysis finished (`ok`) or failed: decks waiting on it pick up the grid. */
+  analysisDone: (trackId: number, ok: boolean) => void;
   send: (c: MixControl) => void;
   togglePlay: (deck: number) => void;
   /** CUE pressed (`down`) or let go. */
   cue: (deck: number, down: boolean) => void;
-  toggleSync: (deck: number, bar?: boolean) => void;
+  /** SYNC on or off; `bar` lines up the downbeats too (Settings → Decks). */
+  toggleSync: (deck: number, bar: boolean) => void;
+  takeMaster: (deck: number) => void;
+  /** Beat jump by `beats` (negative: back); remembers the size for the keys. */
+  beatJump: (deck: number, beats: number) => void;
+  /** Beat jump by the size used last, back (-1) or forward. */
+  jumpLast: (deck: number, dir: -1 | 1) => void;
+  /** A BEAT LOOP pad: set a loop of `beats`, resize the active one to it, or leave it. */
+  loopPad: (deck: number, beats: number) => void;
+  /** Loop on at the size used last, or off. */
+  toggleLoop: (deck: number) => void;
+  setPadMode: (deck: number, mode: PadMode) => void;
+  cyclePadMode: (deck: number) => void;
+  setPadPage: (deck: number, mode: PagedPadMode, page: number) => void;
+  /** Sets the tempo that plays the deck at `bpm`, stepping the range up when needed. */
+  setBpm: (deck: number, bpm: number) => void;
   /** -1 slower, 1 faster, 0 released. */
   nudge: (deck: number, dir: -1 | 0 | 1) => void;
   setTempo: (deck: number, ratio: number) => void;
@@ -154,19 +211,37 @@ export interface MixStore {
   setVolume: (volume: number) => void;
 }
 
+const DEFAULT_PREFS: DeckPrefs = {
+  tempoRange: DEFAULT_TEMPO_RANGE,
+  zoom: DEFAULT_DECK_ZOOM,
+  padMode: "hotCue",
+  padPage: { beatJump: 0, beatLoop: 0 },
+  lastJump: DEFAULT_PAD_BEATS,
+  lastLoop: DEFAULT_PAD_BEATS,
+};
+
 export function emptyDeck(): DeckMeta {
   return {
     track: null,
     loading: null,
     error: null,
+    failed: null,
     hotCues: [],
     memoryCues: [],
     columns: null,
     beats: null,
     viewError: null,
-    tempoRange: DEFAULT_TEMPO_RANGE,
-    zoom: DEFAULT_DECK_ZOOM,
+    analysing: false,
+    gridPending: false,
+    ...DEFAULT_PREFS,
   };
+}
+
+/** An empty deck that keeps `prev`'s settings. */
+function emptyDeckFrom(prev: DeckMeta | undefined): DeckMeta {
+  if (prev === undefined) return emptyDeck();
+  const { tempoRange, zoom, padMode, padPage, lastJump, lastLoop } = prev;
+  return { ...emptyDeck(), tempoRange, zoom, padMode, padPage, lastJump, lastLoop };
 }
 
 const DEFAULT_CHANNEL: ChannelValues = {
@@ -280,6 +355,55 @@ export const useMix = create<MixStore>((set, get) => {
       return;
     }
     set({ live });
+    get().decks.forEach((meta, deck) => {
+      if (meta.gridPending && live.decks[deck]?.playing === false) void reloadForGrid(deck);
+    });
+  }
+
+  /**
+   * Reloads a paused deck's track so the engine gets the grid analysis
+   * just stored, putting the cue point, position and tempo back.
+   */
+  async function reloadForGrid(deck: number) {
+    const meta = get().decks[deck];
+    const v = deckView(deck);
+    if (meta?.track == null || v?.loaded !== true || v.playing) return;
+    patchDeck(deck, { gridPending: false });
+    const seq = (loads[deck] ?? 0) + 1;
+    loads[deck] = seq;
+    const { positionMs, cueMs, tempo } = v;
+    try {
+      const loaded = await mixLoad(deck, meta.track.id);
+      if (loaded === null || loads[deck] !== seq) return;
+      patchDeck(deck, { hotCues: loaded.hotCues, memoryCues: loaded.memoryCues });
+      if (cueMs > 0) {
+        // CUE on a paused deck off its cue point sets it at the head.
+        get().send({ type: "seek", deck, ms: cueMs });
+        get().send({ type: "cue", deck });
+      }
+      get().send({ type: "seek", deck, ms: positionMs });
+      get().send({ type: "tempo", deck, ratio: tempo });
+    } catch (e) {
+      if (loads[deck] === seq) patchDeck(deck, { viewError: message(e) });
+    }
+  }
+
+  /** The waveform and grid of the track on `deck`, for the views. */
+  async function fetchViews(deck: number, id: number, current: () => boolean) {
+    const [columns, grid] = await Promise.allSettled([waveformColumns(id), beatgridGet(id)]);
+    if (!current()) return null;
+    const failed = [columns, grid].find((r) => r.status === "rejected");
+    const beats = grid.status === "fulfilled" ? grid.value.beats : null;
+    patchDeck(deck, {
+      columns: columns.status === "fulfilled" ? new Uint8Array(columns.value) : null,
+      beats,
+      viewError: failed === undefined ? null : message(failed.reason),
+    });
+    return beats;
+  }
+
+  function prefs(deck: number): DeckMeta {
+    return get().decks[deck] ?? emptyDeck();
   }
 
   /** The user picked a cue routing; until then each device gets its own default. */
@@ -379,11 +503,7 @@ export const useMix = create<MixStore>((set, get) => {
         set({
           status: "running",
           live,
-          decks: Array.from({ length: DECKS }, (_, i) => ({
-            ...emptyDeck(),
-            tempoRange: get().decks[i]?.tempoRange ?? DEFAULT_TEMPO_RANGE,
-            zoom: get().decks[i]?.zoom ?? DEFAULT_DECK_ZOOM,
-          })),
+          decks: Array.from({ length: DECKS }, (_, i) => emptyDeckFrom(get().decks[i])),
         });
         for (const c of mixerControls(get())) await mixControl(c);
         return true;
@@ -398,7 +518,7 @@ export const useMix = create<MixStore>((set, get) => {
         status: "stopped",
         live: null,
         error: null,
-        decks: Array.from({ length: DECKS }, emptyDeck),
+        decks: Array.from({ length: DECKS }, (_, i) => emptyDeckFrom(get().decks[i])),
       });
       try {
         await mixStop();
@@ -417,9 +537,12 @@ export const useMix = create<MixStore>((set, get) => {
       const seq = (loads[deck] ?? 0) + 1;
       loads[deck] = seq;
       const current = () => loads[deck] === seq;
-      let meta: DeckTrack =
-        typeof track === "number" ? { id: track, title: null, artist: null } : track;
-      patchDeck(deck, { loading: meta, error: null });
+      const ref: TrackRef =
+        typeof track === "number"
+          ? { id: track, title: null, artist: null }
+          : { id: track.id, title: track.title, artist: track.artist };
+      let meta: DeckTrack = { ...ref, key: null, artworkId: null, artworkMime: "" };
+      patchDeck(deck, { loading: ref, error: null, failed: null });
       try {
         if (get().status !== "running") {
           const started = await get().start();
@@ -427,11 +550,24 @@ export const useMix = create<MixStore>((set, get) => {
           if (current()) patchDeck(deck, { loading: started ? meta : null });
           if (!started) return;
         }
-        if (typeof track === "number") {
-          const t = (await libraryTrack(track)).track;
-          meta = { id: track, title: t.title, artist: t.artist };
-          if (current()) patchDeck(deck, { loading: meta });
+        // Key and artwork for the header; without them the deck still loads.
+        let t: Awaited<ReturnType<typeof libraryTrack>>["track"] | null = null;
+        try {
+          t = (await libraryTrack(ref.id)).track;
+        } catch {
+          // Removed meanwhile, or the library is busy: load with what we have.
         }
+        if (t !== null) {
+          meta = {
+            id: ref.id,
+            title: t.title,
+            artist: t.artist,
+            key: t.key,
+            artworkId: t.artwork?.id ?? null,
+            artworkMime: t.artwork?.mime ?? "",
+          };
+        }
+        if (current()) patchDeck(deck, { loading: ref.title === null ? meta : ref });
         const loaded = await mixLoad(deck, meta.id);
         if (loaded === null || !current()) return;
         patchDeck(deck, {
@@ -442,32 +578,54 @@ export const useMix = create<MixStore>((set, get) => {
           columns: null,
           beats: null,
           viewError: null,
+          analysing: false,
+          gridPending: false,
         });
         if (play) get().send({ type: "play", deck });
-        const [columns, grid] = await Promise.allSettled([
-          waveformColumns(meta.id),
-          beatgridGet(meta.id),
-        ]);
-        if (!current()) return;
-        const failed = [columns, grid].find((r) => r.status === "rejected");
-        patchDeck(deck, {
-          columns: columns.status === "fulfilled" ? new Uint8Array(columns.value) : null,
-          beats: grid.status === "fulfilled" ? grid.value.beats : null,
-          viewError: failed === undefined ? null : message(failed.reason),
-        });
+        const beats = await fetchViews(deck, meta.id, current);
+        if (beats === null || beats.length > 0 || !current()) return;
+        // No grid yet: analyse it first; the deck plays meanwhile.
+        patchDeck(deck, { analysing: true });
+        try {
+          await analysisReanalyse([meta.id]);
+        } catch {
+          // Analysis is off (no beat model): the deck says it has no grid.
+          if (current()) patchDeck(deck, { analysing: false });
+        }
       } catch (e) {
-        if (current()) patchDeck(deck, { loading: null, error: message(e) });
+        if (current()) patchDeck(deck, { loading: null, error: message(e), failed: ref });
       }
     },
 
     unload(deck) {
       loads[deck] = (loads[deck] ?? 0) + 1;
-      patchDeck(deck, {
-        ...emptyDeck(),
-        tempoRange: get().decks[deck]?.tempoRange ?? DEFAULT_TEMPO_RANGE,
-        zoom: get().decks[deck]?.zoom ?? DEFAULT_DECK_ZOOM,
-      });
+      patchDeck(deck, emptyDeckFrom(get().decks[deck]));
       get().send({ type: "unload", deck });
+    },
+
+    async retry(deck) {
+      const meta = get().decks[deck];
+      if (meta === undefined) return;
+      if (meta.failed !== null) return get().load(deck, meta.failed);
+      if (meta.track === null) return;
+      const seq = loads[deck];
+      await fetchViews(deck, meta.track.id, () => loads[deck] === seq);
+    },
+
+    analysisDone(trackId, ok) {
+      get().decks.forEach((meta, deck) => {
+        if (!meta.analysing || meta.track?.id !== trackId) return;
+        const seq = loads[deck];
+        const current = () => loads[deck] === seq;
+        patchDeck(deck, { analysing: false });
+        if (!ok) return;
+        void fetchViews(deck, trackId, current).then((beats) => {
+          if (beats !== null && beats.length > 0 && current()) {
+            patchDeck(deck, { gridPending: true });
+            if (deckView(deck)?.playing === false) void reloadForGrid(deck);
+          }
+        });
+      });
     },
 
     send(c) {
@@ -489,10 +647,58 @@ export const useMix = create<MixStore>((set, get) => {
     toggleSync(deck, bar) {
       const v = deckView(deck);
       if (v === undefined) return;
-      const nextBar = bar ?? v.syncBar;
-      // The BAR switch alone keeps sync as it is.
-      const on = bar === undefined ? !v.sync : v.sync;
-      get().send({ type: "sync", deck, on, bar: nextBar });
+      get().send({ type: "sync", deck, on: !v.sync, bar });
+    },
+
+    takeMaster(deck) {
+      get().send({ type: "takeMaster", deck });
+    },
+
+    beatJump(deck, beats) {
+      patchDeck(deck, { lastJump: Math.abs(beats) });
+      get().send({ type: "beatJump", deck, beats });
+    },
+
+    jumpLast(deck, dir) {
+      get().send({ type: "beatJump", deck, beats: dir * prefs(deck).lastJump });
+    },
+
+    loopPad(deck, beats) {
+      patchDeck(deck, { lastLoop: beats });
+      for (const c of loopPadControls(deckView(deck)?.loopRegion?.beats ?? null, beats)) {
+        get().send({ ...c, deck });
+      }
+    },
+
+    toggleLoop(deck) {
+      const looping = (deckView(deck)?.loopRegion ?? null) !== null;
+      get().send(
+        looping
+          ? { type: "loopExit", deck }
+          : { type: "beatLoop", deck, beats: prefs(deck).lastLoop },
+      );
+    },
+
+    setPadMode(deck, mode) {
+      patchDeck(deck, { padMode: mode });
+    },
+
+    cyclePadMode(deck) {
+      patchDeck(deck, { padMode: nextPadMode(prefs(deck).padMode) });
+    },
+
+    setPadPage(deck, mode, page) {
+      patchDeck(deck, { padPage: { ...prefs(deck).padPage, [mode]: page } });
+    },
+
+    setBpm(deck, bpm) {
+      const v = deckView(deck);
+      if (v?.bpm == null || v.speed <= 0 || v.sync) return;
+      // The track's own BPM here: what plays at tempo 1 (nudge left out).
+      const t = tempoForBpm(bpm, v.bpm / v.speed, prefs(deck).tempoRange);
+      if (t === null) return;
+      if (t.range !== prefs(deck).tempoRange) patchDeck(deck, { tempoRange: t.range });
+      get().send({ type: "tempo", deck, ratio: t.ratio });
     },
 
     nudge(deck, dir) {

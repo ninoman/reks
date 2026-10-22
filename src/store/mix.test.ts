@@ -12,6 +12,7 @@ vi.mock("../lib/ipc", () => ({
   mixLoad: vi.fn(),
   mixControl: vi.fn(),
   libraryTrack: vi.fn(),
+  analysisReanalyse: vi.fn(),
   waveformColumns: vi.fn(),
   beatgridGet: vi.fn(),
 }));
@@ -67,7 +68,23 @@ const deckView = (over: Partial<DeckView> = {}): DeckView => ({
 
 const sent = () => vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0]);
 
+/** `library_track` as the store reads it: title, artist, key, artwork. */
+const detail = (id: number) =>
+  ({
+    track: {
+      id,
+      title: `T${id}`,
+      artist: null,
+      key: "Am",
+      artwork: { id: 50 + id, mime: "image/jpeg" },
+    },
+    cues: [],
+    beatgrid: null,
+  }) as unknown as Awaited<ReturnType<typeof ipc.libraryTrack>>;
+
 beforeEach(() => {
+  vi.mocked(ipc.libraryTrack).mockImplementation(async (id) => detail(id));
+  vi.mocked(ipc.analysisReanalyse).mockResolvedValue(1);
   vi.mocked(ipc.mixStart).mockResolvedValue(running);
   vi.mocked(ipc.mixControl).mockResolvedValue(undefined);
   vi.mocked(ipc.waveformColumns).mockResolvedValue(new Uint8Array([1, 2, 3, 4]).buffer);
@@ -110,7 +127,7 @@ describe("mix store", () => {
       deck: 1,
       trackId: 9,
       durationMs: 1000,
-      hotCues: [{ slot: 0, positionMs: 10, colorRgb: null }],
+      hotCues: [{ slot: 0, positionMs: 10, colorRgb: null, name: null }],
       memoryCues: [],
     });
     await useMix.getState().load(1, { id: 9, title: "T", artist: null });
@@ -119,9 +136,75 @@ describe("mix store", () => {
     const deck = useMix.getState().decks[1];
     expect(deck?.track?.id).toBe(9);
     expect(deck?.loading).toBeNull();
-    expect(deck?.hotCues).toEqual([{ slot: 0, positionMs: 10, colorRgb: null }]);
+    expect(deck?.hotCues).toEqual([{ slot: 0, positionMs: 10, colorRgb: null, name: null }]);
     expect(deck?.columns?.length).toBe(4);
     expect(deck?.beats).toHaveLength(1);
+    expect(deck?.track).toMatchObject({ key: "Am", artworkId: 59, artworkMime: "image/jpeg" });
+    expect(deck?.analysing).toBe(false);
+    expect(ipc.analysisReanalyse).not.toHaveBeenCalled();
+  });
+
+  it("a track without a grid is analysed; the deck reloads with the grid once paused", async () => {
+    const loaded = { deck: 1, trackId: 9, durationMs: 1000, hotCues: [], memoryCues: [] };
+    vi.mocked(ipc.mixLoad).mockResolvedValue(loaded);
+    vi.mocked(ipc.beatgridGet).mockResolvedValueOnce({
+      anchors: [],
+      source: null,
+      locked: false,
+      beats: [],
+    });
+    await useMix.getState().load(1, 9);
+    expect(ipc.analysisReanalyse).toHaveBeenCalledWith([9]);
+    expect(useMix.getState().decks[1]?.analysing).toBe(true);
+    // Playing when the grid arrives: it waits for a pause.
+    const playing = deckView({
+      trackId: 9,
+      loaded: true,
+      playing: true,
+      positionMs: 400,
+      cueMs: 100,
+    });
+    useMix.setState({ live: { ...running, decks: [deckView(), playing] } });
+    vi.mocked(ipc.mixLoad).mockClear();
+    vi.mocked(ipc.mixControl).mockClear();
+    useMix.getState().analysisDone(9, true);
+    await vi.waitFor(() => expect(useMix.getState().decks[1]?.gridPending).toBe(true));
+    expect(useMix.getState().decks[1]?.analysing).toBe(false);
+    expect(useMix.getState().decks[1]?.beats).toHaveLength(1);
+    expect(ipc.mixLoad).not.toHaveBeenCalled();
+    // Paused: reloaded, with the cue point, position and tempo put back.
+    const state = { ...running, decks: [deckView(), { ...playing, playing: false, tempo: 1.02 }] };
+    useMix.setState({ live: state });
+    vi.mocked(ipc.mixStart).mock.lastCall?.[1](state);
+    await vi.waitFor(() => expect(ipc.mixLoad).toHaveBeenCalledWith(1, 9));
+    await vi.waitFor(() =>
+      expect(sent()).toEqual([
+        { type: "seek", deck: 1, ms: 100 },
+        { type: "cue", deck: 1 },
+        { type: "seek", deck: 1, ms: 400 },
+        { type: "tempo", deck: 1, ratio: 1.02 },
+      ]),
+    );
+    expect(useMix.getState().decks[1]?.gridPending).toBe(false);
+  });
+
+  it("analysis that fails leaves the deck without a grid", async () => {
+    vi.mocked(ipc.mixLoad).mockResolvedValue({
+      deck: 0,
+      trackId: 4,
+      durationMs: 1,
+      hotCues: [],
+      memoryCues: [],
+    });
+    vi.mocked(ipc.beatgridGet).mockResolvedValueOnce({
+      anchors: [],
+      source: null,
+      locked: false,
+      beats: [],
+    });
+    await useMix.getState().load(0, 4);
+    useMix.getState().analysisDone(4, false);
+    expect(useMix.getState().decks[0]).toMatchObject({ analysing: false, gridPending: false });
   });
 
   it("a newer load on the same deck wins", async () => {
@@ -174,6 +257,93 @@ describe("mix store", () => {
       DEFAULT_DECK_ZOOM + 1,
       DEFAULT_DECK_ZOOM - 1,
       DECK_ZOOM_S.length - 1,
+    ]);
+  });
+
+  it("pads: jumps and loops remember their size; loop pads set, resize or leave", () => {
+    const looping = (beats: number | null) =>
+      useMix.setState({
+        status: "running",
+        live: {
+          ...running,
+          decks: [
+            deckView({
+              loaded: true,
+              loopRegion: beats === null ? null : { startMs: 0, endMs: 1, beats },
+            }),
+          ],
+        },
+      });
+    looping(null);
+    const mix = useMix.getState();
+    mix.beatJump(0, -2);
+    mix.jumpLast(0, 1);
+    mix.loopPad(0, 8);
+    expect(useMix.getState().decks[0]).toMatchObject({ lastJump: 2, lastLoop: 8 });
+    looping(8);
+    mix.loopPad(0, 2);
+    mix.loopPad(0, 2);
+    looping(2);
+    mix.loopPad(0, 2);
+    mix.toggleLoop(0);
+    looping(null);
+    mix.toggleLoop(0);
+    expect(sent()).toEqual([
+      { type: "beatJump", deck: 0, beats: -2 },
+      { type: "beatJump", deck: 0, beats: 2 },
+      { type: "beatLoop", deck: 0, beats: 8 },
+      { type: "loopResize", deck: 0, double: false },
+      { type: "loopResize", deck: 0, double: false },
+      { type: "loopResize", deck: 0, double: false },
+      { type: "loopResize", deck: 0, double: false },
+      { type: "loopExit", deck: 0 },
+      { type: "loopExit", deck: 0 },
+      { type: "beatLoop", deck: 0, beats: 2 },
+    ]);
+  });
+
+  it("keeps pad mode, pages and sizes across an eject", () => {
+    const mix = useMix.getState();
+    mix.setPadMode(2, "beatLoop");
+    mix.cyclePadMode(2);
+    mix.setPadPage(2, "beatJump", 1);
+    mix.beatJump(2, 16);
+    mix.unload(2);
+    expect(useMix.getState().decks[2]).toMatchObject({
+      padMode: "hotCue",
+      padPage: { beatJump: 1, beatLoop: 0 },
+      lastJump: 16,
+      track: null,
+    });
+  });
+
+  it("a typed BPM sets the tempo and steps the range up when needed", () => {
+    useMix.setState({
+      status: "running",
+      live: { ...running, decks: [deckView({ loaded: true, bpm: 128, speed: 1 })] },
+    });
+    useMix.getState().setBpm(0, 145);
+    expect(useMix.getState().decks[0]?.tempoRange).toBe(0.16);
+    const t = sent()[0];
+    expect(t?.type === "tempo" && t.ratio).toBeCloseTo(145 / 128, 6);
+    // Synced: ignored.
+    useMix.setState({
+      live: { ...running, decks: [deckView({ loaded: true, bpm: 128, speed: 1, sync: true })] },
+    });
+    useMix.getState().setBpm(0, 120);
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("sync uses the bar setting it is given; take master", () => {
+    useMix.setState({
+      status: "running",
+      live: { ...running, decks: [deckView({ loaded: true })] },
+    });
+    useMix.getState().toggleSync(0, false);
+    useMix.getState().takeMaster(0);
+    expect(sent()).toEqual([
+      { type: "sync", deck: 0, on: true, bar: false },
+      { type: "takeMaster", deck: 0 },
     ]);
   });
 

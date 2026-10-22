@@ -8,7 +8,9 @@ import { Checkbox } from "./Checkbox";
 import type { ControlSize } from "./control";
 import { Dialog, DialogContent, DialogTitle } from "./Dialog";
 import { IconButton } from "./IconButton";
+import { InlineNumber, parseNumber } from "./InlineNumber";
 import { Input } from "./Input";
+import { Pad, SplitPad } from "./Pad";
 import { Segment, SegmentedControl } from "./SegmentedControl";
 import { Select } from "./Select";
 import { Switch } from "./Switch";
@@ -174,5 +176,106 @@ describe("lit switches", () => {
       </SegmentedControl>,
     );
     expect(screen.getByRole("radiogroup").getAttribute("data-variant")).toBe("control");
+  });
+});
+
+describe("Pad", () => {
+  it("is at least --pad-h tall and fills its cell, in every tone", () => {
+    render(
+      <>
+        <Pad aria-label="a">A</Pad>
+        <Pad aria-label="b" tone="set" color="#ffffff">
+          B
+        </Pad>
+        <Pad aria-label="c" tone="lit" marked>
+          C
+        </Pad>
+      </>,
+    );
+    for (const name of ["a", "b", "c"]) {
+      expect(screen.getByRole("button", { name }).classList).toContain("min-h-(--pad-h)");
+    }
+  });
+
+  it("a data colour fills it, with text that stays readable", () => {
+    render(
+      <>
+        <Pad aria-label="light" tone="set" color="#f0f0f0" />
+        <Pad aria-label="dark" tone="set" color="#202020" />
+      </>,
+    );
+    const fg = (name: string) =>
+      screen.getByRole("button", { name }).style.getPropertyValue("--pad-fg");
+    expect(fg("light")).toContain("pad-ink-dark");
+    expect(fg("dark")).toContain("pad-ink-light");
+  });
+
+  it("a split pad is two buttons under one label", () => {
+    const back = vi.fn();
+    const forward = vi.fn();
+    render(
+      <SplitPad
+        label="4"
+        backLabel="Back 4"
+        forwardLabel="Forward 4"
+        onBack={back}
+        onForward={forward}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Back 4" }));
+    fireEvent.click(screen.getByRole("button", { name: "Forward 4" }));
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(forward).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("InlineNumber", () => {
+  const setup = (value: number | null = 128) => {
+    const commit = vi.fn();
+    render(
+      <InlineNumber
+        value={value}
+        format={(v) => v.toFixed(2)}
+        onCommit={commit}
+        aria-label="BPM"
+      />,
+    );
+    return commit;
+  };
+
+  it("double-click opens a field; Enter commits", () => {
+    const commit = setup();
+    fireEvent.doubleClick(screen.getByRole("button", { name: "BPM" }));
+    const field = screen.getByRole("textbox", { name: "BPM" }) as HTMLInputElement;
+    expect(field.value).toBe("128.00");
+    fireEvent.change(field, { target: { value: "131,5" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(commit).toHaveBeenCalledWith(131.5);
+    expect(screen.getByRole("button", { name: "BPM" })).toBeTruthy();
+  });
+
+  it("Enter on the focused text opens it; Esc cancels and blur commits", () => {
+    const commit = setup();
+    fireEvent.keyDown(screen.getByRole("button", { name: "BPM" }), { key: "Enter" });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "120" } });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
+    expect(commit).not.toHaveBeenCalled();
+    fireEvent.doubleClick(screen.getByRole("button", { name: "BPM" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "122" } });
+    fireEvent.blur(screen.getByRole("textbox"));
+    expect(commit).toHaveBeenCalledWith(122);
+  });
+
+  it("drops text that is not a number, and does not open without a value", () => {
+    const commit = setup();
+    fireEvent.doubleClick(screen.getByRole("button", { name: "BPM" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "fast" } });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    expect(commit).not.toHaveBeenCalled();
+    cleanup();
+    setup(null);
+    expect((screen.getByRole("button", { name: "BPM" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(parseNumber(" 99.5 ")).toBe(99.5);
+    expect(parseNumber("1e3")).toBeNull();
   });
 });

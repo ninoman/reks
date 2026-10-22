@@ -185,3 +185,38 @@ export function SmartIcon() {
     </svg>
   );
 }
+
+/**
+ * Nudge slower (− REV): the CDJ jog-wheel arrow, an arc of the wheel's lower
+ * rim running anticlockwise down to its bottom.
+ */
+export function NudgeDownIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="M3 1.5A11 11 0 0 0 14 12.5M14 12.5 11 10.4M14 12.5l-2.8 2.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Nudge faster (+ FWD): the mirrored arrow, running clockwise. */
+export function NudgeUpIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="M13 1.5A11 11 0 0 1 2 12.5M2 12.5 5 10.4M2 12.5l2.8 2.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

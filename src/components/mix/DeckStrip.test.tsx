@@ -33,8 +33,11 @@ const view = (over: Partial<DeckView> = {}): DeckView => ({
 
 const loadedMeta = (over: Partial<DeckMeta> = {}): DeckMeta => ({
   ...emptyDeck(),
-  track: { id: 7, title: "Dawn", artist: "Ron Trent" },
-  hotCues: [{ slot: 1, positionMs: 4_000, colorRgb: null }],
+  track: { id: 7, title: "Dawn", artist: "Ron Trent", key: "Am", artworkId: null, artworkMime: "" },
+  hotCues: [
+    { slot: 1, positionMs: 4_000, colorRgb: null, name: null },
+    { slot: 2, positionMs: 8_000, colorRgb: 0xff_00_00, name: "Drop" },
+  ],
   memoryCues: [],
   columns: new Uint8Array(0),
   beats: [{ positionUs: 12_000, beatInBar: 1 }],
@@ -49,17 +52,22 @@ function setup(props: Partial<DeckStripProps> = {}) {
       "pause",
       "cue",
       "toggleSync",
-      "toggleBar",
-      "toggleLeader",
+      "takeMaster",
       "toggleQuantise",
       "hotCue",
+      "beatJump",
+      "loopPad",
+      "setPadMode",
+      "setPadPage",
       "nudge",
       "setTempo",
       "setTempoRange",
+      "setBpm",
       "zoom",
       "seek",
       "eject",
       "drop",
+      "retry",
     ].map((k) => [k, vi.fn()]),
   ) as unknown as DeckActions;
   render(
@@ -67,10 +75,8 @@ function setup(props: Partial<DeckStripProps> = {}) {
       deck={1}
       view={undefined}
       meta={emptyDeck()}
-      leader={false}
-      leaderChosen={false}
+      keyText={null}
       phase={null}
-      compact={false}
       actions={actions}
       {...props}
     />,
@@ -88,34 +94,65 @@ describe("DeckStrip", () => {
     ).toBe(true);
   });
 
-  it("loading and error states", () => {
-    setup({
+  it("loading: the title at once, decoding in the waveform slot", () => {
+    setup({ meta: { ...emptyDeck(), loading: { id: 3, title: "Echo", artist: null } } });
+    expect(screen.getByText("Loading Echo…")).toBeTruthy();
+    expect(screen.getByText("Decoding…")).toBeTruthy();
+  });
+
+  it("error: the reason with Retry and Eject", () => {
+    const a = setup({
       meta: {
         ...emptyDeck(),
-        loading: { id: 3, title: "Echo", artist: null },
         error: "decode failed",
+        failed: { id: 3, title: null, artist: null },
       },
     });
-    expect(screen.getByText("Loading Echo…")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toBe("decode failed");
+    expect(screen.getByRole("alert").textContent).toContain("decode failed");
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(a.retry).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Eject" }));
+    expect(a.eject).toHaveBeenCalled();
+  });
+
+  it("analysing: playable, but what needs a grid waits", () => {
+    setup({
+      view: view({ bpm: null, beat: null }),
+      meta: loadedMeta({ beats: [], analysing: true }),
+    });
+    expect(screen.getByText("Analysing the beatgrid…")).toBeTruthy();
+    const enabled = (name: string) =>
+      !(screen.getByRole("button", { name }) as HTMLButtonElement).disabled;
+    expect(enabled("Play deck 2")).toBe(true);
+    expect(enabled("Deck 2 hot cue B")).toBe(true);
+    expect(enabled("Deck 2 sync")).toBe(false);
+    expect(enabled("Deck 2 master")).toBe(false);
+    expect(enabled("Deck 2 quantise")).toBe(false);
+    expect(enabled("Deck 2 BPM")).toBe(false);
   });
 
   it("loaded: shows the track, tempo and time, and forwards actions", () => {
     const a = setup({ view: view(), meta: loadedMeta() });
     expect(screen.getByText("Dawn")).toBeTruthy();
-    expect(screen.getByText("131.20")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Deck 2 BPM" }).textContent).toBe("131.20");
     expect(screen.getByText("+2.50%")).toBeTruthy();
     expect(screen.getByText("0:12.3")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Play deck 2" }));
     expect(a.togglePlay).toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Deck 2 sync" }));
     expect(a.toggleSync).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 master" }));
+    expect(a.takeMaster).toHaveBeenCalled();
     // Only set hot cues are enabled.
     const b = screen.getByRole("button", { name: "Deck 2 hot cue B" }) as HTMLButtonElement;
-    const c = screen.getByRole("button", { name: "Deck 2 hot cue C" }) as HTMLButtonElement;
-    expect(c.disabled).toBe(true);
+    const d = screen.getByRole("button", { name: "Deck 2 hot cue D" }) as HTMLButtonElement;
+    expect(d.disabled).toBe(true);
     fireEvent.click(b);
     expect(a.hotCue).toHaveBeenCalledWith(1);
+    // A named cue shows its name; its colour fills the pad.
+    const drop = screen.getByRole("button", { name: "Deck 2 hot cue C" });
+    expect(drop.textContent).toBe("CDrop");
+    expect(drop.style.getPropertyValue("--pad-color")).toBe("#ff0000");
     const range = screen.getByRole("button", { name: "Deck 2 tempo range ±10%" });
     expect(range.textContent).toBe("±10");
     fireEvent.click(range);
@@ -175,12 +212,87 @@ describe("DeckStrip", () => {
     }
   });
 
-  it("shows sync phase against the leader, and the leader itself", () => {
+  it("shows sync phase against the master; the master is lit and has none", () => {
     setup({ view: view({ sync: true, locked: true }), meta: loadedMeta(), phase: -0.25 });
     expect(screen.getByRole("img", { name: "Phase: −0.25 beat" })).toBeTruthy();
     cleanup();
-    setup({ view: view({ sync: true }), meta: loadedMeta(), leader: true });
-    expect(screen.getByText("Leader")).toBeTruthy();
+    setup({ view: view({ sync: true, master: true }), meta: loadedMeta() });
+    expect(screen.queryByRole("img", { name: /Phase/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Deck 2 master" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
+
+  it("BEAT JUMP: split pads jump back and forward; the last size is marked", () => {
+    const a = setup({ view: view(), meta: loadedMeta({ padMode: "beatJump", lastJump: 2 }) });
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 jump back FINE (1/32 beat)" }));
+    expect(a.beatJump).toHaveBeenLastCalledWith(-1 / 32);
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 jump forward 8 beats" }));
+    expect(a.beatJump).toHaveBeenLastCalledWith(8);
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 jump sizes: next page" }));
+    expect(a.setPadPage).toHaveBeenCalledWith("beatJump", 1);
+    cleanup();
+    setup({
+      view: view(),
+      meta: loadedMeta({ padMode: "beatJump", padPage: { beatJump: 1, beatLoop: 0 } }),
+    });
+    expect(screen.getByRole("button", { name: "Deck 2 jump forward 128 beats" })).toBeTruthy();
+  });
+
+  it("BEAT LOOP: the active size is lit; pads set or leave the loop", () => {
+    const a = setup({
+      view: view({ loopRegion: { startMs: 1_000, endMs: 2_875, beats: 4 } }),
+      meta: loadedMeta({ padMode: "beatLoop" }),
+    });
+    const four = screen.getByRole("button", { name: "Deck 2 loop 4 beats" });
+    expect(four.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(four);
+    expect(a.loopPad).toHaveBeenLastCalledWith(4);
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 loop 1/8 beats" }));
+    expect(a.loopPad).toHaveBeenLastCalledWith(1 / 8);
+  });
+
+  it("switches pad mode; page arrows are off in HOT CUE", () => {
+    const a = setup({ view: view(), meta: loadedMeta() });
+    fireEvent.click(screen.getByRole("radio", { name: "BEAT LOOP" }));
+    expect(a.setPadMode).toHaveBeenCalledWith("beatLoop");
+    const next = screen.getByRole("button", { name: "Deck 2 jump sizes: next page" });
+    expect((next as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("ejects from the artwork", () => {
+    const a = setup({ view: view(), meta: loadedMeta() });
+    fireEvent.click(screen.getByRole("button", { name: "Eject deck 2" }));
+    expect(a.eject).toHaveBeenCalled();
+    cleanup();
+    setup();
+    expect(screen.queryByRole("button", { name: "Eject deck 2" })).toBeNull();
+  });
+
+  it("BPM: double-click to type one; Enter sets it, Esc cancels", () => {
+    const a = setup({ view: view(), meta: loadedMeta() });
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Deck 2 BPM" }));
+    const field = screen.getByRole("textbox", { name: "Deck 2 BPM" });
+    fireEvent.change(field, { target: { value: "126.5" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(a.setBpm).toHaveBeenCalledWith(126.5);
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Deck 2 BPM" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Deck 2 BPM" }), {
+      target: { value: "90" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Deck 2 BPM" }), { key: "Escape" });
+    expect(a.setBpm).toHaveBeenCalledTimes(1);
+    cleanup();
+    // Synced: the BPM follows the master.
+    setup({ view: view({ sync: true }), meta: loadedMeta() });
+    expect((screen.getByRole("button", { name: "Deck 2 BPM" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it("shows the key in the chosen notation", () => {
+    setup({ view: view(), meta: loadedMeta(), keyText: "8A" });
+    expect(screen.getByText("8A")).toBeTruthy();
   });
 
   it("warns when the track has no grid", () => {
@@ -204,7 +316,7 @@ describe("DeckStrip", () => {
     cleanup();
     setup({ solo: true, view: view({ sync: true }), meta: loadedMeta() });
     expect(screen.queryByRole("button", { name: "Deck 2 sync" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Deck 2 leader" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deck 2 master" })).toBeNull();
     expect(screen.getByRole("button", { name: "Deck 2 cue" })).toBeTruthy();
     expect(screen.getByRole("slider", { name: "Deck 2 tempo" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Deck 2 hot cue B" })).toBeTruthy();

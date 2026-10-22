@@ -49,7 +49,7 @@ export type ButtonProps = ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
     /** Keyboard shortcut, shown in a tooltip on hover and focus. Take it from `mixKeys`, not a literal. */
-    shortcut?: string;
+    shortcut?: string | undefined;
     /** What the tooltip says before the key; defaults to `aria-label`. */
     hint?: ReactNode;
   };

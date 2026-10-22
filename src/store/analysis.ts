@@ -2,7 +2,7 @@
  * Background analysis (Phase 3 task 11): the queue's counts for the toolbar
  * indicator, pause/resume/cancel, and re-analyse. The queue itself runs in
  * Rust; an analysed track's row is swapped in place (no refresh, so
- * selection and scroll stay).
+ * selection and scroll stay), and a deck waiting on it gets its grid.
  */
 import { create } from "zustand";
 
@@ -15,6 +15,7 @@ import {
   analysisSubscribe,
   libraryTrack,
 } from "../lib/ipc";
+import { useMix } from "./mix";
 import { replaceRowEverywhere } from "./panes";
 
 export interface AnalysisState {
@@ -57,6 +58,9 @@ export const useAnalysis = create<AnalysisState>()((set) => {
           if (e.type === "status") set({ status: e.status });
           else if (e.type === "analysed" && (e.stored.grid || e.stored.bpm || e.stored.key))
             updateRow(e.trackId);
+          // A deck that loaded the track without a grid is waiting for it.
+          if (e.type === "analysed") useMix.getState().analysisDone(e.trackId, e.stored.grid);
+          else if (e.type === "failed") useMix.getState().analysisDone(e.trackId, false);
         });
         set({ status, error: null });
       } catch (e) {

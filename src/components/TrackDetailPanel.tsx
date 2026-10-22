@@ -23,18 +23,13 @@ import {
   formatRgb,
   hotCueLabel,
 } from "../lib/format";
-import {
-  artworkGet,
-  type Cue,
-  libraryTrack,
-  libraryUpdateTrack,
-  type TrackDetail,
-} from "../lib/ipc";
+import { type Cue, libraryTrack, libraryUpdateTrack, type TrackDetail } from "../lib/ipc";
 import { rowAt, useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
 import { replaceRowEverywhere } from "../store/panes";
 import { primaryIndex } from "../store/selection";
 import { useKeyLabel } from "../store/settings";
+import { ArtworkThumb } from "./ArtworkThumb";
 import { GridEditorDialog } from "./GridEditor";
 import { PlayedIn } from "./PlayedIn";
 import { TrackTags } from "./TrackTags";
@@ -199,7 +194,7 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
 
   return (
     <Panel>
-      <ArtworkView id={t.artwork?.id ?? null} mime={t.artwork?.mime ?? ""} />
+      <ArtworkThumb artworkId={t.artwork?.id ?? null} mime={t.artwork?.mime ?? ""} />
       <div className="text-xs text-fg-muted">
         <div>
           {t.kind.toUpperCase()}
@@ -360,44 +355,5 @@ function CueRow({ cue }: { cue: Cue }) {
       </td>
       <td>{cue.name ?? ""}</td>
     </tr>
-  );
-}
-
-/** Artwork from `artwork_get` bytes; a placeholder when there is none or it fails. */
-function ArtworkView({ id, mime }: { id: number | null; mime: string }) {
-  const [loaded, setLoaded] = useState<{ id: number; url: string } | null>(null);
-
-  useEffect(() => {
-    if (id === null) return;
-    let live = true;
-    let created: string | null = null;
-    artworkGet(id).then(
-      (bytes) => {
-        if (!live) return;
-        created = URL.createObjectURL(new Blob([bytes], { type: mime }));
-        setLoaded({ id, url: created });
-      },
-      () => {
-        // A deleted cache file: show the placeholder.
-      },
-    );
-    return () => {
-      live = false;
-      if (created !== null) URL.revokeObjectURL(created);
-    };
-  }, [id, mime]);
-
-  // A stale picture from the previous id is not shown while the new one loads.
-  const url = loaded !== null && loaded.id === id ? loaded.url : null;
-  return url === null ? (
-    <div
-      className="flex aspect-square w-full items-center justify-center rounded-xs border border-border bg-bg text-[64px] text-fg-muted"
-      role="img"
-      aria-label="No artwork"
-    >
-      ♪
-    </div>
-  ) : (
-    <img className="aspect-square w-full rounded-xs object-cover" src={url} alt="Artwork" />
   );
 }

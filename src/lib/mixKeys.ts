@@ -9,8 +9,12 @@
  * | play/pause | S / K |
  * | sync | D / L |
  * | nudge slower, faster (held) | Q, W / U, I |
- * | hot cue A–D | 1–4 / 7–0 |
- * | waveform zoom out, in | E, R / O, P |
+ * | hot cue A–D (any pad mode) | 1–4 / 7–0 |
+ * | beat jump back, forward by the last jump size | E, R / O, P |
+ * | loop on/off at the last loop size | F / ; |
+ * | take master | G / H |
+ * | next pad mode | T / Y |
+ * | waveform zoom out, in | V, B / N, M |
  *
  * Crossfader: Z left, X centre, C right (a tenth per press).
  */
@@ -22,6 +26,10 @@ export type DeckAction =
   | { type: "sync" }
   | { type: "nudge"; dir: -1 | 1 }
   | { type: "hotCue"; slot: number }
+  | { type: "jump"; dir: -1 | 1 }
+  | { type: "loop" }
+  | { type: "master" }
+  | { type: "padMode" }
   | { type: "zoom"; dir: -1 | 1 };
 
 export type MixKeyAction =
@@ -39,8 +47,13 @@ const DECK_KEYS: [string, string, DeckAction][] = [
   ["Digit2", "Digit8", { type: "hotCue", slot: 1 }],
   ["Digit3", "Digit9", { type: "hotCue", slot: 2 }],
   ["Digit4", "Digit0", { type: "hotCue", slot: 3 }],
-  ["KeyE", "KeyO", { type: "zoom", dir: -1 }],
-  ["KeyR", "KeyP", { type: "zoom", dir: 1 }],
+  ["KeyE", "KeyO", { type: "jump", dir: -1 }],
+  ["KeyR", "KeyP", { type: "jump", dir: 1 }],
+  ["KeyF", "Semicolon", { type: "loop" }],
+  ["KeyG", "KeyH", { type: "master" }],
+  ["KeyT", "KeyY", { type: "padMode" }],
+  ["KeyV", "KeyN", { type: "zoom", dir: -1 }],
+  ["KeyB", "KeyM", { type: "zoom", dir: 1 }],
 ];
 
 const BY_CODE = new Map<string, { side: number; action: DeckAction }>(
@@ -76,13 +89,14 @@ export function mixKeyAction(e: KeyPress, decks: number): MixKeyAction | null {
   return { ...hit.action, deck: HANDS[e.shiftKey ? "shift" : "plain"][hit.side] ?? 1 };
 }
 
-/** `KeyA` → "A", `Digit7` → "7". */
-const keyName = (code: string) => code.replace(/^(Key|Digit)/, "");
+/** `KeyA` → "A", `Digit7` → "7", `Semicolon` → ";". */
+const keyName = (code: string) => (code === "Semicolon" ? ";" : code.replace(/^(Key|Digit)/, ""));
 
+/** Same action, including its direction or slot. */
 const sameAction = (a: DeckAction, b: DeckAction) =>
   a.type === b.type &&
-  (a.type !== "nudge" || a.dir === (b as typeof a).dir) &&
-  (a.type !== "hotCue" || a.slot === (b as typeof a).slot);
+  ("dir" in a ? "dir" in b && a.dir === b.dir : true) &&
+  ("slot" in a ? "slot" in b && a.slot === b.slot : true);
 
 /**
  * How the key for `action` on `deck` (0-based) reads in a hint, taken from

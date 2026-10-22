@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { keepsSpace } from "../lib/keys";
 import { mixKeyAction } from "../lib/mixKeys";
 import { useMix } from "./mix";
+import { syncBar } from "./settings";
 
 export function useMixShortcuts(enabled: boolean) {
   useEffect(() => {
@@ -30,7 +31,19 @@ export function useMixShortcuts(enabled: boolean) {
           mix.togglePlay(action.deck);
           break;
         case "sync":
-          mix.toggleSync(action.deck);
+          mix.toggleSync(action.deck, syncBar());
+          break;
+        case "jump":
+          mix.jumpLast(action.deck, action.dir);
+          break;
+        case "loop":
+          mix.toggleLoop(action.deck);
+          break;
+        case "master":
+          mix.takeMaster(action.deck);
+          break;
+        case "padMode":
+          mix.cyclePadMode(action.deck);
           break;
         case "hotCue":
           mix.send({ type: "hotCue", deck: action.deck, slot: action.slot });

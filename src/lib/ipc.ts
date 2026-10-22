@@ -702,6 +702,8 @@ export interface HotCueView {
   positionMs: number;
   /** 0xRRGGBB from the library, null for the deck's default colour. */
   colorRgb: number | null;
+  /** The cue's name from the library, shown on its pad. */
+  name: string | null;
 }
 
 /** A memory cue or loop (by its start). */
@@ -768,11 +770,11 @@ export type MixControl =
   | { type: "sync"; deck: number; on: boolean; bar: boolean }
   /** MASTER: this deck becomes the sync master until it stops, ends or is unloaded. */
   | { type: "takeMaster"; deck: number }
-  /** Signed beats along the grid (1/8 … 32, as `BEAT_JUMP_SIZES`); during a loop the loop moves too. */
+  /** Signed beats along the grid (the pads' `JUMP_PAGES`, FINE = 1/32); during a loop the loop moves too. */
   | { type: "beatJump"; deck: number; beats: number }
-  /** FINE: a fixed 10 ms. */
+  /** A fixed 10 ms (the deck's FINE pad is a 1/32 `beatJump` instead). */
   | { type: "fineJump"; deck: number; forward: boolean }
-  /** Loop of `beats` (1/8 … 32, as `BEAT_LOOP_SIZES`) from the playhead, from the beat with quantise. */
+  /** Loop of `beats` (the pads' `LOOP_PAGES`) from the playhead, from the beat with quantise. */
   | { type: "beatLoop"; deck: number; beats: number }
   | { type: "loopExit"; deck: number }
   /** Halve (`double: false`) or double the active loop. */
@@ -784,11 +786,6 @@ export type MixControl =
   | { type: "master"; param: MasterParam; value: number }
   /** The player's volume slider, 0..1 (squared taper in Rust), on top of the master level. */
   | { type: "volume"; value: number };
-
-/** Beat jump sizes, as on rekordbox; FINE is `fineJump`. */
-export const BEAT_JUMP_SIZES = [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16, 32] as const;
-/** Beat loop sizes. */
-export const BEAT_LOOP_SIZES = [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16, 32] as const;
 
 export function mixDeviceOptions(device: string | null): Promise<MixDeviceOptions> {
   return invoke("mix_device_options", { device });
@@ -820,6 +817,9 @@ export type KeyNotation = "classical" | "camelot" | "openKey";
 /** How the decks draw their waveforms; all come from the same analysis columns. */
 export type DeckWaveform = "threeBand" | "rgb" | "blue";
 
+/** What SYNC lines up with the master: the beat, or the bar (downbeats too). */
+export type SyncAlign = "beat" | "bar";
+
 /** Library window state kept across launches. */
 export interface UiState {
   /** Hidden column ids; `null` until changed (UI defaults). */
@@ -836,6 +836,7 @@ export interface Settings {
   audioDevice: string | null;
   keyNotation: KeyNotation;
   deckWaveform: DeckWaveform;
+  syncAlign: SyncAlign;
   /** The cache dir in use. */
   cacheDir: string;
   ui: UiState;
@@ -850,6 +851,7 @@ export interface SettingsPatch {
   audioDevice?: string | null;
   keyNotation?: KeyNotation;
   deckWaveform?: DeckWaveform;
+  syncAlign?: SyncAlign;
   ui?: UiState;
   anlzPreference?: AnlzPreference;
 }

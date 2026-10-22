@@ -421,31 +421,44 @@ pub enum Control {
     (`deck.rs`), `deckScroll.test.ts`, `waveStrip.test.ts`,
     `deckMarks.test.ts`, `mixKeys.test.ts`. Checked in headless Chrome with
     the dev mock only.
-16. **Deck redesign** (maintainer review, 2026-10-22). Depends on tasks 13
+16. [x] **Deck redesign** (maintainer review, 2026-10-22). Built on tasks 13
     (master handoff, beat jump, beat loop, loop region), 14 (tooltip
-    `shortcut`, control polish) and 15 (per-deck zoom, waveform markers);
-    start after they are merged. Layout, states, components, data and keys:
-    [`../ui.md`](../ui.md#deck-layout-task-16-approved-2026-10-22-not-built-yet)
-    (wireframe approved, revision 3). UI only, no engine work beyond what
-    13–15 add, except:
-    - `HotCueView.color` through `mix_load` (from `Cue.color_rgb`).
-    - Bar sync becomes a setting (Settings → Decks → "Sync aligns: beat /
-      bar", default bar), replacing the deck's BAR button.
-    - On loading a track without a grid, queue it first for analysis and
-      refetch columns and grid when it is done.
-
-    Steps: split `DeckStrip.tsx` into the parts listed in `ui.md`; add `Pad` /
-    `SplitPad`, `InlineNumber`, `Fader` `detent`, `ArtworkThumb`, nudge icons
-    and the deck tokens (drop `compact`); pure helpers (`JUMP_PAGES`,
-    `LOOP_PAGES` with FINE = 1/32 beat, `formatBeats`, `snapToDetent`,
-    `tempoForBpm`, `nextPadMode`) and the new keys with `deckKeyHint` in
-    `mixKeys.ts`; update the Shortcuts popover and the Mix panel bullets in
-    `ui.md`. Master tempo (**M**) stays disabled until task 10 decides.
-    Tests: `mixView.test.ts` (pages, detent snap, BPM → tempo and range
-    step-up), `mixKeys.test.ts` (new keys, hints match the table),
-    `ui.test.tsx` (`Pad` height, `InlineNumber` commit / cancel),
-    `DeckStrip.test.tsx` (every state, pad modes, eject on artwork, BPM edit).
-    Check 2- and 4-deck mode at 1280, 1440 and 1920 px with the dev mock.
+    `shortcut`, control polish) and 15 (per-deck zoom, waveform markers).
+    Layout, states, components, data and keys:
+    [`../ui.md`](../ui.md#deck-layout-task-16) (wireframe approved, revision
+    3). UI only, no engine work beyond what 13–15 add, except:
+    - `HotCueView.name` through `mix_load` (`CueMark.name` from `Cue.name`);
+      the colour was already there from task 15 (`colorRgb`).
+    - Bar sync is a setting (Settings → Decks → "Sync aligns: beat / bar",
+      `mix.sync_align`, `SyncAlign` in `reks-core` `settings.rs`, default
+      bar), replacing the deck's BAR button.
+    - A track loaded without a grid is queued for analysis first; when it is
+      done the deck refetches columns and grid, and reloads the track in
+      place once paused so the engine has the grid (cue point, position and
+      tempo put back).
+    - The deck's 2 × 4 pads: HOT CUE (A–H in their cue colours and names),
+      BEAT JUMP (FINE = 1/32 beat … 128, split back / forward), BEAT LOOP
+      (1/8 … 32; the lit size exits, another resizes). New keys E/R O/P jump,
+      F ; loop, G H take master, T Y pad mode, V B N M zoom (zoom moved off
+      E/R O/P).
+    - Tempo: no Reset button (double-click or Delete; drags snap at 0%), BPM
+      typed into the header steps the range up when needed; nudge uses the
+      CDJ jog arrows. Master tempo (**M**) stays disabled until task 10.
+    - `tsconfig.app.json` type errors from task 14 fixed (`shortcut` under
+      `exactOptionalPropertyTypes`; the root `tsc --noEmit` checks no files,
+      so `npx tsc --noEmit -p tsconfig.app.json` is the real check).
+    Tests: `mixView.test.ts` (pages, loop pad controls, detent snap, BPM →
+    tempo and range step-up), `mixKeys.test.ts` (new keys, hints match the
+    `ui.md` table, round trip), `ui.test.tsx` (`Pad` height and ink,
+    `SplitPad`, `InlineNumber` commit / cancel / parse), `DeckStrip.test.tsx`
+    (every state, pad modes and pages, eject on artwork, BPM edit, master),
+    `mix.test.ts` (analysis on load and reload when paused, pads, BPM,
+    sync bar), `settings.rs` (`SyncAlign`), `deck.rs` (cue names).
+    Checked in headless Chrome (DPR 2) with the dev mock: 2- and 4-deck mode
+    at 1280 × 800 (deck 441 px), 1440 × 900 (521 × 248 px, as specified) and
+    1920 × 1080, each pad mode, empty, loading, analysing → grid, error and
+    BPM edit. Not checked in the Tauri WebView. CDJ-like behaviour (pad sizes, FINE,
+    jump and loop feel) is UNVERIFIED on hardware.
 
 ## Acceptance criteria
 

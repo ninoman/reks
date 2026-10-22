@@ -8,8 +8,8 @@ describe("deckMarks", () => {
   it("lists memory cues, the cue point, then lettered hot cues in their own colours", () => {
     const marks = deckMarks(
       [
-        { slot: 0, positionMs: 1_000, colorRgb: 0x30d158 },
-        { slot: 3, positionMs: 2_000, colorRgb: null },
+        { slot: 0, positionMs: 1_000, colorRgb: 0x30d158, name: null },
+        { slot: 3, positionMs: 2_000, colorRgb: null, name: null },
       ],
       [{ positionMs: 500, colorRgb: null }],
       250,

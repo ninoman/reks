@@ -28,6 +28,7 @@ const settings: Settings = {
   audioDevice: "USB DAC",
   keyNotation: "classical",
   deckWaveform: "rgb",
+  syncAlign: "bar",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
   onelibraryKeyBuiltin: false,

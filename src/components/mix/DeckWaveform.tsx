@@ -1,9 +1,10 @@
 /**
  * A deck's waveforms on the dark deck: the scrolling view (playhead in the
  * middle, beat lines, cue, memory cue and hot cue marks, the active loop;
- * zoom with the buttons, E/R and O/P, or Cmd/Ctrl + scroll) and the whole
- * track overview under it (click or arrow keys to seek). Both draw in the
- * waveform style chosen in Settings → Decks.
+ * Cmd/Ctrl + scroll zooms; `overlay` sits on top of it: the zoom buttons,
+ * sync phase and warnings) and the whole track overview under it (click or
+ * arrow keys to seek). Both draw in the waveform style chosen in Settings →
+ * Decks.
  *
  * Both canvases draw in device pixels from one animation-frame loop, which
  * runs the playhead on between engine states (`deckScroll.ts`) and copies
@@ -12,6 +13,7 @@
 import {
   type KeyboardEvent,
   type MouseEvent,
+  type ReactNode,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -20,7 +22,6 @@ import {
 } from "react";
 import { activeLoop, deckMarks } from "../../lib/deckMarks";
 import {
-  DECK_ZOOM_S,
   followPlayhead,
   frameMs,
   type PlayheadSample,
@@ -31,10 +32,7 @@ import {
 import type { BeatMark, HotCueView, LoopView, MemoryCueView } from "../../lib/ipc";
 import { WaveStrip } from "../../lib/waveStrip";
 import { useSettings } from "../../store/settings";
-import { MinusIcon, PlusIcon } from "../icons";
 import { focusRingInset } from "../ui/control";
-import { IconButton } from "../ui/IconButton";
-import { Tooltip } from "../ui/Tooltip";
 import { drawOverview, drawScroll, type Inputs, readTokens } from "./deckCanvas";
 import { useCanvasSize } from "./useCanvasSize";
 
@@ -59,10 +57,11 @@ export interface DeckWaveformProps {
   loop: LoopView | null;
   /** `DECK_ZOOM_S` index. */
   zoom: number;
-  compact: boolean;
   onSeek: (ms: number) => void;
   /** 1 zooms in, -1 out. */
   onZoom: (dir: -1 | 1) => void;
+  /** Drawn over the scrolling view. */
+  overlay?: ReactNode;
 }
 
 export function DeckWaveform({
@@ -78,9 +77,9 @@ export function DeckWaveform({
   memoryCues,
   loop,
   zoom,
-  compact,
   onSeek,
   onZoom,
+  overlay,
 }: DeckWaveformProps) {
   const style = useSettings((s) => s.settings?.deckWaveform ?? "rgb");
   const [scrollBox, setScrollBox] = useState<HTMLDivElement | null>(null);
@@ -243,39 +242,19 @@ export function DeckWaveform({
 
   const n = deck + 1;
   return (
-    <div className="flex flex-col gap-px bg-deck">
+    <div className="flex flex-col gap-1.5">
       <div
         ref={setScrollBox}
-        className={`relative ${compact ? "h-(--deck-wave-h-compact)" : "h-(--deck-wave-h)"}`}
+        className="group/wave relative h-(--deck-wave-h) overflow-hidden rounded-xs bg-deck"
       >
         {/* Pointer-only: the overview below is the keyboard way to seek. */}
         <canvas ref={scroll} className="block" data-zoom={seconds} onClick={seekScroll} />
-        <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-70 hover:opacity-100 focus-within:opacity-100">
-          <Tooltip content="Zoom out">
-            <IconButton
-              size="xs"
-              variant="control"
-              aria-label={`Deck ${n} zoom out`}
-              disabled={zoom <= 0}
-              onClick={() => onZoom(-1)}
-            >
-              <MinusIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip content="Zoom in">
-            <IconButton
-              size="xs"
-              variant="control"
-              aria-label={`Deck ${n} zoom in`}
-              disabled={zoom >= DECK_ZOOM_S.length - 1}
-              onClick={() => onZoom(1)}
-            >
-              <PlusIcon />
-            </IconButton>
-          </Tooltip>
-        </div>
+        {overlay}
       </div>
-      <div ref={setOverviewBox} className="h-(--deck-overview-h)">
+      <div
+        ref={setOverviewBox}
+        className="h-(--deck-overview-h) overflow-hidden rounded-xs bg-deck"
+      >
         <canvas
           ref={overview}
           role="slider"

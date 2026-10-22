@@ -1,7 +1,8 @@
 /**
  * Settings (phase 1 task 13) in one view, grouped: Folders (library folders,
  * cache folder), Playback (output device), Display (key notation), Decks
- * (the waveform style of the player deck and the Mix view). Values
+ * (the waveform style of the player deck and the Mix view, what SYNC
+ * aligns). Values
  * live in Rust (`useSettings`); the library window's own state (columns,
  * panels, volume) is saved without asking.
  */
@@ -10,7 +11,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { cn } from "../lib/cn";
 
-import type { DeckWaveform, KeyNotation } from "../lib/ipc";
+import type { DeckWaveform, KeyNotation, SyncAlign } from "../lib/ipc";
 import { useMix } from "../store/mix";
 import { useScan } from "../store/scan";
 import { chooseOutputDevice, useSettings } from "../store/settings";
@@ -43,6 +44,11 @@ const NOTATIONS: { id: KeyNotation; label: string; example: string }[] = [
   { id: "classical", label: "Classical", example: "Am, F#, Db" },
   { id: "camelot", label: "Camelot", example: "8A, 2B, 3B" },
   { id: "openKey", label: "Open Key", example: "1m, 7d, 8d" },
+];
+
+const SYNC_ALIGNS: { id: SyncAlign; label: string }[] = [
+  { id: "bar", label: "Bar" },
+  { id: "beat", label: "Beat" },
 ];
 
 const WAVEFORMS: { id: DeckWaveform; label: string; hint: string }[] = [
@@ -112,6 +118,7 @@ function SettingsBody() {
           </Group>
           <Group title="Decks">
             <DeckWaveformChoice waveform={settings.deckWaveform} />
+            <SyncAlignChoice align={settings.syncAlign} />
           </Group>
         </>
       )}
@@ -267,6 +274,29 @@ function DeckWaveformChoice({ waveform }: { waveform: DeckWaveform }) {
           <Segment key={w.id} value={w.id}>
             {w.label}
             <span className="font-normal text-fg-subtle">{w.hint}</span>
+          </Segment>
+        ))}
+      </SegmentedControl>
+    </div>
+  );
+}
+
+function SyncAlignChoice({ align }: { align: SyncAlign }) {
+  return (
+    <div className={item}>
+      <h5 className={itemTitle}>Sync aligns</h5>
+      <p className={hint}>
+        Bar: SYNC lines up the downbeats with the master as well as the beat. Bar is the default.
+      </p>
+      <SegmentedControl
+        className="mt-2.5"
+        aria-label="Sync aligns"
+        value={align}
+        onValueChange={(v) => void useSettings.getState().update({ syncAlign: v as SyncAlign })}
+      >
+        {SYNC_ALIGNS.map((a) => (
+          <Segment key={a.id} value={a.id}>
+            {a.label}
           </Segment>
         ))}
       </SegmentedControl>

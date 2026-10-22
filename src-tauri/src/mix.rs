@@ -344,6 +344,8 @@ pub struct HotCueView {
     pub position_ms: f64,
     /// 0xRRGGBB from the library, if set.
     pub color_rgb: Option<u32>,
+    /// The cue's name, if set.
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -429,6 +431,7 @@ fn cue_views(marks: &[CueMark], rate: u32) -> (Vec<HotCueView>, Vec<MemoryCueVie
                 slot,
                 position_ms,
                 color_rgb: m.color_rgb,
+                name: m.name.clone(),
             }),
             None => memory.push(MemoryCueView {
                 position_ms,

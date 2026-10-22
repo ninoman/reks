@@ -4,14 +4,21 @@ import type { CueRouting } from "./ipc";
 import {
   cueFits,
   deckSide,
+  formatBeats,
   formatClock,
   formatTempo,
+  JUMP_PAGES,
+  LOOP_PAGES,
+  loopPadControls,
+  nextPadMode,
   nextTempoRange,
   phaseOffset,
   pickSwitches,
   scrubTarget,
   shownDecks,
+  snapToDetent,
   tempoFader,
+  tempoForBpm,
   tempoRangeLabel,
   tempoRatio,
 } from "./mixView";
@@ -121,5 +128,66 @@ describe("scrubTarget", () => {
     expect(scrubTarget(grip, 0, -50)).toBe(10_500);
     expect(scrubTarget(grip, 0, 200)).toBe(8_000);
     expect(scrubTarget(grip, 0, 5_000)).toBe(0);
+  });
+});
+
+describe("pads", () => {
+  it("cycle HOT CUE, BEAT JUMP, BEAT LOOP", () => {
+    expect(nextPadMode("hotCue")).toBe("beatJump");
+    expect(nextPadMode("beatJump")).toBe("beatLoop");
+    expect(nextPadMode("beatLoop")).toBe("hotCue");
+  });
+
+  it("page through eight sizes each, FINE first", () => {
+    expect(JUMP_PAGES.map((p) => p.map(formatBeats))).toEqual([
+      ["FINE", "1/8", "1/4", "1/2", "1", "2", "4", "8"],
+      ["1", "2", "4", "8", "16", "32", "64", "128"],
+    ]);
+    expect(LOOP_PAGES.map((p) => p.map(formatBeats))).toEqual([
+      ["1/8", "1/4", "1/2", "1", "2", "4", "8", "16"],
+      ["1/4", "1/2", "1", "2", "4", "8", "16", "32"],
+    ]);
+    expect(JUMP_PAGES[0]?.[0]).toBe(1 / 32);
+  });
+
+  it("a loop pad sets, leaves or resizes the loop", () => {
+    expect(loopPadControls(null, 4)).toEqual([{ type: "beatLoop", beats: 4 }]);
+    expect(loopPadControls(4, 4)).toEqual([{ type: "loopExit" }]);
+    expect(loopPadControls(4, 16)).toEqual([
+      { type: "loopResize", double: true },
+      { type: "loopResize", double: true },
+    ]);
+    expect(loopPadControls(1, 1 / 2)).toEqual([{ type: "loopResize", double: false }]);
+  });
+});
+
+describe("snapToDetent", () => {
+  it("lands on the detent within the zone only", () => {
+    expect(snapToDetent(0.52, 0.5, 0.03)).toBe(0.5);
+    expect(snapToDetent(0.48, 0.5, 0.03)).toBe(0.5);
+    expect(snapToDetent(0.54, 0.5, 0.03)).toBe(0.54);
+  });
+});
+
+describe("tempoForBpm", () => {
+  it("divides the typed BPM by the track's", () => {
+    const t = tempoForBpm(131.5, 128, 0.1);
+    expect(t?.range).toBe(0.1);
+    expect(t?.ratio).toBeCloseTo(1.02734, 4);
+  });
+
+  it("steps the range up to the smallest that fits", () => {
+    expect(tempoForBpm(145, 128, 0.1)?.range).toBe(0.16);
+    expect(tempoForBpm(118, 128, 0.06)?.range).toBe(0.1);
+    expect(tempoForBpm(200, 128, 0.1)?.range).toBe(1);
+    // A narrower range is never picked.
+    expect(tempoForBpm(129, 128, 0.16)?.range).toBe(0.16);
+  });
+
+  it("rejects what no range reaches or is not a BPM", () => {
+    expect(tempoForBpm(300, 128, 0.1)).toBeNull();
+    expect(tempoForBpm(Number.NaN, 128, 0.1)).toBeNull();
+    expect(tempoForBpm(0, 128, 0.1)).toBeNull();
+    expect(tempoForBpm(128, 0, 0.1)).toBeNull();
   });
 });

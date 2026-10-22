@@ -182,3 +182,8 @@ export function useKeyLabel(): (key: Key) => string {
   const keys = useLibrary((s) => s.facets?.keys);
   return (key) => keyLabel(key, notation, keys);
 }
+
+/** Whether SYNC lines up bars (Settings → Decks → Sync aligns; bar until settings load). */
+export function syncBar(): boolean {
+  return (useSettings.getState().settings?.syncAlign ?? "bar") === "bar";
+}

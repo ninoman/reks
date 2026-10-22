@@ -143,7 +143,9 @@ menu items `--menu-item-h`.
 | `Swatch` | `color` (track colour name) or `style`; `size`: xs, sm, md | – |
 | `Caption` | `tone`: muted, subtle, default; small upper-case label | – |
 | `Knob` | `size`: sm, md; `bipolar` (arc from the centre), `defaultValue` (double-click / Delete); drag up/down, arrows, Page Up/Down, Home/End | own (`role="slider"`; Radix has no knob) |
-| `Fader` | `orientation`: vertical, horizontal; `defaultValue` (double-click the cap) | Radix Slider |
+| `Fader` | `orientation`: vertical, horizontal; `defaultValue` (double-click the cap or Delete); `detent` (a tick that drags snap to within `--fader-detent`; keys step past it) | Radix Slider |
+| `Pad` + `SplitPad` | deck pads: `tone`: default, set (filled in `color`, a data colour, else `deck-hotcue`; text `pad-ink-dark/light` by brightness), empty (dashed), lit; `marked` (heavy outline); `SplitPad`: back / forward halves under one label | – |
+| `InlineNumber` | text that becomes a number field on double-click or Enter; Enter / blur commit, Esc cancels, non-numbers are dropped | native |
 
 Menus, popovers, dialogs and tooltips portal to `<body>`; tests query
 `screen` / `document`, not the render container.
@@ -199,8 +201,8 @@ Along the bottom of the window:
   **Mix** toggle, and with the Mix panel off, why the output is not playing
   (opening, failed start, lost device).
 - Under it, `PlayerDeck` (Mix off): deck 2 alone as a `DeckStrip` with
-  `solo` (no SYNC, BAR, LEADER or phase marker), so it has the deck's
-  waveforms, cue, hot cues, nudge, quantise and tempo fader. Empty, it says
+  `solo` (no MASTER, SYNC, phase meter or mixer keys; their space stays), so
+  it has the deck's waveforms, cue, pads, nudge, quantise and tempo fader. Empty, it says
   to double-click a track or drag one onto it. With Mix on, the Mix panel
   takes its place and shows the same deck among the others.
 - Double-click or Enter on a row, and double-click in a history session,
@@ -221,15 +223,15 @@ MID 1, MID 2, LO, filter assign X/off/Y, cue, fader, crossfader assign) with
 one caption column, the master and cue section, then filter X, the crossfader
 and filter Y. Decks 1 and 2 sit left of it, 3 and 4 right. Two decks by
 default, and they are decks 2 and 3, the centre channels, as with two CDJs
-on a 4-channel mixer; 4 with the toggle (shorter waveforms). Deck cards are
-as tall as their content (the columns no longer stretch them to the mixer's
-height).
+on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
+(two stacked fit beside the mixer); the deck itself is described under
+[Deck layout](#deck-layout-task-16).
 
 - States: output off (start form: device, rate, buffer, cue routing; the
   device's cue routing is preselected until the user picks one, and routings
   it has too few outputs for are disabled), opening,
-  error (failed start, device lost), running. A deck is empty (how to load),
-  loading, failed or loaded; a track without a grid says sync needs one.
+  error (failed start, device lost), running. Deck states: see
+  [Deck layout](#deck-layout-task-16).
 - Waveforms draw on the dark `deck` like the grid editor: a scrolling view
   with the playhead in the middle and beat lines, and the overview under it,
   which is the keyboard seek slider. Both draw in device pixels from one
@@ -237,7 +239,7 @@ height).
   is cached in tiles on a pixel grid fixed to the track (`lib/waveStrip.ts`)
   and copied at whole-pixel offsets; the playhead runs on between engine
   states (`lib/deckScroll.ts`). Zoom per deck: 32/16/8/4/2 s across, 8 s by
-  default, with − / + on the view, E R / O P, or Cmd/Ctrl + scroll.
+  default, with − / + on the view, V B / N M, or Cmd/Ctrl + scroll.
 - Marks (`lib/deckMarks.ts`), on both views: hot cues are a flag with the
   slot letter in the cue's library colour (`deck-hotcue` without one; text
   dark or light by the flag's brightness), memory cues a triangle on the
@@ -253,6 +255,9 @@ height).
   release; PLAY during the preview keeps it playing.
 - Tempo range button cycles ±6, ±10 (default), ±16 and WIDE (±100%; the
   slow end stands still), as on a CDJ-3000.
+- Sync aligns (Settings → Decks, `mix.sync_align`): **Bar** (default; SYNC
+  lines up the downbeats too) or **Beat**. Replaces the deck's BAR button;
+  a deck already synced keeps its mode until SYNC is pressed again.
 - Waveform style (Settings → Decks, `display.deck_waveform`), applied to both
   views live, on the player deck too: **RGB** (default since D30; mono height,
   colour mixed from `waveform-rgb-low/mid/high` by band level), **3-band**
@@ -266,10 +271,9 @@ height).
 - Load: the table's context menu ("Load to deck N", also in playlist views)
   or drag a track onto a deck. Loading starts the output if it is off.
 - Shortcuts while the panel is open ([`src/lib/mixKeys.ts`](../src/lib/mixKeys.ts),
-  also under **Shortcuts** in the panel): A/S/D cue, play, sync deck 2 and
-  J/K/L deck 3, the decks on screen with two (Shift: the outer decks 1 and 4), Q/W and U/I nudge while held, 1–4 and
-  7–0 hot cues A–D, E/R and O/P waveform zoom out/in, Z/X/C crossfader. Space
-  stays with the player (deck 2).
+  also under **Shortcuts** in the panel): the table under
+  [Deck layout](#deck-layout-task-16). Every deck control with a key shows
+  it in its tooltip (`deckKeyHint`, from the same table as the handler).
 - The mixer is memoised away from the 60 Hz engine state; only the decks
   re-render with it.
 - Meters (`ui/Meter`): a DJM-style column of nine round LEDs on the deck
@@ -287,15 +291,14 @@ height).
   HP / BP / LP and channel CUE: a click picks one, Shift+click combines
   (tooltip on each); FILTER assign starts at X for channels 1–2, Y for 3–4.
 - Knobs draw a position mark (`knobMark`, `--color-knob-mark`: dark ink on the light cap in both themes).
-- Sizes: `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-wave-h*`, `--deck-overview-h`,
+- Sizes: `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-*`, `--pad-h`,
   `--mixer-strip-w`, `--mixer-row-h`, `--mix-panel-max-h` (the panel scrolls
   inside 62% of the window height).
 
-### Deck layout (task 16, approved 2026-10-22, not built yet)
+### Deck layout (task 16)
 
-Replaces the deck described above once [phase 5 task 16](phases/phase-5.md)
-lands; until then the bullets above describe the app. Modelled on rekordbox's
-2Deck Horizontal. Approved wireframe:
+[Phase 5 task 16](phases/phase-5.md), approved 2026-10-22, built the same day.
+Modelled on rekordbox's 2Deck Horizontal. Approved wireframe:
 <https://claude.ai/artifact/1bLg3dZwjRfL4nXbYvFdzD> (revision 3).
 
 **Size.** 248 px tall in both 2- and 4-deck mode (no compact deck). The mixer
@@ -308,7 +311,7 @@ goes to the header and waveforms, the pads stop at 336 px.
 
 | Row | Contents |
 |---|---|
-| Header (40 px) | Deck number (lit when loaded) · artwork (eject ⏏ on hover or focus; dashed box without artwork) · title / artist · key · BPM with tempo % under it · remaining over elapsed time |
+| Header (40 px) | Deck number (lit when loaded) · artwork (eject ⏏ on hover or focus; dashed box without artwork) · title / artist · key (in the Settings notation) · BPM with tempo % under it · remaining over elapsed time |
 | Zoomed waveform (72 px, full width) | Playhead centred, beat lines, hot cue and loop markers, sync phase meter on the top edge when synced. Zoom − / + float top right on hover or focus-within, zoom level between them. Drag to skim |
 | Overview (20 px) | Whole track, played part shaded, hot cue ticks in cue colour, cue point, loop bar. Keyboard seek slider |
 | Bottom (80 px) | CUE and PLAY (round, 32 px) · pad mode (HOT CUE / BEAT JUMP / BEAT LOOP) · Q · page ◀ ▶ · 2 × 4 pads · MASTER and SYNC |
@@ -318,55 +321,69 @@ goes to the header and waveforms, the pads stop at 336 px.
   number field; Enter or blur saves, Esc cancels. Tempo = typed ÷ the
   track's BPM at the playhead; out of range, the range steps up to the
   smallest that fits. Disabled without a grid and while synced.
-- **Tempo fader**: detent at 0 % that snaps within `--fader-detent`;
+- **Tempo fader**: detent at 0 % that drags snap to within `--fader-detent`;
   double-click or Delete resets. No Reset button.
 - **Nudge**: the CDJ jog-wheel arrows, two arcs of the wheel's lower rim
   pointing down: left (− REV, anticlockwise) slows, right (+ FWD,
   clockwise) speeds up. Held.
 - **MASTER** is lit while the deck is master; a click takes master. SYNC as
   before. Bar sync leaves the deck: Settings → Decks → "Sync aligns: beat /
-  bar" (default bar).
+  bar" (default bar). The phase meter shows on synced decks other than the
+  master.
 - **Pads** (same 2 × 4 in every mode; ◀ ▶ page through sizes, disabled in
-  HOT CUE):
+  HOT CUE; on a deck at its minimum width the mode labels drop HOT / BEAT):
   - HOT CUE: A–H, a set pad filled with its cue's colour (`HotCueView.color`,
     else `deck-hotcue`) and its name; empty pads dashed, dimmed, disabled.
   - BEAT JUMP: page 1 FINE (1/32 beat), 1/8, 1/4, 1/2, 1, 2, 4, 8; page 2
     1 … 128. Split pads: left half ◀ back, right half ▶ forward. Jumps keep
     the beat phase while playing.
   - BEAT LOOP: page 1 1/8 … 16, page 2 1/4 … 32. A pad sets a loop from the
-    playhead (quantised) or resizes the active one; the active size is lit and
-    pressing it again exits.
-  - The size used last (jump and loop, default 4) has a heavy outline; the
-    E/R and F keys use it.
+    playhead (quantised) or resizes the active one (halved / doubled to the
+    size, start kept: `loopPadControls`); the active size is lit and pressing
+    it again exits.
+  - The size used last (jump and loop, default 4) has a heavy outline and
+    carries the E/R and F hints; the keys use it. Pad mode, pages and sizes
+    are kept per deck across loads.
 - **Solo** (player deck): MASTER and SYNC hidden, space kept.
 - **States**, each at full size with disabled controls rather than hidden
   ones: empty (how to load in the waveform slot), loading ("Decoding…"),
   analysing (playable; BPM, MASTER, SYNC, Q, jumps and loops wait for the
   grid), no grid (warning inside the waveform's bottom edge), playing,
   synced / looping, error (reason with Retry and Eject in the waveform slot;
-  a waveform-only failure keeps the deck playing).
+  a waveform-only failure keeps the deck playing and offers Retry only).
+- **Analysis on load**: a track whose grid is empty is queued for analysis
+  (`analysisReanalyse`). When the `analysed` event arrives the deck refetches
+  waveform and grid; the engine only takes a grid at load, so a paused deck
+  is reloaded in place at once (cue point, position and tempo put back) and
+  a playing one at its next pause, saying so on the waveform meanwhile.
 
-**Components.** `MixPanel` stays the only store reader. `DeckStrip` (layout
-and drop target) composes one file per part: `DeckHeader`
-(`ArtworkThumb`, `InlineNumber` for the BPM), `DeckWaveformRow` (zoom
-buttons, `SyncPhase`), `DeckOverview`, `DeckSlot` (empty / loading /
-analysing / error), `DeckTransport`, `DeckPads` (`SegmentedControl`
-`variant="control"`, Q, `PagePicker`, `Pad` / `SplitPad`), `DeckSyncButtons`,
-`DeckTempo`. New shared pieces: `ui/Pad.tsx` (`Pad`, `SplitPad`; `tone`,
-`marked`, `color` via `--pad-color`), `ui/InlineNumber.tsx`, a `detent` prop
-on `Fader`, `ArtworkThumb` (shared with `TrackDetailPanel`), `NudgeDownIcon` /
-`NudgeUpIcon`. Every control has a `Tooltip` with its `shortcut`, taken from
-`deckKeyHint()` in `mixKeys.ts` (same table as the handler).
+**Components** ([`src/components/mix/`](../src/components/mix/)). `MixPanel`
+and `PlayerDeck` stay the only store readers. `DeckStrip` (layout, drop
+target, which state shows) composes one file per part: `DeckHeader`
+(`ArtworkThumb`, `InlineNumber` for the BPM), `DeckWaveform` (both views:
+they share one animation-frame loop, so the overview is not a file of its
+own) with `DeckWaveformRow` as its overlay (zoom buttons and level,
+`SyncPhase`, the warning line), `DeckSlot` (empty / loading / analysing /
+error), `DeckTransport`, `DeckPads` (`SegmentedControl` `variant="control"`,
+Q, `PagePicker`, `Pad` / `SplitPad`), `DeckSyncButtons`, `DeckTempo`; `hold.ts`
+gives CUE and nudge their held handlers. Shared pieces: `ui/Pad.tsx`,
+`ui/InlineNumber.tsx`, `Fader` `detent`, `ArtworkThumb` + `useArtworkUrl`
+(shared with `TrackDetailPanel`), `NudgeDownIcon` / `NudgeUpIcon`. Controls
+with a key show it in their tooltip (`shortcut` from `deckKeyHint()`).
 
-**Data.** New in `DeckMeta`: `padMode`, `padPage`, `lastJump`, `lastLoop`,
-`analysing`; `DeckTrack.key`, `artworkId`; `HotCueView.color` (`#rrggbb` from
-`Cue.color_rgb`). From tasks 13 and 15: `DeckView.loop`, beat jump / loop /
-loop exit / take-master controls, `DeckMeta.zoom`. Pure helpers in
-`mixView.ts`: `JUMP_PAGES`, `LOOP_PAGES`, `formatBeats`, `snapToDetent`,
-`tempoForBpm`, `nextPadMode`. Tokens: `--deck-h` 248, `--deck-min-w` 440,
-`--deck-wave-h` 72, `--deck-overview-h` 20, `--deck-art` 40,
-`--deck-pads-max-w` 336, `--pad-h` 26, `--fader-detent`; `--deck-wave-h-compact`
-and the `compact` prop go.
+**Data.** `DeckMeta`: `padMode`, `padPage`, `lastJump`, `lastLoop`,
+`analysing`, `gridPending`, `failed` (for Retry); `DeckTrack.key`,
+`artworkId`, `artworkMime` (from `library_track` on load); `HotCueView.colorRgb`
+(task 15) and `name` (from `Cue.name`, through `mix_load`). From tasks 13 and
+15: `DeckView.loopRegion`, `master`, beat jump / loop / loop exit / resize /
+take-master controls, `DeckMeta.zoom`. Pure helpers in `mixView.ts`:
+`JUMP_PAGES`, `LOOP_PAGES` (FINE = a 1/32 `beatJump`; the engine's 10 ms
+`fineJump` is unused by the deck), `formatBeats`, `snapToDetent`,
+`tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` 248,
+`--deck-header-h` 40, `--deck-min-w` 440, `--deck-wave-h` 72,
+`--deck-overview-h` 20, `--deck-views-h`, `--deck-bottom-h` 80, `--deck-art`
+40, `--deck-pads-max-w` 336, `--deck-transport`, `--deck-sync-w`,
+`--deck-tempo-w`, `--pad-h` 26, `--fader-detent` 6, `--color-pad-ink-*`.
 
 **Keys** (left hand deck 2, right hand deck 3, Shift: decks 1 / 4 with four
 shown):

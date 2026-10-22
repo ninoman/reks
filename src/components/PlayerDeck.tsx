@@ -5,11 +5,13 @@
  */
 import { useMix } from "../store/mix";
 import { PLAYER_DECK } from "../store/player";
+import { useKeyLabel } from "../store/settings";
 import { DeckStrip } from "./mix/DeckStrip";
 import { deckActions } from "./mix/deckActions";
 
 export function PlayerDeck() {
   const mix = useMix();
+  const keyLabel = useKeyLabel();
   const meta = mix.decks[PLAYER_DECK];
   if (meta === undefined) return null;
   const view = mix.status === "running" ? mix.live?.decks[PLAYER_DECK] : undefined;
@@ -20,10 +22,8 @@ export function PlayerDeck() {
         deck={PLAYER_DECK}
         view={view}
         meta={meta}
-        leader={false}
-        leaderChosen={false}
+        keyText={meta.track?.key == null ? null : keyLabel(meta.track.key)}
         phase={null}
-        compact={false}
         solo
         actions={deckActions(mix, PLAYER_DECK)}
       />

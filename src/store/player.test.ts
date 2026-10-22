@@ -11,6 +11,7 @@ vi.mock("../lib/ipc", () => ({
   mixLoad: vi.fn(),
   mixControl: vi.fn(),
   libraryTrack: vi.fn(),
+  analysisReanalyse: vi.fn(),
   waveformColumns: vi.fn(),
   beatgridGet: vi.fn(),
 }));

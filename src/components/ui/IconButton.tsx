@@ -20,7 +20,7 @@ export type IconButtonProps = Omit<ComponentProps<"button">, "aria-label"> & {
   "aria-label": string;
   asChild?: boolean;
   /** Keyboard shortcut, shown in a tooltip on hover and focus. */
-  shortcut?: string;
+  shortcut?: string | undefined;
   /** What the tooltip says before the key; defaults to `aria-label`. */
   hint?: ReactNode;
 } & VariantProps<typeof buttonVariants> &

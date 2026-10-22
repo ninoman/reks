@@ -145,3 +145,83 @@ export function pickSwitches(
     : on.map((v, j) => (j === i ? !(v && on.every((w, k) => k === j || !w)) : false));
   return keepOne && !next.some(Boolean) ? [...on] : next;
 }
+
+/** What the deck's 2 × 4 pads do (rekordbox's pad modes, the three we have). */
+export type PadMode = "hotCue" | "beatJump" | "beatLoop";
+export const PAD_MODES: readonly PadMode[] = ["hotCue", "beatJump", "beatLoop"];
+
+/** The mode after `m`, as the pad mode key cycles. */
+export function nextPadMode(m: PadMode): PadMode {
+  return PAD_MODES[(PAD_MODES.indexOf(m) + 1) % PAD_MODES.length] ?? "hotCue";
+}
+
+/** Hot cue pads: A–H, one page. */
+export const HOT_CUE_PADS = 8;
+
+/** Beat jump sizes per page, in beats; FINE is 1/32 beat (maintainer, 2026-10-22). */
+export const JUMP_PAGES: readonly (readonly number[])[] = [
+  [1 / 32, 1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8],
+  [1, 2, 4, 8, 16, 32, 64, 128],
+];
+
+/** Beat loop sizes per page, in beats. */
+export const LOOP_PAGES: readonly (readonly number[])[] = [
+  [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16],
+  [1 / 4, 1 / 2, 1, 2, 4, 8, 16, 32],
+];
+
+/** The jump and loop size a deck starts with, and the keys use until a pad is pressed. */
+export const DEFAULT_PAD_BEATS = 4;
+
+/** `FINE` (1/32), `1/8`, `4`, `128`. */
+export function formatBeats(beats: number): string {
+  if (beats === 1 / 32) return "FINE";
+  if (beats >= 1) return String(beats);
+  return `1/${Math.round(1 / beats)}`;
+}
+
+/** A fader position within `zone` (0..1 of the travel) of `detent` lands on it. */
+export function snapToDetent(value: number, detent: number, zone: number): number {
+  return Math.abs(value - detent) <= zone ? detent : value;
+}
+
+/**
+ * The tempo that plays a track at `targetBpm`, given its own BPM at the
+ * playhead (`trackBpm`, at tempo 1), and the range to show it in: `range`,
+ * or the smallest one that reaches it. Null when no range does (WIDE's slow
+ * end is 0) or the input is not a BPM.
+ */
+export function tempoForBpm(
+  targetBpm: number,
+  trackBpm: number,
+  range: TempoRange,
+): { ratio: number; range: TempoRange } | null {
+  if (!(targetBpm > 0) || !(trackBpm > 0)) return null;
+  const ratio = targetBpm / trackBpm;
+  const fits = (r: TempoRange) => Math.abs(ratio - 1) <= r + 1e-9;
+  if (fits(range)) return { ratio, range };
+  const wider = TEMPO_RANGES.find((r) => r > range && fits(r));
+  return wider === undefined ? null : { ratio, range: wider };
+}
+
+/**
+ * Controls to set a beat loop of `beats` from a LOOP pad: a new loop, the
+ * loop left when it is that size already, or the active loop halved or
+ * doubled to it (sizes are powers of two, and resizing keeps the start).
+ */
+export function loopPadControls(
+  active: number | null,
+  beats: number,
+): (
+  | { type: "beatLoop"; beats: number }
+  | { type: "loopExit" }
+  | { type: "loopResize"; double: boolean }
+)[] {
+  if (active === null) return [{ type: "beatLoop", beats }];
+  const steps = Math.round(Math.log2(beats / active));
+  if (steps === 0) return [{ type: "loopExit" }];
+  return Array.from({ length: Math.abs(steps) }, () => ({
+    type: "loopResize" as const,
+    double: steps > 0,
+  }));
+}

@@ -16,6 +16,7 @@ function notation(keyNotation: "classical" | "camelot" | "openKey") {
       audioDevice: null,
       keyNotation,
       deckWaveform: "threeBand",
+      syncAlign: "bar",
       cacheDir: "/cache",
       anlzPreference: "rekordboxFirst",
       onelibraryKeyBuiltin: false,

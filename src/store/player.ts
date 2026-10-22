@@ -3,13 +3,13 @@
  * deck's cue, hot cues, tempo and waveform. Double-click, Space and the
  * history view play on it; the Mix panel shows it with the other decks.
  */
-import { type DeckTrack, useMix } from "./mix";
+import { type TrackRef, useMix } from "./mix";
 
 /** Deck 2: one of the two decks the Mix panel shows by default (the centre channels). */
 export const PLAYER_DECK = 1;
 
 /** Loads `track` on the player deck and plays it (keeps it going if it already is). */
-export function playTrack(track: DeckTrack): Promise<void> {
+export function playTrack(track: TrackRef): Promise<void> {
   return useMix.getState().load(PLAYER_DECK, track, true);
 }
 

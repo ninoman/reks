@@ -8,7 +8,7 @@ import { memo, useEffect, useMemo } from "react";
 
 import { deckSide, phaseOffset, shownDecks } from "../../lib/mixView";
 import { useMix } from "../../store/mix";
-import { chooseOutputDevice } from "../../store/settings";
+import { chooseOutputDevice, useKeyLabel } from "../../store/settings";
 import { Button } from "../ui/Button";
 import { Kbd } from "../ui/Kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/Popover";
@@ -26,8 +26,12 @@ const SHORTCUTS: [string, string][] = [
   ["S / K", "Play or pause deck 2 / 3"],
   ["D / L", "Sync deck 2 / 3"],
   ["Q W / U I", "Nudge slower, faster (hold)"],
-  ["1–4 / 7–0", "Hot cues A–D"],
-  ["E R / O P", "Zoom the waveform out, in (or ⌘/Ctrl + scroll on it)"],
+  ["1–4 / 7–0", "Hot cues A–D (any pad mode)"],
+  ["E R / O P", "Beat jump back, forward by the last jump size"],
+  ["F / ;", "Loop on or off at the last loop size"],
+  ["G / H", "Take master"],
+  ["T / Y", "Next pad mode"],
+  ["V B / N M", "Zoom the waveform out, in (or ⌘/Ctrl + scroll on it)"],
   ["Shift + key", "Same on deck 1 / 4"],
   ["Z X C", "Crossfader left, centre, right"],
 ];
@@ -68,7 +72,7 @@ export function MixPanel() {
 
   const running = status === "running" && live !== null;
   const shown = shownDecks(deckCount);
-  const compact = deckCount === 4;
+  const keyLabel = useKeyLabel();
   const activeKey = mix.decks.map((d) => (d.track === null ? 0 : 1)).join("");
   // Recomputed only when a deck loads or empties.
   const active = useMemo(() => [...activeKey].map((c) => c === "1"), [activeKey]);
@@ -77,23 +81,22 @@ export function MixPanel() {
     const view = live?.decks[deck];
     const meta = mix.decks[deck];
     if (meta === undefined) return null;
-    const leader = live?.masterDeck === deck;
-    const leaderBeat =
+    const master = live?.masterDeck === deck;
+    const masterBeat =
       live?.masterDeck == null ? null : (live.decks[live.masterDeck]?.beat ?? null);
     const phase =
-      !leader && view?.beat != null && leaderBeat !== null
-        ? phaseOffset(view.beat, leaderBeat, view.syncBar ? 4 : 1)
+      !master && view?.beat != null && masterBeat !== null
+        ? phaseOffset(view.beat, masterBeat, view.syncBar ? 4 : 1)
         : null;
+    const key = meta.track?.key ?? null;
     return (
       <DeckStrip
         key={deck}
         deck={deck}
         view={view}
         meta={meta}
-        leader={leader}
-        leaderChosen={leader}
+        keyText={key === null ? null : keyLabel(key)}
         phase={phase}
-        compact={compact}
         actions={deckActions(mix, deck)}
       />
     );
@@ -158,7 +161,7 @@ export function MixPanel() {
           />
         </div>
       ) : (
-        <div className="flex min-h-0 items-stretch gap-2">
+        <div className="flex min-h-0 items-start gap-2">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             {shown.filter((d) => deckSide(d) === "left").map(strip)}
           </div>
