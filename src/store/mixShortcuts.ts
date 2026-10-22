@@ -35,6 +35,9 @@ export function useMixShortcuts(enabled: boolean) {
         case "hotCue":
           mix.send({ type: "hotCue", deck: action.deck, slot: action.slot });
           break;
+        case "zoom":
+          mix.zoomDeck(action.deck, action.dir);
+          break;
         case "nudge":
           held.set(e.code, { type: "nudge", deck: action.deck });
           mix.nudge(action.deck, action.dir);

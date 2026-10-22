@@ -32,7 +32,7 @@ pub use analysis::{AnalysisAnchor, AnalysisJob, AnalysisRecord, MappingCandidate
 pub use artwork::ArtworkId;
 pub use beatgrid::{BeatMark, Beatgrid, GridAnchor, GridEdit};
 pub use db::Library;
-pub use deck::{DeckAnchor, DeckAudio};
+pub use deck::{CueMark, DeckAnchor, DeckAudio};
 pub use device::{Device, DeviceId, NewDevice, SyncedPlaylist, SyncedRecord};
 pub use error::{Error, Result};
 pub use keys::{Key, KeyNotation, Mode};

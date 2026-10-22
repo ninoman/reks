@@ -24,6 +24,18 @@ pub struct DeckAudio {
     pub anchors: Vec<DeckAnchor>,
     /// `(slot, frame)` of each hot cue (slot 0..7 = A..H), sorted by slot.
     pub hot_cues: Vec<(u8, i64)>,
+    /// What the deck's waveforms mark: the hot cues with their colours, then
+    /// the memory cues by position.
+    pub marks: Vec<CueMark>,
+}
+
+/// A hot cue (`slot` set) or memory cue (`slot` `None`) to draw on a deck.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CueMark {
+    pub slot: Option<u8>,
+    pub frame: i64,
+    /// 0xRRGGBB from the library; `None` uses the deck's default colour.
+    pub color_rgb: Option<u32>,
 }
 
 /// One `beatgrid` row in frames of the deck's audio.
@@ -41,12 +53,15 @@ impl Library {
     /// Runs for seconds on a long track: call it off the UI and audio threads.
     pub fn deck_audio(&self, id: TrackId, sample_rate: u32) -> Result<DeckAudio> {
         let anchors = deck_anchors(&self.beatgrid(id)?.anchors, sample_rate);
-        let hot_cues = hot_cue_frames(&self.track(id)?.cues, sample_rate);
+        let cues = self.track(id)?.cues;
+        let hot_cues = hot_cue_frames(&cues, sample_rate);
+        let marks = cue_marks(&cues, sample_rate);
         let pcm = self.preview_audio(id, sample_rate)?.pcm;
         Ok(DeckAudio {
             pcm,
             anchors,
             hot_cues,
+            marks,
         })
     }
 }
@@ -72,13 +87,39 @@ pub fn deck_anchors(anchors: &[GridAnchor], rate: u32) -> Vec<DeckAnchor> {
 /// Hot cues (and hot loops, by their start) in frames at `rate`; memory cues
 /// and fade or load markers are left out.
 pub fn hot_cue_frames(cues: &[Cue], rate: u32) -> Vec<(u8, i64)> {
-    let mut out: Vec<(u8, i64)> = cues
+    hot_cues(cues)
         .iter()
-        .filter(|c| matches!(c.kind, KIND_CUE | KIND_LOOP))
         .filter_map(|c| Some((c.slot?, ms_to_frame(c.start_ms, rate))))
+        .collect()
+}
+
+/// Hot cues sorted by slot, the first of a repeated slot only.
+fn hot_cues(cues: &[Cue]) -> Vec<&Cue> {
+    let mut out: Vec<&Cue> = cues
+        .iter()
+        .filter(|c| c.slot.is_some() && matches!(c.kind, KIND_CUE | KIND_LOOP))
         .collect();
-    out.sort_by_key(|c| c.0);
-    out.dedup_by_key(|c| c.0);
+    out.sort_by_key(|c| c.slot);
+    out.dedup_by_key(|c| c.slot);
+    out
+}
+
+/// The hot cues (as [`hot_cue_frames`], with colour) and then the memory
+/// cues and loops (no slot) by position, in frames at `rate`.
+pub fn cue_marks(cues: &[Cue], rate: u32) -> Vec<CueMark> {
+    let mark = |c: &Cue| CueMark {
+        slot: c.slot,
+        frame: ms_to_frame(c.start_ms, rate),
+        color_rgb: c.color_rgb,
+    };
+    let mut memory: Vec<CueMark> = cues
+        .iter()
+        .filter(|c| c.slot.is_none() && matches!(c.kind, KIND_CUE | KIND_LOOP))
+        .map(mark)
+        .collect();
+    memory.sort_by_key(|m| m.frame);
+    let mut out: Vec<CueMark> = hot_cues(cues).into_iter().map(mark).collect();
+    out.extend(memory);
     out
 }
 
@@ -146,6 +187,34 @@ mod tests {
             hot_cue_frames(&cues, 44_100),
             [(0, 44_122), (2, 88_200)],
             "memory and load cues dropped, a repeated slot keeps the first"
+        );
+    }
+
+    #[test]
+    fn cue_marks_list_hot_cues_with_colour_then_memory_cues_by_position() {
+        let mut red = cue(Some(1), KIND_CUE, 1_000.0);
+        red.color_rgb = Some(0xff_00_00);
+        let cues = [
+            cue(None, KIND_CUE, 3_000.0),
+            red,
+            cue(None, KIND_LOOP, 2_000.0),
+            cue(None, 3, 500.0),
+            cue(Some(0), KIND_LOOP, 4_000.0),
+        ];
+        let mark = |slot, frame, color_rgb| CueMark {
+            slot,
+            frame,
+            color_rgb,
+        };
+        assert_eq!(
+            cue_marks(&cues, 1_000),
+            [
+                mark(Some(0), 4_000, None),
+                mark(Some(1), 1_000, Some(0xff_00_00)),
+                mark(None, 2_000, None),
+                mark(None, 3_000, None),
+            ],
+            "load cue dropped"
         );
     }
 }

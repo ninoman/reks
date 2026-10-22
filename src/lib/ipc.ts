@@ -700,6 +700,14 @@ export interface HotCueView {
   /** 0..7 = A..H. */
   slot: number;
   positionMs: number;
+  /** 0xRRGGBB from the library, null for the deck's default colour. */
+  colorRgb: number | null;
+}
+
+/** A memory cue or loop (by its start). */
+export interface MemoryCueView {
+  positionMs: number;
+  colorRgb: number | null;
 }
 
 export interface DeckLoaded {
@@ -707,6 +715,8 @@ export interface DeckLoaded {
   trackId: number;
   durationMs: number;
   hotCues: HotCueView[];
+  /** By position. */
+  memoryCues: MemoryCueView[];
 }
 
 export type ChannelParam =

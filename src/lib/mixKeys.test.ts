@@ -17,6 +17,8 @@ describe("mixKeyAction", () => {
     expect(mixKeyAction(key("KeyK"), 2)).toEqual({ type: "play", deck: 2 });
     expect(mixKeyAction(key("KeyU"), 2)).toEqual({ type: "nudge", dir: -1, deck: 2 });
     expect(mixKeyAction(key("Digit9"), 2)).toEqual({ type: "hotCue", slot: 2, deck: 2 });
+    expect(mixKeyAction(key("KeyE"), 2)).toEqual({ type: "zoom", dir: -1, deck: 1 });
+    expect(mixKeyAction(key("KeyP"), 2)).toEqual({ type: "zoom", dir: 1, deck: 2 });
   });
 
   it("Shift reaches the outer decks 1 and 4 only when four are shown", () => {
@@ -29,7 +31,7 @@ describe("mixKeyAction", () => {
     expect(mixKeyAction(key("KeyZ"), 2)).toEqual({ type: "crossfader", step: -1 });
     expect(mixKeyAction(key("KeyX"), 2)).toEqual({ type: "crossfader", step: 0 });
     expect(mixKeyAction(key("KeyS", { metaKey: true }), 2)).toBeNull();
-    expect(mixKeyAction(key("KeyP"), 2)).toBeNull();
+    expect(mixKeyAction(key("KeyT"), 2)).toBeNull();
   });
 });
 

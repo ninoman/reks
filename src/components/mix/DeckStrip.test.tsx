@@ -34,7 +34,8 @@ const view = (over: Partial<DeckView> = {}): DeckView => ({
 const loadedMeta = (over: Partial<DeckMeta> = {}): DeckMeta => ({
   ...emptyDeck(),
   track: { id: 7, title: "Dawn", artist: "Ron Trent" },
-  hotCues: [{ slot: 1, positionMs: 4_000 }],
+  hotCues: [{ slot: 1, positionMs: 4_000, colorRgb: null }],
+  memoryCues: [],
   columns: new Uint8Array(0),
   beats: [{ positionUs: 12_000, beatInBar: 1 }],
   ...over,
@@ -55,6 +56,7 @@ function setup(props: Partial<DeckStripProps> = {}) {
       "nudge",
       "setTempo",
       "setTempoRange",
+      "zoom",
       "seek",
       "eject",
       "drop",

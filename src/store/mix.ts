@@ -8,7 +8,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
-
+import { DEFAULT_DECK_ZOOM, stepZoom } from "../lib/deckScroll";
 import {
   audioDevices,
   type BeatMark,
@@ -20,6 +20,7 @@ import {
   type HotCueView,
   libraryTrack,
   type MasterParam,
+  type MemoryCueView,
   type MixConfig,
   type MixControl,
   type MixDeviceOptions,
@@ -56,12 +57,15 @@ export interface DeckMeta {
   loading: DeckTrack | null;
   error: string | null;
   hotCues: HotCueView[];
+  memoryCues: MemoryCueView[];
   /** Waveform columns (4 bytes each), null until fetched. */
   columns: Uint8Array | null;
   beats: BeatMark[] | null;
   /** The waveform or grid could not be fetched (the deck still plays). */
   viewError: string | null;
   tempoRange: TempoRange;
+  /** Scrolling waveform zoom (`DECK_ZOOM_S` index), kept across loads. */
+  zoom: number;
 }
 
 export interface ChannelValues {
@@ -133,6 +137,8 @@ export interface MixStore {
   nudge: (deck: number, dir: -1 | 0 | 1) => void;
   setTempo: (deck: number, ratio: number) => void;
   setTempoRange: (deck: number, range: TempoRange) => void;
+  /** Zooms the deck's scrolling waveform in (1) or out (-1). */
+  zoomDeck: (deck: number, dir: -1 | 1) => void;
   setChannel: <K extends keyof ChannelValues>(
     ch: number,
     param: K,
@@ -154,10 +160,12 @@ export function emptyDeck(): DeckMeta {
     loading: null,
     error: null,
     hotCues: [],
+    memoryCues: [],
     columns: null,
     beats: null,
     viewError: null,
     tempoRange: DEFAULT_TEMPO_RANGE,
+    zoom: DEFAULT_DECK_ZOOM,
   };
 }
 
@@ -374,6 +382,7 @@ export const useMix = create<MixStore>((set, get) => {
           decks: Array.from({ length: DECKS }, (_, i) => ({
             ...emptyDeck(),
             tempoRange: get().decks[i]?.tempoRange ?? DEFAULT_TEMPO_RANGE,
+            zoom: get().decks[i]?.zoom ?? DEFAULT_DECK_ZOOM,
           })),
         });
         for (const c of mixerControls(get())) await mixControl(c);
@@ -429,6 +438,7 @@ export const useMix = create<MixStore>((set, get) => {
           track: meta,
           loading: null,
           hotCues: loaded.hotCues,
+          memoryCues: loaded.memoryCues,
           columns: null,
           beats: null,
           viewError: null,
@@ -455,6 +465,7 @@ export const useMix = create<MixStore>((set, get) => {
       patchDeck(deck, {
         ...emptyDeck(),
         tempoRange: get().decks[deck]?.tempoRange ?? DEFAULT_TEMPO_RANGE,
+        zoom: get().decks[deck]?.zoom ?? DEFAULT_DECK_ZOOM,
       });
       get().send({ type: "unload", deck });
     },
@@ -490,6 +501,10 @@ export const useMix = create<MixStore>((set, get) => {
 
     setTempo(deck, ratio) {
       get().send({ type: "tempo", deck, ratio });
+    },
+
+    zoomDeck(deck, dir) {
+      patchDeck(deck, { zoom: stepZoom(get().decks[deck]?.zoom ?? DEFAULT_DECK_ZOOM, dir) });
     },
 
     setTempoRange(deck, range) {

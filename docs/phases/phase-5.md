@@ -376,6 +376,51 @@ pub enum Control {
       resets.
     Tests: `Knob.test.tsx` (mark angle), `Button` hint rendered from the key
     map (`ui.test.tsx`), `mixKeys.test.ts`, `mix.test.ts` (no VCF in IPC).
+15. [x] **Deck waveforms** (maintainer review, 2026-10-22): sharpness, zoom,
+    cue marks ([`../ui.md`](../ui.md#mix-panel-phase-5)).
+    - Why it looked low-res (measured, not the frame budget: 60 fps with
+      4 decks before and after). Peaks were binned per CSS pixel and drawn
+      as 1-CSS-px bars, so on a 2× screen every bar was two device pixels
+      (half the resolution the columns have: 8 s over a 450 px deck is
+      1.3 columns per device pixel). The bins also moved with the
+      fractional view start each frame, so peaks re-binned and shimmered,
+      and the scroll stepped in whole CSS pixels (2 device px) whenever a
+      ~60 Hz engine state arrived, not on the display's frames. Data was
+      not the cause: the deck already drew the 150/s analysis columns (the
+      PWV5 rate), not the overview.
+    - Fix: the waveform is drawn once into 512-device-pixel tiles on a pixel
+      grid fixed to the track (`src/lib/waveStrip.ts`); each animation frame
+      copies tiles at a whole-device-pixel offset, with beat lines and marks
+      on the same grid (`src/lib/deckScroll.ts`). Canvases are sized to whole
+      device pixels (no resampling). The playhead runs on between engine
+      states at the deck's speed and eases out arrival jitter; a seek, or a
+      stopped deck, snaps. Paused decks don't redraw.
+    - Frame time, headless Chrome at DPR 2, 1440×900, dev mock, 4 decks
+      playing, 5 s: before 60.2 fps, worst frame 16.8 ms, 6.7 ms main thread
+      per frame (whole app: React renders of the 60 Hz state and the mock
+      engine); after 60.2 fps, worst 16.8 ms, 5.6 ms (2 s zoom 5.7 ms, 32 s
+      zoom 5.8 ms), no frame over 20 ms. One deck's waveform per frame:
+      1.6 ms before, 0.9 ms after at twice the pixels (both including a GPU
+      read-back to time it); a new tile costs ~3 ms, every ~0.6 s per deck
+      at the closest zoom. Not yet measured in the Tauri WebView on a
+      Retina screen.
+    - Zoom: 32, 16, 8 (default), 4, 2 s across the view, per deck, kept
+      across loads; − / + on the view, E/R (deck 2) and O/P (deck 3), Shift
+      for decks 1/4, or Cmd/Ctrl + scroll. Past one column per device pixel
+      (4 s and 2 s on a wide deck) levels are interpolated between columns.
+      Skimming the zoomed view follows the zoom.
+    - Marks on both views: hot cues as a flag with the slot letter in the
+      cue's library colour (`deck-hotcue` when it has none), memory cues and
+      loops (by their start) as a triangle on the bottom edge
+      (`deck-memory`), the deck's cue point likewise in `deck-cue`.
+      `mix_load` now returns `hotCues[].colorRgb` and `memoryCues`
+      (`reks-core` `cue_marks`). The active loop draws as a `deck-loop` band
+      from `DeckView.loopRegion` (task 13's field; null on this branch until
+      the engine reports loops, so nothing draws yet).
+    Tests: `cue_marks_list_hot_cues_with_colour_then_memory_cues_by_position`
+    (`deck.rs`), `deckScroll.test.ts`, `waveStrip.test.ts`,
+    `deckMarks.test.ts`, `mixKeys.test.ts`. Checked in headless Chrome with
+    the dev mock only.
 16. **Deck redesign** (maintainer review, 2026-10-22). Depends on tasks 13
     (master handoff, beat jump, beat loop, loop region), 14 (tooltip
     `shortcut`, control polish) and 15 (per-deck zoom, waveform markers);
