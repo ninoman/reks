@@ -183,7 +183,7 @@ export function DeckStrip({
                 cueMs={view.cueMs}
                 hotCues={meta.hotCues}
                 memoryCues={meta.memoryCues}
-                loop={view.loop ?? null}
+                loop={view.loopRegion}
                 zoom={meta.zoom}
                 compact={compact}
                 onSeek={actions.seek}

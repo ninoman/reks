@@ -40,6 +40,7 @@ const idleDeck: DeckView = {
   locked: false,
   quantise: false,
   cuePreview: false,
+  loopRegion: null,
 };
 
 const state = (over: Partial<MixState> = {}): MixState => ({

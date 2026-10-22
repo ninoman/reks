@@ -18,7 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { deckMarks, loopRegion } from "../../lib/deckMarks";
+import { activeLoop, deckMarks } from "../../lib/deckMarks";
 import {
   DECK_ZOOM_S,
   followPlayhead,
@@ -124,8 +124,8 @@ export function DeckWaveform({
     [hotCues, memoryCues, cueMs, tokens],
   );
 
-  const loopStart = loopRegion(loop)?.startMs ?? null;
-  const loopEnd = loopRegion(loop)?.endMs ?? null;
+  const loopStart = activeLoop(loop)?.startMs ?? null;
+  const loopEnd = activeLoop(loop)?.endMs ?? null;
   const inputs = useRef<Inputs | null>(null);
   // Bumped when anything but the playhead changes, so a still deck redraws.
   const version = useRef(0);

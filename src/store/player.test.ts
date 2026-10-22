@@ -32,6 +32,7 @@ const view = (over: Partial<DeckView>): DeckView => ({
   bpm: null,
   beat: null,
   cuePreview: false,
+  loopRegion: null,
   sync: false,
   syncBar: false,
   locked: false,

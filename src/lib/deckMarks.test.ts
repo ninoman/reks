@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { darkText, deckMarks, loopRegion } from "./deckMarks";
+import { activeLoop, darkText, deckMarks } from "./deckMarks";
 
 const colours = { hot: "#00ff00", memory: "#ff0000", cue: "#ffaa00" };
 
@@ -32,11 +32,14 @@ describe("darkText", () => {
   });
 });
 
-describe("loopRegion", () => {
+describe("activeLoop", () => {
   it("is the loop when the engine reports one, else nothing", () => {
-    expect(loopRegion(undefined)).toBeNull();
-    expect(loopRegion(null)).toBeNull();
-    expect(loopRegion({ startMs: 10, endMs: 10 })).toBeNull();
-    expect(loopRegion({ startMs: 10, endMs: 20 })).toEqual({ startMs: 10, endMs: 20 });
+    expect(activeLoop(null)).toBeNull();
+    expect(activeLoop({ startMs: 10, endMs: 10, beats: 1 })).toBeNull();
+    expect(activeLoop({ startMs: 10, endMs: 20, beats: 1 })).toEqual({
+      startMs: 10,
+      endMs: 20,
+      beats: 1,
+    });
   });
 });

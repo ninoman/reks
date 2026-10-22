@@ -60,7 +60,7 @@ export function darkText(hex: string): boolean {
 }
 
 /** The active loop, if the engine reports one with a positive length. */
-export function loopRegion(loop: LoopView | null | undefined): LoopView | null {
+export function activeLoop(loop: LoopView | null): LoopView | null {
   return loop != null && loop.endMs > loop.startMs ? loop : null;
 }
 

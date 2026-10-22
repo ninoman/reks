@@ -654,8 +654,16 @@ export interface DeckView {
   /** Following the leader's tempo and phase. */
   locked: boolean;
   quantise: boolean;
-  /** The active loop; absent until the engine reports loops (phase 5 task 13). */
-  loop?: LoopView | null;
+  /** The active beat loop; null when not looping. */
+  loopRegion: LoopView | null;
+}
+
+/** An active beat loop, in ms of the track. */
+export interface LoopView {
+  startMs: number;
+  /** Where playback jumps back to `startMs`. */
+  endMs: number;
+  beats: number;
 }
 
 /** A peak meter: `level` linear (1 = 0 dBFS); `clip` reached 0 dBFS since the last state. */
@@ -702,12 +710,6 @@ export interface DeckLoaded {
   hotCues: HotCueView[];
   /** By position. */
   memoryCues: MemoryCueView[];
-}
-
-/** An active loop on a deck, in ms. */
-export interface LoopView {
-  startMs: number;
-  endMs: number;
 }
 
 export type ChannelParam =

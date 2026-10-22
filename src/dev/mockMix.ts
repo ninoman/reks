@@ -44,6 +44,7 @@ function emptyDeck(): Deck {
       syncBar: false,
       locked: false,
       quantise: true,
+      loopRegion: null,
     },
     grid: false,
     hotCues: [],

@@ -55,7 +55,7 @@ export interface Inputs {
   tokens: Tokens | null;
   beats: BeatMark[] | null;
   marks: DeckMark[];
-  loop: LoopView | null;
+  loop: Pick<LoopView, "startMs" | "endMs"> | null;
   seconds: number;
   durationMs: number;
 }

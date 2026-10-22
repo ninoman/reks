@@ -351,8 +351,8 @@ pub enum Control {
       (`deck-memory`), the deck's cue point likewise in `deck-cue`.
       `mix_load` now returns `hotCues[].colorRgb` and `memoryCues`
       (`reks-core` `cue_marks`). The active loop draws as a `deck-loop` band
-      from an optional `DeckView.loop { startMs, endMs }`; until the engine
-      reports it (task 13) the field is absent and nothing draws.
+      from `DeckView.loopRegion` (task 13's field; null on this branch until
+      the engine reports loops, so nothing draws yet).
     Tests: `cue_marks_list_hot_cues_with_colour_then_memory_cues_by_position`
     (`deck.rs`), `deckScroll.test.ts`, `waveStrip.test.ts`,
     `deckMarks.test.ts`, `mixKeys.test.ts`. Checked in headless Chrome with

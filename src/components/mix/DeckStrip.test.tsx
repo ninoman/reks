@@ -26,6 +26,7 @@ const view = (over: Partial<DeckView> = {}): DeckView => ({
   locked: false,
   quantise: true,
   cuePreview: false,
+  loopRegion: null,
   ...over,
 });
 
