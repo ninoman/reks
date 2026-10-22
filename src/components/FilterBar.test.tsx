@@ -14,6 +14,9 @@ function notation(keyNotation: "classical" | "camelot" | "openKey") {
   useSettings.setState({
     settings: {
       audioDevice: null,
+      audioSampleRate: null,
+      audioBufferFrames: null,
+      audioCue: null,
       keyNotation,
       deckWaveform: "threeBand",
       syncAlign: "bar",

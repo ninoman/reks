@@ -251,6 +251,9 @@ describe("useExportWizard", () => {
   it("opens with the analysis setting and saves a change to it", async () => {
     const settings = {
       audioDevice: null,
+      audioSampleRate: null,
+      audioBufferFrames: null,
+      audioCue: null,
       keyNotation: "classical",
       deckWaveform: "threeBand",
       syncAlign: "bar",

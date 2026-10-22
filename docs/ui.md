@@ -498,7 +498,7 @@ re-queries. Pure helpers (coverage, search, create offers) are in
 [`tagModel.ts`](../src/store/tagModel.ts).
 
 - `TagDrawer`: a `Sheet` on the right, over the info panel (toolbar tag
-  button, sidebar "My Tags" row, "Manage tags…", the info panel's "Edit
+  button, "Manage tags…", the info panel's "Edit
   tags"). Attach and manage in one place: a checkbox per tag for the main
   list's selection, following it live (`tagTargets.ts`; mixed when only some
   tracks have it; no checkboxes with nothing selected), names shown as text that a click turns into a field
