@@ -1,11 +1,14 @@
 //! Mixer commands (Phase 5 task 8): start and stop the `reks-mix` engine,
-//! load library tracks onto decks, forward controls, and stream the engine
+//! load library tracks or a plugged-in stick's tracks onto decks, forward controls, and stream the engine
 //! state to the UI on a `Channel` at about 60 Hz, and edit the loaded
 //! track's cues (task 17). Decoding and grid conversion live in
-//! `reks_core::deck`, cue rows in `reks_core::cue`, the engine in
+//! `reks_core::deck` (`reks_export_rb::browse` for stick tracks), cue rows in
+//! `reks_core::cue`, the engine in
 //! `reks_mix`. This file only maps between their types and the UI's serde
 //! shapes.
 
+use std::fmt::Display;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -41,9 +44,27 @@ struct MixSlot {
 
 #[derive(Debug, Clone)]
 struct LoadedDeck {
-    track_id: TrackId,
+    track: DeckTrack,
     /// The engine's source, for where a cue set at the head goes.
     src: Arc<DeckSource>,
+}
+
+/// Where a deck's track comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeckTrack {
+    Library(TrackId),
+    /// Played off a plugged-in stick, with the stick's grid and cues; those
+    /// are the stick's, so they can't be edited here.
+    Stick,
+}
+
+impl DeckTrack {
+    fn library_id(self) -> Option<TrackId> {
+        match self {
+            DeckTrack::Library(id) => Some(id),
+            DeckTrack::Stick => None,
+        }
+    }
 }
 
 impl MixSlot {
@@ -229,7 +250,7 @@ fn snapshot(slot: &mut MixSlot) -> Option<MixState> {
     let ids = slot
         .decks
         .each_ref()
-        .map(|d| d.as_ref().map(|l| l.track_id));
+        .map(|d| d.as_ref().and_then(|l| l.track.library_id()));
     let engine = slot.engine.as_mut()?;
     let st = engine.poll_state();
     let info = engine.info();
@@ -335,7 +356,8 @@ pub fn mix_stop(state: State<'_, AppState>) -> CmdResult<()> {
 #[serde(rename_all = "camelCase")]
 pub struct DeckLoaded {
     pub deck: u8,
-    pub track_id: TrackId,
+    /// `None` for a stick track.
+    pub track_id: Option<TrackId>,
     pub duration_ms: f64,
     /// Hot cues set on the deck.
     pub hot_cues: Vec<HotCueView>,
@@ -407,15 +429,48 @@ fn deck_index(deck: u8) -> CmdResult<usize> {
     }
 }
 
-/// Decodes track `id` at the engine rate on a worker thread, builds its deck
-/// source there, then loads it on `deck` (stopped at the start) unless a
-/// newer load for that deck came in meanwhile. Returns `None` then.
+/// Decodes library track `id` and loads it on `deck` ([`load_deck`]).
 #[tauri::command]
 pub async fn mix_load(
     state: State<'_, AppState>,
     deck: u8,
     id: TrackId,
 ) -> CmdResult<Option<DeckLoaded>> {
+    load_deck(&state, deck, DeckTrack::Library(id), move |lib, rate| {
+        lib.deck_audio(id, rate)
+    })
+    .await
+}
+
+/// Decodes track `track_id` of the stick at `mount_point` and loads it on
+/// `deck` ([`load_deck`]), with the grid and cues of the stick's ANLZ files.
+#[tauri::command]
+pub async fn mix_load_stick(
+    state: State<'_, AppState>,
+    deck: u8,
+    mount_point: PathBuf,
+    track_id: u32,
+) -> CmdResult<Option<DeckLoaded>> {
+    load_deck(&state, deck, DeckTrack::Stick, move |_, rate| {
+        reks_export_rb::browse::deck_audio(&mount_point, track_id, rate)
+    })
+    .await
+}
+
+/// Decodes a track with `decode` at the engine rate on a worker thread,
+/// builds its deck source there, then loads it on `deck` (stopped at the
+/// start) unless a newer load for that deck came in meanwhile. Returns
+/// `None` then.
+async fn load_deck<E, F>(
+    state: &State<'_, AppState>,
+    deck: u8,
+    track: DeckTrack,
+    decode: F,
+) -> CmdResult<Option<DeckLoaded>>
+where
+    E: Display + Send + 'static,
+    F: FnOnce(&Library, u32) -> Result<DeckAudio, E> + Send + 'static,
+{
     let i = deck_index(deck)?;
     let (generation, rate) = {
         let mut s = lock(&state.mix)?;
@@ -423,10 +478,10 @@ pub async fn mix_load(
         s.generation[i] += 1;
         (s.generation[i], rate)
     };
-    let (src, (hot_cues, memory_cues)) = blocking(&state, move |lib| {
-        let audio = lib.deck_audio(id, rate)?;
+    let (src, (hot_cues, memory_cues)) = blocking(state, move |lib| {
+        let audio = decode(lib, rate)?;
         let views = cue_views(&audio.marks, rate);
-        Ok::<_, reks_core::Error>((Arc::new(deck_source(audio)), views))
+        Ok::<_, E>((Arc::new(deck_source(audio)), views))
     })
     .await?;
     let mut s = lock(&state.mix)?;
@@ -439,10 +494,10 @@ pub async fn mix_load(
         deck,
         src: Arc::clone(&src),
     })?;
-    s.decks[i] = Some(LoadedDeck { track_id: id, src });
+    s.decks[i] = Some(LoadedDeck { track, src });
     Ok(Some(DeckLoaded {
         deck,
-        track_id: id,
+        track_id: track.library_id(),
         duration_ms,
         hot_cues,
         memory_cues,
@@ -537,7 +592,15 @@ pub async fn mix_cue_edit(
     let (id, generation, rate, at, looping) = {
         let mut s = lock(&state.mix)?;
         let (id, src) = match &s.decks[i] {
-            Some(l) => (l.track_id, Arc::clone(&l.src)),
+            Some(LoadedDeck {
+                track: DeckTrack::Library(id),
+                src,
+            }) => (*id, Arc::clone(src)),
+            Some(_) => {
+                return Err(CmdError(
+                    "The cues of a track on a stick can't be changed here.".into(),
+                ))
+            }
             None => return Err(CmdError(format!("deck {} is empty", i + 1))),
         };
         let generation = s.generation[i];

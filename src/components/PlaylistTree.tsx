@@ -22,7 +22,7 @@ import { usePlaylists } from "../store/playlists";
 import { visibleNodes } from "../store/playlistTree";
 import { useRules } from "../store/rules";
 import { Disclosure } from "./Disclosure";
-import { InfoIcon, PlusIcon } from "./icons";
+import { FolderIcon, InfoIcon, PlaylistIcon, PlusIcon } from "./icons";
 import { DISCLOSURE, ICON, INDENT, NAME, PAD, ROW } from "./treeStyles";
 import {
   ContextMenu,
@@ -318,32 +318,6 @@ function CollectionIcon() {
   );
 }
 
-function FolderIcon() {
-  return (
-    <svg className={ICON} viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-      <path d="M1 3.5h5l1.5 1.5H15v8.5H1z" fill="currentColor" />
-    </svg>
-  );
-}
-
-function PlaylistIcon() {
-  return (
-    <svg className={ICON} viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-      <rect
-        x="2"
-        y="1.5"
-        width="12"
-        height="13"
-        rx="1"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-      />
-      <path d="M4.5 5h7M4.5 8h7M4.5 11h7" stroke="currentColor" strokeWidth="1.3" />
-    </svg>
-  );
-}
-
 /** A playlist whose tracks follow rules: the list icon with a spark. */
 function SmartPlaylistIcon() {
   return (
@@ -424,7 +398,13 @@ function TreeRow({
       ) : (
         <span className={DISCLOSURE} />
       )}
-      {node.isFolder ? <FolderIcon /> : node.smart ? <SmartPlaylistIcon /> : <PlaylistIcon />}
+      {node.isFolder ? (
+        <FolderIcon className={ICON} />
+      ) : node.smart ? (
+        <SmartPlaylistIcon />
+      ) : (
+        <PlaylistIcon className={ICON} />
+      )}
       {draft === null ? (
         <>
           <span className={NAME}>{node.name}</span>

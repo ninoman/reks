@@ -39,6 +39,7 @@ import type {
   TrackRow,
 } from "../lib/ipc";
 import { mockAdopt } from "./mockAdopt";
+import { mockBrowse } from "./mockBrowse";
 import { mockGrid } from "./mockGrid";
 import { mockHistory } from "./mockHistory";
 import { mockMix } from "./mockMix";
@@ -1215,6 +1216,7 @@ mockIPC((cmd, payload) => {
       return (
         history(cmd, args) ??
         mockAdopt(cmd, args) ??
+        mockBrowse(cmd, args, TRACKS) ??
         mockGrid(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
         mockMix(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
         null

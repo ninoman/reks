@@ -3,9 +3,9 @@
  * it the deck section, as in rekordbox and Traktor: the player bar (deck
  * layout, output status, volume, output device), then the player deck alone
  * (1 deck, D30) or the mix panel (2 or 4 decks and the mixer, with its own
- * shortcuts, `src/lib/mixKeys.ts`). Below that the library: the playlist and
- * Histories trees on the left (an open history session replaces the
- * toolbar, filters and table); toolbar, filter bar and track table in the
+ * shortcuts, `src/lib/mixKeys.ts`). Below that the library: the playlist,
+ * Devices and Histories trees on the left (an open stick list or history
+ * session replaces the toolbar, filters and table); toolbar, filter bar and track table in the
  * middle, with Shift+clicked playlists split under it (`TrackLists`) and the
  * track info panel and the My Tags drawer sliding over the tables' right edge
  * when their toolbar buttons are on. Space plays and pauses the player deck
@@ -20,6 +20,7 @@ import { AppHeader } from "./components/AppHeader";
 import { ConvertDialog } from "./components/ConvertDialog";
 import { DEFAULT_HIDDEN } from "./components/columns";
 import { DevicesDialog } from "./components/DevicesDialog";
+import { DeviceTree } from "./components/DeviceTree";
 import { ExportWizard } from "./components/ExportWizard";
 import { FilterBar } from "./components/FilterBar";
 import { HistoryImportDialog } from "./components/HistoryImportDialog";
@@ -34,12 +35,14 @@ import { PlaylistTree } from "./components/PlaylistTree";
 import { RuleBuilder } from "./components/RuleBuilder";
 import { SessionView } from "./components/SessionView";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { StickListView } from "./components/StickListView";
 import { ToastHost } from "./components/ToastHost";
 import { TrackLists } from "./components/TrackLists";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
 import { keepsSpace, PLAYER_PLAY_KEY, waveZoomKey } from "./lib/keys";
 import { dismissSplash } from "./lib/splash";
 import { useAnalysis } from "./store/analysis";
+import { useDeviceBrowser } from "./store/deviceBrowser";
 import { useHistory } from "./store/history";
 import { useLibrary } from "./store/library";
 import { useMix } from "./store/mix";
@@ -59,6 +62,7 @@ export default function App() {
   const error = useLibrary((s) => s.error);
   const filterBarOpen = usePanels((s) => s.filterBarOpen);
   const sessionOpen = useHistory((s) => s.openId !== null);
+  const stickListOpen = useDeviceBrowser((s) => s.open !== null);
   const mixOpen = usePanels((s) => s.mixOpen);
   const rulesOpen = useRules((s) => s.open);
   useMixShortcuts(mixOpen);
@@ -127,10 +131,13 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-(--sidebar-w) shrink-0 flex-col border-r border-border bg-bg-subtle">
           <PlaylistTree />
+          <DeviceTree />
           <HistoryTree />
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
-          {sessionOpen ? (
+          {stickListOpen ? (
+            <StickListView />
+          ) : sessionOpen ? (
             <SessionView />
           ) : (
             <>

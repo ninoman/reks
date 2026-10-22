@@ -34,7 +34,7 @@ import { shownDecks } from "../lib/mixView";
 import { useAnalysis } from "../store/analysis";
 import { useConverter } from "../store/converter";
 import { entryPosition, itemAt, type ViewItem, viewCount } from "../store/library";
-import { useMix } from "../store/mix";
+import { libraryRef, useMix } from "../store/mix";
 import { usePanels } from "../store/panels";
 import { playTrack, usePlayerTrackId } from "../store/player";
 import { shownPlaylist, usePlaylists } from "../store/playlists";
@@ -205,7 +205,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
 
   /** Double-click or Enter: a track plays, a divider is renamed. */
   function activate(item: ViewItem) {
-    if (item.kind === "track") void playTrack(item.row);
+    if (item.kind === "track") void playTrack(libraryRef(item.row));
     else if (view !== null)
       usePlaylists
         .getState()
@@ -238,7 +238,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
     const first = selectedItems().find((i) => i.kind === "track");
     if (first?.kind !== "track") return;
     usePanels.getState().setMixOpen(true);
-    void useMix.getState().load(deck, first.row);
+    void useMix.getState().load(deck, libraryRef(first.row));
   }
 
   function removeSelected() {

@@ -974,6 +974,43 @@ Date of decisions: 2026-10-18.
   removes the minute limit for standard runners and would make this decision
   unnecessary.
 
+## D32. Browsing a plugged-in stick and playing its tracks off it
+
+- Date: 2026-10-22 (maintainer's request; outside the phase plan). Extends D30.
+- Decision: the sidebar has a **Devices** section above the Histories: every
+  drive the OS reports as removable, each with the playlists (folders kept)
+  and the play-history sessions its `export.pdb` holds
+  ([`reks_export_rb::browse`](../crates/reks-export-rb/src/browse.rs)). A
+  list opens in the main area; its tracks play on the player deck **straight
+  off the stick** (`mix_load_stick`), not through a library match, with the
+  grid (`PQTZ`, one anchor per tempo run) and hot and memory cues (`PCO2` in
+  the `.EXT`, else `PCOB`) of the stick's own ANLZ files, so a stick made by
+  rekordbox or by reks plays as a player would show it. A track with no or
+  unreadable ANLZ plays without a grid or cues. The deck's waveform is read
+  from the stick too ([`deckwave`](../crates/reks-anlz/src/deckwave.rs)):
+  `PWV7` bands and `PWV3` height turned back into deck columns by inverting
+  our calibrated encoders (detail curves, `PWVC` gains, height curve), so it
+  draws at once. Without a `.2EX` (rekordbox before 6) it is computed from
+  the audio, as for a library track.
+- Read-only: nothing writes to the stick; a stick track's cues can't be
+  edited (`mix_cue_edit` refuses them) and it is never queued for analysis.
+  Paths with `..` in a stick's PDB are refused. OneLibrary-only sticks
+  (no `export.pdb`) show "No rekordbox library".
+- Rejected: always computing the waveform from the audio (a second full
+  decode, seconds per track; the maintainer chose speed over exactness);
+  playing the matched library copy instead (a friend's stick would mostly not play, and
+  the grid and cues shown would not be the stick's).
+- Risks: the read-back waveform is approximate: bands come back as the
+  encoder's peak-hold envelope (slower decays), and rekordbox's scaling is
+  only our fitted model. On rekordbox 7.2.19's click-track export the mean
+  error against the waveform computed from the audio is 9% / 5% / 1% / 0.3%
+  of full scale (low / mid / high / mono), the low band smeared between
+  clicks. Reading `export.pdb` is strict ([`pdbread`](../crates/reks-export-rb/src/pdbread.rs)):
+  one damaged row and the drive shows an error instead of its lists. Checked
+  against rekordbox 7.2.19's reference export (`fixtures/onelibrary/ref-7.2.19`)
+  and synthetic PDBs; a stick written by a player's history logging is
+  **UNVERIFIED** beyond the history tests.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

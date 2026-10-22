@@ -746,7 +746,8 @@ export type CueEdit =
 
 export interface DeckLoaded {
   deck: number;
-  trackId: number;
+  /** Null for a stick track. */
+  trackId: number | null;
   durationMs: number;
   hotCues: HotCueView[];
   /** By position. */
@@ -831,6 +832,18 @@ export function mixStop(): Promise<void> {
 /** Decodes and loads track `id` on `deck`; null when a newer load for the deck won. */
 export function mixLoad(deck: number, id: number): Promise<DeckLoaded | null> {
   return invoke("mix_load", { deck, id });
+}
+
+/**
+ * Decodes track `trackId` of the stick at `mountPoint` and loads it on `deck` with the
+ * stick's grid and cues (read-only); null when a newer load for the deck won.
+ */
+export function mixLoadStick(
+  deck: number,
+  mountPoint: string,
+  trackId: number,
+): Promise<DeckLoaded | null> {
+  return invoke("mix_load_stick", { deck, mountPoint, trackId });
 }
 
 export function mixControl(control: MixControl): Promise<void> {
@@ -959,6 +972,65 @@ export function devicesList(): Promise<DeviceInfo[]> {
 /** Unmounts and ejects the removable volume at `mountPoint`. */
 export function deviceEject(mountPoint: string): Promise<void> {
   return invoke("device_eject", { mountPoint });
+}
+
+// Browsing a plugged-in stick (`reks_export_rb::browse`); read-only.
+
+/** A track row of the stick's `export.pdb`. */
+export interface StickTrack {
+  /** The PDB row id; unique per stick only. */
+  id: number;
+  title: string;
+  artist: string | null;
+  album: string | null;
+  genre: string | null;
+  bpmX100: number | null;
+  key: Key | null;
+  durationMs: number | null;
+  /** `/`-separated from the stick root. */
+  stickPath: string;
+}
+
+export interface StickPlaylist {
+  id: number;
+  /** Null at the root. */
+  parentId: number | null;
+  name: string;
+  isFolder: boolean;
+  /** In entry order. */
+  trackIds: number[];
+}
+
+/** A session a player logged on the stick. */
+export interface StickSession {
+  id: number;
+  /** `HISTORY 001`, … */
+  name: string;
+  /** In play order; may name tracks the stick no longer has. */
+  trackIds: number[];
+}
+
+export interface StickLibrary {
+  tracks: StickTrack[];
+  /** Siblings in player order, parents before children. */
+  playlists: StickPlaylist[];
+  /** Oldest first. */
+  histories: StickSession[];
+}
+
+/** The library on the stick at `mountPoint`; null when it has no `export.pdb`. */
+export function deviceLibrary(mountPoint: string): Promise<StickLibrary | null> {
+  return invoke("device_library", { mountPoint });
+}
+
+/** A stick track's grid from its ANLZ files (`source` `stick`, locked). */
+export function deviceBeatgrid(mountPoint: string, trackId: number): Promise<Beatgrid> {
+  return invoke("device_beatgrid", { mountPoint, trackId });
+}
+
+/** A stick track's waveform columns, laid out as `waveformColumns`. */
+export function deviceWaveformColumns(mountPoint: string, trackId: number): Promise<ArrayBuffer> {
+  return invoke("device_waveform_columns", { mountPoint, trackId });
 }
 
 /** Player family the export is checked against (`TargetProfile`). */
