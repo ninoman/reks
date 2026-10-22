@@ -1,6 +1,6 @@
 /**
- * Filter unit X or Y: FREQ, RESONANCE, HP / BP / LP, ON, and on Y the LINK to X's FREQ. A click picks one mode; Shift+click combines
- * modes (`pickSwitches`).
+ * Filter unit X or Y: FREQ, RESONANCE, HP / BP / LP, ON. A click picks one mode; Shift+click
+ * combines modes (`pickSwitches`).
  */
 import type { FilterUnit as Unit } from "../../lib/ipc";
 import { pickSwitches } from "../../lib/mixView";
@@ -27,18 +27,6 @@ const MODES: [Mode, string, string][] = [
 
 export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
   const name = `Filter ${unit.toUpperCase()}`;
-  const toggle = (param: "on" | "link", text: string, spoken: string) => (
-    <Button
-      key={param}
-      variant="control"
-      size="xs"
-      aria-pressed={values[param]}
-      aria-label={`${name} ${spoken}`}
-      onClick={() => onChange(param, !values[param])}
-    >
-      {text}
-    </Button>
-  );
   const pickMode = (i: number, additive: boolean) => {
     const was = MODES.map(([p]) => values[p]);
     pickSwitches(was, i, additive, true).forEach((on, j) => {
@@ -50,7 +38,15 @@ export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
     <section aria-label={name} className="flex flex-col items-center gap-1.5">
       <div className="flex items-center gap-1.5">
         <Caption tone="default">{name}</Caption>
-        {toggle("on", "On", "on")}
+        <Button
+          variant="control"
+          size="xs"
+          aria-pressed={values.on}
+          aria-label={`${name} on`}
+          onClick={() => onChange("on", !values.on)}
+        >
+          On
+        </Button>
       </div>
       <div className="flex items-end gap-2">
         <LabelledKnob
@@ -83,7 +79,6 @@ export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
           </Tooltip>
         ))}
       </div>
-      {unit === "y" && <div className="flex gap-0.5">{toggle("link", "Link", "linked to X")}</div>}
     </section>
   );
 }

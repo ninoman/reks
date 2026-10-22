@@ -594,7 +594,6 @@ mod tests {
                     F::BandPass,
                     F::LowPass,
                     F::On,
-                    F::Link,
                 ] {
                     r.controls
                         .push(Control::Filter {

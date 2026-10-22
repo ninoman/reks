@@ -628,7 +628,6 @@ pub enum FilterParamArg {
     BandPass,
     LowPass,
     On,
-    Link,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -805,7 +804,6 @@ impl MixControl {
                     FilterParamArg::BandPass => F::BandPass,
                     FilterParamArg::LowPass => F::LowPass,
                     FilterParamArg::On => F::On,
-                    FilterParamArg::Link => F::Link,
                 },
                 value,
             },
@@ -908,10 +906,10 @@ mod tests {
             }
         ));
         assert!(matches!(
-            parse(r#"{"type":"filter","unit":"y","param":"link","value":1}"#),
+            parse(r#"{"type":"filter","unit":"y","param":"highPass","value":1}"#),
             reks_mix::Control::Filter {
                 unit: reks_mix::FilterUnit::Y,
-                param: reks_mix::FilterParam::Link,
+                param: reks_mix::FilterParam::HighPass,
                 ..
             }
         ));

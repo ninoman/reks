@@ -228,8 +228,6 @@ pub enum FilterParam {
     BandPass,
     LowPass,
     On,
-    /// Y follows X's FREQ (unit Y only).
-    Link,
 }
 
 /// A master section control.

@@ -77,8 +77,8 @@ change every sample. 2-pole; the hardware slope is **UNVERIFIED** (R§9.1).
   "all-pass effect"); BP alone has unity peak gain. No mode selected passes the
   signal rather than muting it (our choice).
 - ON crossfades between dry and filtered; the SVF keeps running while off.
-- `FilterPanel::effective_freq` (pure): LINK makes Y follow X's FREQ. (VCF TO
-  XFADER was removed 2026-10-22, maintainer: unused.)
+- Each unit has its own FREQ. VCF TO XFADER and LINK were removed
+  2026-10-22 (maintainer: unused).
 - Deviation: the guide says resonance is "flattest at about two o'clock",
   so on the hardware MILD is probably overdamped. We make MILD the flat
   (Butterworth) setting so the set cutoff is the −3 dB point at minimum
@@ -113,11 +113,9 @@ sum → master level × preview volume → [master meter] → safety limiter →
   heard, and starts from cleared state.
 - FILTER and XFADE assigns are three smoothed weights (dry/X/Y,
   X/direct/Y), so moving a switch crossfades; filter modes and ON are
-  smoothed inside the filter. LINK sets Y's cutoff once a
-  block, and the filter smooths it.
+  smoothed inside the filter, and so is FREQ.
 - Switch values arrive as knob values: assigns X below 1/3, Y above 2/3,
-  else off; on/off switches on from 0.5. LINK is a panel switch, taken from
-  either unit's control.
+  else off; on/off switches on from 0.5.
 - Start state: every channel flat with its fader up, XFADE assign off,
   FILTER assign X for channels 1–2 and Y for 3–4 with both units off
   (an off unit returns its input exactly), master up, so a single deck (the library's player, D30) plays through bit for
@@ -204,6 +202,6 @@ above; the limiter ceiling with trim at +10 dB into a maximum-resonance LP
 and HP swept 30 Hz → 20 kHz → 30 Hz at 44.1, 48 and 96 kHz (master meter
 above +12 dB); assign, filter-mode and ON switches on a 50 Hz tone with no
 frame-to-frame step above 0.01; LO kill, fader taper and master level;
-LINK; meters and clip latches. The engine's allocation
+each unit's own FREQ; meters and clip latches. The engine's allocation
 guard test sends every mixer control while both filter units and the
 assigns move.

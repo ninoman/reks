@@ -37,10 +37,8 @@ describe("MixerPanel", () => {
     expect(screen.getByRole("region", { name: "Filter X" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Filter Y" })).toBeTruthy();
     expect(screen.getByRole("slider", { name: "Crossfader" })).toBeTruthy();
-    // LINK is on Y only.
-    expect(screen.queryByRole("button", { name: "Filter X linked to X" })).toBeNull();
     expect(screen.queryByText("VCF")).toBeNull();
-    expect(screen.getByRole("button", { name: "Filter Y linked to X" })).toBeTruthy();
+    expect(screen.queryByText("Link")).toBeNull();
   });
 
   it("forwards switches as typed changes", () => {

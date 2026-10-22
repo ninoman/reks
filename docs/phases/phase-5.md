@@ -33,8 +33,8 @@ speakers. It is a preparation tool. Nothing here is meant for playing a gig.
   - FILTER assign (X / off / Y), XFADE assign (X / off = direct / Y), CUE,
     channel fader.
   - Two state-variable filters, X and Y: FREQ 30 Hz–20 kHz, HP/BP/LP in any
-    combination, RESONANCE mild to wild, ON. No LFOs (D21). LINK (Y follows X's FREQ).
-    VCF TO XFADER was dropped (task 14).
+    combination, RESONANCE mild to wild, ON. No LFOs (D21). VCF TO XFADER and
+    LINK were dropped (task 14).
   - Crossfader with curve: progressive with a 4 dB centre dip, through to a
     near-instant cut.
   - Master level; channel and master meters; a safety limiter on master and
@@ -149,10 +149,10 @@ pub enum Control {
    tolerances in [`../mixer-dsp.md`](../mixer-dsp.md).
 5. [x] **Filters**: two state-variable filters (trapezoidal SVF from the
    published papers, our own code), mode combinations, resonance taper,
-   LINK (VCF TO XFADER was built here and removed in task 14). Tests: −3 dB at the set
+   LINK and VCF TO XFADER (both built here and removed in task 14). Tests: −3 dB at the set
    cutoff for LP and HP at minimum resonance; stable at maximum resonance across
    30 Hz–20 kHz at 44.1, 48 and 96 kHz. Done: `dsp::filter` (`Filter`, `FilterPanel`
-   for LINK), wired in task 6; MILD is Butterworth, not the
+   for LINK, since removed), wired in task 6; MILD is Butterworth, not the
    hardware's likely overdamped setting ([`../mixer-dsp.md`](../mixer-dsp.md)).
    2026-10-21 (maintainer's testing): resonance halved to Q 0.707–10 (WILD
    +20 dB, was +26 dB) on a v² curve (noon +2.7 dB); a test pins the knob
@@ -368,8 +368,11 @@ pub enum Control {
       in `ui/Knob.tsx` (`knobMark`), so every knob has it.
     - **VCF TO XFADER removed** (maintainer: unused, removed 2026-10-22): the
       toggle, `FilterParam::VcfToXfader`, `vcfToXfader` in IPC and store, the
-      block-rate cutoff logic (`FilterPanel::effective_freq` now only applies
-      LINK) and `Crossfader::pos`. No decision in `decisions.md` named it.
+      block-rate cutoff logic and `Crossfader::pos`. No decision in
+      `decisions.md` named it.
+    - **LINK removed** (maintainer: unused, removed 2026-10-22): the Y toggle,
+      `FilterParam::Link`, `link` in IPC and store, and `FilterPanel`; FREQ
+      now goes straight to each unit's filters.
     - Shortcut hints: `Button` takes `shortcut` and shows it in a tooltip on
       hover/focus ("Play · S"). The text comes from `mixKeys.ts`
       (`mixKeyLabel`), so a key and its hint cannot drift apart. Applied to
@@ -559,8 +562,8 @@ Record machine, OS, audio device, date and outcome in a "Mixer" table in
 2. Four decks layered (kick from one, hats from another with LO killed, etc.):
    no dropouts while moving every control.
 3. LO kill removes the kick; HI kill leaves the body; mid cut is deep, not total.
-4. Filter X LP on channel 1, filter Y HP on channel 2, LINK on: sweeping FREQ
-   swaps lows and highs smoothly.
+4. Filter X LP on channel 1, filter Y HP on channel 2: sweeping each FREQ
+   moves only its own unit, smoothly.
 5. Maximum resonance while sweeping FREQ: the limiter catches
    peaks, nothing harsh on headphones.
 6. 4-output interface: master on 1/2, cue on 3/4. Laptop output: split cue on

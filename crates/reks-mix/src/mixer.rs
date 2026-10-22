@@ -5,7 +5,7 @@
 
 use crate::control::{Control, CueRouting, FilterParam, FilterUnit, MasterParam};
 use crate::cue::CueBus;
-use crate::dsp::filter::{FilterModes, FilterPanel};
+use crate::dsp::filter::FilterModes;
 use crate::dsp::level::MasterLevel;
 use crate::dsp::limiter::Limiter;
 use crate::dsp::meter::PeakMeter;
@@ -39,7 +39,6 @@ fn switch(value: f32) -> bool {
 #[derive(Debug, Clone)]
 pub(crate) struct Mixer {
     strips: [Strip; DECKS],
-    panel: FilterPanel,
     modes: [FilterModes; 2],
     xfader: Crossfader,
     xgains: [XfadeGains; BLOCK],
@@ -67,11 +66,6 @@ impl Mixer {
         };
         Self {
             strips: std::array::from_fn(|ch| Strip::new(sample_rate, default_filter_assign(ch))),
-            panel: FilterPanel {
-                freq_x: 1.0,
-                freq_y: 1.0,
-                link: false,
-            },
             modes: [lp; 2],
             xfader: Crossfader::new(sample_rate),
             xgains: [XfadeGains { x: 1.0, y: 1.0 }; BLOCK],
@@ -123,12 +117,11 @@ impl Mixer {
             FilterUnit::Y => 1,
         };
         match param {
-            FilterParam::Freq => match unit {
-                FilterUnit::X => self.panel.freq_x = value,
-                FilterUnit::Y => self.panel.freq_y = value,
-            },
-            // A panel switch: either unit's control sets it.
-            FilterParam::Link => self.panel.link = switch(value),
+            FilterParam::Freq => {
+                for s in &mut self.strips {
+                    s.filter_mut(unit).set_freq(value);
+                }
+            }
             FilterParam::Resonance => {
                 for s in &mut self.strips {
                     s.filter_mut(unit).set_resonance(value);
@@ -186,12 +179,6 @@ impl Mixer {
     ) {
         let n = out.len();
         let frames = n / 2;
-        // LINK moves Y's cutoff once a block; the filters smooth it.
-        let (fx, fy) = self.panel.effective_freq();
-        for s in &mut self.strips {
-            s.filter_mut(FilterUnit::X).set_freq(fx);
-            s.filter_mut(FilterUnit::Y).set_freq(fy);
-        }
         for g in &mut self.xgains[..frames] {
             *g = self.xfader.tick();
         }

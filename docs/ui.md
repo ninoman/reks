@@ -287,7 +287,7 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   Each meter subscribes to its own lit-LED count (`useMeter`,
   `mix/LiveMeter`), so it renders only when an LED changes and the memoised
   mixer still skips the 60 Hz renders.
-- Mixer switches (CUE, filter ON/HP/BP/LP/LINK, SPLIT, POST EQ) are
+- Mixer switches (CUE, filter ON/HP/BP/LP, SPLIT, POST EQ) are
   `Button variant="control"` and the assign switches `SegmentedControl
   variant="control"`: when on they are lit (`lit` fill, `lit-fg` text,
   `shadow-lit` glow), the same look for every hardware-style switch.
