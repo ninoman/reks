@@ -437,7 +437,6 @@ pub enum FilterParamArg {
     BandPass,
     LowPass,
     On,
-    VcfToXfader,
     Link,
 }
 
@@ -606,7 +605,6 @@ impl MixControl {
                     FilterParamArg::BandPass => F::BandPass,
                     FilterParamArg::LowPass => F::LowPass,
                     FilterParamArg::On => F::On,
-                    FilterParamArg::VcfToXfader => F::VcfToXfader,
                     FilterParamArg::Link => F::Link,
                 },
                 value,
@@ -703,10 +701,10 @@ mod tests {
             }
         ));
         assert!(matches!(
-            parse(r#"{"type":"filter","unit":"y","param":"vcfToXfader","value":1}"#),
+            parse(r#"{"type":"filter","unit":"y","param":"link","value":1}"#),
             reks_mix::Control::Filter {
                 unit: reks_mix::FilterUnit::Y,
-                param: reks_mix::FilterParam::VcfToXfader,
+                param: reks_mix::FilterParam::Link,
                 ..
             }
         ));

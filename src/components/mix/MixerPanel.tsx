@@ -3,10 +3,12 @@
  * section, then filter X, the crossfader (with its curve) and filter Y.
  */
 import type { FilterUnit as Unit } from "../../lib/ipc";
+import { crossfaderKeyHint } from "../../lib/mixKeys";
 import { pickSwitches } from "../../lib/mixView";
 import type { ChannelValues, FilterValues, MasterValues } from "../../store/mix";
 import { Caption } from "../ui/Caption";
 import { Fader } from "../ui/Fader";
+import { Tooltip } from "../ui/Tooltip";
 import { ChannelLegend, ChannelStrip } from "./ChannelStrip";
 import { FilterUnit } from "./FilterUnit";
 import { LabelledKnob } from "./LabelledKnob";
@@ -58,13 +60,15 @@ export function MixerPanel(p: MixerPanelProps) {
         <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 pt-5">
           <div className="flex w-full items-center gap-1">
             <Caption aria-hidden="true">X</Caption>
-            <Fader
-              orientation="horizontal"
-              value={p.crossfader.pos}
-              defaultValue={0.5}
-              onValueChange={(pos) => p.onCrossfader({ pos })}
-              aria-label="Crossfader"
-            />
+            <Tooltip content="Crossfader left, centre, right" shortcut={crossfaderKeyHint()}>
+              <Fader
+                orientation="horizontal"
+                value={p.crossfader.pos}
+                defaultValue={0.5}
+                onValueChange={(pos) => p.onCrossfader({ pos })}
+                aria-label="Crossfader"
+              />
+            </Tooltip>
             <Caption aria-hidden="true">Y</Caption>
           </div>
           <LabelledKnob

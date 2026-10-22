@@ -32,6 +32,10 @@ const DRAG_PX = 160;
 /** Sweep of the knob: 270°, from 7:30 to 4:30. */
 const SWEEP = 270;
 
+/** Radii of the position mark's ends, in the 0..32 box. The cap is 10.5; the mark pokes past it, short of the arc at 14. */
+const MARK_INNER = 3;
+const MARK_OUTER = 12.5;
+
 const clamp = (v: number) => Math.min(1, Math.max(0, v));
 
 /** The value a key press moves to, or null for keys the knob ignores. */
@@ -69,6 +73,13 @@ export function knobKeyValue(
 function point(v: number, r: number): [number, number] {
   const a = ((-135 + v * SWEEP - 90) * Math.PI) / 180;
   return [16 + r * Math.cos(a), 16 + r * Math.sin(a)];
+}
+
+/** The position mark: a short line from near the centre out past the cap's rim. */
+export function knobMark(v: number): { x1: number; y1: number; x2: number; y2: number } {
+  const [x1, y1] = point(v, MARK_INNER);
+  const [x2, y2] = point(v, MARK_OUTER);
+  return { x1, y1, x2, y2 };
 }
 
 function arc(from: number, to: number, r: number): string {
@@ -136,7 +147,7 @@ export function Knob({
   }
 
   const start = bipolar ? 0.5 : 0;
-  const [px, py] = point(v, 9);
+  const mark = knobMark(v);
   return (
     <div
       role="slider"
@@ -179,15 +190,7 @@ export function Knob({
           className="fill-knob stroke-border-strong"
           strokeWidth="1"
         />
-        <line
-          x1="16"
-          y1="16"
-          x2={px}
-          y2={py}
-          strokeWidth="2"
-          strokeLinecap="round"
-          className="stroke-fg"
-        />
+        <line {...mark} strokeWidth="2" strokeLinecap="round" className="stroke-knob-mark" />
       </svg>
     </div>
   );

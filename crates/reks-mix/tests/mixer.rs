@@ -232,7 +232,7 @@ fn eq_and_fader_controls_reach_the_strip() {
 }
 
 #[test]
-fn vcf_to_xfader_and_link_move_the_cutoff() {
+fn link_makes_filter_y_follow_x() {
     let mut g = Graph::new(RATE).unwrap();
     play(&mut g, 0, tone(RATE, 2_000.0, 0.5));
     channel(&mut g, 0, ChannelParam::FilterAssign, 1.0);
@@ -251,13 +251,6 @@ fn vcf_to_xfader_and_link_move_the_cutoff() {
     assert!((level(&mut g) - open).abs() < 1e-3, "not linked yet");
     filter(&mut g, FilterUnit::Y, FilterParam::Link, 1.0);
     assert!(level(&mut g) < 0.01, "linked to 30 Hz");
-    // VCF TO XFADER on X: the crossfader is X's FREQ, and Y follows.
-    filter(&mut g, FilterUnit::X, FilterParam::VcfToXfader, 1.0);
-    g.apply(Control::Crossfader {
-        pos: 1.0,
-        curve: 0.0,
-    });
-    assert!(level(&mut g) > 0.45, "crossfader opened the filter");
 }
 
 #[test]

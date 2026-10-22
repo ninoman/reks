@@ -89,6 +89,7 @@
   --color-selected: var(--mist-200);
   --color-selected-fg: var(--mist-850);
   --color-knob: var(--mist-0);
+  --color-knob-mark: var(--mist-850);
 
   --color-fg: var(--mist-850);
   --color-fg-muted: var(--mist-500);
@@ -195,6 +196,7 @@
     --color-selected: var(--mist-750);
     --color-selected-fg: var(--mist-75);
     --color-knob: var(--mist-75);
+    --color-knob-mark: var(--mist-900);
     --color-fg: var(--mist-75);
     --color-fg-muted: var(--mist-400);
     --color-fg-subtle: var(--mist-600);

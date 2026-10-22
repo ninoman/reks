@@ -38,7 +38,7 @@ import { TagsSidebarEntry } from "./components/TagsSidebarEntry";
 import { ToastHost } from "./components/ToastHost";
 import { TrackLists } from "./components/TrackLists";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
-import { keepsSpace } from "./lib/keys";
+import { keepsSpace, PLAYER_PLAY_KEY } from "./lib/keys";
 import { dismissSplash } from "./lib/splash";
 import { useAnalysis } from "./store/analysis";
 import { useHistory } from "./store/history";
@@ -93,7 +93,7 @@ export default function App() {
   useEffect(() => {
     const root = document.documentElement;
     function onKeyDown(e: KeyboardEvent) {
-      const space = e.code === "Space" && !keepsSpace(e.target);
+      const space = e.code === PLAYER_PLAY_KEY.code && !keepsSpace(e.target);
       // Hides the focus ring a key press would draw on the last clicked
       // control (index.css); any other key brings it back.
       if (!MODIFIERS.has(e.key)) root.toggleAttribute("data-space-key", space);

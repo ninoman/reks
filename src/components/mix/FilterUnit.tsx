@@ -1,6 +1,5 @@
 /**
- * Filter unit X or Y: FREQ, RESONANCE, HP / BP / LP, ON, VCF to crossfader,
- * and on Y the LINK to X's FREQ. A click picks one mode; Shift+click combines
+ * Filter unit X or Y: FREQ, RESONANCE, HP / BP / LP, ON, and on Y the LINK to X's FREQ. A click picks one mode; Shift+click combines
  * modes (`pickSwitches`).
  */
 import type { FilterUnit as Unit } from "../../lib/ipc";
@@ -28,7 +27,7 @@ const MODES: [Mode, string, string][] = [
 
 export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
   const name = `Filter ${unit.toUpperCase()}`;
-  const toggle = (param: "on" | "vcfToXfader" | "link", text: string, spoken: string) => (
+  const toggle = (param: "on" | "link", text: string, spoken: string) => (
     <Button
       key={param}
       variant="control"
@@ -84,10 +83,7 @@ export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
           </Tooltip>
         ))}
       </div>
-      <div className="flex gap-0.5">
-        {toggle("vcfToXfader", "VCF", "follows the crossfader")}
-        {unit === "y" && toggle("link", "Link", "linked to X")}
-      </div>
+      {unit === "y" && <div className="flex gap-0.5">{toggle("link", "Link", "linked to X")}</div>}
     </section>
   );
 }

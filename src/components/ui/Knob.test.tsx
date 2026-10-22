@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Fader } from "./Fader";
-import { Knob, knobKeyValue } from "./Knob";
+import { Knob, knobKeyValue, knobMark } from "./Knob";
 
 afterEach(cleanup);
 
@@ -43,6 +43,39 @@ describe("Knob", () => {
     expect(knobKeyValue("ArrowLeft", 0.5, true, 0.5)).toBeCloseTo(0.498);
     expect(knobKeyValue("Delete", 0.9, false, 0.5)).toBe(0.5);
     expect(knobKeyValue("a", 0.5, false, 0.5)).toBeNull();
+  });
+});
+
+describe("Knob position mark", () => {
+  it("points at 7:30 at minimum, 12:00 at half and 4:30 at maximum", () => {
+    const angle = (v: number) => {
+      const { x1, y1, x2, y2 } = knobMark(v);
+      // Clockwise from 12 o'clock, in degrees.
+      return (Math.atan2(x2 - x1, -(y2 - y1)) * 180) / Math.PI;
+    };
+    expect(angle(0)).toBeCloseTo(-135);
+    expect(angle(0.5)).toBeCloseTo(0);
+    expect(angle(1)).toBeCloseTo(135);
+  });
+
+  it("runs from near the centre out past the cap's rim", () => {
+    const { x1, y1, x2, y2 } = knobMark(0.5);
+    expect(x1).toBeCloseTo(16);
+    expect(x2).toBeCloseTo(16);
+    expect(y1).toBeGreaterThan(y2);
+    expect(16 - y2).toBeGreaterThan(10.5);
+    expect(16 - y2).toBeLessThan(14);
+  });
+
+  it("is drawn in the mark token and follows the value", () => {
+    const { container, rerender } = render(
+      <Knob value={0} onValueChange={() => {}} aria-label="Hi" />,
+    );
+    const line = () => container.querySelector("line");
+    expect(line()?.getAttribute("class")).toBe("stroke-knob-mark");
+    const before = line()?.getAttribute("x2");
+    rerender(<Knob value={1} onValueChange={() => {}} aria-label="Hi" />);
+    expect(line()?.getAttribute("x2")).not.toBe(before);
   });
 });
 

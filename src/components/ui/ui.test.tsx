@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { deckKeyHint } from "../../lib/mixKeys";
 import { Button } from "./Button";
 import { Checkbox } from "./Checkbox";
 import type { ControlSize } from "./control";
@@ -64,6 +65,33 @@ describe("control size scale", () => {
     const cls = [...screen.getByRole("button").classList];
     expect(cls).toContain("px-0");
     expect(cls.some((c) => c.startsWith("px-(--ctl"))).toBe(false);
+  });
+});
+
+describe("shortcut hints", () => {
+  it("a button with a shortcut shows it on focus, from the key map", async () => {
+    const key = deckKeyHint({ type: "play" }, 1);
+    render(
+      <Button aria-label="Play deck 2" hint="Play" shortcut={key}>
+        ▶
+      </Button>,
+    );
+    fireEvent.focus(screen.getByRole("button", { name: "Play deck 2" }));
+    const tip = await screen.findByRole("tooltip");
+    expect(tip.textContent).toContain("Play");
+    expect(tip.textContent).toContain("S");
+  });
+
+  it("an icon button's hint falls back to its label", async () => {
+    render(<IconButton aria-label="Eject" shortcut="E" />);
+    fireEvent.focus(screen.getByRole("button", { name: "Eject" }));
+    expect((await screen.findByRole("tooltip")).textContent).toContain("Eject");
+  });
+
+  it("no shortcut, no tooltip", () => {
+    render(<Button>Plain</Button>);
+    fireEvent.focus(screen.getByRole("button", { name: "Plain" }));
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 });
 

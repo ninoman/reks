@@ -6,10 +6,11 @@
  */
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
 import { controlSizes, disabledState, focusRing, litState } from "./control";
+import { ShortcutTooltip } from "./Tooltip";
 
 export const buttonVariants = cva(
   [
@@ -45,15 +46,32 @@ export const buttonVariants = cva(
 );
 
 export type ButtonProps = ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & { asChild?: boolean };
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean;
+    /** Keyboard shortcut, shown in a tooltip on hover and focus. Take it from `mixKeys`, not a literal. */
+    shortcut?: string;
+    /** What the tooltip says before the key; defaults to `aria-label`. */
+    hint?: ReactNode;
+  };
 
-export function Button({ variant, size, asChild = false, className, type, ...props }: ButtonProps) {
+export function Button({
+  variant,
+  size,
+  asChild = false,
+  className,
+  type,
+  shortcut,
+  hint,
+  ...props
+}: ButtonProps) {
   const Comp = asChild ? Slot : "button";
   return (
-    <Comp
-      type={asChild ? undefined : (type ?? "button")}
-      className={cn(buttonVariants({ variant, size }), className)}
-      {...props}
-    />
+    <ShortcutTooltip shortcut={shortcut} hint={hint ?? props["aria-label"]}>
+      <Comp
+        type={asChild ? undefined : (type ?? "button")}
+        className={cn(buttonVariants({ variant, size }), className)}
+        {...props}
+      />
+    </ShortcutTooltip>
   );
 }

@@ -83,7 +83,6 @@ export interface FilterValues {
   bandPass: boolean;
   lowPass: boolean;
   on: boolean;
-  vcfToXfader: boolean;
   link: boolean;
 }
 
@@ -181,7 +180,6 @@ const DEFAULT_FILTER: FilterValues = {
   bandPass: false,
   lowPass: true,
   on: false,
-  vcfToXfader: false,
   link: false,
 };
 

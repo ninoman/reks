@@ -199,7 +199,6 @@ pub enum FilterParam {
     BandPass,
     LowPass,
     On,
-    VcfToXfader,
     /// Y follows X's FREQ (unit Y only).
     Link,
 }
