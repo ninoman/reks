@@ -32,7 +32,7 @@ import {
 } from "../../lib/deckScroll";
 import type { BeatMark, HotCueView, LoopView, MemoryCueView } from "../../lib/ipc";
 import { WaveStrip } from "../../lib/waveStrip";
-import { useSettings } from "../../store/settings";
+import { useSettings, useTheme } from "../../store/settings";
 import { focusRingInset } from "../ui/control";
 import { drawOverview, drawScroll, type Inputs, readTokens } from "./deckCanvas";
 import { useCanvasSize } from "./useCanvasSize";
@@ -93,8 +93,12 @@ export function DeckWaveform({
   const overviewSize = useCanvasSize(overviewBox);
   const seconds = zoomSeconds(zoom);
 
-  // Tokens are the same in both themes (the deck is always dark); read once.
-  const tokens = useMemo(() => (scrollBox === null ? null : readTokens(scrollBox)), [scrollBox]);
+  const theme = useTheme();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `theme` re-reads the deck and waveform colours.
+  const tokens = useMemo(
+    () => (scrollBox === null ? null : readTokens(scrollBox)),
+    [scrollBox, theme],
+  );
   const strip = useMemo(
     () =>
       columns === null || tokens === null || scrollSize === null || scrollSize.width === 0

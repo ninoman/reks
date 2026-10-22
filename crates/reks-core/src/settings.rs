@@ -4,8 +4,8 @@
 //! Each setting is one row whose value is JSON. A missing or unreadable value
 //! means the default (an unreadable one is logged), so a bad row never stops
 //! the app. Keys: [`AUDIO_DEVICE`], [`AUDIO_SAMPLE_RATE`],
-//! [`AUDIO_BUFFER_FRAMES`], [`AUDIO_CUE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`SYNC_ALIGN`],
-//! [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`].
+//! [`AUDIO_BUFFER_FRAMES`], [`AUDIO_CUE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`THEME`],
+//! [`SYNC_ALIGN`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`].
 
 use std::path::{Path, PathBuf};
 
@@ -31,6 +31,8 @@ pub const AUDIO_CUE: &str = "audio.cue";
 pub const KEY_NOTATION: &str = "display.key_notation";
 /// [`DeckWaveform`]: how the Mix view's deck waveforms are drawn.
 pub const DECK_WAVEFORM: &str = "display.deck_waveform";
+/// [`Theme`]: the app's colours.
+pub const THEME: &str = "display.theme";
 /// [`SyncAlign`]: what a deck's SYNC lines up with the master.
 pub const SYNC_ALIGN: &str = "mix.sync_align";
 /// The cache dir the user chose; absent = the app's default.
@@ -91,6 +93,25 @@ pub enum CueRouting {
     Outputs { master: [u16; 2], cue: [u16; 2] },
 }
 
+/// The app's colour theme (display only; the palettes live in the UI's
+/// `tokens.css`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Theme {
+    /// Dark, warm neutrals with an ivory accent (default, maintainer's call,
+    /// 2026-10-22).
+    #[default]
+    Graphite,
+    /// Light: ivory canvas, rose accent.
+    Paper,
+    /// Dark navy, blue accent.
+    Midnight,
+    /// Dark plum, lavender accent.
+    Dusk,
+    /// Black, high contrast, grey accent.
+    Booth,
+}
+
 /// What SYNC lines up with the master besides the tempo (phase 5 task 16;
 /// replaces the deck's BAR button).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,6 +136,7 @@ pub struct Settings {
     pub audio_cue: Option<CueRouting>,
     pub key_notation: KeyNotation,
     pub deck_waveform: DeckWaveform,
+    pub theme: Theme,
     pub sync_align: SyncAlign,
     /// The cache dir in use; changed only by [`Library::move_cache_dir`].
     pub cache_dir: PathBuf,
@@ -166,6 +188,7 @@ pub struct SettingsPatch {
     pub audio_cue: Option<CueRouting>,
     pub key_notation: Option<KeyNotation>,
     pub deck_waveform: Option<DeckWaveform>,
+    pub theme: Option<Theme>,
     pub sync_align: Option<SyncAlign>,
     pub ui: Option<UiState>,
     pub anlz_preference: Option<AnlzPreference>,
@@ -201,6 +224,7 @@ impl Library {
             audio_cue: get(&conn, AUDIO_CUE)?,
             key_notation: get(&conn, KEY_NOTATION)?.unwrap_or_default(),
             deck_waveform: get(&conn, DECK_WAVEFORM)?.unwrap_or_default(),
+            theme: get(&conn, THEME)?.unwrap_or_default(),
             sync_align: get(&conn, SYNC_ALIGN)?.unwrap_or_default(),
             cache_dir: self.cache_dir(),
             ui: get(&conn, UI_STATE)?.unwrap_or_default(),
@@ -231,6 +255,9 @@ impl Library {
             }
             if let Some(w) = patch.deck_waveform {
                 put(&tx, DECK_WAVEFORM, Some(&w))?;
+            }
+            if let Some(t) = patch.theme {
+                put(&tx, THEME, Some(&t))?;
             }
             if let Some(a) = patch.sync_align {
                 put(&tx, SYNC_ALIGN, Some(&a))?;
@@ -544,6 +571,7 @@ mod tests {
         assert_eq!(s.audio_cue, None);
         assert_eq!(s.key_notation, KeyNotation::Classical);
         assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
+        assert_eq!(s.theme, Theme::Graphite);
         assert_eq!(s.sync_align, SyncAlign::Bar);
         assert_eq!(s.cache_dir, dir.path().join("cache"));
         assert_eq!(s.ui, UiState::default());
@@ -570,6 +598,7 @@ mod tests {
             }),
             key_notation: Some(KeyNotation::Camelot),
             deck_waveform: Some(DeckWaveform::ThreeBand),
+            theme: Some(Theme::Paper),
             sync_align: Some(SyncAlign::Beat),
             ui: Some(ui.clone()),
             anlz_preference: Some(AnlzPreference::ReksFirst),
@@ -593,6 +622,7 @@ mod tests {
         );
         assert_eq!(s.key_notation, KeyNotation::OpenKey);
         assert_eq!(s.deck_waveform, DeckWaveform::ThreeBand);
+        assert_eq!(s.theme, Theme::Paper);
         assert_eq!(s.sync_align, SyncAlign::Beat);
         assert_eq!(s.ui, ui);
         assert_eq!(s.anlz_preference, AnlzPreference::ReksFirst);
@@ -625,6 +655,8 @@ mod tests {
         assert_eq!(p.deck_waveform, Some(DeckWaveform::ThreeBand));
         let p: SettingsPatch = serde_json::from_str(r#"{"deckWaveform":"blue"}"#).unwrap();
         assert_eq!(p.deck_waveform, Some(DeckWaveform::Blue));
+        let p: SettingsPatch = serde_json::from_str(r#"{"theme":"booth"}"#).unwrap();
+        assert_eq!(p.theme, Some(Theme::Booth));
         let p: SettingsPatch = serde_json::from_str(r#"{"syncAlign":"beat"}"#).unwrap();
         assert_eq!(p.sync_align, Some(SyncAlign::Beat));
         let p: SettingsPatch =
@@ -654,6 +686,7 @@ mod tests {
             .execute_batch(
                 "INSERT INTO setting VALUES ('display.key_notation', '\"sideways\"');
                  INSERT INTO setting VALUES ('display.deck_waveform', '\"plaid\"');
+                 INSERT INTO setting VALUES ('display.theme', '\"solarized\"');
                  INSERT INTO setting VALUES ('ui.state', '{\"volume\": 0.25, \"infoOpen\": 7}');
                  INSERT INTO setting VALUES ('audio.device', 'not json');",
             )
@@ -661,6 +694,7 @@ mod tests {
         let s = lib.settings().unwrap();
         assert_eq!(s.key_notation, KeyNotation::Classical);
         assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
+        assert_eq!(s.theme, Theme::Graphite);
         assert_eq!(s.ui, UiState::default());
         assert_eq!(s.audio_device, None);
     }

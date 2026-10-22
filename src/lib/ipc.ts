@@ -861,6 +861,9 @@ export type KeyNotation = "classical" | "camelot" | "openKey";
 /** How the decks draw their waveforms; all come from the same analysis columns. */
 export type DeckWaveform = "threeBand" | "rgb" | "blue";
 
+/** The app's colour theme (`data-theme` on <html>, tokens.css). Graphite is the default. */
+export type Theme = "graphite" | "paper" | "midnight" | "dusk" | "booth";
+
 /** What SYNC lines up with the master: the beat, or the bar (downbeats too). */
 export type SyncAlign = "beat" | "bar";
 
@@ -886,6 +889,7 @@ export interface Settings {
   audioCue: CueRouting | null;
   keyNotation: KeyNotation;
   deckWaveform: DeckWaveform;
+  theme: Theme;
   syncAlign: SyncAlign;
   /** The cache dir in use. */
   cacheDir: string;
@@ -904,6 +908,7 @@ export interface SettingsPatch {
   audioCue?: CueRouting;
   keyNotation?: KeyNotation;
   deckWaveform?: DeckWaveform;
+  theme?: Theme;
   syncAlign?: SyncAlign;
   ui?: UiState;
   anlzPreference?: AnlzPreference;

@@ -3,7 +3,11 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { appReady } from "./lib/ipc";
 import { showStartupError } from "./lib/splash";
+import { applyLastTheme } from "./lib/theme";
 import "./styles/index.css";
+
+// Before the splash fades in, so it shows in the theme the settings will load.
+applyLastTheme();
 
 const root = document.getElementById("root");
 if (!root) {

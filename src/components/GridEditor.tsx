@@ -24,6 +24,7 @@ import {
   waveformColumns,
 } from "../lib/ipc";
 import { usePlayerPosition } from "../store/player";
+import { useTheme } from "../store/settings";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import {
@@ -143,7 +144,9 @@ export function GridEditorDialog({
   }, [canvas, maxStart, pxPerS]);
 
   const start = Math.min(startMs, maxStart);
+  const theme = useTheme();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `theme` redraws in the new colours.
   useEffect(() => {
     if (canvas === null || width === 0) return;
     const ctx = canvas.getContext("2d");
@@ -191,7 +194,7 @@ export function GridEditorDialog({
       ctx.fillStyle = token("--color-grid-cursor");
       ctx.fillRect(Math.round(xOf(cursorMs)) - 1, 0, 2, height);
     }
-  }, [canvas, columns, grid, start, pxPerS, width, cursorMs, playheadMs]);
+  }, [canvas, columns, grid, start, pxPerS, width, cursorMs, playheadMs, theme]);
 
   const anchor = grid?.anchors[0] ?? null;
   const hasGrid = anchor !== null;
