@@ -312,6 +312,31 @@ pub enum Control {
     `wide_tempo_doubles_and_stands_still_at_the_ends` (`graph.rs`),
     `mixView.test.ts`, `mixKeys.test.ts`, `DeckStrip.test.tsx`. Checked in
     the browser with the dev mock only.
+16. **Deck redesign** (maintainer review, 2026-10-22). Depends on tasks 13
+    (master handoff, beat jump, beat loop, loop region), 14 (tooltip
+    `shortcut`, control polish) and 15 (per-deck zoom, waveform markers);
+    start after they are merged. Layout, states, components, data and keys:
+    [`../ui.md`](../ui.md#deck-layout-task-16-approved-2026-10-22-not-built-yet)
+    (wireframe approved, revision 3). UI only, no engine work beyond what
+    13–15 add, except:
+    - `HotCueView.color` through `mix_load` (from `Cue.color_rgb`).
+    - Bar sync becomes a setting (Settings → Decks → "Sync aligns: beat /
+      bar", default bar), replacing the deck's BAR button.
+    - On loading a track without a grid, queue it first for analysis and
+      refetch columns and grid when it is done.
+
+    Steps: split `DeckStrip.tsx` into the parts listed in `ui.md`; add `Pad` /
+    `SplitPad`, `InlineNumber`, `Fader` `detent`, `ArtworkThumb`, nudge icons
+    and the deck tokens (drop `compact`); pure helpers (`JUMP_PAGES`,
+    `LOOP_PAGES` with FINE = 1/32 beat, `formatBeats`, `snapToDetent`,
+    `tempoForBpm`, `nextPadMode`) and the new keys with `deckKeyHint` in
+    `mixKeys.ts`; update the Shortcuts popover and the Mix panel bullets in
+    `ui.md`. Master tempo (**M**) stays disabled until task 10 decides.
+    Tests: `mixView.test.ts` (pages, detent snap, BPM → tempo and range
+    step-up), `mixKeys.test.ts` (new keys, hints match the table),
+    `ui.test.tsx` (`Pad` height, `InlineNumber` commit / cancel),
+    `DeckStrip.test.tsx` (every state, pad modes, eject on artwork, BPM edit).
+    Check 2- and 4-deck mode at 1280, 1440 and 1920 px with the dev mock.
 
 ## Acceptance criteria
 
