@@ -137,6 +137,19 @@ pub struct DeckView {
     pub sync_bar: bool,
     pub locked: bool,
     pub quantise: bool,
+    /// This deck is the sync master.
+    pub master: bool,
+    /// The active beat loop.
+    pub loop_region: Option<LoopView>,
+}
+
+/// An active beat loop (`reks_mix::LoopRegion`) in milliseconds.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LoopView {
+    pub start_ms: f64,
+    pub end_ms: f64,
+    pub beats: f64,
 }
 
 /// A peak meter: `level` linear (1.0 = 0 dBFS) with a falling display;
@@ -168,8 +181,8 @@ pub struct MixState {
     /// The device went away; stop and start again.
     pub device_lost: bool,
     pub xruns: u64,
-    pub leader: Option<u8>,
-    pub leader_chosen: bool,
+    /// The sync master deck; `None` when nobody is master.
+    pub master_deck: Option<u8>,
     pub decks: Vec<DeckView>,
     /// Channel meters, after EQ and filter, before the fader.
     pub meters: Vec<MeterView>,
@@ -199,6 +212,12 @@ fn deck_view(d: &DeckState, loaded: Option<LoadedDeck>, rate: u32) -> DeckView {
         sync_bar: d.sync_bar,
         locked: d.locked,
         quantise: d.quantise,
+        master: d.master,
+        loop_region: d.loop_region.map(|l| LoopView {
+            start_ms: frames_to_ms(l.start, rate),
+            end_ms: frames_to_ms(l.end, rate),
+            beats: l.beats,
+        }),
     }
 }
 
@@ -215,8 +234,7 @@ fn snapshot(slot: &mut MixSlot) -> Option<MixState> {
         buffer_frames: info.buffer_frames,
         device_lost: engine.device_lost(),
         xruns: engine.xruns(),
-        leader: st.leader,
-        leader_chosen: st.leader_chosen,
+        master_deck: st.master_deck,
         decks: st
             .decks
             .iter()
@@ -486,8 +504,28 @@ pub enum MixControl {
         on: bool,
         bar: bool,
     },
-    Leader {
-        deck: Option<u8>,
+    TakeMaster {
+        deck: u8,
+    },
+    /// Signed; fractions for 1/8 … 1/2.
+    BeatJump {
+        deck: u8,
+        beats: f64,
+    },
+    FineJump {
+        deck: u8,
+        forward: bool,
+    },
+    BeatLoop {
+        deck: u8,
+        beats: f64,
+    },
+    LoopExit {
+        deck: u8,
+    },
+    LoopResize {
+        deck: u8,
+        double: bool,
     },
     Quantise {
         deck: u8,
@@ -534,7 +572,12 @@ impl MixControl {
             Self::Tempo { deck, ratio } => Control::Tempo { deck, ratio },
             Self::Nudge { deck, ratio } => Control::Nudge { deck, ratio },
             Self::Sync { deck, on, bar } => Control::Sync { deck, on, bar },
-            Self::Leader { deck } => Control::Leader { deck },
+            Self::TakeMaster { deck } => Control::TakeMaster { deck },
+            Self::BeatJump { deck, beats } => Control::BeatJump { deck, beats },
+            Self::FineJump { deck, forward } => Control::FineJump { deck, forward },
+            Self::BeatLoop { deck, beats } => Control::BeatLoop { deck, beats },
+            Self::LoopExit { deck } => Control::LoopExit { deck },
+            Self::LoopResize { deck, double } => Control::LoopResize { deck, double },
             Self::Quantise { deck, on } => Control::Quantise { deck, on },
             Self::Channel { ch, param, value } => Control::Channel {
                 ch,
@@ -622,8 +665,34 @@ mod tests {
             reks_mix::Control::HotCue { deck: 0, slot: 3 }
         ));
         assert!(matches!(
-            parse(r#"{"type":"leader","deck":null}"#),
-            reks_mix::Control::Leader { deck: None }
+            parse(r#"{"type":"takeMaster","deck":2}"#),
+            reks_mix::Control::TakeMaster { deck: 2 }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"beatJump","deck":1,"beats":-0.125}"#),
+            reks_mix::Control::BeatJump { deck: 1, beats } if beats == -0.125
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"fineJump","deck":1,"forward":true}"#),
+            reks_mix::Control::FineJump {
+                deck: 1,
+                forward: true
+            }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"beatLoop","deck":3,"beats":4}"#),
+            reks_mix::Control::BeatLoop { deck: 3, beats } if beats == 4.0
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"loopExit","deck":3}"#),
+            reks_mix::Control::LoopExit { deck: 3 }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"loopResize","deck":3,"double":false}"#),
+            reks_mix::Control::LoopResize {
+                deck: 3,
+                double: false
+            }
         ));
         assert!(matches!(
             parse(r#"{"type":"channel","ch":2,"param":"eqMid1","value":0.25}"#),

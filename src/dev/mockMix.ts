@@ -3,7 +3,9 @@
  * advance in real time and stream their state at 60 Hz, so the mixer UI runs
  * in a plain browser. Every track plays the 30 s fixture `mockGrid.ts` draws
  * (128 BPM, first beat at 12 ms; tracks without analysis have no grid). Sync
- * is a rough stand-in: it copies the leader's tempo and beat phase at once.
+ * is a rough stand-in: it copies the master's tempo and beat phase at once.
+ * The master is handed on as in the engine (a playing synced deck takes it
+ * at its tempo when the master stops); beat jumps and loops use the grid.
  * The real engine is `reks-mix` (tested there); mixer controls are accepted
  * and ignored, as in the engine until phase 5 tasks 6–7.
  */
@@ -21,7 +23,7 @@ interface Deck {
   view: DeckView;
   grid: boolean;
   hotCues: number[];
-  /** When playing started, for the automatic leader. */
+  /** When playing started, for electing a master. */
   since: number;
 }
 
@@ -44,6 +46,8 @@ function emptyDeck(): Deck {
       syncBar: false,
       locked: false,
       quantise: true,
+      master: false,
+      loopRegion: null,
     },
     grid: false,
     hotCues: [],
@@ -52,25 +56,51 @@ function emptyDeck(): Deck {
 }
 
 let decks: Deck[] = [];
-let chosenLeader: number | null = null;
+let master: number | null = null;
+/** The master was playing at the last tick, so stopping hands it on. */
+let masterPlaying = false;
+const FINE_JUMP_MS = 10;
 let timer: ReturnType<typeof setInterval> | null = null;
 let config: MixConfig | null = null;
 
 const beatAt = (ms: number) => (ms - FIRST_BEAT_MS) / BEAT_MS;
 const msAtBeat = (beat: number) => FIRST_BEAT_MS + beat * BEAT_MS;
 
-function leader(): number | null {
-  if (chosenLeader !== null) return chosenLeader;
+/** A playing deck with a grid to take master: synced first, then the one playing longest. */
+function elect(except: number | null): number | null {
   let best: number | null = null;
+  let bestRank = Number.POSITIVE_INFINITY;
   decks.forEach((d, i) => {
-    if (!d.view.playing || !d.grid) return;
-    if (best === null || d.since < (decks[best]?.since ?? 0)) best = i;
+    if (i === except || !d.view.playing || !d.grid) return;
+    // Synced decks first, then by play start (`since` is under 1e12 ms).
+    const rank = (d.view.locked ? 0 : 1e12) + d.since;
+    if (rank < bestRank) {
+      best = i;
+      bestRank = rank;
+    }
   });
   return best;
 }
 
+/** As in `reks-mix` `Graph::update_master`. */
+function updateMaster() {
+  const m = master === null ? undefined : decks[master];
+  if (master !== null && (!m?.view.loaded || !m.grid || (masterPlaying && !m.view.playing))) {
+    const next = elect(master);
+    decks.forEach((d, i) => {
+      if (i === master || (next !== null && next !== i) || !d.view.locked) return;
+      // Keep the matched tempo, so nothing changes speed.
+      d.view.tempo = d.view.speed / d.view.nudge;
+    });
+    master = next;
+  }
+  if (master === null) master = elect(null);
+  masterPlaying = master !== null && decks[master]?.view.playing === true;
+}
+
 function tick() {
-  const lead = leader();
+  updateMaster();
+  const lead = master;
   const leadDeck = lead === null ? undefined : decks[lead];
   const follows = (d: Deck, i: number) =>
     d.view.sync && leadDeck !== undefined && lead !== i && d.grid && leadDeck.grid;
@@ -81,6 +111,10 @@ function tick() {
     v.speed = follows(d, i) && leadDeck ? leadDeck.view.speed : v.tempo * v.nudge;
     if (v.playing) {
       v.positionMs += FRAME_MS * v.speed;
+      const l = v.loopRegion;
+      if (l && v.positionMs >= l.endMs) {
+        v.positionMs = l.startMs + ((v.positionMs - l.startMs) % (l.endMs - l.startMs));
+      }
       if (v.positionMs >= v.durationMs) {
         v.positionMs = v.durationMs;
         v.playing = false;
@@ -91,7 +125,8 @@ function tick() {
     const v = d.view;
     if (!v.loaded) return;
     v.locked = follows(d, i);
-    if (v.locked && leadDeck !== undefined && v.playing && v.nudge === 1) {
+    v.master = i === lead;
+    if (v.locked && leadDeck !== undefined && v.playing && v.nudge === 1 && !v.loopRegion) {
       // Jump into the leader's beat phase (bar phase with bar sync).
       const span = v.syncBar ? 4 : 1;
       const own = beatAt(v.positionMs);
@@ -112,8 +147,7 @@ function snapshot(): MixState {
     bufferFrames: config?.bufferFrames ?? null,
     deviceLost: false,
     xruns: 0,
-    leader: leader(),
-    leaderChosen: chosenLeader !== null,
+    masterDeck: master,
     decks: decks.map((d) => ({ ...d.view })),
     meters: decks.map((d) => meter(d.view.playing)),
     masterMeter: meter(decks.some((d) => d.view.playing)),
@@ -130,15 +164,77 @@ function snap(d: Deck, ms: number): number {
   return msAtBeat(Math.round(beatAt(ms)));
 }
 
-function control(c: MixControl) {
-  if (!("deck" in c) || c.type === "leader") {
-    if (c.type === "leader") chosenLeader = c.deck;
-    return;
+/** A jump out of the active loop ends it. */
+function leaveLoopUnless(v: DeckView, ms: number) {
+  const l = v.loopRegion;
+  if (l && !(ms >= l.startMs && ms < l.endMs)) v.loopRegion = null;
+}
+
+function beatJump(d: Deck, beats: number) {
+  const v = d.view;
+  const to = v.positionMs + beats * BEAT_MS;
+  if (!d.grid || to < 0 || to >= v.durationMs) return;
+  const l = v.loopRegion;
+  if (l) {
+    const by = beats * BEAT_MS;
+    if (l.startMs + by < 0 || l.endMs + by > v.durationMs) return;
+    v.loopRegion = { ...l, startMs: l.startMs + by, endMs: l.endMs + by };
   }
+  v.positionMs = to;
+}
+
+function beatLoop(d: Deck, beats: number) {
+  const v = d.view;
+  if (!d.grid) return;
+  const q = Math.min(beats, 1);
+  const startMs = v.quantise
+    ? msAtBeat(Math.floor(beatAt(v.positionMs) / q + 1e-9) * q)
+    : v.positionMs;
+  const endMs = startMs + beats * BEAT_MS;
+  if (startMs >= 0 && endMs <= v.durationMs) v.loopRegion = { startMs, endMs, beats };
+}
+
+function resizeLoop(v: DeckView, double: boolean) {
+  const l = v.loopRegion;
+  if (!l) return;
+  const beats = double ? l.beats * 2 : l.beats / 2;
+  const endMs = l.startMs + beats * BEAT_MS;
+  if (beats >= 1 / 32 && beats <= 512 && endMs <= v.durationMs) {
+    v.loopRegion = { ...l, endMs, beats };
+  }
+}
+
+function control(c: MixControl) {
+  if (!("deck" in c)) return;
   const d = decks[c.deck];
   if (d === undefined) throw new Error(`no deck ${c.deck + 1}`);
   const v = d.view;
   switch (c.type) {
+    case "takeMaster":
+      if (d.grid) {
+        if (v.locked) v.tempo = v.speed / v.nudge;
+        master = c.deck;
+        masterPlaying = v.playing;
+      }
+      break;
+    case "beatJump":
+      beatJump(d, c.beats);
+      break;
+    case "fineJump":
+      v.positionMs = Math.min(
+        v.durationMs,
+        Math.max(0, v.positionMs + (c.forward ? FINE_JUMP_MS : -FINE_JUMP_MS)),
+      );
+      break;
+    case "beatLoop":
+      beatLoop(d, c.beats);
+      break;
+    case "loopExit":
+      v.loopRegion = null;
+      break;
+    case "loopResize":
+      resizeLoop(v, c.double);
+      break;
     case "unload":
       decks[c.deck] = emptyDeck();
       break;
@@ -177,11 +273,13 @@ function control(c: MixControl) {
       break;
     case "seek":
       v.positionMs = Math.min(v.durationMs, Math.max(0, v.playing ? c.ms : snap(d, c.ms)));
+      leaveLoopUnless(v, v.positionMs);
       break;
     case "hotCue": {
       const at = d.hotCues[c.slot];
       if (at !== undefined) {
         v.cuePreview = false;
+        leaveLoopUnless(v, at);
         v.positionMs = at;
         v.playing = true;
         d.since = performance.now();
@@ -219,6 +317,8 @@ function load(deck: number, id: number, analysed: boolean): DeckLoaded {
     quantise: prev?.view.quantise ?? true,
   };
   d.grid = analysed;
+  // A new track on the master hands the role on at the next tick.
+  if (master === deck) masterPlaying = true;
   // Hot cues A, B and D on bars 2, 5 and 9.
   d.hotCues = analysed ? [msAtBeat(4), msAtBeat(16), msAtBeat(32)] : [];
   const slots = [0, 1, 3];
@@ -256,7 +356,8 @@ export function mockMix(
     case "mix_start": {
       config = args.config as MixConfig;
       decks = Array.from({ length: 4 }, emptyDeck);
-      chosenLeader = null;
+      master = null;
+      masterPlaying = false;
       const channel = args.onState as Channel<MixState>;
       if (timer !== null) clearInterval(timer);
       timer = setInterval(() => {

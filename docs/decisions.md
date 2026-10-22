@@ -601,6 +601,14 @@ Date of decisions: 2026-10-18.
   Shift+click combines modes (a unit always keeps one); a click on a channel
   CUE cues that channel alone (or clears it) and Shift+click adds or removes
   it. Channels 1–2 default to filter X (left), 3–4 to Y (right).
+- Sync master, beat jump and beat loops: added 2026-10-22 (maintainer's
+  review, phase 5 task 13). The sync leader becomes a CDJ-style master
+  role that passes to a playing synced deck at its matched tempo when the
+  master stops, ends or is unloaded (was: recomputed every block, so a
+  follower fell back to its own tempo). Beat jump and beat loops are deck
+  controls DJs use to audition a transition, so they count as preparation,
+  not the live-performance scope rejected below; loop rolls, slip mode and
+  saved loops still need a decision.
 - Filter LFOs: dropped 2026-10-20 (maintainer's call). The Xone:92 has one
   per filter (R§9.1); reks models the filters without them. Adding them back
   needs a new decision.

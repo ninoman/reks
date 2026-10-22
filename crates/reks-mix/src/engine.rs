@@ -731,15 +731,63 @@ mod tests {
         });
         assert_eq!(n, 0, "sync");
         let st = r.p.graph.state();
-        assert_eq!(st.leader, Some(2));
+        assert_eq!(st.master_deck, Some(2));
         assert!(st.decks[1].locked);
-        r.controls.push(Control::Leader { deck: Some(1) }).unwrap();
+        r.controls.push(Control::TakeMaster { deck: 1 }).unwrap();
         let n = realtime(|| {
             for _ in 0..4 {
                 r.p.process(&mut out_f32, 2);
             }
         });
-        assert_eq!(n, 0, "chosen leader");
+        assert_eq!(n, 0, "take master");
+
+        // Beat jumps, a beat loop wrapping a few times, halve, double, exit,
+        // and the master pausing (hand-over to deck 2, which syncs first).
+        for c in [
+            Control::Sync {
+                deck: 2,
+                on: true,
+                bar: false,
+            },
+            Control::BeatJump {
+                deck: 2,
+                beats: 4.0,
+            },
+            Control::FineJump {
+                deck: 2,
+                forward: false,
+            },
+            Control::BeatLoop {
+                deck: 2,
+                beats: 0.125,
+            },
+            Control::LoopResize {
+                deck: 2,
+                double: true,
+            },
+            Control::LoopResize {
+                deck: 2,
+                double: false,
+            },
+        ] {
+            r.controls.push(c).unwrap();
+        }
+        let n = realtime(|| {
+            for _ in 0..16 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "beat jump and loop");
+        assert!(r.p.graph.state().decks[2].loop_region.is_some());
+        r.controls.push(Control::LoopExit { deck: 2 }).unwrap();
+        r.controls.push(Control::Pause { deck: 1 }).unwrap();
+        let n = realtime(|| {
+            for _ in 0..16 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "loop exit, master hand-over");
+        assert_eq!(r.p.graph.state().master_deck, Some(2));
 
         // Loading over a playing deck retires `first` through the queue.
         r.controls

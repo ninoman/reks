@@ -36,6 +36,8 @@ const view = (over: Partial<DeckView>): DeckView => ({
   syncBar: false,
   locked: false,
   quantise: true,
+  master: false,
+  loopRegion: null,
   ...over,
 });
 
@@ -46,8 +48,7 @@ const state = (decks: DeckView[]): MixState => ({
   bufferFrames: null,
   deviceLost: false,
   xruns: 0,
-  leader: null,
-  leaderChosen: false,
+  masterDeck: null,
   decks,
   meters: [],
   masterMeter: { level: 0, clip: false },

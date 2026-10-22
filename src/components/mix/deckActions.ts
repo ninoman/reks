@@ -10,10 +10,7 @@ export function deckActions(mix: MixStore, deck: number): DeckActions {
     cue: (down) => mix.cue(deck, down),
     toggleSync: () => mix.toggleSync(deck),
     toggleBar: () => mix.toggleSync(deck, !(mix.live?.decks[deck]?.syncBar ?? false)),
-    toggleLeader: () => {
-      const chosen = mix.live?.leaderChosen === true && mix.live.leader === deck;
-      mix.send({ type: "leader", deck: chosen ? null : deck });
-    },
+    toggleLeader: () => mix.send({ type: "takeMaster", deck }),
     toggleQuantise: () =>
       mix.send({ type: "quantise", deck, on: !(mix.live?.decks[deck]?.quantise ?? false) }),
     hotCue: (slot) => mix.send({ type: "hotCue", deck, slot }),

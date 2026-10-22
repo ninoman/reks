@@ -312,6 +312,55 @@ pub enum Control {
     `wide_tempo_doubles_and_stands_still_at_the_ends` (`graph.rs`),
     `mixView.test.ts`, `mixKeys.test.ts`, `DeckStrip.test.tsx`. Checked in
     the browser with the dev mock only.
+13. [x] **Engine: master hand-off, beat jump, beat loop** (maintainer review,
+    2026-10-22). Engine, IPC and dev mock only; the deck redesign builds the
+    controls (D21).
+    - [x] Master hand-off. Bug: deck A master, B synced; when A ended, B fell
+      back to its own tempo (the automatic leader moved to B, which then
+      played its own fader). Now the master (`EngineState::master_deck`,
+      `DeckState::master`; `masterDeck` / `master` in `MixState`) is a
+      sticky role, as on a CDJ: the first deck with a grid to play takes it,
+      or the deck sent `Control::TakeMaster` (`takeMaster`; replaces
+      `Leader`, there is no "automatic" mode any more). When it stops, ends
+      or is unloaded or reloaded, a playing synced deck takes over (else the
+      deck playing longest) and keeps the tempo it had matched: its tempo
+      fader is set to it, so `tempo` changes in the state. With no deck
+      playing, nobody is master, and paused followers keep their matched
+      tempo too. A follower taking master keeps its tempo the same way.
+      Supersedes task 3's leader rule.
+    - [x] Beat jump: `BeatJump { beats }` (signed; UI sizes FINE, 1/8 … 32,
+      `BEAT_JUMP_SIZES` in `ipc.ts`) moves along the grid with quantise (the
+      place in the beat is kept on dynamic grids too), else by `beats` of the
+      local beat length; ignored without a grid or when it would leave the
+      track. During a loop the loop moves with it. `FineJump { forward }`
+      moves 10 ms (`FINE_JUMP_MS`; rekordbox's FINE amount is UNVERIFIED).
+    - [x] Beat loop: `BeatLoop { beats }` (1/8 … 32; halve/double reach
+      1/32 … 512) from the playhead, or with quantise from the last grid step
+      (whole beats, or 1/`beats` for loops under a beat); `LoopExit`;
+      `LoopResize { double }` keeps the start. At the end the head goes back
+      by the loop length exactly (no drift against sync) with a 4 ms
+      equal-power crossfade (`LOOP_XFADE_MS`) from the head running on. No
+      allocation (checked by the engine's real-time test). A seek, hot cue or
+      cue outside the loop ends it; a load clears it. `DeckState::loop_region`
+      / `loopRegion` (ms in the UI). Sync: a looping follower matches tempo
+      only; a master looping under a beat gives no phase, and one looping
+      part of a bar gives beat phase only.
+    Tests (`graph.rs`): `the_master_ending_hands_over_to_the_synced_deck_at_the_same_tempo`,
+    `the_master_pausing_hands_over_to_the_synced_deck_at_the_same_tempo`,
+    `with_no_synced_deck_playing_nobody_is_master`,
+    `taking_master_from_a_follower_keeps_its_tempo`,
+    `the_master_is_the_first_deck_to_play_until_another_takes_it`,
+    `beat_jump_moves_by_beats_and_keeps_the_place_in_the_beat`,
+    `quantised_beat_jumps_follow_a_dynamic_grid`,
+    `beat_loop_repeats_from_the_quantised_beat`,
+    `unquantised_loops_start_at_the_head_and_seeks_out_of_them_end_them`,
+    `the_loop_point_crossfades_without_a_click`,
+    `a_synced_loop_stays_in_phase_with_the_master`;
+    `loops_limit_sync_to_what_keeps_time` (`sync.rs`); the real-time test in
+    `engine.rs`; `controls_parse_from_the_ui_shapes` (`src-tauri/src/mix.rs`);
+    `src/dev/mockMix.test.ts`. Not checked by ear or against a CDJ
+    (UNVERIFIED: CDJ-3000 hand-off details and loop/jump behaviour are
+    modelled from the manuals' descriptions, not tested on hardware).
 
 ## Acceptance criteria
 

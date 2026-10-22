@@ -66,10 +66,40 @@ pub enum Control {
         on: bool,
         bar: bool,
     },
-    /// Makes `deck` the sync leader; `None` returns to automatic (the deck
-    /// that has been playing longest).
-    Leader {
-        deck: Option<u8>,
+    /// MASTER pressed: `deck` becomes the sync master (leader) now. It keeps
+    /// the role until it stops, ends or is unloaded; see
+    /// [`crate::graph::EngineState::master_deck`].
+    TakeMaster {
+        deck: u8,
+    },
+    /// Beat jump by `beats` (negative: back), along the grid: the place in
+    /// the beat is kept. During a loop the loop moves with it. Ignored
+    /// without a grid.
+    BeatJump {
+        deck: u8,
+        beats: f64,
+    },
+    /// FINE jump: [`crate::graph::FINE_JUMP_MS`] forward or back, no grid
+    /// needed.
+    FineJump {
+        deck: u8,
+        forward: bool,
+    },
+    /// Beat loop of `beats` from the playhead (from the last 1/`beats`
+    /// grid step with quantise); replaces an active loop. Ignored without a
+    /// grid or when the loop would run past the track.
+    BeatLoop {
+        deck: u8,
+        beats: f64,
+    },
+    /// Leaves the active loop; playback carries on past its end.
+    LoopExit {
+        deck: u8,
+    },
+    /// Halves (`double: false`) or doubles the active loop from its start.
+    LoopResize {
+        deck: u8,
+        double: bool,
     },
     /// Quantise: cue points snap to the beat, jumps keep the beat phase.
     Quantise {
@@ -119,8 +149,13 @@ impl Control {
             | Self::Tempo { deck, .. }
             | Self::Nudge { deck, .. }
             | Self::Sync { deck, .. }
-            | Self::Quantise { deck, .. } => Some(*deck),
-            Self::Leader { .. }
+            | Self::Quantise { deck, .. }
+            | Self::BeatJump { deck, .. }
+            | Self::FineJump { deck, .. }
+            | Self::BeatLoop { deck, .. }
+            | Self::LoopExit { deck }
+            | Self::LoopResize { deck, .. } => Some(*deck),
+            Self::TakeMaster { .. }
             | Self::Channel { .. }
             | Self::Filter { .. }
             | Self::Crossfader { .. }

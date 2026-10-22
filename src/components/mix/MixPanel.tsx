@@ -76,8 +76,9 @@ export function MixPanel() {
     const view = live?.decks[deck];
     const meta = mix.decks[deck];
     if (meta === undefined) return null;
-    const leader = live?.leader === deck;
-    const leaderBeat = live?.leader == null ? null : (live.decks[live.leader]?.beat ?? null);
+    const leader = live?.masterDeck === deck;
+    const leaderBeat =
+      live?.masterDeck == null ? null : (live.decks[live.masterDeck]?.beat ?? null);
     const phase =
       !leader && view?.beat != null && leaderBeat !== null
         ? phaseOffset(view.beat, leaderBeat, view.syncBar ? 4 : 1)
@@ -89,7 +90,7 @@ export function MixPanel() {
         view={view}
         meta={meta}
         leader={leader}
-        leaderChosen={live?.leaderChosen ?? false}
+        leaderChosen={leader}
         phase={phase}
         compact={compact}
         actions={deckActions(mix, deck)}
