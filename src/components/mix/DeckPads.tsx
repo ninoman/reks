@@ -237,7 +237,7 @@ function MemoryPads({
   page,
   onCallCue,
   onEditCues,
-}: DeckPadsProps & { page: number }) {
+}: Omit<DeckPadsProps, "page"> & { page: number }) {
   const n = deck + 1;
   const [renaming, setRenaming] = useState<number | null>(null);
   const cues = loaded ? memoryCues.slice(page * MEMORY_PADS, (page + 1) * MEMORY_PADS) : [];
