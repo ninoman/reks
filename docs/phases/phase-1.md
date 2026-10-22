@@ -463,7 +463,7 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
   (logged). Artwork paths are relative to the cache, so the database is untouched.
 - Window state is saved 300 ms after the last change (`startUiSync`) and restored before the
   table shows; window size and position are task 14 (window-state plugin, below).
-- UI: Settings dialog (header gear button, Cmd/Ctrl+,), one view in titled groups: Folders
+- UI: Settings dialog (header gear button, Cmd/Ctrl+,), one tab per group in a sidebar: Library
   (library folders, cache folder), Playback (output device; Phase 5: sample rate, buffer,
   headphone cue), Display (theme, key notation), Decks
   (Mix view waveform style, Phase 5), Experimental (OneLibrary key, Phase 4). A stored

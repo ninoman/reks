@@ -80,6 +80,12 @@ async function openDialog() {
   await screen.findByText("/Music/House");
 }
 
+/** Radix tabs switch on mouse down, not click. */
+function showTab(name: string) {
+  fireEvent.mouseDown(screen.getByRole("tab", { name }));
+  return screen.getByRole("tabpanel", { name });
+}
+
 describe("SettingsDialog", () => {
   it("lists library folders and removes one", async () => {
     await openDialog();
@@ -90,14 +96,17 @@ describe("SettingsDialog", () => {
     expect(ipc.libraryRootRemove).toHaveBeenCalledWith(1);
   });
 
-  it("shows every setting in one view, folders together", async () => {
+  it("groups settings in tabs, opening on the library folders", async () => {
     await openDialog();
-    const groups = screen.getAllByRole("region").map((g) => g.getAttribute("aria-label"));
-    expect(groups).toEqual(["Folders", "Playback", "Display", "Decks"]);
-    const folders = screen.getByRole("region", { name: "Folders" });
-    expect(folders.textContent).toContain("/Music/House");
-    expect(folders.textContent).toContain("/Users/dj/Library/Caches/reks");
-    expect(screen.queryByRole("tab")).toBeNull();
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual(["Library", "Playback", "Display", "Decks"]);
+    const library = screen.getByRole("tabpanel", { name: "Library" });
+    expect(library.textContent).toContain("/Music/House");
+    expect(library.textContent).toContain("/Users/dj/Library/Caches/reks");
+    expect(screen.queryByRole("radio", { name: /Camelot/ })).toBeNull();
+    const display = showTab("Display");
+    expect(display.textContent).toContain("Key notation");
+    expect(screen.queryByText("/Music/House")).toBeNull();
   });
 
   it("has no OneLibrary key field: release builds have the key built in", async () => {
@@ -107,6 +116,7 @@ describe("SettingsDialog", () => {
 
   it("stores the key notation", async () => {
     await openDialog();
+    showTab("Display");
     fireEvent.click(screen.getByRole("radio", { name: /Camelot/ }));
     await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ keyNotation: "camelot" }));
     expect(useSettings.getState().settings?.keyNotation).toBe("camelot");
@@ -115,7 +125,7 @@ describe("SettingsDialog", () => {
   it("switches the theme and stores it", async () => {
     const stop = startThemeSync();
     await openDialog();
-    const display = screen.getByRole("region", { name: "Display" });
+    const display = showTab("Display");
     expect(display.querySelector('[aria-checked="true"]')?.textContent).toContain("Graphite");
     fireEvent.click(screen.getByRole("radio", { name: /Paper/ }));
     await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ theme: "paper" }));
@@ -126,7 +136,7 @@ describe("SettingsDialog", () => {
 
   it("stores the deck waveform style", async () => {
     await openDialog();
-    const decks = screen.getByRole("region", { name: "Decks" });
+    const decks = showTab("Decks");
     expect(decks.querySelector('[aria-checked="true"]')?.textContent).toContain("RGB");
     fireEvent.click(screen.getByRole("radio", { name: /3-band/ }));
     await waitFor(() =>
@@ -137,6 +147,7 @@ describe("SettingsDialog", () => {
 
   it("keeps a chosen device that is not connected in the list", async () => {
     await openDialog();
+    showTab("Playback");
     const select = screen.getByRole("combobox", { name: "Output device" }) as HTMLSelectElement;
     await waitFor(() => expect(select.options.length).toBe(3));
     expect(select.value).toBe("USB DAC");
@@ -145,6 +156,7 @@ describe("SettingsDialog", () => {
 
   it("stores the output device and hands it to the engine", async () => {
     await openDialog();
+    showTab("Playback");
     const select = screen.getByRole("combobox", { name: "Output device" }) as HTMLSelectElement;
     await waitFor(() => expect(select.options.length).toBe(3));
     fireEvent.change(select, { target: { value: "Built-in Output" } });
@@ -160,6 +172,7 @@ describe("SettingsDialog", () => {
 
   it("stores the buffer and headphone cue, offering only what the device takes", async () => {
     await openDialog();
+    showTab("Playback");
     const buffer = screen.getByRole("combobox", { name: /Buffer/ }) as HTMLSelectElement;
     // 64…1024 frames: 2048 is not offered.
     await waitFor(() => expect(buffer.options.length).toBe(6));
