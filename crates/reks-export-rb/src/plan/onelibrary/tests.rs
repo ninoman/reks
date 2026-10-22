@@ -168,7 +168,7 @@ fn off_by_default_and_off_adds_nothing() {
 }
 
 #[test]
-fn on_without_a_key_blocks_and_says_where_the_key_goes() {
+fn on_without_a_key_blocks_and_says_how_to_get_one() {
     let w = World::new();
     let mut p = planned(&w, &options(true));
     plan_onelibrary(&mut p, &Fake::new(ExistingLibrary::Absent), None, &w.lib).unwrap();
@@ -177,7 +177,7 @@ fn on_without_a_key_blocks_and_says_where_the_key_goes() {
     assert_eq!(p.errors, [Problem::OneLibraryKeyMissing]);
     assert!(Problem::OneLibraryKeyMissing
         .to_string()
-        .contains("Settings → Experimental"));
+        .contains("release build"));
 }
 
 #[test]

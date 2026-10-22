@@ -22,7 +22,7 @@
 //! heuristic (HIST1); without it every session is undated.
 //!
 //! Both stick libraries are read (Phase 4 task 11): `export.pdb` and, with
-//! the OneLibrary key (Settings → Experimental, else `REKS_ONELIBRARY_KEY`),
+//! the OneLibrary key (`REKS_ONELIBRARY_KEY`, else built in),
 //! `exportLibrary.db`. Its sessions are listed with `(OneLibrary)` and
 //! import with source `onelibrary`. A database that is not read (no key,
 //! wrong key, a backup copy that does not match its manifest) is reported
@@ -59,7 +59,7 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
     };
     let args = parse_args(flags, cmd)?;
     let source = source(Path::new(path))?;
-    let out = execute(&args, &source)?;
+    let out = execute(&args, &source, resolve_key().as_ref())?;
     if args.json {
         println!("{}", serde_json::to_string_pretty(&out)?);
     } else {
@@ -157,7 +157,7 @@ struct Out {
     report: Option<ImportReport>,
 }
 
-fn execute(args: &Args, source: &Source) -> anyhow::Result<Out> {
+fn execute(args: &Args, source: &Source, key: Option<&OneLibraryKey>) -> anyhow::Result<Out> {
     if !args.library.is_file() {
         bail!("no library at {}", args.library.display());
     }
@@ -167,14 +167,13 @@ fn execute(args: &Args, source: &Source) -> anyhow::Result<Out> {
         .unwrap_or(Path::new("."))
         .join("cache");
     let lib = Library::open(&args.library, &cache_dir)?;
-    let key = resolve_key(&lib)?;
     let (both, onelibrary) = read_both(
         &source.src,
         &HistoryReadOptions {
             stick_serial: source.stick_serial.clone(),
             hist1_dates: args.hist1_dates,
         },
-        key.as_ref().map(OneLibraryKey::expose),
+        key.map(OneLibraryKey::expose),
     )?;
     let plan = history::scan(&both, &lib)?;
     let choices = resolve_choices(&plan, &args.choices)?;
@@ -487,9 +486,19 @@ mod tests {
     }
 
     fn run_on(db: &Path, path: &Path, cmd: Command, flags: &[String]) -> anyhow::Result<Out> {
+        run_with_key(db, path, cmd, flags, None)
+    }
+
+    fn run_with_key(
+        db: &Path,
+        path: &Path,
+        cmd: Command,
+        flags: &[String],
+        key: Option<&OneLibraryKey>,
+    ) -> anyhow::Result<Out> {
         let mut all = vec!["--library".to_owned(), db.to_str().unwrap().to_owned()];
         all.extend_from_slice(flags);
-        execute(&parse_args(&all, cmd)?, &source(path)?)
+        execute(&parse_args(&all, cmd)?, &source(path)?, key)
     }
 
     #[test]
@@ -581,15 +590,6 @@ mod tests {
         .unwrap();
     }
 
-    fn store_key(db: &Path) {
-        let lib = Library::open(db, &db.parent().unwrap().join("cache")).unwrap();
-        lib.update_settings(reks_core::SettingsPatch {
-            onelibrary_key: Some(reks_core::OneLibraryKey::new(OL_KEY)),
-            ..Default::default()
-        })
-        .unwrap();
-    }
-
     /// Both stick libraries' history, the OneLibrary one only with the key.
     #[test]
     fn reads_exportlibrary_history_with_the_key() {
@@ -600,14 +600,15 @@ mod tests {
         let out = run_on(&db, &stick, Command::Scan, &[]).unwrap();
         let text = render(&out);
         assert!(
-            // No key stored (REKS_ONELIBRARY_KEY, if set, is not this one).
+            // No key.
             text.contains("OneLibrary  exportLibrary.db not read: "),
             "{text}"
         );
         assert_eq!(out.plan.sessions.len(), 2);
 
-        store_key(&db);
-        let out = run_on(&db, &stick, Command::Scan, &[]).unwrap();
+        let key = OneLibraryKey::new(OL_KEY);
+        let key = key.as_ref();
+        let out = run_with_key(&db, &stick, Command::Scan, &[], key).unwrap();
         let text = render(&out);
         assert!(text.contains("exportLibrary.db read: 1 sessions"), "{text}");
         assert!(
@@ -617,14 +618,14 @@ mod tests {
         assert!(text.contains("Sessions  3 new, 0 extended"), "{text}");
 
         let flags = ["--practice", "HISTORY 001 (OneLibrary)", "--yes"].map(str::to_owned);
-        let out = run_on(&db, &stick, Command::Import, &flags).unwrap();
+        let out = run_with_key(&db, &stick, Command::Import, &flags, key).unwrap();
         let report = out.report.as_ref().unwrap();
         assert_eq!((report.created.len(), report.entries), (3, 6));
         // export.pdb's HISTORY 001 (twice) and 002 count; the OneLibrary
         // session is practice.
         assert_eq!(play_count(&db), 3);
 
-        let out = run_on(&db, &stick, Command::Import, &args("--yes")).unwrap();
+        let out = run_with_key(&db, &stick, Command::Import, &args("--yes"), key).unwrap();
         assert_eq!(out.report.as_ref().unwrap().skipped, 3);
         assert_eq!(play_count(&db), 3);
     }

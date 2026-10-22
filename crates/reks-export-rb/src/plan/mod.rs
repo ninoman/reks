@@ -494,8 +494,8 @@ pub enum Problem {
     HistoryImportUnavailable {
         message: String,
     },
-    /// The OneLibrary export is on but no key is stored or in
-    /// `REKS_ONELIBRARY_KEY` ([`crate::onelibrary::resolve_key`]).
+    /// The OneLibrary export is on but this build has no key built in and
+    /// `REKS_ONELIBRARY_KEY` is unset ([`crate::onelibrary::resolve_key`]).
     OneLibraryKeyMissing,
     /// The OneLibrary export is on but this build has no writer
     /// ([`crate::onelibrary::NoWriter`]).

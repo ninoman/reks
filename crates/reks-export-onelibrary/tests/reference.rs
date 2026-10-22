@@ -83,3 +83,16 @@ fn reference_opens_with_the_key_and_matches_its_dump() {
     // The history reader takes rekordbox's file: no sessions on a fresh stick.
     assert!(reader.play_history().unwrap().is_empty());
 }
+
+/// The key built into this binary (`REKS_BUILD_ONELIBRARY_KEY`) opens
+/// rekordbox's file. The release workflow runs it with the secret set, so a
+/// wrong secret fails the release; builds without a key skip it.
+#[test]
+fn builtin_key_opens_the_reference() {
+    let Some(key) = reks_core::secret::builtin::key() else {
+        return;
+    };
+    let db = root().join("PIONEER/rekordbox/exportLibrary.db");
+    let reader = OneLibraryReader::open(&db, key.expose()).unwrap();
+    assert_eq!(reader.integrity_check().unwrap(), "ok");
+}

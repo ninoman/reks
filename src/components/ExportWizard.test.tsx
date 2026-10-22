@@ -440,7 +440,7 @@ describe("ExportWizard", () => {
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     expect(screen.getByText("EXPERIMENTAL")).toBeTruthy();
     expect(screen.getByText(/not supported by AlphaTheta/)).toBeTruthy();
-    expect(screen.getByText(/Settings → Experimental/)).toBeTruthy();
+    expect(screen.getByText(/has no OneLibrary key: use a release build/)).toBeTruthy();
     fireEvent.click(toggle);
 
     fireEvent.click(button("Dry run"));

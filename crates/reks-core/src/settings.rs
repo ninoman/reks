@@ -4,11 +4,7 @@
 //! Each setting is one row whose value is JSON. A missing or unreadable value
 //! means the default (an unreadable one is logged), so a bad row never stops
 //! the app. Keys: [`AUDIO_DEVICE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`CACHE_DIR`],
-//! [`UI_STATE`], [`ANLZ_PREFERENCE`], [`ONELIBRARY_KEY`].
-//!
-//! The OneLibrary key is write-only from the UI's side: [`Settings`] says
-//! only whether one is stored, and [`Library::onelibrary_key`] is how the
-//! export reads it. Its value is never logged.
+//! [`UI_STATE`], [`ANLZ_PREFERENCE`].
 
 use std::path::{Path, PathBuf};
 
@@ -20,7 +16,6 @@ use crate::db::create_dir;
 use crate::error::{Error, Result};
 use crate::fileinfo::library_path;
 use crate::keys::KeyNotation;
-use crate::secret::OneLibraryKey;
 use crate::Library;
 
 /// Output device name; absent = the system default.
@@ -35,8 +30,6 @@ pub const CACHE_DIR: &str = "storage.cache_dir";
 pub const UI_STATE: &str = "ui.state";
 /// [`AnlzPreference`]: where USB exports take a track's analysis from.
 pub const ANLZ_PREFERENCE: &str = "export.anlz_preference";
-/// The OneLibrary passphrase the user pasted (Phase 4 key policy, D14).
-pub const ONELIBRARY_KEY: &str = "onelibrary.key";
 
 /// Where a USB export takes a track's ANLZ files (waveforms, beatgrid, cues)
 /// from when both rekordbox's local analysis cache and reks's own analysis
@@ -86,8 +79,8 @@ pub struct Settings {
     pub cache_dir: PathBuf,
     pub ui: UiState,
     pub anlz_preference: AnlzPreference,
-    /// A OneLibrary key is stored (the key itself never leaves Rust).
-    pub onelibrary_key_set: bool,
+    /// This build has the OneLibrary key built in ([`crate::secret::builtin`]).
+    pub onelibrary_key_builtin: bool,
 }
 
 /// Library window state kept across launches. Window size and position are
@@ -127,9 +120,6 @@ pub struct SettingsPatch {
     pub deck_waveform: Option<DeckWaveform>,
     pub ui: Option<UiState>,
     pub anlz_preference: Option<AnlzPreference>,
-    /// `Some(None)` (JSON `null`) removes the stored key.
-    #[serde(default, deserialize_with = "present")]
-    pub onelibrary_key: Option<Option<OneLibraryKey>>,
 }
 
 /// Lets `null` mean "set to none" rather than "absent".
@@ -162,15 +152,8 @@ impl Library {
             cache_dir: self.cache_dir(),
             ui: get(&conn, UI_STATE)?.unwrap_or_default(),
             anlz_preference: get(&conn, ANLZ_PREFERENCE)?.unwrap_or_default(),
-            onelibrary_key_set: read_onelibrary_key(&conn)?.is_some(),
+            onelibrary_key_builtin: crate::secret::builtin::present(),
         })
-    }
-
-    /// The stored OneLibrary key, if any. The export's first key source
-    /// (Phase 4 key policy); the caller falls back to `REKS_ONELIBRARY_KEY`.
-    pub fn onelibrary_key(&self) -> Result<Option<OneLibraryKey>> {
-        let conn = self.conn()?;
-        read_onelibrary_key(&conn)
     }
 
     /// Applies `patch` in one transaction and returns the new settings.
@@ -193,9 +176,6 @@ impl Library {
             }
             if let Some(p) = patch.anlz_preference {
                 put(&tx, ANLZ_PREFERENCE, Some(&p))?;
-            }
-            if let Some(key) = patch.onelibrary_key {
-                put(&tx, ONELIBRARY_KEY, key.as_ref().map(OneLibraryKey::expose))?;
             }
             tx.commit()?;
         }
@@ -364,29 +344,6 @@ fn get<T: DeserializeOwned>(conn: &Connection, key: &str) -> Result<Option<T>> {
     }))
 }
 
-/// Like [`get`] for [`ONELIBRARY_KEY`], without logging the value.
-fn read_onelibrary_key(conn: &Connection) -> Result<Option<OneLibraryKey>> {
-    let raw: Option<zeroize::Zeroizing<String>> = conn
-        .query_row(
-            "SELECT value FROM setting WHERE key = ?1",
-            [ONELIBRARY_KEY],
-            |r| r.get::<_, String>(0),
-        )
-        .optional()?
-        .map(zeroize::Zeroizing::new);
-    let Some(raw) = raw else { return Ok(None) };
-    match serde_json::from_str::<OneLibraryKey>(&raw) {
-        Ok(key) => Ok(Some(key)),
-        Err(_) => {
-            tracing::warn!(
-                key = ONELIBRARY_KEY,
-                "unreadable setting, treating it as unset"
-            );
-            Ok(None)
-        }
-    }
-}
-
 /// Stores `value` as JSON; `None` removes the row (back to the default).
 fn put<T: Serialize + ?Sized>(conn: &Connection, key: &str, value: Option<&T>) -> Result<()> {
     match value {
@@ -540,7 +497,6 @@ mod tests {
             deck_waveform: Some(DeckWaveform::ThreeBand),
             ui: Some(ui.clone()),
             anlz_preference: Some(AnlzPreference::ReksFirst),
-            onelibrary_key: None,
         })
         .unwrap();
         let s = lib
@@ -597,23 +553,6 @@ mod tests {
         assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
         assert_eq!(s.ui, UiState::default());
         assert_eq!(s.audio_device, None);
-    }
-
-    #[test]
-    fn onelibrary_key_is_stored_but_not_shown() {
-        let (_dir, lib) = open_temp();
-        assert!(!lib.settings().unwrap().onelibrary_key_set);
-        let p: SettingsPatch = serde_json::from_str(r#"{"onelibraryKey":" k3y "}"#).unwrap();
-        let s = lib.update_settings(p).unwrap();
-        assert!(s.onelibrary_key_set);
-        assert!(!format!("{s:?}").contains("k3y"));
-        assert!(!serde_json::to_string(&s).unwrap().contains("k3y"));
-        assert_eq!(lib.onelibrary_key().unwrap().unwrap().expose(), "k3y");
-
-        let p: SettingsPatch = serde_json::from_str(r#"{"onelibraryKey":null}"#).unwrap();
-        assert!(!lib.update_settings(p).unwrap().onelibrary_key_set);
-        assert!(lib.onelibrary_key().unwrap().is_none());
-        assert!(serde_json::from_str::<SettingsPatch>(r#"{"onelibraryKey":""}"#).is_err());
     }
 
     #[test]

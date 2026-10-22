@@ -12,17 +12,18 @@
 //!     files; exits non-zero on findings
 //! ```
 //!
-//! The key comes from `REKS_ONELIBRARY_KEY` (Phase 4 key policy) and is
-//! never printed. A database is read from a temporary copy with its `-wal`
+//! The key comes from `REKS_ONELIBRARY_KEY`, else the key built into release
+//! builds (Phase 4 key policy), and is never printed. A database is read from a temporary copy with its `-wal`
 //! and `-shm`, so a stick is never written.
 
 use std::path::Path;
 
 use anyhow::{bail, Context};
+use reks_core::OneLibraryKey;
 use reks_export_onelibrary::diff::{diff, DiffOptions};
 use reks_export_onelibrary::dump::Dump;
 use reks_export_onelibrary::{validate, OneLibraryReader};
-use zeroize::Zeroizing;
+use reks_export_rb::onelibrary::{resolve_key, KEY_ENV};
 
 const USAGE: &str = "usage: reks onelibrary dump <exportLibrary.db> [<out.json>] \
     | diff <ours> <theirs> [--strict] | validate <stick>";
@@ -56,7 +57,7 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
             Ok(())
         }
         [cmd, stick] if cmd == "validate" => {
-            let findings = validate::validate(Path::new(stick), &key()?)?;
+            let findings = validate::validate(Path::new(stick), key()?.expose())?;
             for f in &findings {
                 println!("{f}");
             }
@@ -70,13 +71,10 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
     }
 }
 
-fn key() -> anyhow::Result<Zeroizing<String>> {
-    match std::env::var(reks_export_rb::onelibrary::KEY_ENV) {
-        Ok(k) if !k.trim().is_empty() => Ok(Zeroizing::new(k.trim().to_owned())),
-        _ => bail!(
-            "set {} to the OneLibrary key",
-            reks_export_rb::onelibrary::KEY_ENV
-        ),
+fn key() -> anyhow::Result<OneLibraryKey> {
+    match resolve_key() {
+        Some(key) => Ok(key),
+        None => bail!("this build has no OneLibrary key built in: set {KEY_ENV} to it"),
     }
 }
 
@@ -87,6 +85,6 @@ fn read(path: &Path) -> anyhow::Result<Dump> {
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         return Dump::from_json(&text).with_context(|| format!("parsing {}", path.display()));
     }
-    let reader = OneLibraryReader::open(path, &key()?)?;
+    let reader = OneLibraryReader::open(path, key()?.expose())?;
     Ok(reader.dump()?)
 }

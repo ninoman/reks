@@ -62,17 +62,22 @@ files, mirroring what rekordbox 7.2.11+ does on every export.
 
 ## Key policy (decision; see decisions.md)
 
-- The passphrase is **not committed to this repository** and is not compiled
-  into release binaries by default. Reason: Mixxx and libdjinterop both chose
-  not to ship it; the legal position (DMCA §1201(f) interoperability defence)
-  is untested; the project has no legal budget.
-- The writer takes the key at runtime from, in order: (1) the `setting` table
-  (user pasted it in Settings → Experimental), (2) an environment variable
-  `REKS_ONELIBRARY_KEY` (CI/testing), (3) a locally installed rekordbox 7 via
-  a documented extraction routine **only if** that routine is itself
-  legally reviewed later (placeholder; not implemented in this phase).
-- The UI explains where the key comes from and that the feature is
-  experimental and unsupported by AlphaTheta.
+- The passphrase is **not committed to this repository**. Release builds
+  have it built in (D14, amended 2026-10-21): the release workflow passes the
+  `REKS_ONELIBRARY_KEY` repository secret to the compiler as
+  `REKS_BUILD_ONELIBRARY_KEY`, and
+  [`reks_core::secret::builtin`](../../crates/reks-core/src/secret/builtin.rs)
+  stores it masked, so it is not a plain string in the binary. A build from
+  source without that variable has no built-in key.
+- The writer takes the key at runtime from `REKS_ONELIBRARY_KEY` (CI,
+  testing, builds from source), else the built-in key. Users never enter a
+  key: there is no key field in Settings (removed 2026-10-21).
+- The release workflow refuses to build without the secret, checks that the
+  built-in key opens the reference `exportLibrary.db`
+  (`builtin_key_opens_the_reference`), and checks that no app binary contains
+  the plain key.
+- The export wizard marks the option experimental and unsupported by
+  AlphaTheta, and says when a build has no key.
 - Note: the Phase 2 dependency `baken-export` contains its own obfuscated copy
   of the key in its `onelibrary` module. We do not call that module and we do
   not enable `Options::onelibrary`. Revisit if the maintainers object.
@@ -176,8 +181,8 @@ empty in the reference, so their rows are UNVERIFIED (mapped like baken).
    Done: `validate` (counts, paths, `analysisDataFilePath` vs PDB and on
    disk, `property.numberOfContents`, playlist orphans); `reks onelibrary
    validate <stick>`. rekordbox's own reference stick validates clean.
-8. [x] **Planner integration + UI**: experimental toggle, key entry in Settings,
-   warnings, dry-run shows the extra file. Done: the seam is
+8. [x] **Planner integration + UI**: experimental toggle, key entry in Settings
+   (removed 2026-10-21: release builds have the key built in), warnings, dry-run shows the extra file. Done: the seam is
    [`onelibrary.rs`](../../crates/reks-export-rb/src/onelibrary.rs) in
    reks-export-rb: the trait `OneLibraryExport::plan(&ExportPlan,
    &OneLibraryKey) -> OneLibraryPlan` (planned write, auxiliary files
@@ -193,9 +198,8 @@ empty in the reference, so their rows are UNVERIFIED (mapped like baken).
    (`OneLibraryHistoryNotImported` until a choice; Import and Back up keep the
    file in the backup). A database it cannot read keeps the Phase 2 backup.
    The key (`reks_core::OneLibraryKey`: redacted `Debug`, no `Serialize`,
-   zeroed on drop) is stored under `onelibrary.key` in the `setting` table
-   from Settings → Experimental. The UI only learns `onelibraryKeySet`, and
-   `REKS_ONELIBRARY_KEY` is the fallback.
+   zeroed on drop) comes from `resolve_key` (key policy above); the UI only
+   learns `onelibraryKeyBuiltin`.
    Apply side (2026-10-20): with the option on, `apply` takes the writer and
    key in `ApplyEnv::onelibrary` (`OneLibraryEnv`, never in the plan) and
    refuses without them (`NoOneLibraryWriter`, `NoOneLibraryPlan`). After the

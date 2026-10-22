@@ -95,9 +95,28 @@ jobs:
       - name: npm ci
         run: npm ci
 
+      # The OneLibrary passphrase is built into release binaries from this secret,
+      # never from the repository (D14). A release without it, or with a key that
+      # does not open rekordbox's reference file, is refused.
+      - name: Check the built-in OneLibrary key
+        shell: bash
+        env:
+          REKS_BUILD_ONELIBRARY_KEY: ${{ secrets.REKS_ONELIBRARY_KEY }}
+        run: |
+          if [ -z "$REKS_BUILD_ONELIBRARY_KEY" ]; then
+            echo "::error::Set the REKS_ONELIBRARY_KEY repository secret (docs/phases/phase-4.md, key policy)."
+            exit 1
+          fi
+          # One platform is enough to prove the secret is right.
+          [ "${{ matrix.target }}" = aarch64-apple-darwin ] || exit 0
+          out=$(cargo test -p reks-export-onelibrary --test reference builtin_key_opens_the_reference -- --exact 2>&1) \
+            || { echo "$out"; exit 1; }
+          echo "$out" | grep -q "1 passed" || { echo "$out"; echo "::error::the built-in key test did not run"; exit 1; }
+
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REKS_BUILD_ONELIBRARY_KEY: ${{ secrets.REKS_ONELIBRARY_KEY }}
         with:
           tauriScript: npx tauri
           args: --target ${{ matrix.target }}
@@ -109,3 +128,22 @@ jobs:
             Not tested on CDJs; see docs/hw-test-log.md.
           releaseDraft: true
           prerelease: true
+
+      # The key is stored masked; make sure no build carries it as plain text. The
+      # release is still a draft here: if this fails, delete it rather than publish.
+      - name: Check the binary has no plain-text key
+        shell: bash
+        env:
+          REKS_BUILD_ONELIBRARY_KEY: ${{ secrets.REKS_ONELIBRARY_KEY }}
+        run: |
+          found=0
+          for f in target/${{ matrix.target }}/release/reks target/${{ matrix.target }}/release/reks.exe \
+                   target/${{ matrix.target }}/release/reks-app target/${{ matrix.target }}/release/reks-app.exe; do
+            [ -f "$f" ] || continue
+            found=1
+            if grep -a -F -q -- "$REKS_BUILD_ONELIBRARY_KEY" "$f"; then
+              echo "::error::$f contains the OneLibrary key as plain text"
+              exit 1
+            fi
+          done
+          [ "$found" = 1 ] || { echo "::error::no app binary found to check"; exit 1; }

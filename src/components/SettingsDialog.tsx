@@ -1,8 +1,7 @@
 /**
  * Settings (phase 1 task 13) in one view, grouped: Folders (library folders,
  * cache folder), Playback (output device), Display (key notation), Decks
- * (the waveform style of the player deck and the Mix view), Experimental (the OneLibrary key, phase 4 task 8; write-only: Rust only
- * says whether one is stored). Values
+ * (the waveform style of the player deck and the Mix view). Values
  * live in Rust (`useSettings`); the library window's own state (columns,
  * panels, volume) is saved without asking.
  */
@@ -26,7 +25,6 @@ import {
   DialogTitle,
 } from "./ui/Dialog";
 import { Field } from "./ui/Field";
-import { Input } from "./ui/Input";
 import { Segment, SegmentedControl } from "./ui/SegmentedControl";
 import { Select } from "./ui/Select";
 
@@ -114,9 +112,6 @@ function SettingsBody() {
           </Group>
           <Group title="Decks">
             <DeckWaveformChoice waveform={settings.deckWaveform} />
-          </Group>
-          <Group title="Experimental">
-            <OneLibraryKey keySet={settings.onelibraryKeySet} />
           </Group>
         </>
       )}
@@ -328,61 +323,6 @@ function CacheFolder({ cacheDir }: { cacheDir: string }) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function OneLibraryKey({ keySet }: { keySet: boolean }) {
-  const [draft, setDraft] = useState("");
-  const update = (onelibraryKey: string | null) => useSettings.getState().update({ onelibraryKey });
-
-  async function save() {
-    await update(draft.trim());
-    setDraft("");
-  }
-
-  return (
-    <div className={item}>
-      <h5 className={itemTitle}>OneLibrary key</h5>
-      <p className={hint}>
-        The OneLibrary export option also writes exportLibrary.db, the library newer players read.
-        It is experimental: no player has been tested with reks's file, and AlphaTheta does not
-        support it.
-      </p>
-      <p className={hint}>
-        rekordbox encrypts exportLibrary.db with a fixed passphrase. reks does not include it;
-        community projects that document the format have published it. Paste it here to use the
-        option. reks keeps it in its library database on this computer and never shows or logs it.
-        Without a stored key, reks reads REKS_ONELIBRARY_KEY from the environment.
-      </p>
-      <p className="mt-2.5 mb-0 text-sm" role="status">
-        {keySet ? "A key is stored." : "No key stored."}
-      </p>
-      <form
-        className={row}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (draft.trim() !== "") void save();
-        }}
-      >
-        <Input
-          type="password"
-          aria-label="OneLibrary key"
-          placeholder={keySet ? "Paste a new key to replace it" : "Paste the key"}
-          autoComplete="off"
-          spellCheck={false}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-        <Button type="submit" disabled={draft.trim() === ""}>
-          Save
-        </Button>
-        {keySet && (
-          <Button type="button" variant="quiet" onClick={() => void update(null)}>
-            Remove
-          </Button>
-        )}
-      </form>
     </div>
   );
 }

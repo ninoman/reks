@@ -505,10 +505,7 @@ pub async fn export_apply(
         // Read again rather than kept from the dry run, so the key is in
         // memory only while an export needs it. Without one, apply refuses.
         let key = if plan.options.onelibrary {
-            one::resolve_key(&lib).unwrap_or_else(|err| {
-                tracing::warn!(%err, "OneLibrary key not read");
-                None
-            })
+            one::resolve_key()
         } else {
             None
         };

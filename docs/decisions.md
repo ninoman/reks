@@ -438,10 +438,25 @@ Date of decisions: 2026-10-18.
   pass on the SQLCipher build. Consequence: the app's SQLite version is
   SQLCipher's, which trails upstream by a release or two; do not use SQLite
   features newer than SQLCipher's bundled version in `reks-core`.
-- Rationale and policy: see `docs/phases/phase-4.md`. The key is user- or
-  environment-supplied at runtime, mirroring libdjinterop and Mixxx, because
-  the legal position is untested and the format is in flux (R§2). Feature off
-  by default until a hardware success is logged.
+- Rationale and policy: see `docs/phases/phase-4.md`. Originally the key was
+  user- or environment-supplied at runtime only, mirroring libdjinterop and
+  Mixxx, because the legal position is untested and the format is in flux
+  (R§2). Feature off by default until a hardware success is logged.
+- Amended 2026-10-21 (maintainer decision): release builds have the key built
+  in, because asking users to find it was too unfriendly. It is still never in
+  the repository: CI injects it from a secret at compile time and the binary
+  holds it masked (`reks_core::secret::builtin`). Why the risk is acceptable:
+  the key is public and shipped by pyrekordbox, baken and onelibrary-connect
+  with no takedowns found (R§2); the only use is writing the user's own
+  library to their own stick for players to read, which is the case DMCA
+  §1201(f) exempts; AlphaTheta now sanctions third-party writers. Keeping it
+  out of git keeps the repository, the likeliest takedown target, free of
+  it. Users never enter a key (the Settings key field is gone);
+  `REKS_ONELIBRARY_KEY` overrides the built-in one for CI and builds from
+  source, and if rekordbox changes the passphrase, a new release ships it.
+  Rejected: committing it obfuscated (as baken does; puts the repository at
+  risk) and extracting it from a local rekordbox (does not help users
+  without rekordbox).
 - Rejected: enabling `baken-export`'s `onelibrary` option (embeds the key,
   untested on players); rbox (GPL-3.0-only is compatible but the repo is
   unreachable and docs.rs fails).
@@ -450,9 +465,9 @@ Date of decisions: 2026-10-18.
   lives in `reks-export-rb` (the writer crate needs `ExportPlan`, so the
   dependency can only go writer → reks-export-rb), and the app injects the
   implementation. The key is a `reks_core::OneLibraryKey` (`zeroize`,
-  Apache-2.0 OR MIT): never serialised, never logged, stored in plain text
-  in the local library database. That is the policy's "pasted in Settings";
-  OS keychain storage is not in this phase.
+  Apache-2.0 OR MIT): never serialised, never logged. (Until 2026-10-21 it
+  could also be pasted in Settings and stored in the library database; an
+  old `onelibrary.key` row is now ignored.)
 - Apply seam (2026-10-20): the trait also has `write(plan, key,
   device_root)`, which `apply` calls after baken has written `export.pdb`
   and removed rekordbox's OneLibrary files, the order baken uses for its own

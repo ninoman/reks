@@ -146,7 +146,7 @@ impl fmt::Display for Problem {
                 "cannot import the stick's play history ({message}); back it up or discard it"
             ),
             Self::OneLibraryKeyMissing => f.write_str(
-                "the OneLibrary export needs its key: paste it in Settings → Experimental \
+                "this build of reks has no OneLibrary key built in: use a release build \
                  or set REKS_ONELIBRARY_KEY",
             ),
             Self::OneLibraryUnavailable => f.write_str(
