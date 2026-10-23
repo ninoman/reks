@@ -30,7 +30,6 @@ import { usePanels } from "../store/panels";
 import { replaceRowEverywhere } from "../store/panes";
 import { primaryIndex } from "../store/selection";
 import { useKeyLabel } from "../store/settings";
-import { ArtworkThumb } from "./ArtworkThumb";
 import { ErrorMessage } from "./ErrorMessage";
 import { GridEditorDialog } from "./GridEditor";
 import { PlayedIn } from "./PlayedIn";
@@ -43,6 +42,7 @@ import {
   TEXT_FIELDS,
   toForm,
 } from "./trackDetailForm";
+import { Artwork } from "./ui/Artwork";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
@@ -204,7 +204,7 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
 
   return (
     <Panel>
-      <ArtworkThumb artworkId={t.artwork?.id ?? null} mime={t.artwork?.mime ?? ""} />
+      <Artwork artworkId={t.artwork?.id ?? null} mime={t.artwork?.mime ?? ""} />
       <div className="text-xs text-fg-muted">
         <div>
           {t.kind.toUpperCase()}

@@ -639,7 +639,7 @@ Date of decisions: 2026-10-18.
   [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §6;
   phase 5 tasks 24–25.
 - 3-band EQ layout (issue #56; status: **accepted** 2026-10-23, maintainer's
-  go-ahead to implement; phase 5 task 26): an EQ
+  go-ahead to implement; phase 5 task 27): an EQ
   setting, 4-band · 3-band, beside Mixer view Simple · Advanced (which
   applies to both). 3-band has a 3-band EQ (−26 / +6 dB) and, per channel,
   an FX knob with a mixer-wide effect select (FILTER, ECHO, REVERB) and
@@ -663,6 +663,21 @@ Date of decisions: 2026-10-18.
   `soundtouch` (SPDX `LGPL-2.1`, needs a `deny.toml` note). Choose by listening test.
   Status 2026-10-21: licences and cost checked (R§9.3), `reks keylock-render`
   ready; the choice is pending the maintainer's listening (phase 5 task 10).
+- Master tempo (status: **proposed** 2026-10-23, pending task 10's
+  listening): the deck's **M** turns on a key lock head built on
+  `timestretch` 0.15's real-time `Keylock` profile (two-band SOLA). Why this
+  one first: already in the tree and licence-checked (MIT, `cargo deny`
+  passes), pure Rust (no C++ toolchain or libclang on any platform), lowest
+  latency (≈ 12.7 ms) and no allocation measured in the callback (R§9.3).
+  It sits behind one module, [`keylock.rs`](../crates/reks-mix/src/keylock.rs),
+  so another engine is a local swap if listening prefers it. A jump primes
+  the engine synchronously (reset, preroll, output dropped until the target
+  leaves it), so the deck needs no latency compensation; leaving key lock
+  bakes the crossfade's fade-out from the engine, since its output is not the
+  source at the head. Limits: used where the step is 0.25–2 and the source
+  is at the engine's rate (the app resamples at load, D5), else varispeed;
+  the profile fades to varispeed beyond ±35% (WIDE). Each jump with M on
+  costs one priming run on the audio thread, so tiny loops cost more CPU.
 - Rejected: live-performance scope (MIDI mapping, recording, stage reliability;
   a second product, needs its own decision); embedding Mixxx (C++/Qt
   application, not a library); WebView audio (D4); rodio for the mixer (no
@@ -825,9 +840,9 @@ Date of decisions: 2026-10-18.
   canvas (4.6:1; the warm one was 3.9:1).
 - Themes (2026-10-22, maintainer's call): the light/dark pair that followed
   the system became five themes picked in Settings (`display.theme`):
-  Graphite (default: Claude's warm dark neutrals, ivory accent), Paper (light,
+  Graphite (Claude's warm dark neutrals, ivory accent), Paper (light,
   rose), Midnight (navy, blue), Dusk (plum, lavender), Booth (black, light grey;
-  for dark rooms). Cool accents on the warm neutrals were tried and dropped.
+  for dark rooms; the default since 2026-10-23). Cool accents on the warm neutrals were tried and dropped.
   The deck follows the theme too (Paper's is light). Palettes, contrast
   checks: [`ui.md`](ui.md#ui-design-system).
 - Decision: tokens CSS-first in `src/styles/tokens.css` (`@theme`, one block
@@ -964,7 +979,9 @@ Date of decisions: 2026-10-18.
   (`reks-mix` `Engine`, src-tauri `mix.rs`). The library plays on its deck 2
   (`PLAYER_DECK`, [`src/store/player.ts`](../src/store/player.ts)), one of the
   two decks the Mix panel shows by default. Double-click, Enter, Space and the
-  history view play on it; it opens the output when it is off, with the saved
+  history view play on it (with 2 or 4 decks shown, double-click and Enter
+  load onto a spare deck instead, never onto one that may be on air; added
+  2026-10-23, [`ui.md`](ui.md#mix-panel-phase-5)); it opens the output when it is off, with the saved
   output settings (`audio.*`, Settings → Playback). With the Mix
   panel off, the window shows that deck alone in the deck
   design (scrolling and overview waveform, cue, hot cues, nudge, quantise,

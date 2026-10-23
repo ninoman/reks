@@ -17,6 +17,7 @@ import {
   tagsMutate,
 } from "../lib/ipc";
 import { useLibrary } from "./library";
+import { usePanels } from "./panels";
 import { allLibraries } from "./panes";
 import { applyTags } from "./tagModel";
 
@@ -104,13 +105,20 @@ export const useTags = create<TagsState>()((set, get) => {
       set({ error: null });
     },
     openManager() {
+      usePanels.setState({ filterBarOpen: false });
       set({ managerOpen: true });
     },
     closeManager() {
       set({ managerOpen: false });
     },
     toggleManager() {
+      if (!get().managerOpen) usePanels.setState({ filterBarOpen: false });
       set((s) => ({ managerOpen: !s.managerOpen }));
     },
   };
+});
+
+// The two right-hand drawers share one spot: opening Filters closes My Tags.
+usePanels.subscribe((s, prev) => {
+  if (s.filterBarOpen && !prev.filterBarOpen) useTags.setState({ managerOpen: false });
 });

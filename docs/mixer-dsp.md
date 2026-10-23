@@ -104,7 +104,7 @@ Tests (`dsp::filter` tests):
 | maximum resonance, LP/HP/BP, 30 Hz–20 kHz in 1/3 octaves and while FREQ sweeps end to end | finite, below 200 on full-scale noise, rings down; at 44.1, 48, 96 kHz |
 | mode switch plus ON → off on a 50 Hz tone | no sample step above 0.01 |
 
-## 3-band EQ and channel FX (task 26)
+## 3-band EQ and channel FX (task 27)
 
 The 3-band layout's blocks (`docs/research/djm-eq-fx.md`, R§9.5). Both
 layouts' blocks sit in every strip; the UI sends the hidden layout's knobs

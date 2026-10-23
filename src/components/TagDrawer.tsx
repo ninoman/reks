@@ -263,7 +263,7 @@ function deleteText(d: Doomed): string {
 }
 
 function targetText(targets: TrackRow[]): string {
-  if (targets.length === 0) return "Select tracks to attach tags to them.";
+  if (targets.length === 0) return "";
   if (targets.length > 1) return `Tick a tag to attach it to ${targets.length} selected tracks.`;
   const r = targets[0];
   const name = [r?.artist, r?.title].filter(Boolean).join(" – ") || "Untitled";
@@ -282,8 +282,6 @@ export function TagDrawer() {
   const [doomed, setDoomed] = useState<Doomed | null>(null);
 
   const categories = tree?.categories ?? [];
-  const firstCategory: TagId | undefined = categories[0]?.id;
-  const noTags = categories.every((c) => c.tags.length === 0);
 
   return (
     <aside
@@ -299,7 +297,7 @@ export function TagDrawer() {
     >
       <div className="px-3 pt-2">
         <SheetHeader title="My Tags" closeLabel="Close My Tags" onClose={close} />
-        <p className="m-0 pb-2 text-xs text-fg-muted" aria-live="polite">
+        <p className="m-0 pb-2 text-xs text-fg-muted empty:hidden" aria-live="polite">
           {targetText(targets)}
         </p>
       </div>
@@ -316,19 +314,6 @@ export function TagDrawer() {
             )
           ) : (
             <>
-              {noTags && firstCategory !== undefined && (
-                <div className="rounded-md border border-border-subtle bg-bg p-3 text-sm">
-                  <p className="m-0 mb-2 text-fg-muted">
-                    No tags yet. Tags group by category (Genre, Situation…); add the first one
-                    below.
-                  </p>
-                  <AddField
-                    label="Your first tag"
-                    placeholder={`First tag, in ${categories[0]?.name}`}
-                    onAdd={(name) => addTag(firstCategory, name, targets)}
-                  />
-                </div>
-              )}
               {categories.map((c) => (
                 <CategorySection
                   key={c.id}

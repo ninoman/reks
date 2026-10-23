@@ -49,6 +49,8 @@ deunicode = "1.6"
 # Pure-Rust FLAC encoder for the converter (D25). No default features: no rayon-style threads, no serde.
 flacenc = { version = "0.5", default-features = false }
 hound = "3"
+# Artwork thumbnails (decode + resize + JPEG). MIT/Apache-2.0; already in the tree via rten.
+image = { version = "0.25", default-features = false, features = ["bmp", "gif", "jpeg", "png", "webp"] }
 imagesize = { version = "0.15", default-features = false, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
 lofty = "0.25"
 proptest = "1"
@@ -66,9 +68,10 @@ libc = "0.2"
 rustfft = "6.4"
 rusqlite = { version = "0.40", features = ["bundled"] }
 rubato = "5"
-# Key lock candidates (phase 5 task 10), reks-cli only, exact pins: young crates.
-# timestretch is pure Rust (MIT); the other two compile C++ with cc + bindgen
-# (libclang) and sit behind opt-in reks-cli features. See research.md §9.3.
+# Key lock (phase 5 task 10), exact pins: young crates. timestretch is pure
+# Rust (MIT) and is reks-mix's key lock head (D21, proposed); the other two
+# compile C++ with cc + bindgen (libclang) and sit behind opt-in reks-cli
+# features for listening comparisons. See research.md §9.3.
 timestretch = "=0.15.0"
 signalsmith-stretch = "=0.1.3"
 # GPL-2.0-or-later (Rubber Band 4.0.0 vendored), compatible with GPL-3.0-or-later.

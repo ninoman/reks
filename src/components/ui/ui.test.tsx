@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogTitle } from "./Dialog";
 import { IconButton } from "./IconButton";
 import { InlineNumber, parseNumber } from "./InlineNumber";
 import { Input } from "./Input";
+import { LampButton } from "./LampButton";
 import { Pad, SplitPad } from "./Pad";
 import { Readout } from "./Readout";
 import { Segment, SegmentedControl } from "./SegmentedControl";
@@ -20,9 +21,9 @@ afterEach(cleanup);
 
 const SIZES: ControlSize[] = ["xs", "sm", "md", "lg"];
 
-/** The height utility on an element (`h-(--ctl-h-sm)` etc.). */
+/** The height utility on an element (`h-(--ctl-h-sm)` etc.); `min-h-` (controls that may wrap) counts as `h-`. */
 function heightClass(el: Element): string | undefined {
-  return [...el.classList].find((c) => c.startsWith("h-"));
+  return [...el.classList].find((c) => /^(min-)?h-/.test(c))?.replace(/^min-/, "");
 }
 
 describe("control size scale", () => {
@@ -317,5 +318,16 @@ describe("Readout", () => {
     expect(heightClass(screen.getByRole("img"))).toBe(
       heightClass(screen.getByRole("button", { name: "b" })),
     );
+  });
+});
+
+describe("LampButton", () => {
+  it("is a button that reports and toggles its pressed state", () => {
+    const onClick = vi.fn();
+    render(<LampButton aria-label="Lamp" pressed={false} onClick={onClick} />);
+    const lamp = screen.getByRole("button", { name: "Lamp" });
+    expect(lamp.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(lamp);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });

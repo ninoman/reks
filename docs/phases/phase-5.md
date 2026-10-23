@@ -1,6 +1,8 @@
 # Phase 5 — Mix-prep mixer (decks, beat sync, Xone:92-style mixer)
 
-Status: not started; scheduled after Phase 4 and before Engine DJ export
+Status: in progress (tasks 1–9 and 12–25 done by 2026-10-23; 10 key lock
+evaluation (master tempo works on `timestretch`, engine choice pending
+listening) and 11 listening checklist open). Runs before Engine DJ export
 (Phase 6) (D21, reordered 2026-10-20). Depends on: Phase 1
 (library, decode, imported grids) and Phase 3 (waveform columns, grid editor).
 Read `docs/decisions.md` D5, D10, D21 and `docs/research.md` §9 first.
@@ -288,6 +290,16 @@ pub enum Control {
     | vocal 1 | rubberband-r2 | | | |
 
     Listener, date, headphones/speakers: _______. Choice: pending (D21).
+
+    Master tempo on the decks (2026-10-23, maintainer report "M does not
+    work"): M was a disabled placeholder and the engine had no stretcher.
+    Now **M** toggles `Control::MasterTempo`; the deck plays through a key
+    lock head on `timestretch` Keylock (D21, proposed until the listening
+    above picks an engine). Tests: `crates/reks-mix/tests/master_tempo.rs`
+    (90 / 440 / 1,000 Hz tones at ±6%: key held within 0.5% with M, shifted
+    by the tempo without; head moves at the tempo; toggling and seeking
+    don't click), `keylock.rs` unit test, no-allocation callback test in
+    `engine.rs`, `DeckStrip.test.tsx`.
 11. **Listening checklist** below, run and logged ([#26](https://github.com/ninoman/reks/issues/26)).
 12. [x] **Deck refinements** (maintainer review of tasks 8–9, 2026-10-21):
     - Tempo ranges ±6, ±10, ±16 and WIDE (±100%), CDJ-3000; ±10 is the
@@ -451,7 +463,8 @@ pub enum Control {
       (not in text fields, dialogs or menus), Mix panel open or not.
     - Tempo: no Reset button (double-click or Delete; drags snap at 0%), BPM
       typed into the header steps the range up when needed; nudge uses the
-      CDJ jog arrows. Master tempo (**M**) stays disabled until task 10.
+      CDJ jog arrows. Master tempo (**M**) stayed disabled until task 10
+      (wired 2026-10-23, see task 10).
     - `tsconfig.app.json` type errors from task 14 fixed (`shortcut` under
       `exactOptionalPropertyTypes`; the root `tsc --noEmit` checks no files,
       so `npx tsc --noEmit -p tsconfig.app.json` is the real check).
@@ -673,6 +686,10 @@ nothing; 25 needs 22–24.
     wide, not 52 (a 60 px CUE / PLAY / Q / SYNC / MASTER cluster and the loop
     grid take the rest); measurements in `ui.md` (5 library rows at
     1280 × 800, 8 at 1440 × 900).
+    Revised 2026-10-23 (maintainer): 2 and 4 decks share one controls row
+    (CUE / PLAY · pads · quick-loop block · MASTER / SYNC) that scales with
+    the deck's width; the 4-deck pads are now 42 px wide at 1280 px and the
+    artwork 24 px. See `ui.md` "Controls row".
 24. [x] **Settings → Mixer and the mixer's settings button** ([#45](https://github.com/ninoman/reks/issues/45)) (§6).
     - `reks-core` `settings.rs`: `mix.mixer_view` (`MixerView`: simple,
       advanced; default simple) and `mix.mixer_filters` (`MixerFilters`:
@@ -704,7 +721,21 @@ nothing; 25 needs 22–24.
     `mix.test.ts` (engine values in Simple, stored values back in
     Advanced, after a start), `MixerPanel.test.tsx` (hidden rows per
     view), `mixKeys.test.ts` (X C V in Simple).
-26. [x] **3-band EQ and channel FX layout** ([#56](https://github.com/ninoman/reks/issues/56)).
+26. [x] **Double-click loads onto a spare deck** (maintainer request,
+    2026-10-23). With 2 or 4 decks, double-click or Enter on a track (table,
+    history session, stick list) loads it paused onto a spare deck: an empty
+    one first, else the lowest-numbered deck that is stopped with its
+    channel fader fully closed (`spareDeck`,
+    [`src/lib/spareDeck.ts`](../../src/lib/spareDeck.ts)). With none spare
+    nothing loads and a toast says "No free deck". With 1 deck it still
+    plays on deck 2. Engine fix: PLAY sent while a load fades out a playing
+    track now starts the new track once it is in (`Deck::play_after_load`);
+    before, it came in paused, so a double-click while the player was
+    playing loaded the new track stopped. Tests: `spareDeck.test.ts`,
+    `player.test.ts` (`activateTrack`), `graph.rs`
+    (`play_after_a_load_while_playing_starts_the_new_track`,
+    `pause_after_a_queued_play_keeps_the_new_track_stopped`).
+27. [x] **3-band EQ and channel FX layout** ([#56](https://github.com/ninoman/reks/issues/56)).
     Spec: [`research/djm-eq-fx.md`](../research/djm-eq-fx.md); wireframe:
     [`wireframes/mix-view-56.html`](../wireframes/mix-view-56.html).
     - [x] `reks-core` `settings.rs`: `mix.mixer_eq` (`MixerEq`: fourBand,

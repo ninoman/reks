@@ -36,7 +36,7 @@ import { useConverter } from "../store/converter";
 import { entryPosition, itemAt, type ViewItem, viewCount } from "../store/library";
 import { libraryRef, useMix } from "../store/mix";
 import { usePanels } from "../store/panels";
-import { playTrack, usePlayerTrackId } from "../store/player";
+import { activateTrack, usePlayerTrackId } from "../store/player";
 import { shownPlaylist, usePlaylists } from "../store/playlists";
 import { primaryIndex } from "../store/selection";
 import { useTags } from "../store/tags";
@@ -203,9 +203,9 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
     else select({ type: "click", index });
   }
 
-  /** Double-click or Enter: a track plays, a divider is renamed. */
+  /** Double-click or Enter: a track plays (or loads onto a spare deck while mixing), a divider is renamed. */
   function activate(item: ViewItem) {
-    if (item.kind === "track") void playTrack(libraryRef(item.row));
+    if (item.kind === "track") void activateTrack(libraryRef(item.row));
     else if (view !== null)
       usePlaylists
         .getState()

@@ -25,7 +25,11 @@ export function PagePicker({ page, pages, disabled, label, onPage }: PagePickerP
       >
         <ChevronRightIcon />
       </IconButton>
-      <span className="font-mono text-2xs text-fg-subtle tabular-nums" aria-hidden="true">
+      {/* The arrows are enough on narrow pads (`DeckPads` is the container): the tabs get the room. */}
+      <span
+        className="hidden font-mono text-2xs text-fg-subtle tabular-nums @[12rem]:inline"
+        aria-hidden="true"
+      >
         {disabled ? "–" : `${page + 1}/${pages}`}
       </span>
       <IconButton

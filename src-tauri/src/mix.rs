@@ -162,6 +162,8 @@ pub struct DeckView {
     pub sync_bar: bool,
     pub locked: bool,
     pub quantise: bool,
+    /// Master tempo (key lock) is on.
+    pub master_tempo: bool,
     /// This deck is the sync master.
     pub master: bool,
     /// The active loop.
@@ -243,6 +245,7 @@ fn deck_view(d: &DeckState, track_id: Option<TrackId>, rate: u32) -> DeckView {
         sync_bar: d.sync_bar,
         locked: d.locked,
         quantise: d.quantise,
+        master_tempo: d.master_tempo,
         master: d.master,
         loop_region: d.loop_region.map(|l| loop_view(l, rate)),
         loop_in: d.loop_in.map(|f| frames_to_ms(f, rate)),
@@ -825,6 +828,10 @@ pub enum MixControl {
         deck: u8,
         on: bool,
     },
+    MasterTempo {
+        deck: u8,
+        on: bool,
+    },
     Channel {
         ch: u8,
         param: ChannelParamArg,
@@ -889,6 +896,7 @@ impl MixControl {
             Self::Reloop { deck } => Control::Reloop { deck },
             Self::LoopResize { deck, double } => Control::LoopResize { deck, double },
             Self::Quantise { deck, on } => Control::Quantise { deck, on },
+            Self::MasterTempo { deck, on } => Control::MasterTempo { deck, on },
             Self::Channel { ch, param, value } => Control::Channel {
                 ch,
                 param: match param {

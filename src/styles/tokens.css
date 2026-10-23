@@ -479,6 +479,7 @@
 
   /* Rows: track table and playlist tree (TS mirror: ROW_HEIGHT), menu items. */
   --row-h: 26px;
+  --row-art: 20px;
   --menu-item-h: 26px;
 
   /* Layout. */
@@ -515,20 +516,16 @@
   --deck-overview-h-compact: 14px;
   /* Both views and the gap between them, in the player deck. */
   --deck-views-h: calc(var(--deck-wave-h) + var(--deck-overview-h) + 6px);
-  /* Q over CUE and PLAY: 20 + 32 + 32 and two 4px gaps. */
-  --deck-bottom-h: 92px;
-  /* Compact bottom row: pad mode tabs (20), two 26 pad rows and their gaps. */
-  --deck-bottom-h-compact: 80px;
   /* The player deck alone: header over one row (CUE / PLAY · views · pads); padding and border included. */
   --deck-solo-h: calc(var(--deck-header-h) + 6px + var(--deck-views-h) + 18px);
   --deck-art: 40px;
+  /* Fits the 30 px compact header whole. */
+  --deck-art-compact: 24px;
   --deck-pads-max-w: 336px;
-  /* Quick-loop 3 x 2 block, beside the pads. */
-  --loop-block-w: 104px;
-  --deck-transport: 32px;
-  --deck-sync-w: 60px;
-  /* Compact deck: CUE / PLAY, Q / SYNC and MASTER in one two-column cluster as wide as MASTER / SYNC. */
-  --deck-cluster-w: var(--deck-sync-w);
+  /* Compact controls row: pad mode tabs (20), two 26 px pad rows and their gaps. */
+  --deck-controls-h-compact: 80px;
+  /* Every column of the controls row: the pad mode tabs' row over the two pad rows. */
+  --deck-ctl-rows: var(--ctl-h-xs) minmax(0, 1fr) minmax(0, 1fr);
   --deck-tempo-w: 44px;
   --pad-h: 26px;
   /* Tempo fader: drags within this of 0% snap to it. */
@@ -573,6 +570,39 @@
   --duration-fast: 100ms;
   --duration-slide-in: 240ms;
   --duration-slide-out: 160ms;
+}
+
+/*
+ * A deck (`DeckStrip`, `data-deck-size`) is an inline-size container: its
+ * controls row (CUE / PLAY · pads · quick loop · MASTER / SYNC) scales with
+ * the deck's width. Declared here, not on :root, so the derived sizes see
+ * the compact and solo overrides.
+ */
+[data-deck-size] {
+  --deck-gap: clamp(4px, 1.2cqw, 10px);
+  --deck-controls-h: clamp(92px, 16cqw, 116px);
+  /* One pad row: the controls row less the tabs (--ctl-h-xs) and two 4 px gaps. */
+  --deck-pad-row-h: calc((var(--deck-controls-h) - var(--ctl-h-xs) - 8px) / 2);
+  /* CUE and PLAY are round, one pad row across. */
+  --deck-transport-w: var(--deck-pad-row-h);
+  --loop-block-w: clamp(100px, 21cqw, 148px);
+  --deck-sync-w: clamp(52px, 11cqw, 88px);
+  --deck-ctl-cols: var(--deck-transport-w) minmax(0, 1fr) var(--loop-block-w) var(--deck-sync-w);
+}
+[data-deck-size="compact"] {
+  --deck-controls-h: var(--deck-controls-h-compact);
+  --deck-header-h: var(--deck-header-h-compact);
+  --deck-overview-h: var(--deck-overview-h-compact);
+  --deck-art: var(--deck-art-compact);
+}
+[data-deck-size="solo"] {
+  --deck-controls-h: var(--deck-views-h);
+}
+/* A narrow deck (448 px at a 1280 px window): small labels a pixel smaller, so RELOOP, MASTER and the pad tabs fit. */
+@container (width < 30rem) {
+  [data-deck-size] > * {
+    --text-2xs: 10px;
+  }
 }
 
 /*

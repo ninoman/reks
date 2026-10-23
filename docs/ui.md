@@ -9,11 +9,11 @@ Settings → Display (`display.theme`); history in
 
 | Theme | Look | Accent |
 |---|---|---|
-| Graphite (default) | dark, Claude's warm neutrals | ivory |
+| Graphite | dark, Claude's warm neutrals | ivory |
 | Paper | light, the same warm neutrals | rose |
 | Midnight | dark navy | blue |
 | Dusk | dark plum | lavender |
-| Booth | black, most contrast (dark rooms) | light grey |
+| Booth (default) | black, most contrast (dark rooms) | light grey |
 
 No accent is orange, amber, red or green: those already mean something here
 (warning/rating and the cue point, danger and memory cues, success and hot
@@ -126,7 +126,7 @@ have the same height (tested in `ui.test.tsx`).
 | gap | 4 | 4 | 6 | 8 |
 
 Use: `xs` inside rows (tree "+", sheet close, key grid); `sm` in bars (app
-header, library toolbar, filter bar, player bar, decks); `md` (default) in dialogs and
+header, library toolbar, drawers, player bar, decks); `md` (default) in dialogs and
 forms; `lg` for large standalone controls. Table and tree rows use `--row-h`,
 menu items `--menu-item-h`.
 
@@ -140,6 +140,7 @@ menu items `--menu-item-h`.
 | `Textarea` | `size`: sm, md | native |
 | `Select` | `size`; native `<select>` with our chevron | native |
 | `Switch` | `size`: sm, md | Radix Switch |
+| `LampButton` | `pressed`; small round text-less toggle (the filter ON lamp), accent when lit; `aria-label` required | none |
 | `Checkbox` | `size`: sm, md; `indeterminate` (mixed); native, wrap in a `<label>` (Biome knows it as an input) | native |
 | `Slider` | `size`: sm, md; one value | Radix Slider |
 | `SegmentedControl` + `Segment` | `size`; `variant`: default, control (chosen segment lit), outline (chosen segment ringed in `accent`, no fill: mode tabs); one choice, can't be cleared (radiogroup); segment corners nest inside the outer radius (`--seg-r`) | Radix ToggleGroup |
@@ -250,7 +251,10 @@ rekordbox and Traktor (2026-10-22; it was along the bottom):
   takes its place and shows the same deck among the others; "Load to deck N"
   in the table opens it.
 - Double-click or Enter on a row, and double-click in a history session or
-  a stick list (Devices, below), load the track on deck 2 and play it (it keeps playing if it already is);
+  a stick list (Devices, below), load the track on deck 2 and play it (it keeps playing if it already is,
+  and replaces a playing track without stopping);
+  with 2 or 4 decks they load onto a spare deck instead (see Load under
+  [Mix panel](#mix-panel-phase-5));
   loading opens the output when it is off. Space plays and pauses deck 2
   wherever focus is (except in text fields, dialogs and menus). The row of
   the track on deck 2 is marked as loaded; the grid editor draws deck 2's
@@ -336,7 +340,7 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 - CUE is held, not clicked (pointer down/up, Enter/Space, and the A/J keys
   down/up): paused on the cue point it previews while held and returns on
   release; PLAY during the preview keeps it playing.
-- Tempo range button cycles ±6, ±10 (default), ±16 and WIDE (±100%; the
+- Tempo range button cycles ±6, ±10 (default), ±16 and WIDE (±100%, labelled `W`; the
   slow end stands still), as on a CDJ-3000.
 - Sync aligns (Settings → Decks, `mix.sync_align`): **Bar** (default; SYNC
   lines up the downbeats too) or **Beat**. Replaces the deck's BAR button;
@@ -355,7 +359,7 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   start; Advanced sends the user's positions again. X C V do nothing in
   Simple and the Shortcuts list leaves them out (`mixKeyAction(e, decks,
   crossfader)`). Spec: [research §6](research/deck-mixer-layout.md).
-- EQ layout (task 26, Settings → Mixer **EQ**, `mix.mixer_eq`: **4-band**
+- EQ layout (task 27, Settings → Mixer **EQ**, `mix.mixer_eq`: **4-band**
   default, 3-band), for both Mixer views. 3-band rows are LEVEL · HI · MID
   · LOW · FX: the FX row's caption is the selected effect, and the FX knob
   has a centre detent and lights outside its dead zone (0.485–0.515). The
@@ -380,6 +384,10 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   bottom.
 - Load: the table's context menu ("Load to deck N", also in playlist views)
   or drag a track onto a deck. Loading starts the output if it is off.
+  Double-click or Enter loads paused onto a spare deck: an empty one first,
+  else the lowest-numbered deck shown that is stopped with its channel fader
+  fully closed ([`spareDeck.ts`](../src/lib/spareDeck.ts)). A deck that may
+  be on air is never replaced: with none spare, a toast says "No free deck".
 - Shortcuts while the panel is open ([`src/lib/mixKeys.ts`](../src/lib/mixKeys.ts),
   also under **Shortcuts** in the player bar): the table under
   [Deck layout](#deck-layout-task-16). Every deck control with a key shows
@@ -421,16 +429,26 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 Modelled on rekordbox's 2Deck Horizontal. Approved wireframe:
 <https://claude.ai/artifact/1bLg3dZwjRfL4nXbYvFdzD> (revision 3).
 
-**Size** (task 23). 2 decks: `--deck-h` = `--mixer-h` (440 px in Advanced; 356 / 292 in the Simple views, so the decks follow the mixer); the waveform takes the spare height (222 px; `--deck-wave-min-h` 60 is the floor) and the
-quick-loop row sits under the overview. 4 decks (`compact`): `--deck-h-compact` 216 px, two stacked make the mixer's
-440; header 30, overview 14, waveform 60, and the quick-loop grid beside the pads. The panel is capped by
+**Size** (task 23). 2 decks: `--deck-h` = `--mixer-h` (440 px in Advanced; 356 / 292 in the Simple views, so the decks follow the mixer); the waveform takes the spare height (`--deck-wave-min-h` 60 is the floor). 4 decks (`compact`): `--deck-h-compact` 216 px, two stacked make the mixer's
+440; header 30 (artwork 24), overview 14, waveform 60. Both have the same controls row (below). The panel is capped by
 `--mix-panel-max-h` = window height − `--app-chrome-h` (82) − `--library-min-h` (246: toolbar and filters 116, column
 header, 4 rows). Width is what's left on each side: 448 px at a 1280 px window (minimum `--deck-min-w` 440),
-528 at 1440, 768 at 1920; extra width goes to the header and waveforms, the pads stop at 336 px.
+528 at 1440, 768 at 1920.
 
-Compact bottom row (80 px, 4 px gaps), left to right: a 60 px cluster (CUE · PLAY round 28 px; Q · SYNC; MASTER across),
-pads (tabs 20 + two 26 px rows), the 3 × 2 loop grid. At 1280 px the pads are 46 px wide (research §7 asked 52): the
-row has 378 px for cluster 60 + loop grid 104 + pads, and the tabs read tight there. 1440 px and up have room.
+**Controls row** (2026-10-23), left to right: Q over CUE and PLAY · pad mode tabs over the 2 × 4 pads · the quick-loop
+block (IN OUT / ½ size 2× / LOOP RELOOP) · MASTER over SYNC. One CSS grid (`--deck-ctl-cols`); every column has the
+same three rows (`--deck-ctl-rows`: the tabs' 20 px, then one row per pad row), so Q, IN / OUT sit level with the tabs
+and CUE, ½ size 2×, MASTER level with the first pad row. The deck section is an inline-size container
+(`data-deck-size` = `mix` / `compact` / `solo`, rules in `tokens.css`) and the row scales with its width (`clamp()` on
+`cqw`): height 92–116 px on 2 decks (80 on 4), loop block 100–148, MASTER / SYNC 52–88, gaps 4–10; CUE and PLAY are
+round, one pad row across; the pads take the rest. Below 30rem (a 1280 px window) the deck's 2xs labels drop to 10 px
+and the page picker hides its page count, so RELOOP, MASTER and the tabs fit.
+
+| Window | Deck | Row columns 2 decks (CUE · pads · loop · sync) | 4 decks | Pad (2 / 4 decks) |
+|---|---|---|---|---|
+| 1280 × 800 | 448 | 32 · 170 · 100 · 52 | 26 · 176 · 100 · 52 | 40 × 32 / 42 × 26 |
+| 1440 × 900 | 528 | 32 · 235 · 107 · 56 | 26 · 241 · 107 · 56 | – |
+| 1920 × 1080 | 768 | 44 · 393 · 143 · 83 | 26 · 411 · 143 · 83 | 95 × 44 / 99 × 26 |
 
 Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light give the same numbers; library rows =
 `(grid height − header) / 26`, whole rows):
@@ -450,9 +468,8 @@ Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light g
 | Header (40 px; 30 compact) | Deck number (lit when loaded) · artwork (eject ⏏ on hover or focus; dashed box without artwork) · title / artist · key (in the Settings notation; a readout with KEY under it, not a pill) · BPM with tempo % under it · remaining over elapsed time |
 | Zoomed waveform (spare height, min 60 px; the player deck 72 px) | Playhead centred, beat lines, hot cue and loop markers, sync phase meter on the top edge when synced. Zoom − / + float top right on hover or focus-within, zoom level between them. Drag to skim |
 | Overview (20 px; 14 compact) | Whole track, played part shaded, hot cue ticks in cue colour, cue point, loop bar. Keyboard seek slider |
-| Quick loop (24 px; compact: the 3 × 2 grid beside the pads) | `LoopBlock` row: IN · OUT · ½ · size · 2× · LOOP · RELOOP, in every pad mode (see [Quick loop](#quick-loop-task-21)) |
-| Bottom (92 px; compact 80, see Size) | Q over CUE and PLAY (round, 32 px), at the bottom of their column · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · MASTER and SYNC (bottom-aligned like Q, CUE and PLAY) |
-| Tempo column (44 px) | Range button (±6 / ±10 / ±16 / WIDE) and **M** (master tempo, ghost; disabled until task 10 picks an engine) · full-height fader · nudge |
+| Controls (see Controls row) | Q over CUE and PLAY (round) · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · `LoopBlock` (see [Quick loop](#quick-loop-task-21)) · MASTER over SYNC |
+| Tempo column (44 px) | Range button (±6 / ±10 / ±16 / W, for WIDE) and **M** (master tempo: key lock, lit when on) · full-height fader · nudge |
 
 - **BPM edit**: double-click (or Enter when focused) turns the BPM into a
   number field; Enter or blur saves, Esc cancels. Tempo = typed ÷ the
@@ -509,14 +526,14 @@ Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light g
 **Components** ([`src/components/mix/`](../src/components/mix/)). `MixPanel`
 and `PlayerDeck` stay the only store readers. `DeckStrip` (layout, drop
 target, which state shows) composes one file per part: `DeckHeader`
-(`ArtworkThumb`, `InlineNumber` for the BPM), `DeckWaveform` (both views:
+(`ui/Artwork`, `InlineNumber` for the BPM), `DeckWaveform` (both views:
 they share one animation-frame loop, so the overview is not a file of its
 own) with `DeckWaveformRow` as its overlay (zoom buttons and level,
 `SyncPhase`, the warning line), `DeckSlot` (empty / loading / analysing /
 error), `DeckTransport`, `DeckPads` (`SegmentedControl` tabs,
 Q, `PagePicker`, `Pad` / `SplitPad`), `DeckSyncButtons`, `DeckTempo`; `hold.ts`
 gives CUE and nudge their held handlers. Shared pieces: `ui/Pad.tsx`,
-`ui/InlineNumber.tsx`, `Fader` `detent`, `ArtworkThumb` + `useArtworkUrl`
+`ui/InlineNumber.tsx`, `Fader` `detent`, `ui/Artwork` + `useArtworkUrl`
 (shared with `TrackDetailPanel`), `NudgeDownIcon` / `NudgeUpIcon`. Controls
 with a key show it in their tooltip (`shortcut` from `deckKeyHint()`).
 
@@ -530,11 +547,12 @@ take-master controls; task 15's per-deck zoom became one `MixStore.waveZoom`
 (maintainer, 2026-10-22). Pure helpers in `mixView.ts`:
 `JUMP_PAGES`, `LOOP_PAGES` (FINE = a 1/32 `beatJump`; the engine's 10 ms
 `fineJump` is unused by the deck), `formatBeats`, `snapToDetent`,
-`tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` (= `--mixer-h`), `--deck-h-compact` 216, `--loop-block-w` 104,
+`tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` (= `--mixer-h`), `--deck-h-compact` 216,
 `--deck-header-h` 40 / `-compact` 30, `--deck-min-w` 440, `--deck-wave-h` 72 (player deck), `--deck-wave-min-h` 60,
-`--deck-overview-h` 20 / `-compact` 14, `--deck-bottom-h-compact` 80, `--deck-cluster-w`, `--deck-views-h`, `--deck-bottom-h` 92, `--deck-solo-h`, `--deck-art`
-40, `--deck-pads-max-w` 336, `--deck-transport`, `--deck-sync-w`,
-`--deck-tempo-w`, `--pad-h` 26, `--fader-detent` 6.
+`--deck-overview-h` 20 / `-compact` 14, `--deck-views-h`, `--deck-solo-h`, `--deck-art` 40 / `-compact` 24,
+`--deck-pads-max-w` 336 (player deck), `--deck-controls-h-compact` 80, `--deck-ctl-rows`; scaled per deck
+(`[data-deck-size]`): `--deck-controls-h`, `--deck-pad-row-h`, `--deck-transport-w`, `--loop-block-w`, `--deck-sync-w`,
+`--deck-gap`, `--deck-ctl-cols`; `--deck-tempo-w`, `--pad-h` 26, `--fader-detent` 6.
 
 **Keys** follow rekordbox's default PERFORMANCE keys (Performance 1,
 [rekordbox 7.0.5 shortcut reference](https://cdn.rekordbox.com/files/20241203185020/rekordbox7.0.5_default_keyboard_shortcut_reference_EN.pdf))
@@ -570,10 +588,10 @@ eject, the memory cue list, renames.
 [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §5.
 `mix/LoopBlock` is on every deck in every pad mode, from `Button
 variant="control"` and the new `ui/Readout` (a mono value box, `dimmed` when
-not in effect). `layout="row"` is one 24 px line under the overview (2-deck decks, which have
-the height); `layout="grid"` is the 3 × 2 block (`--loop-block-w` 104: IN OUT /
-½ size 2× / LOOP RELOOP) beside the pads on the 4-deck (compact) decks, and
-between the waveform and the pads of the player deck.
+not in effect). It is a 3-row block (`--loop-block-w`: IN OUT /
+½ size 2× / LOOP RELOOP), its rows level with the pad tabs and pads, right of
+the pads on the mixer decks (2 and 4) and between the waveform and the pads
+of the player deck.
 
 | Control | Not looping | Looping |
 |---|---|---|
@@ -644,7 +662,10 @@ edit through `tags_mutate`; assigning patches the loaded table rows in place
 re-queries. Pure helpers (coverage, search, create offers) are in
 [`tagModel.ts`](../src/store/tagModel.ts).
 
-- `TagDrawer`: a `Sheet` on the right, over the info panel (toolbar tag
+- `FilterDrawer`: the library filters in a `Sheet`, same header and Escape/×
+  close as My Tags; the toolbar Filters button toggles it (hidden by default).
+- `TagDrawer`: a `Sheet` on the right, over the info panel (and sharing the
+  spot with `FilterDrawer`: opening one closes the other; toolbar tag
   button, "Manage tags…", the info panel's "Edit
   tags"). Attach and manage in one place: a checkbox per tag for the main
   list's selection, following it live (`tagTargets.ts`; mixed when only some
@@ -661,17 +682,17 @@ re-queries. Pure helpers (coverage, search, create offers) are in
   for the whole selection; a tag only some selected tracks have is mixed and a
   click adds it to all; the menu stays open; the search field offers
   "Create 'X' in <category>".
-- `TagPicker` (Popover body, search + checkboxes by category): the filter bar's
+- `TagPicker` (Popover body, search + checkboxes by category): the Filters drawer's
   My Tags field (`FilterState.tagIds` → `tagAny`, counted in the Filters badge).
 - `TrackTags`: the info panel's removable chips and the "Edit tags" button.
 - "My Tags" table column, hidden until switched on.
-- States: loading, load error with Retry, no tags yet ("Create your first
-  tag"), no match for the search.
+- States: loading, load error with Retry, no tags in a category (its add field
+  is always there), no match for the search.
 - Dev: `npm run dev` serves tags from [`mockTags.ts`](../src/dev/mockTags.ts).
 
 ## Rule builder and smart playlists (D29)
 
-The **Advanced** button in the filter bar opens the builder under it
+The **Advanced** button in the Filters drawer opens the builder under the fields
 (`RuleBuilder` → `RuleGroup` → `RuleRow` → `RuleValueEditor`; the last three
 take props, `RuleBuilder` reads the stores). State is
 [`store/rules.ts`](../src/store/rules.ts), the tree edits are pure functions in

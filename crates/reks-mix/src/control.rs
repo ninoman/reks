@@ -10,8 +10,8 @@ use crate::graph::DeckSource;
 /// A command for the graph.
 #[derive(Debug, Clone)]
 pub enum Control {
-    /// Replaces the deck's track and stops it at the start. Tempo, sync and
-    /// quantise stay as they were.
+    /// Replaces the deck's track and stops it at the start. Tempo, sync,
+    /// quantise and master tempo stay as they were.
     Load {
         deck: u8,
         src: Arc<DeckSource>,
@@ -157,6 +157,12 @@ pub enum Control {
         deck: u8,
         on: bool,
     },
+    /// Master tempo (key lock): tempo changes keep the key. Stays across
+    /// loads, like tempo.
+    MasterTempo {
+        deck: u8,
+        on: bool,
+    },
     /// Mixer channel strip.
     Channel {
         ch: u8,
@@ -213,6 +219,7 @@ impl Control {
             | Self::Nudge { deck, .. }
             | Self::Sync { deck, .. }
             | Self::Quantise { deck, .. }
+            | Self::MasterTempo { deck, .. }
             | Self::BeatJump { deck, .. }
             | Self::FineJump { deck, .. }
             | Self::BeatLoop { deck, .. }

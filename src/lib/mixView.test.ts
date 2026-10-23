@@ -62,7 +62,7 @@ describe("tempo fader", () => {
       const next = nextTempoRange(r as 0.06);
       return `${tempoRangeLabel(r as 0.06)}>${tempoRangeLabel(next)}`;
     });
-    expect(seen).toEqual(["±6>±10", "±10>±16", "±16>WIDE", "WIDE>±6"]);
+    expect(seen).toEqual(["±6>±10", "±10>±16", "±16>W", "W>±6"]);
   });
 
   it("formats as a signed percentage", () => {

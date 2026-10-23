@@ -347,6 +347,10 @@ Notes (task 9, [`track.rs`](../../crates/reks-core/src/track.rs), [`TrackDetailP
 - `artwork_get(artwork_id)` returns the cached image as raw bytes (`ipc::Response`). The UI
   shows it through a Blob URL with `artwork.mime`, and shows a placeholder when there is
   no artwork or the cache file is gone and cannot be re-extracted.
+- `artwork_thumb(artwork_id)` returns a 96 px JPEG, generated once and cached in
+  `<cache>/artwork/thumb/`; track rows carry `artworkId`. The track list shows it in the title
+  cell (`ui/Artwork`, `size="row"`) through a bounded URL cache, and a record-glyph tile
+  without artwork. The list opens sorted by date added, newest first.
 - UI: the panel follows the primary selected row (`primaryIndex`: the focused row if it is
   selected, else the lowest selected one), so with several rows selected it shows one track.
   Bulk edit is not built yet. Save sends only the changed fields; Revert or Esc resets.
@@ -445,8 +449,8 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
 - One `setting` row per key, value JSON: `audio.device` (name, absent = system default;
   Phase 5 adds `audio.sample_rate`, `audio.buffer_frames`, `audio.cue`),
   `display.key_notation` (`classical` default, `camelot`, `openKey`), `display.deck_waveform`
-  (Phase 5: `rgb` default since D30, `threeBand`, `blue`), `display.theme` (`graphite`
-  default, `paper`, `midnight`, `dusk`, `booth`; see [ui.md](../ui.md)), `storage.cache_dir`
+  (Phase 5: `rgb` default since D30, `threeBand`, `blue`), `display.theme` (`booth`
+  default, `graphite`, `paper`, `midnight`, `dusk`; see [ui.md](../ui.md)), `storage.cache_dir`
   (absent = `app_cache_dir`), `ui.state` (hidden columns, filter bar shown, filters on, track
   info open, volume). A missing or unreadable value is its default (unreadable ones are logged).
   `settings_get` / `settings_set(patch)` (the UI stores `audioDevice` when the device changes).

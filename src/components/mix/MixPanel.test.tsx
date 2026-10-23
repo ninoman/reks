@@ -52,6 +52,7 @@ const idleDeck: DeckView = {
   syncBar: false,
   locked: false,
   quantise: false,
+  masterTempo: false,
   master: false,
   loopRegion: null,
   loopIn: null,

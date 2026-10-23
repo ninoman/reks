@@ -31,7 +31,7 @@ const settings: Settings = {
   audioCue: null,
   keyNotation: "classical",
   deckWaveform: "rgb",
-  theme: "graphite",
+  theme: "booth",
   syncAlign: "bar",
   mixerEq: "fourBand",
   mixerView: "simple",
@@ -168,7 +168,7 @@ describe("SettingsDialog", () => {
     const stop = startThemeSync();
     await openDialog();
     const display = showTab("Display");
-    expect(display.querySelector('[aria-checked="true"]')?.textContent).toContain("Graphite");
+    expect(display.querySelector('[aria-checked="true"]')?.textContent).toContain("Booth");
     fireEvent.click(screen.getByRole("radio", { name: /Paper/ }));
     await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ theme: "paper" }));
     expect(document.documentElement.dataset.theme).toBe("paper");

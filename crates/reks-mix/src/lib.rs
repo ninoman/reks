@@ -13,6 +13,7 @@ pub mod dsp;
 pub mod engine;
 pub mod error;
 pub mod graph;
+mod keylock;
 mod mixer;
 pub mod player;
 mod routing;

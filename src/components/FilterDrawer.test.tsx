@@ -8,7 +8,7 @@ const ipc = await import("../lib/ipc");
 const { useTags } = await import("../store/tags");
 const { noFilters, useLibrary } = await import("../store/library");
 const { useSettings } = await import("../store/settings");
-const { FilterBar, FiltersSwitch } = await import("./FilterBar");
+const { FilterDrawer, FiltersSwitch } = await import("./FilterDrawer");
 
 function notation(keyNotation: "classical" | "camelot" | "openKey") {
   useSettings.setState({
@@ -61,9 +61,9 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe("FilterBar", () => {
+describe("FilterDrawer", () => {
   it("outlines only the controls that filter", () => {
-    render(<FilterBar />);
+    render(<FilterDrawer />);
     const outlined = [
       ...document.querySelectorAll('[data-slot="field"][data-active] [data-slot="field-label"]'),
     ].map((e) => e.textContent);
@@ -72,7 +72,7 @@ describe("FilterBar", () => {
 
   it("picks keys from a popover and sums them up on its button", () => {
     notation("camelot");
-    render(<FilterBar />);
+    render(<FilterDrawer />);
     const button = screen.getByRole("button", { name: "Key" });
     expect(button.textContent).toBe("Any");
     fireEvent.click(button);
@@ -105,7 +105,7 @@ describe("FilterBar", () => {
     });
 
     it("ticks tags into a tagAny filter and sums them up on its button", () => {
-      render(<FilterBar />);
+      render(<FilterDrawer />);
       const button = screen.getByRole("button", { name: "My Tags" });
       expect(button.textContent).toBe("Any");
       fireEvent.click(button);
@@ -123,7 +123,7 @@ describe("FilterBar", () => {
     });
 
     it("searches the list by name", () => {
-      render(<FilterBar />);
+      render(<FilterDrawer />);
       fireEvent.click(screen.getByRole("button", { name: "My Tags" }));
       fireEvent.change(screen.getByRole("searchbox", { name: "Find a tag" }), {
         target: { value: "tech" },
@@ -134,7 +134,7 @@ describe("FilterBar", () => {
 
     it("offers to create the first tag when there are none", () => {
       useTags.setState({ tree: { categories: [{ id: 1, name: "Genre", tags: [] }] } });
-      render(<FilterBar />);
+      render(<FilterDrawer />);
       fireEvent.click(screen.getByRole("button", { name: "My Tags" }));
       fireEvent.click(screen.getByRole("button", { name: "Create your first tag" }));
       expect(useTags.getState().managerOpen).toBe(true);
@@ -142,7 +142,7 @@ describe("FilterBar", () => {
 
     it("shows a retry when the tags could not load", () => {
       useTags.setState({ tree: null, status: "error", error: "boom" });
-      render(<FilterBar />);
+      render(<FilterDrawer />);
       fireEvent.click(screen.getByRole("button", { name: "My Tags" }));
       expect(screen.getByRole("alert").textContent).toContain("boom");
       expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
@@ -152,14 +152,14 @@ describe("FilterBar", () => {
   it("labels keys in the notation chosen in Settings", () => {
     useLibrary.setState((s) => ({ filters: { ...s.filters, keys: ["Am"] } }));
     notation("openKey");
-    render(<FilterBar />);
+    render(<FilterDrawer />);
     const button = screen.getByRole("button", { name: "Key" });
     expect(button.textContent).toBe("1m");
     fireEvent.click(button);
     expect(screen.getByRole("button", { name: "1d" }).getAttribute("aria-pressed")).toBe("false");
     cleanup();
     notation("classical");
-    render(<FilterBar />);
+    render(<FilterDrawer />);
     expect(screen.getByRole("button", { name: "Key" }).textContent).toBe("Am");
   });
 
@@ -180,7 +180,7 @@ describe("FilterBar", () => {
   });
 
   it("Clear all keeps the shown playlist", () => {
-    render(<FilterBar />);
+    render(<FilterDrawer />);
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(useLibrary.getState().filters).toEqual({ ...noFilters, playlistId: 4 });
   });

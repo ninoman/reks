@@ -1,6 +1,6 @@
 # Three-band EQ and channel FX (research, 2026-10-23)
 
-Status: **accepted**, implemented in phase 5 task 26 (2026-10-23); as built:
+Status: **accepted**, implemented in phase 5 task 27 (2026-10-23); as built:
 [`../mixer-dsp.md`](../mixer-dsp.md). Spec for the engine side of issue #56: an
 EQ layout setting (4-band · 3-band) whose 3-band layout has a 3-band EQ (HI / MID / LOW) and a per-channel FX knob in
 the fourth knob slot, with an effect selector and a PARAMETER knob, modelled on the DJM-900NXS2 / DJM-A9.

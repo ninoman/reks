@@ -101,6 +101,8 @@ export interface TrackRow {
   lastPlayed: string | null;
   missing: boolean;
   needsAnalysis: boolean;
+  /** Picture for `artworkThumb`; null without embedded artwork. */
+  artworkId: number | null;
   /** Position of this entry in a playlist view (one row per entry); null elsewhere. */
   entryPosition: number | null;
   /** My Tags on the track, ordered by category then tag display order. */
@@ -470,6 +472,11 @@ export function libraryUpdateTrack(id: number, patch: TrackPatch): Promise<Track
   return invoke("library_update_track", { id, patch });
 }
 
+/** Small JPEG of an artwork for lists (raw `ipc::Response`), cached on disk by the core. */
+export function artworkThumb(id: number): Promise<ArrayBuffer> {
+  return invoke("artwork_thumb", { id });
+}
+
 /** Artwork image bytes (raw `ipc::Response`, not JSON). */
 export function artworkGet(id: number): Promise<ArrayBuffer> {
   return invoke("artwork_get", { id });
@@ -654,6 +661,8 @@ export interface DeckView {
   /** Following the master's tempo and phase. */
   locked: boolean;
   quantise: boolean;
+  /** Master tempo (key lock): the tempo fader keeps the key. */
+  masterTempo: boolean;
   /** This deck is the sync master (`MixState.masterDeck`). */
   master: boolean;
   /** The active loop; null when not looping. */
@@ -831,6 +840,7 @@ export type MixControl =
   /** Halve (`double: false`) or double the active loop; by time without a grid. */
   | { type: "loopResize"; deck: number; double: boolean }
   | { type: "quantise"; deck: number; on: boolean }
+  | { type: "masterTempo"; deck: number; on: boolean }
   | { type: "channel"; ch: number; param: ChannelParam; value: number }
   | { type: "filter"; unit: FilterUnit; param: FilterParam; value: number }
   | { type: "crossfader"; pos: number; curve: number }
@@ -889,7 +899,7 @@ export type KeyNotation = "classical" | "camelot" | "openKey";
 /** How the decks draw their waveforms; all come from the same analysis columns. */
 export type DeckWaveform = "threeBand" | "rgb" | "blue";
 
-/** The app's colour theme (`data-theme` on <html>, tokens.css). Graphite is the default. */
+/** The app's colour theme (`data-theme` on <html>, tokens.css). Booth is the default. */
 export type Theme = "graphite" | "paper" | "midnight" | "dusk" | "booth";
 
 /** What SYNC lines up with the master: the beat, or the bar (downbeats too). */
