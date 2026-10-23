@@ -87,6 +87,9 @@ cargo install tauri-cli --version '^2' --locked
 cargo tauri dev
 ```
 
+To build a local macOS DMG, run `npm run bundle:dmg`
+(see [`docs/releasing.md`](docs/releasing.md#local-builds)).
+
 Unsigned developer builds for macOS, Windows and Linux are attached to draft
 GitHub releases cut with `npm run release -- X.Y.Z` (see
 [`docs/releasing.md`](docs/releasing.md)). They are not code-signed, so the OS will

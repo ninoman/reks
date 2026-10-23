@@ -37,6 +37,25 @@ GitHub and publish it by hand.
 If a check fails, fix it on `main`, then cut the next patch version. Do not move a tag
 that has been pushed.
 
+## Local builds
+
+To build a macOS DMG on your own machine, without CI:
+
+```sh
+npm ci
+npm run bundle:dmg
+```
+
+The DMG is written to `target/release/bundle/dmg/` (this is the workspace `target/` at the
+repo root). Tauri deletes the intermediate `reks.app` afterwards; to keep it, run
+`npm run tauri build -- --bundles app,dmg`. The DMG is built for your Mac's architecture only. For a universal build, run
+`rustup target add x86_64-apple-darwin aarch64-apple-darwin` once, then
+`npm run bundle:dmg -- --target universal-apple-darwin`; the output goes under
+`target/universal-apple-darwin/release/`. To bundle for the host OS's other formats, run
+`npm run tauri build`.
+
+Set `REKS_FEEDBACK_URL` before building to turn on in-app reports ([feedback.md](feedback.md)).
+
 ## Unsigned builds
 
 Until the Apple and Windows signing accounts exist (D17), builds are unsigned. On macOS

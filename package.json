@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "bundle:dmg": "tauri build --bundles dmg",
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "vitest run --passWithNoTests",
