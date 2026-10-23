@@ -22,7 +22,9 @@ use crate::routing;
 const BLOCK: usize = 256;
 /// Capacity of each queue. Retired sources share it with controls, so the
 /// retire queue cannot fill while the control side drains it on every send.
-const QUEUE: usize = 64;
+/// Must hold a whole mixer resync (`mixerControls` in `src/store/mix.ts`,
+/// 73 controls), which the UI sends in one burst on a layout switch.
+const QUEUE: usize = 256;
 /// State snapshots per second.
 const STATE_HZ: u32 = 60;
 /// Output rate tried first. Most DJ music is 44.1 kHz, so running the

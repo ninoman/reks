@@ -75,6 +75,9 @@ const deckView = (over: Partial<DeckView> = {}): DeckView => ({
 
 const sent = () => vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0]);
 
+/** `QUEUE` in crates/reks-mix/src/engine.rs. */
+const ENGINE_QUEUE = 256;
+
 /** `library_track` as the store reads it: title, artist, key, artwork. */
 const detail = (id: number) =>
   ({
@@ -322,6 +325,9 @@ describe("mix store", () => {
     expect(sent()).toContainEqual({ type: "filter", unit: "x", param: "on", value: 0 });
     expect(sent()).toContainEqual({ type: "channelFx", kind: "filter" });
     expect(sent()).toContainEqual({ type: "fxParameter", value: 0.5 });
+    // The resync is one burst: it must fit the engine's control queue
+    // (`QUEUE` in crates/reks-mix/src/engine.rs), or its tail is refused.
+    expect(sent().length).toBeLessThanOrEqual(ENGINE_QUEUE);
     vi.mocked(ipc.mixControl).mockClear();
     s.setLook({ eq: "fourBand", view: "simple", filters: "show" });
     expect(sent()).toContainEqual({ type: "channel", ch: 1, param: "eqLo", value: 0.2 });
