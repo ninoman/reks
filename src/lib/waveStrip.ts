@@ -6,7 +6,7 @@
  * `drawImage` calls a frame instead of a bar per pixel.
  */
 import { COLUMNS_PER_SECOND, type DeckWaveform } from "./ipc";
-import { type WavePalette, waveBars } from "./waveDraw";
+import { centreLineColour, type WavePalette, waveBars } from "./waveDraw";
 
 /** Device pixels per tile. */
 export const TILE_PX = 512;
@@ -103,6 +103,14 @@ export class WaveStrip {
     if (ctx === null) return null;
     const { bands, mono } = stripPeaks(columns, start, colsPerPx, TILE_PX);
     const mid = height / 2;
+    // A flat line under the bars keeps silent stretches continuous; it stops
+    // at the track's ends, where the view stays empty.
+    const from = Math.max(0, -start);
+    const to = Math.min(TILE_PX, Math.ceil(columns.length / 4 / colsPerPx) - start);
+    if (to > from) {
+      ctx.fillStyle = centreLineColour(style, palette);
+      ctx.fillRect(from, Math.floor(mid), to - from, 1);
+    }
     for (const bar of waveBars(style, bands, mono, height, palette)) {
       ctx.fillStyle = bar.colour;
       ctx.fillRect(bar.x, mid - bar.half, 1, 2 * bar.half);

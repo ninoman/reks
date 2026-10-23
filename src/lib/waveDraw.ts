@@ -149,6 +149,12 @@ export function waveBars(
   return out;
 }
 
+/** The colour of the flat centre line drawn where the waveform is silent. */
+export function centreLineColour(style: DeckWaveform, palette: WavePalette): string {
+  if (style === "threeBand") return palette.mid;
+  return style === "rgb" ? palette.rgbMid : palette.blue;
+}
+
 /** The waveform in `style`, mirrored round the middle of the view. */
 export function drawWave(
   ctx: CanvasRenderingContext2D,
