@@ -150,7 +150,6 @@ menu items `--menu-item-h`.
 | `Toast` | bottom-centre message with an optional action (Undo); one at a time via `store/toasts` + `ToastHost` | – |
 | `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |
 | `Kbd` | `variant`: default, inverse | – |
-| `Readout` | mono, tabular value box in the control size scale (`size`); `dimmed` for a value not in effect yet (the next loop size); `role="img"`, name it with `aria-label` | – |
 | `Tooltip` | `content`, `shortcut`, `side` | Radix Tooltip |
 | Shortcut hint | `Button` / `IconButton` take `shortcut` (+ `hint`, default `aria-label`) and show it in a tooltip on hover/focus; the key text comes from `lib/mixKeys` (`deckKeyHint`, `crossfaderKeyHint`) or `lib/keys` (`PLAYER_PLAY_KEY`), never a literal | `ShortcutTooltip` |
 | `DropdownMenu*` | Content, Item (`variant`: default, danger), CheckboxItem, Separator | Radix DropdownMenu |
@@ -473,9 +472,9 @@ header, 4 rows). Width is what's left on each side: 448 px at a 1280 px window (
 528 at 1440, 768 at 1920.
 
 **Controls row** (2026-10-23), left to right: Q over CUE and PLAY · pad mode tabs over the 2 × 4 pads · the quick-loop
-block (IN OUT / ½ size 2× / LOOP RELOOP) · MASTER over SYNC. One CSS grid (`--deck-ctl-cols`); every column has the
-same three rows (`--deck-ctl-rows`: the tabs' 20 px, then one row per pad row), so Q, IN / OUT sit level with the tabs
-and CUE, ½ size 2×, MASTER level with the first pad row. The deck section is an inline-size container
+block (BEAT | IN/OUT tabs over one page) · MASTER over SYNC. One CSS grid (`--deck-ctl-cols`); every column has the
+same three rows (`--deck-ctl-rows`: the tabs' 20 px, then one row per pad row), so Q and the loop page tabs sit level
+with the pad tabs and CUE, the loop size (or IN OUT), MASTER level with the first pad row. The deck section is an inline-size container
 (`data-deck-size` = `mix` / `compact` / `solo`, rules in `tokens.css`) and the row scales with its width (`clamp()` on
 `cqw`): height 92–116 px on 2 decks (80 on 4), loop block 100–148, MASTER / SYNC 52–88, gaps 4–10; CUE and PLAY are
 round, one pad row across; the pads take the rest. Below 30rem (a 1280 px window) the deck's 2xs labels drop to 10 px
@@ -622,28 +621,30 @@ eject, the memory cue list, renames.
 ### Quick loop (task 21)
 
 [Phase 5 task 21](phases/phase-5.md), spec
-[`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §5.
+[`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §5; laid out
+like rekordbox's since task 28 (wireframe
+[`wireframes/loop-control.html`](wireframes/loop-control.html), option B).
 `mix/LoopBlock` is on every deck in every pad mode, from `Button
-variant="control"` and the new `ui/Readout` (a mono value box, `dimmed` when
-not in effect). It is a 3-row block (`--loop-block-w`: IN OUT /
-½ size 2× / LOOP RELOOP), its rows level with the pad tabs and pads, right of
-the pads on the mixer decks (2 and 4) and between the waveform and the pads
-of the player deck.
+variant="control"` and the `SegmentedControl` the pad mode tabs use. It is
+`--loop-block-w` wide: BEAT | IN/OUT tabs level with the pad tabs, then one
+page over the two pad rows. The page is kept per deck across loads
+(`DeckMeta.loopPage`, default BEAT). Right of the pads on the mixer decks, between the
+waveform and the pads on the player deck.
 
-| Control | Not looping | Looping |
-|---|---|---|
-| IN | pending loop IN at the playhead; lit, and drawn on both waveforms (`deck-loop-in`, a line with a bracket) | moves the loop's start |
-| OUT | loops from a pending IN to the playhead; disabled until the head is past IN | moves the loop's end |
-| ½ / 2× | change the next LOOP size (`DeckMeta.lastLoop`, 1/32 … 512; needs a grid) | resize the loop (by time without a grid) |
-| size | the next size, dimmed | the loop's length: `64`, `1/16`, `3.87`, or seconds (`1.25s`) without a grid |
-| LOOP | loop of the shown size (needs a grid) | leaves it; lit while any loop plays |
-| RELOOP | back into the last loop; disabled when there is none | leaves it, keeping it |
+| Page | Control | Not looping | Looping (lit) |
+|---|---|---|---|
+| BEAT | size | the next size (`DeckMeta.lastLoop`); click loops that size (needs a grid) | the loop's length (`64`, `1/16`, `3.87`, or `1.25s` without a grid); click leaves it |
+| BEAT | ‹ › | halve / double the next size (1/32 … 512; needs a grid) | resize the loop (by time without a grid) |
+| IN/OUT | IN | pending loop IN at the playhead; lit, and drawn on both waveforms (`deck-loop-in`) | moves the loop's start |
+| IN/OUT | OUT | loops from a pending IN to the playhead; disabled until the head is past IN | moves the loop's end |
+| IN/OUT | RELOOP / EXIT | RELOOP: back into the last loop; disabled when there is none | EXIT: leaves it, keeping it |
 
-State and format are pure in `mixView.ts` (`loopBlockState`, `stepLoopSize`,
-`formatLoopBeats`, `formatLoopSeconds`); `DeckStrip` passes them to the
-block. A memory loop pad sends its end with `callCue`, which arms RELOOP.
-Keys and tooltips come from `mixKeys.ts`; `ShortcutHelp` is built from the
-same table (`deckKeysHelp`). UNVERIFIED on a CDJ (hardware checks deferred).
+The keys don't depend on the page. State and format are pure in
+`mixView.ts` (`loopBlockState`, `stepLoopSize`, `formatLoopBeats`,
+`formatLoopSeconds`); `DeckStrip` passes them to the block. A memory loop
+pad sends its end with `callCue`, which arms RELOOP. Keys and tooltips come
+from `mixKeys.ts`; `ShortcutHelp` is built from the same table
+(`deckKeysHelp`). UNVERIFIED on a CDJ (hardware checks deferred).
 
 ### Cue editing (task 17)
 

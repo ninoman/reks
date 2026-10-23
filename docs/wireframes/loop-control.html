@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quick Loop Options</title>
+<meta name="description" content="Wireframe: a simpler, rekordbox-style quick loop block for the deck, four options next to today's, close up and in full 2-deck, 4-deck and player decks.">
+<style>
+/*
+ * Quick-loop block options. Deck sizes use the same formulas as
+ * src/styles/tokens.css ([data-deck-size], 2026-10-23), so every deck here
+ * is to scale; low-fidelity greys, amber for an active loop.
+ */
+:root {
+  --paper: #f4f4f7; --sheet: #ffffff; --ink: #1c1c24; --ink-2: #5d5d6c; --ink-3: #8a8a99; --line: #c7c7d2;
+  --box: #ffffff; --box-2: #e9e9ef; --wave: #2b2b35; --wave-ink: #d4d4de;
+  --new: #4247c9; --new-bg: #e6e7fa;
+  --loop: #b86a00; --loop-bg: #fbecd6; --loop-band: rgb(212 154 69 / 38%);
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  /* tokens.css */
+  --ctl-h-xs: 20px; --deck-ctl-rows: var(--ctl-h-xs) minmax(0, 1fr) minmax(0, 1fr);
+  --deck-tempo-w: 44px; --deck-pads-max-w: 336px; --mixer-w: 344px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #131318; --sheet: #1a1a21; --ink: #e8e8ef; --ink-2: #a3a3b3; --ink-3: #737384; --line: #3b3b48;
+  --box: #1f1f27; --box-2: #2b2b35; --wave: #0b0b0f; --wave-ink: #b9b9c9;
+  --new: #a3a6ff; --new-bg: #2a2b57;
+  --loop: #f2a23c; --loop-bg: #3d2a10; --loop-band: rgb(242 162 60 / 30%);
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #131318; --sheet: #1a1a21; --ink: #e8e8ef; --ink-2: #a3a3b3; --ink-3: #737384; --line: #3b3b48;
+  --box: #1f1f27; --box-2: #2b2b35; --wave: #0b0b0f; --wave-ink: #b9b9c9;
+  --new: #a3a6ff; --new-bg: #2a2b57;
+  --loop: #f2a23c; --loop-bg: #3d2a10; --loop-band: rgb(242 162 60 / 30%);
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1520px; margin: 0 auto; padding: 24px 16px 64px; display: flex; flex-direction: column; gap: 32px; }
+h1 { font-size: 26px; line-height: 1.2; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 18px; margin: 0 0 4px; }
+p { margin: 0; max-width: 84ch; }
+.lede { color: var(--ink-2); }
+code { font-family: var(--font-mono); font-size: 0.9em; }
+section.block { display: flex; flex-direction: column; gap: 12px; }
+.sheet { background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.block { scroll-margin-top: 56px; }
+.bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; padding: 10px 16px; margin: 0 -16px; background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+.bar label { font-size: 12px; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--sheet); }
+.seg button { font: 500 13px var(--font-ui); color: var(--ink); background: transparent; border: 0; padding: 5px 11px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.seg button:focus-visible, .b:focus-visible { outline: 2px solid var(--new); outline-offset: 1px; }
+.tag { display: inline-block; font: 600 10px var(--font-ui); letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; vertical-align: 2px; margin-left: 6px; background: var(--new-bg); color: var(--new); }
+.tag.now { background: var(--box-2); color: var(--ink-2); }
+.notes { margin: 0; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.45; display: flex; flex-direction: column; gap: 3px; color: var(--ink-2); }
+.notes li { padding-left: 16px; position: relative; }
+.notes li::before { position: absolute; left: 0; font-weight: 700; font-family: var(--font-mono); }
+.notes li.add::before { content: "+"; color: var(--new); }
+.notes li.del::before { content: "−"; color: #c0474c; }
+.notes li.q::before { content: "?"; color: var(--loop); }
+
+/* ---- Close-ups: the block alone at 2 × (2-deck sizes) ---- */
+.cu-wrap { overflow-x: auto; }
+.cu { display: grid; grid-template-columns: 210px repeat(5, max-content); gap: 14px 26px; align-items: center; width: max-content; }
+.cu .hd { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); font-weight: 600; }
+.cu .rowname b { display: block; font-size: 14px; }
+.cu .rowname span { font-size: 12px; color: var(--ink-2); line-height: 1.35; display: block; }
+.zoom { zoom: 2; --deck-controls-h: 92px; --deck-pad-row-h: 32px; --loop-block-w: 109px; }
+.zoom.wide { --loop-block-w: 145px; }
+
+/* ---- Buttons ---- */
+.b { min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 2px; border: 1px solid var(--line); border-radius: 3px; background: var(--box); color: var(--ink-2);
+  font: 700 10px/1 var(--font-ui); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.b:disabled { opacity: 0.38; cursor: default; }
+.b.on { color: var(--loop); border-color: var(--loop); background: var(--loop-bg); }
+.b.wait { color: var(--loop); border: 1px dashed var(--loop); }
+@media (prefers-reduced-motion: no-preference) { .b.wait { animation: blink 1s steps(2, start) infinite; } }
+@keyframes blink { to { background: var(--loop-bg); } }
+.b.dim { color: var(--ink-3); }
+.b.num { font-family: var(--font-mono); letter-spacing: 0; text-transform: none; }
+.b.big { font-size: min(calc(var(--deck-pad-row-h) * 0.62), 24px); font-weight: 500; }
+.b.big2 { font-size: min(calc((var(--deck-pad-row-h) + 24px) * 0.5), 28px); font-weight: 500; }
+.b.arrow { font-size: 15px; font-weight: 400; }
+.readout { display: flex; align-items: center; justify-content: center; border-radius: 3px; background: var(--box-2); font: 600 11px var(--font-mono); color: var(--ink); }
+.readout.dim { color: var(--ink-3); }
+.s2 { grid-column: span 2; } .s4 { grid-column: 1 / -1; }
+.r23 { grid-row: 2 / 4; } .r12 { grid-row: 1 / 3; }
+
+/* ---- The loop block, one class per option ---- */
+.lb { width: var(--loop-block-w); height: var(--deck-controls-h); display: grid; gap: 4px; min-width: 0; }
+.lb.o-today, .lb.o-one { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: var(--deck-ctl-rows); }
+.lb.o-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: var(--deck-ctl-rows); }
+.lb.o-rb { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1.3fr) minmax(0, 1fr) 6px; }
+.lb.o-side { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: var(--deck-ctl-rows); column-gap: 4px; }
+.ptabs { grid-column: 1 / -1; display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.ptabs .b { flex: 1; border: 0; border-radius: 0; font-size: 9px; position: relative; }
+.ptabs .b + .b { border-left: 1px solid var(--line); }
+.ptabs .b[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.ptabs .b .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--loop); margin-left: 4px; }
+.strip { grid-column: 1 / -1; position: relative; background: #000; border-radius: 3px; display: flex; }
+.strip button { flex: 1; border: 0; background: transparent; padding: 0; cursor: pointer; }
+.strip i { position: absolute; top: 1px; bottom: 1px; width: 48%; border-radius: 3px; background: #6c6c78; pointer-events: none; }
+
+/* ---- Decks: the same container formulas as tokens.css ---- */
+.deck { container-type: inline-size; display: flex; gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--sheet); flex-shrink: 0; font-family: var(--font-ui);
+  --deck-gap: clamp(4px, 1.2cqw, 10px);
+  --deck-controls-h: clamp(92px, 16cqw, 116px);
+  --deck-pad-row-h: calc((var(--deck-controls-h) - var(--ctl-h-xs) - 8px) / 2);
+  --deck-transport-w: var(--deck-pad-row-h);
+  --loop-block-w: clamp(100px, 21cqw, 148px);
+  --deck-sync-w: clamp(52px, 11cqw, 88px);
+  --deck-header-h: 40px; --deck-overview-h: 20px; --deck-art: 40px;
+  --deck-views-h: 98px;
+  width: 536px; height: 440px; }
+.deck.o-side { --loop-block-w: clamp(132px, 28cqw, 196px); }
+.deck[data-size="compact"] { height: 216px; --deck-controls-h: 80px; --deck-header-h: 30px; --deck-overview-h: 14px; --deck-art: 24px; }
+.deck[data-size="solo"] { width: 1180px; height: 162px; --deck-controls-h: var(--deck-views-h); }
+.dmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.deck[data-size="compact"] .dmain { gap: 4px; }
+.dhead { height: var(--deck-header-h); display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.art { width: var(--deck-art); height: var(--deck-art); border-radius: 3px; background: var(--box-2); flex-shrink: 0; }
+.ttl { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.ttl b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ttl span { font-size: 11px; color: var(--ink-2); }
+.deck[data-size="compact"] .ttl span { display: none; }
+.meta { display: flex; gap: 10px; font: 600 12px var(--font-mono); color: var(--ink-2); }
+.meta b { color: var(--ink); }
+.views { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; }
+.deck[data-size="compact"] .views { gap: 4px; }
+.deck[data-size="solo"] .views { height: var(--deck-views-h); flex: 1; min-width: 0; }
+.wave { flex: 1; min-height: 40px; background: var(--wave); border-radius: 3px; position: relative; overflow: hidden;
+  background-image: repeating-linear-gradient(90deg, transparent 0 3px, color-mix(in srgb, var(--wave-ink) 30%, transparent) 3px 4px); background-size: 100% 60%; background-position: center; background-repeat: no-repeat; }
+.ov { height: var(--deck-overview-h); flex-shrink: 0; background: var(--wave); border-radius: 3px; position: relative; overflow: hidden; }
+.ph { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; left: 50%; }
+.ov .ph { left: 34%; width: 1px; }
+.band { position: absolute; top: 0; bottom: 0; background: var(--loop-band); border-left: 2px solid var(--loop); border-right: 2px solid var(--loop); }
+.inmark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--loop); }
+.ctl { height: var(--deck-controls-h); flex-shrink: 0; display: grid; grid-template-columns: var(--deck-transport-w) minmax(0, 1fr) var(--loop-block-w) var(--deck-sync-w); column-gap: var(--deck-gap); }
+.deck[data-size="solo"] .srow { display: flex; gap: 8px; flex: 1; min-height: 0; align-items: flex-start; }
+.col { display: grid; grid-template-rows: var(--deck-ctl-rows); gap: 4px; min-width: 0; height: var(--deck-controls-h); }
+.col.tr { width: var(--deck-transport-w); }
+.round { border-radius: 50%; aspect-ratio: 1; width: 100%; max-height: 100%; justify-self: center; font-size: 8px; }
+.pads { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: var(--deck-ctl-rows); gap: 4px; min-width: 0; height: var(--deck-controls-h); }
+.deck[data-size="solo"] .pads { width: var(--deck-pads-max-w); flex-shrink: 0; }
+.pads .mt { grid-column: 1 / -1; display: flex; gap: 2px; }
+.pads .mt .b { flex: 1; font-size: 8.5px; }
+.pads .mt .b.sel { background: var(--box-2); color: var(--ink); border-color: var(--ink-3); }
+.pad { border: 1px dashed var(--line); border-radius: 3px; display: flex; align-items: center; justify-content: center; font: 600 10px var(--font-ui); color: var(--ink-3); }
+.pad.set { border-style: solid; border-color: var(--ink-3); color: var(--ink-2); }
+.tempo { width: var(--deck-tempo-w); flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.tempo .b { height: var(--ctl-h-xs); font-size: 9px; }
+.fad { flex: 1; position: relative; }
+.fad::before { content: ""; position: absolute; left: 50%; top: 2px; bottom: 2px; width: 2px; translate: -1px 0; background: var(--line); }
+.fad i { position: absolute; left: 10px; right: 10px; top: 46%; height: 12px; border: 1px solid var(--ink-2); background: var(--box-2); border-radius: 2px; }
+.deck[data-size="solo"] .fad { min-height: 30px; }
+
+/* ---- Full views ---- */
+.opt-card { display: flex; flex-direction: column; gap: 10px; }
+.opt-card .head { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; justify-content: space-between; }
+.opt-card .head b { font-size: 16px; }
+.measure { font-size: 12px; color: var(--ink-2); font-family: var(--font-mono); }
+.fit { overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); padding: 8px; }
+.fit > .scaled { transform-origin: 0 0; width: max-content; }
+.panel { display: flex; gap: 8px; align-items: flex-start; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.mixer { width: var(--mixer-w); height: 440px; border: 1px dashed var(--line); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: var(--ink-3); font: 600 13px var(--font-mono); flex-shrink: 0; }
+
+/* ---- Table ---- */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; font-size: 13px; min-width: 900px; width: 100%; }
+th, td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); font-weight: 600; }
+td:first-child { color: var(--ink-2); white-space: nowrap; }
+.qs { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; max-width: 96ch; }
+.qs li span { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="block" style="display:flex;flex-direction:column;gap:8px">
+  <h1>Quick loop: simpler, rekordbox-style</h1>
+  <p class="lede">Today's block has seven controls (IN, OUT, ½, size, 2×, LOOP, RELOOP). rekordbox gets by with two small panels: <b>size</b> with <b>‹ ›</b> (½ and 2×; tap the size to loop, it turns amber while looping) and <b>IN · OUT</b> over <b>RELOOP</b>, which reads <b>EXIT</b> while looping. A strip under the panel switches between them. Below: today, the literal rekordbox panel, and three ways to fit that model into our deck. Every button works: click to try it, or pick a state for all of them.</p>
+  <p class="lede">Shared by A–D: no LOOP button (the size <i>is</i> the loop button), RELOOP and EXIT are one button, amber means a loop is on. Keys don't change: <code>loop</code>, <code>reloop</code>, <code>loopIn</code>, <code>loopOut</code>, <code>loopResize</code> keep their actions.</p>
+</header>
+
+<div class="bar">
+  <label>State <span class="seg" id="presets"></span></label>
+  <label>Full view <span class="seg" id="views"></span></label>
+</div>
+
+<section class="block">
+  <h2>Close up</h2>
+  <p class="lede">The block alone at 2×, at its 2-deck size (536 px deck: block 109 px wide, B 145 px; rows 20 / 32 / 32, level with the pad tabs and the two pad rows). Fixed states, left to right.</p>
+  <div class="sheet cu-wrap"><div class="cu" id="closeups"></div></div>
+</section>
+
+<section class="block">
+  <h2>Full decks</h2>
+  <p class="lede">To scale (2-deck: 536 × 440 decks beside the 344 px mixer; 4-deck: 536 × 216; player: the library's deck alone). Decks 1 and 3 follow the state above, 2 and 4 show the other one. The measure line reads the rendered widths.</p>
+  <div id="fulls" style="display:flex;flex-direction:column;gap:28px"></div>
+</section>
+
+<section class="block">
+  <h2>Compared</h2>
+  <div class="sheet tablewrap">
+    <table>
+      <thead><tr><th></th><th>Today</th><th>A · rekordbox as is</th><th>B · paged, tabs</th><th>C · side by side</th><th>D · one panel</th></tr></thead>
+      <tbody>
+        <tr><td>On screen at once</td><td>7</td><td>3 + strip</td><td>3 + 2 tabs</td><td>6</td><td>6</td></tr>
+        <tr><td>Width (2-deck)</td><td>109 px</td><td>109 px</td><td>109 px</td><td>145 px (pads −37 px)</td><td>109 px</td></tr>
+        <tr><td>Auto loop</td><td>LOOP</td><td>tap size (BEAT page)</td><td>tap size (BEAT page)</td><td>tap size</td><td>tap size</td></tr>
+        <tr><td>Manual loop</td><td>IN, OUT</td><td>strip → IN, OUT</td><td>tab → IN, OUT</td><td>IN, OUT</td><td>IN, OUT</td></tr>
+        <tr><td>Rows level with pads</td><td>yes</td><td>no (own rows + strip)</td><td>yes (tabs by pad tabs)</td><td>yes</td><td>yes</td></tr>
+        <tr><td>Size label</td><td>11 px readout</td><td>large</td><td>large</td><td>largest</td><td>11 px button</td></tr>
+        <tr><td>Hidden state</td><td>none</td><td>other page</td><td>other page (dot on its tab)</td><td>none</td><td>none</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul class="notes" style="max-width:96ch">
+    <li class="add"><b>A</b> is the familiar one, but its strip is 6 px tall: a fiddly mouse target, and its rows don't line up with the pads.</li>
+    <li class="add"><b>B</b> keeps rekordbox's two pages and our row grid: the tabs sit level with the pad mode tabs, and a dot on the hidden tab says a loop is on there.</li>
+    <li class="add"><b>C</b> shows both panels and hides nothing, at the cost of 37 px of pad width (pads go 250 → 213 px on a 2-deck deck).</li>
+    <li class="add"><b>D</b> is today's footprint with the LOOP button folded into the size: the smallest change, the least rekordbox-like.</li>
+  </ul>
+</section>
+
+<section class="block">
+  <h2>Open questions</h2>
+  <ol class="qs">
+    <li><b>Default size.</b> <span>rekordbox starts at 16 beats here; we start at the last size used (4 by default). Keep ours?</span></li>
+    <li><b>B and A: which page after IN?</b> <span>Pressing the IN key while on BEAT could flip the deck to IN / OUT, so OUT is one click away. Or leave the page alone.</span></li>
+    <li><b>IN / OUT while looping.</b> <span>Today they move the loop's start or end; rekordbox lights them amber for that. Keep, amber in every option.</span></li>
+    <li><b>4-deck.</b> <span>Rows are 20 / 26 / 26 there: B's tabs and D's IN · OUT get the 20 px row; check they read at that size.</span></li>
+  </ol>
+</section>
+
+</div>
+
+<script>
+const OPTS = [
+  { id: "today", name: "Today", tag: "now", sub: "IN OUT · ½ size 2× · LOOP RELOOP" },
+  { id: "rb", name: "A · rekordbox as is", sub: "One panel at a time; the strip under it switches. Own rows, not level with the pads." },
+  { id: "tabs", name: "B · paged, tabs", sub: "rekordbox's two pages; BEAT | IN/OUT tabs in the pad-tab row; panels level with the pad rows." },
+  { id: "side", name: "C · side by side", sub: "Both panels at once; the block grows to 28 cqw (pads give up the width)." },
+  { id: "one", name: "D · one panel", sub: "IN OUT · ‹ size › · RELOOP/EXIT in today's 3-row grid." },
+];
+const PRESETS = [
+  { id: "idle", name: "Idle", s: () => ({ size: 16, loop: null, inSet: false, last: null, page: "auto" }) },
+  { id: "inset", name: "IN set", s: () => ({ size: 16, loop: null, inSet: true, last: null, page: "manual" }) },
+  { id: "auto", name: "Auto loop", s: () => ({ size: 16, loop: { kind: "auto", beats: 16 }, inSet: false, last: 16, page: "auto" }) },
+  { id: "manual", name: "Manual loop", s: () => ({ size: 16, loop: { kind: "manual", beats: 8 }, inSet: false, last: 8, page: "manual" }) },
+  { id: "left", name: "Left loop", s: () => ({ size: 16, loop: null, inSet: false, last: 16, page: "auto" }) },
+];
+const VIEWS = [{ id: "mix", name: "2 decks" }, { id: "compact", name: "4 decks" }, { id: "solo", name: "Player" }];
+let preset = "idle", view = "mix";
+
+const fmt = (b) => (b < 1 ? `1/${Math.round(1 / b)}` : String(b));
+const clampBeats = (b) => Math.min(512, Math.max(1 / 32, b));
+const btn = (act, label, cls = "", dis = false, title = "") =>
+  `<button type="button" class="b ${cls}" data-act="${act}"${dis ? " disabled" : ""}${title ? ` title="${title}" aria-label="${title}"` : ""}>${label}</button>`;
+
+/** What the size shows: the loop while looping, else the next size. */
+const shown = (s) => (s.loop ? s.loop.beats : s.size);
+
+function act(s, a) {
+  if (a === "size" || a === "loop") {
+    if (s.loop) { s.last = s.loop.beats; s.loop = null; }
+    else { s.loop = { kind: "auto", beats: s.size }; s.inSet = false; s.last = s.size; }
+  } else if (a === "half" || a === "dbl") {
+    const f = a === "half" ? 0.5 : 2;
+    if (s.loop) { s.loop.beats = clampBeats(s.loop.beats * f); s.size = s.loop.beats; } else s.size = clampBeats(s.size * f);
+  } else if (a === "in") { if (!s.loop) s.inSet = true; }
+  else if (a === "out") { if (s.inSet) { s.loop = { kind: "manual", beats: 8 }; s.inSet = false; s.last = 8; } }
+  else if (a === "reloop") {
+    if (s.loop) { s.last = s.loop.beats; s.loop = null; }
+    else if (s.last) s.loop = { kind: "manual", beats: s.last };
+  } else if (a.startsWith("page:")) s.page = a.slice(5);
+}
+
+const inBtn = (s, cls = "") => btn("in", "IN", `${cls} ${s.loop ? "on" : s.inSet ? "wait" : ""}`, false, s.loop ? "Move the loop start here" : "Loop in");
+const outBtn = (s, cls = "") => btn("out", "OUT", `${cls} ${s.loop ? "on" : ""}`, !(s.inSet || s.loop), s.loop ? "Move the loop end here" : "Loop out");
+const reBtn = (s, cls = "") => btn("reloop", s.loop ? "EXIT" : "RELOOP", `${cls} ${s.loop ? "on" : ""}`, !(s.loop || s.last), s.loop ? "Exit the loop" : "Back into the last loop");
+const sizeBtn = (s, cls) => btn("size", fmt(shown(s)), `num ${cls} ${s.loop ? "on" : ""}`, false, s.loop ? `Exit the ${fmt(shown(s))}-beat loop` : `Loop ${fmt(shown(s))} beats`);
+const half = (s, cls = "") => btn("half", "‹", `arrow ${cls}`, false, "Halve");
+const dbl = (s, cls = "") => btn("dbl", "›", `arrow ${cls}`, false, "Double");
+
+const BLOCKS = {
+  today: (s) =>
+    inBtn(s, "s2").replace(" on", "") + outBtn(s, "s2").replace(" on", "") +
+    btn("half", "½", "", false, "Halve") +
+    `<div class="readout s2 ${s.loop ? "" : "dim"}">${fmt(shown(s))}</div>` +
+    btn("dbl", "2×", "", false, "Double") +
+    btn("loop", "LOOP", `s2 ${s.loop ? "on" : ""}`, false, "Loop") +
+    btn("reloop", "RELOOP", "s2", !(s.loop || s.last), "Reloop"),
+  tabs: (s) => {
+    const dot = (p) => (s.loop && s.page !== p ? `<span class="dot"></span>` : "");
+    const tabs = `<div class="ptabs">` +
+      `<button type="button" class="b" data-act="page:auto" aria-pressed="${s.page === "auto"}">BEAT${dot("auto")}</button>` +
+      `<button type="button" class="b" data-act="page:manual" aria-pressed="${s.page === "manual"}">IN/OUT${dot("manual")}</button></div>`;
+    return tabs + (s.page === "auto" ? sizeBtn(s, "big s4") + half(s) + dbl(s) : inBtn(s) + outBtn(s) + reBtn(s, "s4"));
+  },
+  rb: (s) => {
+    const strip = `<div class="strip"><button type="button" data-act="page:auto" aria-label="Beat loop panel"></button><button type="button" data-act="page:manual" aria-label="IN / OUT panel"></button><i style="${s.page === "auto" ? "left:1px" : "right:1px"}"></i></div>`;
+    return (s.page === "auto" ? sizeBtn(s, "big2 s4") + half(s) + dbl(s) : inBtn(s) + outBtn(s) + reBtn(s, "s4")) + strip;
+  },
+  side: (s) =>
+    `<div style="grid-column:1/3;grid-row:1/4;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:var(--deck-ctl-rows);gap:4px">${sizeBtn(s, "big2 s4 r12")}${half(s)}${dbl(s)}</div>` +
+    `<div style="grid-column:3/5;grid-row:1/4;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:var(--deck-ctl-rows);gap:4px">${inBtn(s, "r12")}${outBtn(s, "r12")}${reBtn(s, "s4")}</div>`,
+  one: (s) => inBtn(s, "s2") + outBtn(s, "s2") + half(s) + sizeBtn(s, "s2") + dbl(s) + reBtn(s, "s4"),
+};
+const block = (opt, s) => `<div class="lb o-${opt}" role="group" aria-label="Quick loop">${BLOCKS[opt](s)}</div>`;
+
+function deck(opt, size, s, n) {
+  const band = s.loop
+    ? (() => { const w = Math.min(46, Math.max(3, shown(s) * 2.2)); return `<div class="band" style="left:${50 - w * 0.6}%;width:${w}%"></div>`; })()
+    : s.inSet ? `<div class="inmark" style="left:44%"></div>` : "";
+  const ovBand = s.loop ? `<div class="band" style="left:33%;width:${Math.min(8, Math.max(1, shown(s) / 3))}%;border-width:1px"></div>` : "";
+  const views = `<div class="views"><div class="wave">${band}<div class="ph"></div></div><div class="ov">${ovBand}<div class="ph"></div></div></div>`;
+  const tr = `<div class="col tr"><button type="button" class="b" tabindex="-1">Q</button><button type="button" class="b round" tabindex="-1">CUE</button><button type="button" class="b round" tabindex="-1">▶</button></div>`;
+  const pads = `<div class="pads"><div class="mt">${["HOT CUE", "MEMORY", "JUMP", "LOOP"].map((t, i) => `<button type="button" class="b ${i ? "" : "sel"}" tabindex="-1">${t}</button>`).join("")}</div>` +
+    "ABCDEFGH".split("").map((l, i) => `<div class="pad ${i < 3 ? "set" : ""}">${l}</div>`).join("") + `</div>`;
+  const sync = `<div class="col"><span></span><button type="button" class="b" tabindex="-1">MASTER</button><button type="button" class="b" tabindex="-1">SYNC</button></div>`;
+  const head = `<div class="dhead"><i class="art"></i><div class="ttl"><b>${n}  Track title</b><span>Artist</span></div><div class="meta"><span><b>128.00</b></span><span>8A</span><span>−3:12</span></div></div>`;
+  const body = size === "solo"
+    ? `<div class="srow">${tr}${views}${block(opt, s)}${pads}</div>`
+    : `${views}<div class="ctl">${tr}${pads}${block(opt, s)}${sync}</div>`;
+  const tempo = `<div class="tempo"><button type="button" class="b" tabindex="-1">±10</button><button type="button" class="b" tabindex="-1">M</button><div class="fad"><i></i></div><button type="button" class="b" tabindex="-1">▲</button><button type="button" class="b" tabindex="-1">▼</button></div>`;
+  return `<section class="deck o-${opt}" data-size="${size}" aria-label="Deck ${n}"><div class="dmain">${head}${body}</div>${tempo}</section>`;
+}
+
+/* Every live block or deck: its own state, re-rendered on click. */
+const insts = [];
+function mount(el, render, s) {
+  const i = insts.length;
+  insts.push({ el, render, s });
+  el.dataset.i = i;
+  el.innerHTML = render(s);
+}
+
+function other(id) { return id === "idle" ? "auto" : "idle"; }
+const presetState = (id) => PRESETS.find((p) => p.id === id).s();
+
+function buildCloseups() {
+  const cu = document.getElementById("closeups");
+  cu.innerHTML = `<div></div>` + PRESETS.map((p) => `<div class="hd">${p.name}</div>`).join("");
+  for (const o of OPTS) {
+    cu.insertAdjacentHTML("beforeend", `<div class="rowname"><b>${o.name}${o.tag ? `<span class="tag now">${o.tag}</span>` : ""}</b><span>${o.sub}</span></div>`);
+    for (const p of PRESETS) {
+      const z = document.createElement("div");
+      z.className = `zoom ${o.id === "side" ? "wide" : ""}`;
+      cu.append(z);
+      z.innerHTML = block(o.id, p.s()); // fixed states: not mounted
+    }
+  }
+}
+
+function buildFulls() {
+  insts.length = 0;
+  const host = document.getElementById("fulls");
+  host.innerHTML = "";
+  for (const o of OPTS) {
+    const card = document.createElement("div");
+    card.className = "opt-card";
+    card.innerHTML = `<div class="head"><div><b>${o.name}</b>${o.tag ? `<span class="tag now">${o.tag}</span>` : ""} <span class="lede" style="font-size:13px">${o.sub}</span></div><span class="measure"></span></div><div class="fit"><div class="scaled"></div></div>`;
+    host.append(card);
+    const sc = card.querySelector(".scaled");
+    const d = (n, id) => { const el = document.createElement("div"); mount(el, (s) => deck(o.id, view, s, n), presetState(id)); return el; };
+    if (view === "solo") sc.append(d(1, preset));
+    else {
+      const panel = document.createElement("div");
+      panel.className = "panel";
+      const mixer = Object.assign(document.createElement("div"), { className: "mixer", textContent: "MIXER 344 × 440" });
+      if (view === "mix") panel.append(d(1, preset), mixer, d(2, other(preset)));
+      else {
+        const L = Object.assign(document.createElement("div"), { className: "stack" });
+        const R = Object.assign(document.createElement("div"), { className: "stack" });
+        L.append(d(1, preset), d(3, preset));
+        R.append(d(2, other(preset)), d(4, other(preset)));
+        panel.append(L, mixer, R);
+      }
+      sc.append(panel);
+    }
+    const lb = sc.querySelector(".lb"), pads = sc.querySelector(".pads"), dk = sc.querySelector(".deck");
+    card.querySelector(".measure").textContent = `deck ${dk.offsetWidth} × ${dk.offsetHeight} · loop block ${lb.offsetWidth} × ${lb.offsetHeight} · pads ${pads.offsetWidth} px`;
+  }
+  fit();
+}
+
+function fit() {
+  for (const f of document.querySelectorAll(".fit")) {
+    const c = f.firstElementChild;
+    c.style.transform = "";
+    const avail = f.clientWidth - 16;
+    const k = Math.min(1, avail / c.offsetWidth);
+    c.style.transform = `scale(${k})`;
+    f.style.height = `${c.offsetHeight * k + 18}px`;
+  }
+}
+
+function segs(id, items, get, set) {
+  const el = document.getElementById(id);
+  const draw = () => {
+    el.innerHTML = items.map((x) => `<button type="button" data-v="${x.id}" aria-pressed="${x.id === get()}">${x.name}</button>`).join("");
+  };
+  el.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; set(b.dataset.v); draw(); buildFulls(); });
+  draw();
+}
+
+document.getElementById("fulls").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act]");
+  const host = e.target.closest("[data-i]");
+  if (!b || !host || b.disabled) return;
+  const inst = insts[Number(host.dataset.i)];
+  act(inst.s, b.dataset.act);
+  host.innerHTML = inst.render(inst.s);
+  host.querySelector(`[data-act="${b.dataset.act}"]`)?.focus();
+});
+
+segs("presets", PRESETS, () => preset, (v) => { preset = v; });
+segs("views", VIEWS, () => view, (v) => { view = v; });
+buildCloseups();
+buildFulls();
+addEventListener("resize", fit);
+</script>
+</body>
+</html>

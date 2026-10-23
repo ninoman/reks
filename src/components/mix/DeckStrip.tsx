@@ -21,7 +21,7 @@ import { hasType, readTracks, TRACKS_MIME } from "../../lib/dnd";
 import type { CueEdit, DeckView } from "../../lib/ipc";
 import { PLAYER_PLAY_KEY, WAVE_ZOOM_KEY } from "../../lib/keys";
 import { type DeckAction, deckKeyHint } from "../../lib/mixKeys";
-import { loopBlockState, type PadMode, type TempoRange } from "../../lib/mixView";
+import { type LoopPage, loopBlockState, type PadMode, type TempoRange } from "../../lib/mixView";
 import type { DeckMeta, PagedPadMode } from "../../store/mix";
 import { DeckHeader } from "./DeckHeader";
 import { DeckPads } from "./DeckPads";
@@ -53,7 +53,7 @@ export interface DeckActions {
   /** Signed beats. */
   beatJump: (beats: number) => void;
   loopPad: (beats: number) => void;
-  /** The quick-loop block (`LoopBlock`). */
+  /** The quick-loop block (`LoopBlock`); the size button toggles the loop. */
   toggleLoop: () => void;
   loopIn: () => void;
   loopOut: () => void;
@@ -61,6 +61,7 @@ export interface DeckActions {
   loopResize: (double: boolean) => void;
   setPadMode: (mode: PadMode) => void;
   setPadPage: (mode: PagedPadMode, page: number) => void;
+  setLoopPage: (page: LoopPage) => void;
   /** -1 slower, 1 faster, 0 released. */
   nudge: (dir: -1 | 0 | 1) => void;
   setTempo: (ratio: number) => void;
@@ -246,6 +247,8 @@ export function DeckStrip({
       deck={deck}
       state={loopBlockState(view, loaded, grid, meta.lastLoop)}
       loaded={loaded}
+      page={meta.loopPage}
+      onPage={actions.setLoopPage}
       keyFor={keyFor}
       actions={actions}
     />

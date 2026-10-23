@@ -273,10 +273,10 @@ describe("loopBlockState", () => {
       false,
       false,
     ]);
-    expect(s.size).toEqual({ text: "4", dimmed: true });
+    expect(s.sizeText).toBe("4");
   });
 
-  it("no grid: IN, OUT and RELOOP work, LOOP and the next size do not", () => {
+  it("no grid: IN, OUT and RELOOP work, the size button and the next size do not", () => {
     const pending = loopBlockState(deck({ loopIn: 3_000 }), true, false, 4);
     expect(pending).toMatchObject({ inLit: true, outEnabled: true, loopEnabled: false });
     expect(pending.resizeEnabled).toBe(false);
@@ -290,17 +290,17 @@ describe("loopBlockState", () => {
     });
   });
 
-  it("with a grid and no loop: LOOP and ½ / 2× are on, the readout shows the next size dimmed", () => {
+  it("with a grid and no loop: the size button and ½ / 2× are on, the size is the next one", () => {
     const s = loopBlockState(deck(), true, true, 1 / 8);
     expect(s).toMatchObject({ looping: false, loopEnabled: true, resizeEnabled: true });
     expect(s).toMatchObject({ reloopEnabled: false, outEnabled: false, inLit: false });
-    expect(s.size).toEqual({ text: "1/8", dimmed: true });
+    expect(s.sizeText).toBe("1/8");
   });
 
-  it("looping: LOOP is lit, the readout shows the loop's own length", () => {
+  it("looping: the size is lit and shows the loop's own length", () => {
     const s = loopBlockState(deck({ loopRegion: { ...loop, beats: 3.87 } }), true, true, 4);
     expect(s).toMatchObject({ looping: true, outEnabled: true, reloopEnabled: true, inLit: false });
-    expect(s.size).toEqual({ text: "3.87", dimmed: false });
+    expect(s.sizeText).toBe("3.87");
   });
 
   it("looping without a grid: seconds, and the loop can still be resized and left", () => {
@@ -311,7 +311,7 @@ describe("loopBlockState", () => {
       4,
     );
     expect(s).toMatchObject({ loopEnabled: true, resizeEnabled: true });
-    expect(s.size).toEqual({ text: "1.25s", dimmed: false });
+    expect(s.sizeText).toBe("1.25s");
   });
 });
 

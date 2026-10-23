@@ -13,7 +13,6 @@ import { InlineNumber, parseNumber } from "./InlineNumber";
 import { Input } from "./Input";
 import { LampButton } from "./LampButton";
 import { Pad, SplitPad } from "./Pad";
-import { Readout } from "./Readout";
 import { Segment, SegmentedControl } from "./SegmentedControl";
 import { Select } from "./Select";
 import { Switch } from "./Switch";
@@ -308,40 +307,6 @@ describe("InlineNumber", () => {
     expect((screen.getByRole("button", { name: "BPM" }) as HTMLButtonElement).disabled).toBe(true);
     expect(parseNumber(" 99.5 ")).toBe(99.5);
     expect(parseNumber("1e3")).toBeNull();
-  });
-});
-
-describe("Readout", () => {
-  it("shows its value under a full name, dimmed when not in effect", () => {
-    render(
-      <div>
-        <Readout aria-label="Loop size: 4">4</Readout>
-        <Readout dimmed aria-label="Next loop size: 1/8">
-          1/8
-        </Readout>
-      </div>,
-    );
-    const on = screen.getByRole("img", { name: "Loop size: 4" });
-    const dim = screen.getByRole("img", { name: "Next loop size: 1/8" });
-    expect(on.textContent).toBe("4");
-    expect(on.dataset.dimmed).toBeUndefined();
-    expect(on.className).toContain("text-fg");
-    expect(dim.dataset.dimmed).toBe("true");
-    expect(dim.className).toContain("text-fg-subtle");
-  });
-
-  it("is one height with the buttons of its size", () => {
-    render(
-      <div>
-        <Readout size="xs" aria-label="r">
-          1
-        </Readout>
-        <Button size="xs">b</Button>
-      </div>,
-    );
-    expect(heightClass(screen.getByRole("img"))).toBe(
-      heightClass(screen.getByRole("button", { name: "b" })),
-    );
   });
 });
 

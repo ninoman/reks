@@ -291,19 +291,23 @@ export function formatLoopSeconds(ms: number): string {
   return `${Number(s.toFixed(s < 10 ? 2 : 1))}s`;
 }
 
+/** The quick-loop block's pages: the beat loop (size, ½ / 2×) and the manual loop (IN, OUT, RELOOP). */
+export type LoopPage = "beat" | "manual";
+
 /** What the quick-loop block shows and allows, from the deck's engine state. */
 export interface LoopBlockState {
   /** IN is lit while it waits for OUT. */
   inLit: boolean;
   outEnabled: boolean;
-  /** ½ and 2×: the active loop, or LOOP's next size (that needs a grid). */
+  /** ½ and 2×: the active loop, or the size button's next size (that needs a grid). */
   resizeEnabled: boolean;
-  /** Any loop plays (beat, manual, memory or auto). */
+  /** Any loop plays (beat, manual, memory or auto): the size is lit and RELOOP reads EXIT. */
   looping: boolean;
+  /** The size button: a loop of that size, or out of the playing loop. */
   loopEnabled: boolean;
   reloopEnabled: boolean;
-  /** The size readout: the playing loop's length, or dimmed, the size LOOP uses next. */
-  size: { text: string; dimmed: boolean };
+  /** The playing loop's length, or the size the size button loops next. */
+  sizeText: string;
 }
 
 /** `nextBeats` is `DeckMeta.lastLoop`; `grid` that the engine has one for the track. */
@@ -329,7 +333,7 @@ export function loopBlockState(
     looping,
     loopEnabled: loaded && (looping || grid),
     reloopEnabled: looping || (loaded && (view?.lastLoop ?? null) !== null),
-    size: { text, dimmed: !looping },
+    sizeText: text,
   };
 }
 
