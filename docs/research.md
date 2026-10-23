@@ -18,6 +18,7 @@ Contents
 9. DJ mixer reference and real-time audio crates (Phase 5)
 10. Play history and playlist dividers (Phases 2 and 2.5)
 11. File conversion (Phase 2.6)
+12. rekordbox pain points and reks gaps
 
 ---
 
@@ -817,3 +818,43 @@ https://pypi.org/project/rekordbox-playlist-converter/ ·
 https://www.mixgraph.io/tools/wav-to-aiff ·
 https://crates.io/api/v1/crates/flacenc · https://github.com/yotarok/flacenc-rs/ ·
 https://docs.rs/hound/3.5.1/src/hound/write.rs.html
+
+---
+
+## 12. rekordbox pain points and reks gaps
+
+Research date: 2026-10-24. Not tied to a decision; input for planning. Full
+analysis: [`research/rekordbox-pain-points.md`](research/rekordbox-pain-points.md)
+(theme table, ranked gaps, every cited source with its date); raw tables:
+[`research/raw-7-rekordbox-pain-points.md`](research/raw-7-rekordbox-pain-points.md).
+
+- Loudest 2025–26 complaint: USB export trust. CDJ-3000 firmware 3.30 blanked
+  playlists and was pulled (2025-11-04); rekordbox 7.2.12 shipped an export
+  players could not load and was pulled (2026-03-17); Device Library vs
+  OneLibrary sticks read differently per player (AlphaTheta, 2026-03-18).
+- Then subscription and paywalls (older controllers lost the free v7 unlock
+  2024-07; billing outage 2025-01-25 to 2025-03), and library hygiene:
+  duplicates, missing files, database loss, which paid tools (Lexicon, RCT,
+  Mixed In Key) sell fixes for.
+- Cheapest high-signal gaps for reks: a read-only "check a stick" report,
+  target players per stick profile, automatic library backups, relocating
+  missing files.
+- Limits: Reddit was unreachable with our tools and the Pioneer forum
+  returned 403 (snippets only); vendor pitches are flagged.
+
+Key sources (accessed 2026-10-24): https://rekordbox.com/en/support/releasenote/
+(2023-03 to 2026-09) ·
+https://rekordbox.com/en/2026/03/important-notice-regarding-rekordbox-v7212/
+(2026-03-17) ·
+https://www.pioneerdj.com/en-gb/news/2026/cdj-3000-firmware-ver330-important-notice
+(2026-01-07) ·
+https://alphatheta.com/en/information/important-notice-for-customers-using-usb-devices-with-our-dj-equipment/
+(2026-03-18) ·
+https://www.digitaldjtips.com/rekordbox-cloud-library-sync-advice/ (2026-04-16) ·
+https://www.digitaldjtips.com/owners-of-older-pioneer-dj-controllers-must-now-subscribe-to-use-rekordbox-7/
+(2024-07-11) ·
+https://musictech.com/features/pioneer-dj-cdj-3000-firmware-bug-jaguar-mojaxx/
+(2026-01-09) ·
+https://community.algoriddim.com/t/rekordbox-onelibrary-misaligned-beatgrids/40391
+(2025-12-06) · https://www.trustpilot.com/review/rekordbox.com (2024-11 to
+2026-08) · https://www.lexicondj.com (vendor, 2026-10)
