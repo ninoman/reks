@@ -48,6 +48,7 @@ function track(patch: Partial<Track> = {}): Track {
     playCount: 0,
     missing: false,
     needsAnalysis: false,
+    artworkId: null,
     entryPosition: null,
     tags: [],
     path: "/music/old.mp3",
