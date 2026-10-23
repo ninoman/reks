@@ -686,6 +686,7 @@ mod tests {
             Control::CallCue {
                 deck: 1,
                 frame: 60_000,
+                end: Some(80_000),
             },
             Control::AutoLoop {
                 deck: 1,
@@ -782,6 +783,10 @@ mod tests {
                 deck: 2,
                 double: false,
             },
+            Control::LoopIn { deck: 2 },
+            Control::LoopOut { deck: 2 },
+            Control::Reloop { deck: 2 },
+            Control::Reloop { deck: 2 },
         ] {
             r.controls.push(c).unwrap();
         }

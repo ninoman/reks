@@ -69,11 +69,14 @@ pub enum Control {
         region: Option<(i64, i64)>,
     },
     /// Memory cue call: the cue point and the head move to `frame` exactly
-    /// (no quantise); a playing deck plays on from there. UNVERIFIED against
-    /// a CDJ's CALL buttons; this is rekordbox's memory cue list.
+    /// (no quantise); a playing deck plays on from there. A memory loop
+    /// (`end`) becomes the loop [`Control::Reloop`] enters; the call itself
+    /// does not loop. UNVERIFIED against a CDJ's CALL buttons; this is
+    /// rekordbox's memory cue list.
     CallCue {
         deck: u8,
         frame: i64,
+        end: Option<i64>,
     },
     /// Tempo fader as a speed ratio, clamped to [`crate::graph::TEMPO_MIN`]..=
     /// [`crate::graph::TEMPO_MAX`]. Pitch follows tempo.
@@ -118,11 +121,33 @@ pub enum Control {
         deck: u8,
         beats: f64,
     },
-    /// Leaves the active loop; playback carries on past its end.
+    /// Leaves the active loop, keeping it for [`Control::Reloop`]; playback
+    /// carries on past its end.
     LoopExit {
         deck: u8,
     },
-    /// Halves (`double: false`) or doubles the active loop from its start.
+    /// Loop IN at the head (the nearest beat with quantise). Looping: moves
+    /// the loop's start there, keeping its end. Otherwise: a pending IN for
+    /// [`Control::LoopOut`]. Works without a grid.
+    LoopIn {
+        deck: u8,
+    },
+    /// Loop OUT at the head (the nearest beat with quantise; one beat after
+    /// IN if that is on or before it). Looping: moves the loop's end there.
+    /// Otherwise, with a pending IN behind the head: loops IN → OUT at once;
+    /// paused, the head moves to IN. Ignored for a loop shorter than
+    /// 2 × [`crate::graph::LOOP_XFADE_MS`] or without an IN.
+    LoopOut {
+        deck: u8,
+    },
+    /// RELOOP: looping, as [`Control::LoopExit`]; otherwise back into the
+    /// last loop left (or memory loop called) and loop it. With quantise
+    /// while playing the jump keeps the beat phase.
+    Reloop {
+        deck: u8,
+    },
+    /// Halves (`double: false`) or doubles the active loop from its start:
+    /// along the grid, or by time without one.
     LoopResize {
         deck: u8,
         double: bool,
@@ -183,6 +208,9 @@ impl Control {
             | Self::FineJump { deck, .. }
             | Self::BeatLoop { deck, .. }
             | Self::LoopExit { deck }
+            | Self::LoopIn { deck }
+            | Self::LoopOut { deck }
+            | Self::Reloop { deck }
             | Self::LoopResize { deck, .. } => Some(*deck),
             Self::TakeMaster { .. }
             | Self::Channel { .. }

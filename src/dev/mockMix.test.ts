@@ -92,4 +92,76 @@ describe("mock mixer", () => {
     run(20);
     expect(state().decks[0]?.loopRegion).toBeNull();
   });
+
+  it("loops IN to OUT, moves its ends, and keeps it for RELOOP", () => {
+    send({ type: "quantise", deck: 0, on: false });
+    send({ type: "seek", deck: 0, ms: 1_000 });
+    send({ type: "loopOut", deck: 0 });
+    send({ type: "loopIn", deck: 0 });
+    run(20);
+    expect(state().decks[0]).toMatchObject({ loopIn: 1_000, loopRegion: null });
+    // Paused: the loop is made and the head goes to IN.
+    send({ type: "seek", deck: 0, ms: 1_005 });
+    send({ type: "loopOut", deck: 0 });
+    run(20);
+    expect(state().decks[0]?.loopRegion).toBeNull();
+    send({ type: "seek", deck: 0, ms: 2_000 });
+    send({ type: "loopOut", deck: 0 });
+    run(20);
+    let d = state().decks[0];
+    expect(d?.loopRegion).toEqual({ startMs: 1_000, endMs: 2_000, beats: 1_000 / 468.75 });
+    expect(d).toMatchObject({ loopIn: null, positionMs: 1_000 });
+    send({ type: "seek", deck: 0, ms: 1_500 });
+    send({ type: "loopIn", deck: 0 });
+    run(20);
+    expect(state().decks[0]?.loopRegion).toMatchObject({ startMs: 1_500, endMs: 2_000 });
+
+    send({ type: "reloop", deck: 0 });
+    send({ type: "seek", deck: 0, ms: 9_000 });
+    run(20);
+    d = state().decks[0];
+    expect(d?.loopRegion).toBeNull();
+    expect(d?.lastLoop).toMatchObject({ startMs: 1_500, endMs: 2_000 });
+    send({ type: "reloop", deck: 0 });
+    run(20);
+    expect(state().decks[0]).toMatchObject({ positionMs: 1_500, playing: false });
+    expect(state().decks[0]?.loopRegion).toMatchObject({ startMs: 1_500 });
+
+    // A memory loop call arms RELOOP without looping; loading clears it.
+    send({ type: "callCue", deck: 0, ms: 4_000, endMs: 5_875 });
+    run(20);
+    d = state().decks[0];
+    expect(d?.loopRegion).toBeNull();
+    expect(d?.lastLoop).toEqual({ startMs: 4_000, endMs: 5_875, beats: 4 });
+    mockMix("mix_load", { deck: 0, id: 1 }, () => true);
+    run(20);
+    expect(state().decks[0]).toMatchObject({ loopIn: null, lastLoop: null });
+  });
+
+  it("resizes a loop by time without a grid", () => {
+    mockMix("mix_load", { deck: 2, id: 9 }, () => false);
+    send({ type: "seek", deck: 2, ms: 1_000 });
+    send({ type: "loopIn", deck: 2 });
+    send({ type: "seek", deck: 2, ms: 1_600 });
+    send({ type: "loopOut", deck: 2 });
+    send({ type: "loopResize", deck: 2, double: false });
+    run(20);
+    expect(state().decks[2]?.loopRegion).toEqual({ startMs: 1_000, endMs: 1_300, beats: null });
+  });
+
+  it("gives no phase from a master looping part of a beat", () => {
+    send({ type: "quantise", deck: 0, on: false });
+    send({ type: "play", deck: 0 });
+    run(500);
+    send({ type: "loopIn", deck: 0 });
+    run(700);
+    send({ type: "loopOut", deck: 0 });
+    send({ type: "sync", deck: 1, on: true, bar: false });
+    send({ type: "play", deck: 1 });
+    run(17);
+    const before = state().decks[1]?.positionMs ?? 0;
+    run(1_000);
+    // Plays straight on: no jumps into the master's loop.
+    expect(state().decks[1]?.positionMs).toBeCloseTo(before + 1_000, -2);
+  });
 });

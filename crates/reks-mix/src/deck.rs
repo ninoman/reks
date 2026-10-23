@@ -42,13 +42,23 @@ struct Tail {
     len: u32,
 }
 
-/// An active loop, in source frames: `end` is `beats` beats after `start`
-/// on the grid.
+/// A loop, in source frames: `end` is `beats` beats after `start` on the
+/// grid (`None` without one).
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Loop {
     start: f64,
     end: f64,
-    beats: f64,
+    beats: Option<f64>,
+}
+
+impl Loop {
+    fn region(self) -> LoopRegion {
+        LoopRegion {
+            start: self.start.round() as i64,
+            end: self.end.round() as i64,
+            beats: self.beats,
+        }
+    }
 }
 
 /// Clamps a ratio control to the tempo range; non-finite values give 1.0.
@@ -88,6 +98,10 @@ pub(crate) struct Deck {
     /// [`LOOP_XFADE_MS`] in frames.
     loop_xfade: u32,
     looping: Option<Loop>,
+    /// A pending loop IN, waiting for OUT ([`Control::LoopIn`]).
+    loop_in: Option<f64>,
+    /// The loop RELOOP enters: the last one left, or a memory loop called.
+    last_loop: Option<Loop>,
     cue: f64,
     /// The loaded track's hot cues by slot: the source's at load, then as
     /// edited ([`Control::SetHotCue`]).
@@ -132,6 +146,8 @@ impl Deck {
             xfade: (sample_rate * SEEK_XFADE_MS / 1000).max(1),
             loop_xfade: (sample_rate * LOOP_XFADE_MS / 1000).max(1),
             looping: None,
+            loop_in: None,
+            last_loop: None,
             cue: 0.0,
             hot_cues: [None; HOT_CUE_SLOTS as usize],
             auto_loops: [None; AUTO_LOOP_SLOTS],
@@ -188,9 +204,13 @@ impl Deck {
         self.step = crate::varispeed::clamp_step(step);
     }
 
-    /// Length of the active loop in beats.
+    /// Length of the active loop in beats; `None` without a loop or a grid.
     pub(crate) fn loop_beats(&self) -> Option<f64> {
-        self.looping.map(|l| l.beats)
+        self.looping.and_then(|l| l.beats)
+    }
+
+    pub(crate) fn looping(&self) -> bool {
+        self.looping.is_some()
     }
 
     /// Sets the tempo fader, clamped to the tempo range.
@@ -278,8 +298,8 @@ impl Deck {
                 }
                 None
             }
-            Control::CallCue { frame, .. } => {
-                self.call_cue(frame);
+            Control::CallCue { frame, end, .. } => {
+                self.call_cue(frame, end);
                 None
             }
             Control::Tempo { ratio: r, .. } => {
@@ -312,7 +332,19 @@ impl Deck {
                 None
             }
             Control::LoopExit { .. } => {
-                self.looping = None;
+                self.exit_loop();
+                None
+            }
+            Control::LoopIn { .. } => {
+                self.loop_in_here();
+                None
+            }
+            Control::LoopOut { .. } => {
+                self.loop_out_here();
+                None
+            }
+            Control::Reloop { .. } => {
+                self.reloop();
                 None
             }
             Control::LoopResize { double, .. } => {
@@ -415,14 +447,21 @@ impl Deck {
     }
 
     /// Memory cue call: cue point and head to `frame`, exactly; playing on.
-    fn call_cue(&mut self, frame: i64) {
+    /// A memory loop (`end`) becomes the loop RELOOP enters.
+    fn call_cue(&mut self, frame: i64, end: Option<i64>) {
         if matches!(self.pending, Pending::Load(_)) || self.src.is_none() {
             return;
         }
         self.cue_preview = false;
-        self.cue = (frame as f64).clamp(0.0, self.frames() as f64);
+        let frames = self.frames() as f64;
+        self.cue = (frame as f64).clamp(0.0, frames);
         self.leave_loop_unless(self.cue);
         self.jump(self.cue);
+        if let Some(end) = end.map(|e| (e as f64).min(frames)) {
+            if end - self.cue >= self.min_loop() {
+                self.last_loop = Some(self.make_loop(self.cue, end));
+            }
+        }
     }
 
     /// Moves the head to `to`, clamped to the track. With quantise, a jump
@@ -448,8 +487,137 @@ impl Deck {
             .looping
             .is_some_and(|l| !(l.start..l.end).contains(&to))
         {
-            self.looping = None;
+            self.exit_loop();
         }
+    }
+
+    /// Leaves the active loop, keeping it for RELOOP.
+    fn exit_loop(&mut self) {
+        if let Some(l) = self.looping.take() {
+            self.last_loop = Some(l);
+        }
+    }
+
+    /// Shortest manual loop, in source frames: two loop crossfades.
+    fn min_loop(&self) -> f64 {
+        self.src.as_ref().map_or(f64::INFINITY, |s| {
+            f64::from(s.sample_rate()) * f64::from(2 * LOOP_XFADE_MS) / 1000.0
+        })
+    }
+
+    /// A loop from `start` to `end`, measured in beats when there is a grid.
+    fn make_loop(&self, start: f64, end: f64) -> Loop {
+        let beats = self
+            .grid()
+            .and_then(|m| Some(m.beat_at(end)? - m.beat_at(start)?));
+        Loop { start, end, beats }
+    }
+
+    /// The head for loop IN / OUT: the nearest beat with quantise (the head
+    /// itself without a grid), clamped to the track.
+    fn loop_point(&self) -> f64 {
+        let here = self.position();
+        match self.src.as_ref() {
+            Some(s) if self.quantise => s.beats().snap(here),
+            _ => here,
+        }
+        .clamp(0.0, self.frames() as f64)
+    }
+
+    /// Loop IN: looping, moves the loop's start here (end kept); otherwise
+    /// sets a pending IN for OUT.
+    fn loop_in_here(&mut self) {
+        if matches!(self.pending, Pending::Load(_)) || self.src.is_none() {
+            return;
+        }
+        let at = self.loop_point();
+        match self.looping {
+            Some(l) => {
+                if l.end - at >= self.min_loop() {
+                    self.looping = Some(self.make_loop(at, l.end));
+                }
+            }
+            None => self.loop_in = Some(at),
+        }
+    }
+
+    /// Loop OUT: looping, moves the loop's end here (start kept); with a
+    /// pending IN behind the head, loops from it to here at once. While
+    /// paused the head goes to IN, so PLAY starts the loop.
+    fn loop_out_here(&mut self) {
+        if matches!(self.pending, Pending::Load(_)) || self.src.is_none() {
+            return;
+        }
+        let frames = self.frames() as f64;
+        let at = self.loop_point();
+        if let Some(l) = self.looping {
+            if at - l.start >= self.min_loop() {
+                self.looping = Some(self.make_loop(l.start, at));
+                // Snapping may have put the end behind the head.
+                self.wrap_loop();
+            }
+            return;
+        }
+        let Some(start) = self.loop_in.filter(|&i| i < self.position()) else {
+            return;
+        };
+        let end = if at > start {
+            at
+        } else {
+            // Snapped back onto IN or before it: one beat after IN.
+            let Some(e) = self
+                .grid()
+                .and_then(|m| m.frame_at(m.beat_at(start)? + 1.0))
+            else {
+                return;
+            };
+            e.min(frames)
+        };
+        if end - start < self.min_loop() {
+            return;
+        }
+        self.loop_in = None;
+        self.looping = Some(self.make_loop(start, end));
+        if self.playing {
+            self.wrap_loop();
+        } else {
+            self.jump(start);
+        }
+    }
+
+    /// RELOOP: looping, leaves the loop as LOOP EXIT does; otherwise jumps
+    /// back into the last loop and loops. With quantise while playing the
+    /// jump keeps the beat phase, landing inside the loop when it is a beat
+    /// or longer, else on its start.
+    fn reloop(&mut self) {
+        if self.looping.is_some() {
+            self.exit_loop();
+            return;
+        }
+        if matches!(self.pending, Pending::Load(_)) {
+            return;
+        }
+        let (Some(l), Some(src)) = (self.last_loop, self.src.as_ref()) else {
+            return;
+        };
+        self.cue_preview = false;
+        let map = src.beats();
+        let mut to = if self.quantise && self.playing {
+            map.keep_phase(self.position(), l.start)
+        } else {
+            l.start
+        };
+        if to < l.start {
+            to = map
+                .beat_at(to)
+                .and_then(|b| map.frame_at(b + 1.0))
+                .unwrap_or(l.start);
+        }
+        if !(l.start..l.end).contains(&to) {
+            to = l.start;
+        }
+        self.looping = Some(l);
+        self.jump(to);
     }
 
     /// The grid, when the deck can take a beat jump or loop now.
@@ -487,7 +655,10 @@ impl Deck {
         }
         if let Some(l) = self.looping {
             let start = self.beats_from(l.start, beats);
-            let end = start.and_then(|s| self.loop_end(s, l.beats));
+            let end = start.and_then(|s| match l.beats {
+                Some(b) => self.loop_end(s, b),
+                None => Some(s + l.end - l.start).filter(|&e| e <= frames),
+            });
             let (Some(start), Some(end)) = (start, end) else {
                 return;
             };
@@ -545,21 +716,41 @@ impl Deck {
             return;
         };
         if let Some(end) = self.loop_end(start, beats) {
-            self.looping = Some(Loop { start, end, beats });
+            self.looping = Some(Loop {
+                start,
+                end,
+                beats: Some(beats),
+            });
         }
     }
 
-    /// Halves or doubles the active loop, keeping its start.
+    /// Halves or doubles the active loop, keeping its start: along the grid,
+    /// or by time without one.
     fn resize_loop(&mut self, double: bool) {
         let Some(l) = self.looping else {
             return;
         };
-        let beats = if double { l.beats * 2.0 } else { l.beats / 2.0 };
-        if !(LOOP_MIN_BEATS..=LOOP_MAX_BEATS).contains(&beats) {
-            return;
-        }
-        if let Some(end) = self.loop_end(l.start, beats) {
-            self.looping = Some(Loop { end, beats, ..l });
+        let factor = if double { 2.0 } else { 0.5 };
+        match l.beats {
+            Some(b) => {
+                let beats = b * factor;
+                if !(LOOP_MIN_BEATS..=LOOP_MAX_BEATS).contains(&beats) {
+                    return;
+                }
+                if let Some(end) = self.loop_end(l.start, beats) {
+                    self.looping = Some(Loop {
+                        end,
+                        beats: Some(beats),
+                        ..l
+                    });
+                }
+            }
+            None => {
+                let end = l.start + (l.end - l.start) * factor;
+                if end - l.start >= self.min_loop() && end <= self.frames() as f64 {
+                    self.looping = Some(Loop { end, ..l });
+                }
+            }
         }
     }
 
@@ -579,11 +770,7 @@ impl Deck {
             .find(|(s, _)| (before..now).contains(s))
             .copied();
         if let Some((start, end)) = hit {
-            let beats = self
-                .grid()
-                .and_then(|m| Some(m.beat_at(end)? - m.beat_at(start)?))
-                .unwrap_or(0.0);
-            self.looping = Some(Loop { start, end, beats });
+            self.looping = Some(self.make_loop(start, end));
         }
     }
 
@@ -657,6 +844,8 @@ impl Deck {
                 self.position = 0.0;
                 self.cue = 0.0;
                 self.looping = None;
+                self.loop_in = None;
+                self.last_loop = None;
                 for (slot, c) in (0..HOT_CUE_SLOTS).zip(&mut self.hot_cues) {
                     *c = src.as_ref().and_then(|s| s.hot_cue(slot));
                 }
@@ -785,11 +974,9 @@ impl Deck {
             locked: self.locked,
             quantise: self.quantise,
             master: false,
-            loop_region: self.looping.map(|l| LoopRegion {
-                start: l.start.round() as i64,
-                end: l.end.round() as i64,
-                beats: l.beats,
-            }),
+            loop_region: self.looping.map(Loop::region),
+            loop_in: self.loop_in.map(|f| f.round() as i64),
+            last_loop: self.last_loop.map(Loop::region),
         }
     }
 }
