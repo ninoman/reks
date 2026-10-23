@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { litCount, METER_LEDS, scaleDb } from "../../lib/meterScale";
-import { Meter } from "./Meter";
+import { Meter, MeterScale } from "./Meter";
 
 afterEach(cleanup);
 
@@ -51,5 +51,11 @@ describe("Meter", () => {
   it("can leave the labels out", () => {
     render(<Meter lit={9} clip={false} labels={false} aria-label="Ch" />);
     expect(screen.getByRole("meter").textContent).toBe("");
+  });
+
+  it("draws the labels alone as a scale", () => {
+    const { container } = render(<MeterScale />);
+    expect(container.textContent).toBe("+10+6+30-3-6-10-15-20");
+    expect(container.firstElementChild?.getAttribute("aria-hidden")).toBe("true");
   });
 });

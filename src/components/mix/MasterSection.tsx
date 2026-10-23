@@ -17,7 +17,7 @@ export function MasterSection({ values, onChange }: MasterSectionProps) {
   return (
     <section
       aria-label="Master"
-      className="ml-1 flex w-(--mixer-strip-w) flex-col items-center gap-2 border-l border-border-subtle pl-1"
+      className="ml-1 flex w-(--mixer-strip-w) flex-col items-center gap-1 border-l border-border-subtle pl-1"
     >
       <Caption tone="default">Master</Caption>
       <LabelledKnob
@@ -28,7 +28,7 @@ export function MasterSection({ values, onChange }: MasterSectionProps) {
         aria-label="Master level"
       />
       <LiveMeter source="master" aria-label="Master meter" />
-      <Caption tone="default" className="mt-2">
+      <Caption tone="default" className="mt-1">
         Cue
       </Caption>
       <LabelledKnob
