@@ -140,6 +140,7 @@ menu items `--menu-item-h`.
 | `Textarea` | `size`: sm, md | native |
 | `Select` | `size`; native `<select>` with our chevron | native |
 | `Switch` | `size`: sm, md | Radix Switch |
+| `LampButton` | `pressed`; small round text-less toggle (the filter ON lamp), accent when lit; `aria-label` required | none |
 | `Checkbox` | `size`: sm, md; `indeterminate` (mixed); native, wrap in a `<label>` (Biome knows it as an input) | native |
 | `Slider` | `size`: sm, md; one value | Radix Slider |
 | `SegmentedControl` + `Segment` | `size`; `variant`: default, control (chosen segment lit), outline (chosen segment ringed in `accent`, no fill: mode tabs); one choice, can't be cleared (radiogroup); segment corners nest inside the outer radius (`--seg-r`) | Radix ToggleGroup |
