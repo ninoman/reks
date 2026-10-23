@@ -1,17 +1,21 @@
 /**
- * Filter unit X or Y: FREQ, RESONANCE, HP / BP / LP, ON. A click picks one mode; Shift+click
- * combines modes (`pickSwitches`).
+ * Filter unit X or Y: FREQ, RESONANCE, HP / BP / LP and the ON lamp. A click picks one mode;
+ * Shift+click combines modes (`pickSwitches`). The unit on the `right` is the mirror image of
+ * the one on the left, around the mixer's centre line.
  */
+import { cn } from "../../lib/cn";
 import type { FilterUnit as Unit } from "../../lib/ipc";
 import { pickSwitches } from "../../lib/mixView";
 import type { FilterValues } from "../../store/mix";
 import { Button } from "../ui/Button";
 import { Caption } from "../ui/Caption";
+import { LampButton } from "../ui/LampButton";
 import { Tooltip } from "../ui/Tooltip";
 import { LabelledKnob } from "./LabelledKnob";
 
 export interface FilterUnitProps {
   unit: Unit;
+  side: "left" | "right";
   values: FilterValues;
   onChange: <K extends keyof FilterValues>(param: K, value: FilterValues[K]) => void;
 }
@@ -25,7 +29,7 @@ const MODES: [Mode, string, string][] = [
   ["lowPass", "LP", "low-pass"],
 ];
 
-export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
+export function FilterUnit({ unit, side, values, onChange }: FilterUnitProps) {
   const name = `Filter ${unit.toUpperCase()}`;
   const pickMode = (i: number, additive: boolean) => {
     const was = MODES.map(([p]) => values[p]);
@@ -34,9 +38,10 @@ export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
       if (mode !== undefined && on !== was[j]) onChange(mode, on);
     });
   };
+  const mirror = side === "right" && "flex-row-reverse";
   return (
-    <section aria-label={name} className="flex items-center gap-2">
-      <div className="flex items-end gap-1.5">
+    <section aria-label={name} className={cn("flex items-center gap-2", mirror)}>
+      <div className={cn("flex items-end gap-1.5", mirror)}>
         <LabelledKnob
           caption="Freq"
           size="lg"
@@ -53,20 +58,16 @@ export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
           aria-label={`${name} resonance`}
         />
       </div>
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-1.5">
-          <Caption tone="default">{name}</Caption>
-          <Button
-            variant="control"
-            size="xs"
-            aria-pressed={values.on}
+      <div className={cn("flex flex-col gap-1", side === "right" && "items-end")}>
+        <div className={cn("flex items-center gap-1.5", mirror)}>
+          <LampButton
+            pressed={values.on}
             aria-label={`${name} on`}
             onClick={() => onChange("on", !values.on)}
-          >
-            On
-          </Button>
+          />
+          <Caption tone="default">{name}</Caption>
         </div>
-        <div className="flex gap-0.5">
+        <div className={cn("flex gap-0.5", mirror)}>
           {MODES.map(([p, text, spoken], i) => (
             <Tooltip key={p} content="Shift+click to combine modes">
               <Button

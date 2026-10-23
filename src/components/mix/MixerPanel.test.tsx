@@ -147,6 +147,17 @@ describe("MixerPanel", () => {
     expect(vi.mocked(p.onChannel).mock.calls).toEqual([[3, "cue", true]]);
   });
 
+  it("mirrors filter Y around the centre line and lights the ON lamp", () => {
+    setup();
+    const x = screen.getByRole("region", { name: "Filter X" });
+    const y = screen.getByRole("region", { name: "Filter Y" });
+    expect(x.className).not.toContain("flex-row-reverse");
+    expect(y.className).toContain("flex-row-reverse");
+    expect(
+      screen.getByRole("button", { name: "Filter X on" }).getAttribute("aria-pressed"),
+    ).toBeTruthy();
+  });
+
   it("puts channels 1–2 on filter X and 3–4 on Y by default", () => {
     setup();
     for (const [n, side] of [

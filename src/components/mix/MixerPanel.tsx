@@ -72,8 +72,18 @@ export function MixerPanel(p: MixerPanelProps) {
       </div>
       {parts.filterRow && (
         <div className="flex justify-between border-t border-border-subtle pt-1">
-          <FilterUnit unit="x" values={p.filters.x} onChange={(k, v) => p.onFilter("x", k, v)} />
-          <FilterUnit unit="y" values={p.filters.y} onChange={(k, v) => p.onFilter("y", k, v)} />
+          <FilterUnit
+            unit="x"
+            side="left"
+            values={p.filters.x}
+            onChange={(k, v) => p.onFilter("x", k, v)}
+          />
+          <FilterUnit
+            unit="y"
+            side="right"
+            values={p.filters.y}
+            onChange={(k, v) => p.onFilter("y", k, v)}
+          />
         </div>
       )}
       {parts.assigns && (
