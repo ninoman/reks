@@ -55,6 +55,7 @@ import {
   DEFAULT_PAD_BEATS,
   DEFAULT_TEMPO_RANGE,
   effectiveMix,
+  type LoopPage,
   loopPadControls,
   type MixerLook,
   NUDGE,
@@ -141,10 +142,15 @@ export interface DeckMeta {
   /** Beats of the jump and loop used last; the keys use them. */
   lastJump: number;
   lastLoop: number;
+  /** The quick-loop block's page. */
+  loopPage: LoopPage;
 }
 
 /** The deck settings a load or eject keeps. */
-type DeckPrefs = Pick<DeckMeta, "tempoRange" | "padMode" | "padPage" | "lastJump" | "lastLoop">;
+type DeckPrefs = Pick<
+  DeckMeta,
+  "tempoRange" | "padMode" | "padPage" | "lastJump" | "lastLoop" | "loopPage"
+>;
 
 export interface ChannelValues {
   trim: number;
@@ -247,7 +253,7 @@ export interface MixStore {
   loopIn: (deck: number) => void;
   loopOut: (deck: number) => void;
   reloop: (deck: number) => void;
-  /** ½ / 2×: resizes the active loop, else LOOP's next size (`DeckMeta.lastLoop`). */
+  /** ½ / 2×: resizes the active loop, else the size button's next size (`DeckMeta.lastLoop`). */
   loopResize: (deck: number, double: boolean) => void;
   /** A hot cue pad or key: jumps to a set cue, sets an empty one at the playhead. */
   hotCuePad: (deck: number, slot: number) => void;
@@ -261,6 +267,7 @@ export interface MixStore {
   setPadMode: (deck: number, mode: PadMode) => void;
   cyclePadMode: (deck: number) => void;
   setPadPage: (deck: number, mode: PagedPadMode, page: number) => void;
+  setLoopPage: (deck: number, page: LoopPage) => void;
   /** Sets the tempo that plays the deck at `bpm`, stepping the range up when needed. */
   setBpm: (deck: number, bpm: number) => void;
   /** -1 slower, 1 faster, 0 released. */
@@ -293,6 +300,7 @@ const DEFAULT_PREFS: DeckPrefs = {
   padPage: { beatJump: 0, beatLoop: 0 },
   lastJump: DEFAULT_PAD_BEATS,
   lastLoop: DEFAULT_PAD_BEATS,
+  loopPage: "beat",
 };
 
 export function emptyDeck(): DeckMeta {
@@ -315,8 +323,8 @@ export function emptyDeck(): DeckMeta {
 /** An empty deck that keeps `prev`'s settings. */
 function emptyDeckFrom(prev: DeckMeta | undefined): DeckMeta {
   if (prev === undefined) return emptyDeck();
-  const { tempoRange, padMode, padPage, lastJump, lastLoop } = prev;
-  return { ...emptyDeck(), tempoRange, padMode, padPage, lastJump, lastLoop };
+  const { tempoRange, padMode, padPage, lastJump, lastLoop, loopPage } = prev;
+  return { ...emptyDeck(), tempoRange, padMode, padPage, lastJump, lastLoop, loopPage };
 }
 
 export const DEFAULT_CHANNEL: ChannelValues = {
@@ -865,6 +873,10 @@ export const useMix = create<MixStore>((set, get) => {
 
     setPadPage(deck, mode, page) {
       patchDeck(deck, { padPage: { ...prefs(deck).padPage, [mode]: page } });
+    },
+
+    setLoopPage(deck, page) {
+      patchDeck(deck, { loopPage: page });
     },
 
     setBpm(deck, bpm) {

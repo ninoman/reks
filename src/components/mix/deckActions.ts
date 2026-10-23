@@ -27,6 +27,7 @@ export function deckActions(mix: MixStore, deck: number): DeckActions {
     loopResize: (double) => mix.loopResize(deck, double),
     setPadMode: (mode) => mix.setPadMode(deck, mode),
     setPadPage: (mode, page) => mix.setPadPage(deck, mode, page),
+    setLoopPage: (page) => mix.setLoopPage(deck, page),
     nudge: (dir) => mix.nudge(deck, dir),
     setTempo: (ratio) => mix.setTempo(deck, ratio),
     setTempoRange: (range) => mix.setTempoRange(deck, range),

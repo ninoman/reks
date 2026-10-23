@@ -82,6 +82,7 @@ function setup(props: Partial<DeckStripProps> = {}) {
       "loopResize",
       "setPadMode",
       "setPadPage",
+      "setLoopPage",
       "nudge",
       "setTempo",
       "setTempoRange",
@@ -450,102 +451,123 @@ describe("DeckStrip", () => {
 
 describe("DeckStrip quick-loop block", () => {
   const btn = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
-  const readout = () => screen.getByRole("img", { name: /Deck 2 (next )?loop size/ });
+  const tab = (name: string) => screen.getByRole("radio", { name }) as HTMLButtonElement;
+  const labels = () =>
+    [...screen.getByRole("group", { name: "Deck 2 quick loop" }).querySelectorAll("button")].map(
+      (b) => b.textContent,
+    );
   const loop = { startMs: 1_000, endMs: 3_000, beats: 4 };
+  const manual = (over: Partial<DeckMeta> = {}) => loadedMeta({ loopPage: "manual", ...over });
 
-  it("is on the deck in every pad mode, with IN, OUT, ½, size, 2×, LOOP and RELOOP", () => {
+  it("is on the deck in every pad mode: BEAT | IN/OUT tabs over one page", () => {
     for (const padMode of ["hotCue", "memory", "beatJump", "beatLoop"] as const) {
-      setup({ view: view(), meta: loadedMeta({ padMode }) });
-      const block = screen.getByRole("group", { name: "Deck 2 quick loop" });
-      expect([...block.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
-        "IN",
-        "OUT",
-        "½",
-        "2×",
-        "LOOP",
-        "RELOOP",
-      ]);
-      expect(readout()).toBeTruthy();
+      setup({ view: view(), meta: loadedMeta({ padMode, lastLoop: 16 }) });
+      expect(labels()).toEqual(["BEAT", "IN/OUT", "16", "‹", "›"]);
+      cleanup();
+      setup({ view: view(), meta: manual({ padMode }) });
+      expect(labels()).toEqual(["BEAT", "IN/OUT", "IN", "OUT", "RELOOP"]);
       cleanup();
     }
   });
 
+  it("the tabs switch the page", () => {
+    const a = setup({ view: view(), meta: loadedMeta() });
+    expect(tab("Beat loop").getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(tab("In and out"));
+    expect(a.setLoopPage).toHaveBeenCalledWith("manual");
+  });
+
   it("empty deck: all of it is disabled", () => {
     setup();
-    for (const name of [
-      "Deck 2 loop in",
-      "Deck 2 loop out",
-      "Deck 2 halve loop",
-      "Deck 2 double loop",
-      "Deck 2 loop",
-      "Deck 2 reloop",
-    ]) {
+    for (const name of ["Deck 2 loop", "Deck 2 halve loop", "Deck 2 double loop"]) {
+      expect(btn(name).disabled).toBe(true);
+    }
+    expect(tab("In and out").disabled).toBe(true);
+    cleanup();
+    setup({ meta: { ...emptyDeck(), loopPage: "manual" } });
+    for (const name of ["Deck 2 loop in", "Deck 2 loop out", "Deck 2 reloop"]) {
       expect(btn(name).disabled).toBe(true);
     }
   });
 
-  it("no loop: LOOP and the next size are on, the readout is dimmed, OUT and RELOOP wait", () => {
+  it("no loop: the size is the next one, unlit; it loops, ‹ › step it", () => {
     const a = setup({ view: view(), meta: loadedMeta({ lastLoop: 1 / 8 }) });
-    expect(readout().textContent).toBe("1/8");
-    expect(readout().dataset.dimmed).toBe("true");
+    expect(btn("Deck 2 loop").textContent).toBe("1/8");
     expect(btn("Deck 2 loop").getAttribute("aria-pressed")).toBe("false");
-    expect(btn("Deck 2 loop out").disabled).toBe(true);
-    expect(btn("Deck 2 reloop").disabled).toBe(true);
     fireEvent.click(btn("Deck 2 halve loop"));
     fireEvent.click(btn("Deck 2 double loop"));
     expect(a.loopResize).toHaveBeenNthCalledWith(1, false);
     expect(a.loopResize).toHaveBeenNthCalledWith(2, true);
     fireEvent.click(btn("Deck 2 loop"));
     expect(a.toggleLoop).toHaveBeenCalledTimes(1);
+    expect(tab("In and out")).toBeTruthy();
+  });
+
+  it("no loop on IN/OUT: IN works, OUT and RELOOP wait", () => {
+    const a = setup({ view: view(), meta: manual() });
+    expect(btn("Deck 2 loop out").disabled).toBe(true);
+    expect(btn("Deck 2 reloop").disabled).toBe(true);
     fireEvent.click(btn("Deck 2 loop in"));
     expect(a.loopIn).toHaveBeenCalledTimes(1);
   });
 
-  it("no grid: IN works, LOOP and ½ / 2× do not", () => {
+  it("no grid: IN works, the size and ‹ › do not", () => {
     setup({ view: view({ beat: null, bpm: null }), meta: loadedMeta({ beats: [] }) });
-    expect(btn("Deck 2 loop in").disabled).toBe(false);
     expect(btn("Deck 2 loop").disabled).toBe(true);
     expect(btn("Deck 2 halve loop").disabled).toBe(true);
     expect(btn("Deck 2 double loop").disabled).toBe(true);
+    cleanup();
+    setup({ view: view({ beat: null, bpm: null }), meta: manual({ beats: [] }) });
+    expect(btn("Deck 2 loop in").disabled).toBe(false);
   });
 
-  it("pending IN: IN is lit, and OUT is on once the head is past it", () => {
-    const a = setup({ view: view({ loopIn: 20_000 }), meta: loadedMeta() });
+  it("pending IN: IN is lit, OUT is on once the head is past it, BEAT's dot marks it", () => {
+    const a = setup({ view: view({ loopIn: 20_000 }), meta: manual() });
     expect(btn("Deck 2 loop in").getAttribute("aria-pressed")).toBe("true");
     expect(btn("Deck 2 loop out").disabled).toBe(true);
     cleanup();
     const b = setup({ view: view({ loopIn: 4_000 }), meta: loadedMeta() });
+    expect(tab("In and out, active")).toBeTruthy();
+    fireEvent.click(tab("In and out, active"));
+    cleanup();
+    const c = setup({ view: view({ loopIn: 4_000 }), meta: manual() });
     expect(btn("Deck 2 loop out").disabled).toBe(false);
     fireEvent.click(btn("Deck 2 loop out"));
-    expect(b.loopOut).toHaveBeenCalledTimes(1);
+    expect(c.loopOut).toHaveBeenCalledTimes(1);
     expect(a.loopOut).not.toHaveBeenCalled();
+    expect(b.setLoopPage).toHaveBeenCalledWith("manual");
   });
 
-  it("looping: LOOP is lit, the readout is the loop's length, RELOOP leaves it", () => {
-    const a = setup({
-      view: view({ loopRegion: { ...loop, beats: 3.87 }, lastLoop: loop }),
-      meta: loadedMeta({ lastLoop: 8 }),
-    });
+  it("looping: the size is lit with the loop's length; RELOOP reads EXIT and leaves it", () => {
+    const looping = view({ loopRegion: { ...loop, beats: 3.87 }, lastLoop: loop });
+    const a = setup({ view: looping, meta: loadedMeta({ lastLoop: 8 }) });
     expect(btn("Deck 2 loop").getAttribute("aria-pressed")).toBe("true");
-    expect(readout().textContent).toBe("3.87");
-    expect(readout().dataset.dimmed).toBeUndefined();
+    expect(btn("Deck 2 loop").textContent).toBe("3.87");
+    expect(tab("In and out, active")).toBeTruthy();
+    fireEvent.click(btn("Deck 2 loop"));
+    expect(a.toggleLoop).toHaveBeenCalledTimes(1);
+    cleanup();
+    const b = setup({ view: looping, meta: manual({ lastLoop: 8 }) });
     expect(btn("Deck 2 loop out").disabled).toBe(false);
-    fireEvent.click(btn("Deck 2 reloop"));
-    expect(a.reloop).toHaveBeenCalledTimes(1);
+    expect(btn("Deck 2 exit loop").textContent).toBe("EXIT");
+    expect(btn("Deck 2 exit loop").getAttribute("aria-pressed")).toBe("true");
+    expect(tab("Beat loop, active")).toBeTruthy();
+    fireEvent.click(btn("Deck 2 exit loop"));
+    expect(b.reloop).toHaveBeenCalledTimes(1);
   });
 
-  it("looping without a grid: the readout is in seconds", () => {
+  it("looping without a grid: the size is in seconds, and still leaves and resizes", () => {
     setup({
       view: view({ loopRegion: { startMs: 1_000, endMs: 2_500, beats: null }, beat: null }),
       meta: loadedMeta({ beats: [] }),
     });
-    expect(readout().textContent).toBe("1.5s");
+    expect(btn("Deck 2 loop").textContent).toBe("1.5s");
     expect(btn("Deck 2 loop").disabled).toBe(false);
     expect(btn("Deck 2 halve loop").disabled).toBe(false);
   });
 
   it("reloop armed: a loop was left, or a memory loop was called", () => {
-    const a = setup({ view: view({ lastLoop: loop }), meta: loadedMeta() });
+    const a = setup({ view: view({ lastLoop: loop }), meta: manual() });
     expect(btn("Deck 2 reloop").disabled).toBe(false);
     fireEvent.click(btn("Deck 2 reloop"));
     expect(a.reloop).toHaveBeenCalledTimes(1);
@@ -558,7 +580,7 @@ describe("DeckStrip quick-loop block", () => {
   });
 
   it("the player deck alone has the block too", () => {
-    setup({ solo: true, view: view({ loopIn: 4_000 }), meta: loadedMeta() });
+    setup({ solo: true, view: view({ loopIn: 4_000 }), meta: manual() });
     expect(screen.getByRole("group", { name: "Deck 2 quick loop" })).toBeTruthy();
     expect(btn("Deck 2 loop out").disabled).toBe(false);
   });

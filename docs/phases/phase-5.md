@@ -757,31 +757,28 @@ nothing; 25 needs 22–24.
     `dsp::channel_reverb`, `taper` (eq3, fx_send, channel filter table),
     `settings.rs` round trip, `mix.rs` IPC parse, `mixView.test.ts`,
     `MixerPanel.test.tsx`.
-28. [ ] **Paged quick loop, rekordbox style** (maintainer request,
+28. [x] **Paged quick loop, rekordbox style** (maintainer request,
     2026-10-23). Wireframe: [`wireframes/loop-control.html`](../wireframes/loop-control.html),
     option B. UI only: the engine, IPC and keys don't change.
-    - [ ] `mixView.ts`: `LoopPage` (`"beat" | "manual"`); `loopBlockState`
-      gains `exit` (RELOOP reads EXIT: a loop plays) and `pageDot` (the
-      hidden tab's dot: a loop plays or IN waits); `loopEnabled` now enables
-      the size button.
-    - [ ] Store: `DeckMeta.loopPage` (default `"beat"`), kept across loads
+    - [x] `mixView.ts`: `LoopPage` (`"beat" | "manual"`); `loopBlockState`
+      gives `sizeText` (was `size`, the dimmed readout) and `pageDot` (the
+      hidden tab's dot: a loop plays or IN waits); `loopEnabled` enables
+      the size button; `looping` lights it and turns RELOOP into EXIT.
+    - [x] Store: `DeckMeta.loopPage` (default `"beat"`), kept across loads
       like `padMode` (`DeckPrefs`); `setLoopPage(deck, page)`.
-    - [ ] `mix/LoopBlock`: the tab row holds BEAT | IN/OUT (`SegmentedControl`,
+    - [x] `mix/LoopBlock`: the tab row holds BEAT | IN/OUT (`SegmentedControl`,
       as the pad mode tabs); the two pad rows show one page. BEAT: the size
       as a button across both columns (`aria-pressed` while looping; click =
-      today's LOOP), ‹ › under it (½ / 2×, same names and keys). IN/OUT: IN
-      OUT, then RELOOP / EXIT across both. The LOOP button and the `Readout`
-      go; `ui/Readout` and its test are deleted (LoopBlock was its only use).
-    - [ ] Same `--loop-block-w`, rows level with the pads; check 2-deck,
-      4-deck (20 / 26 / 26 rows) and the player deck in the dev mock at 1280
-      and 1440.
-    - [ ] Docs: [`../ui.md`](../ui.md#quick-loop-task-21) quick-loop section,
-      its control table and the controls-row line; `Readout` row out of the
-      component table.
-    Tests: `mixView.test.ts` (`exit`, `pageDot`), store test (`loopPage`
-    survives a load and eject), `DeckStrip.test.tsx` (both pages; size
-    click loops and leaves; EXIT label; dot; ‹ › disabled without a grid
-    when idle), `ui.test.tsx` loses the `Readout` case.
+      the old LOOP), ‹ › under it (½ / 2×, same names and keys). IN/OUT: IN
+      OUT, then RELOOP / EXIT across both. The LOOP button and `ui/Readout`
+      (LoopBlock was its only use) are gone.
+    - [x] Same `--loop-block-w`, rows level with the pads; checked 2-deck,
+      4-deck and the player deck in the dev mock.
+    - [x] Docs: [`../ui.md`](../ui.md#quick-loop-task-21).
+    Tests: `mixView.test.ts` (`sizeText`, `pageDot`), `mix.test.ts`
+    (`loopPage` survives an eject), `DeckStrip.test.tsx` (both pages, tabs,
+    size click, EXIT, dots, no grid), `ui.test.tsx` loses the `Readout`
+    case. Done 2026-10-23.
 
 ## Acceptance criteria
 

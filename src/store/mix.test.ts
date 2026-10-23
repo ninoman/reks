@@ -475,8 +475,9 @@ describe("mix store", () => {
     expect(useMix.getState().decks[0]?.hotCues).toHaveLength(2);
   });
 
-  it("keeps pad mode, pages and sizes across an eject", () => {
+  it("keeps pad mode, pages, sizes and the loop page across an eject", () => {
     const mix = useMix.getState();
+    mix.setLoopPage(2, "manual");
     mix.setPadMode(2, "beatLoop");
     mix.cyclePadMode(2);
     mix.setPadPage(2, "beatJump", 1);
@@ -486,6 +487,7 @@ describe("mix store", () => {
       padMode: "hotCue",
       padPage: { beatJump: 1, beatLoop: 0 },
       lastJump: 16,
+      loopPage: "manual",
       track: null,
     });
   });
