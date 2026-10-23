@@ -638,7 +638,7 @@ nothing; 25 needs 22–24.
     Tests: `mixView.test.ts` (readout, size steps), `mixKeys.test.ts`,
     `DeckStrip.test.tsx` (block states: no grid, pending IN, looping,
     reloop armed), `ui.test.tsx` (`Readout`), `deckMarks.test.ts`.
-22. [ ] **Mixer re-layout** ([#43](https://github.com/ninoman/reks/issues/43)) (§4 A, §7). Layout only, no behaviour change.
+22. [x] **Mixer re-layout** ([#43](https://github.com/ninoman/reks/issues/43)) (§4 A, §7). Layout only, no behaviour change.
     - Filter X and Y in one row above a crossfader that spans the mixer
       (119 → ~234 px), curve at the crossfader's right end.
     - One dB scale in the legend column's fader row; channel meters lose

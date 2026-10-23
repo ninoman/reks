@@ -1,6 +1,7 @@
 /**
  * The mixer as laid out on the hardware: four channel strips and the master
- * section, then filter X, the crossfader (with its curve) and filter Y.
+ * section, then one row with filter X and Y, and the crossfader across the
+ * mixer with its curve at the right end.
  */
 import type { FilterUnit as Unit } from "../../lib/ipc";
 import { crossfaderKeyHint } from "../../lib/mixKeys";
@@ -8,10 +9,10 @@ import { pickSwitches } from "../../lib/mixView";
 import type { ChannelValues, FilterValues, MasterValues } from "../../store/mix";
 import { Caption } from "../ui/Caption";
 import { Fader } from "../ui/Fader";
+import { Knob } from "../ui/Knob";
 import { Tooltip } from "../ui/Tooltip";
 import { ChannelLegend, ChannelStrip } from "./ChannelStrip";
 import { FilterUnit } from "./FilterUnit";
-import { LabelledKnob } from "./LabelledKnob";
 import { MasterSection } from "./MasterSection";
 
 export interface MixerPanelProps {
@@ -38,7 +39,7 @@ export function MixerPanel(p: MixerPanelProps) {
   return (
     <section
       aria-label="Mixer"
-      className="flex shrink-0 flex-col gap-2 rounded-md border border-border bg-surface p-2"
+      className="flex h-(--mixer-h) w-(--mixer-w) shrink-0 flex-col gap-1 rounded-md border border-border bg-surface p-2"
     >
       <div className="flex">
         <ChannelLegend />
@@ -55,31 +56,31 @@ export function MixerPanel(p: MixerPanelProps) {
         ))}
         <MasterSection values={p.master} onChange={p.onMaster} />
       </div>
-      <div className="flex items-start gap-2 border-t border-border-subtle pt-2">
+      <div className="flex justify-between border-t border-border-subtle pt-1">
         <FilterUnit unit="x" values={p.filters.x} onChange={(k, v) => p.onFilter("x", k, v)} />
-        <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 pt-5">
-          <div className="flex w-full items-center gap-1">
-            <Caption aria-hidden="true">X</Caption>
-            <Tooltip content="Crossfader left, centre, right" shortcut={crossfaderKeyHint()}>
-              <Fader
-                orientation="horizontal"
-                value={p.crossfader.pos}
-                defaultValue={0.5}
-                onValueChange={(pos) => p.onCrossfader({ pos })}
-                aria-label="Crossfader"
-              />
-            </Tooltip>
-            <Caption aria-hidden="true">Y</Caption>
-          </div>
-          <LabelledKnob
-            caption="Curve"
-            size="sm"
-            value={p.crossfader.curve}
-            onValueChange={(curve) => p.onCrossfader({ curve })}
-            aria-label="Crossfader curve"
-          />
-        </div>
         <FilterUnit unit="y" values={p.filters.y} onChange={(k, v) => p.onFilter("y", k, v)} />
+      </div>
+      <div className="flex h-(--mixer-row-h) items-center gap-1">
+        <Caption aria-hidden="true">X</Caption>
+        <Tooltip content="Crossfader left, centre, right" shortcut={crossfaderKeyHint()}>
+          <Fader
+            orientation="horizontal"
+            value={p.crossfader.pos}
+            defaultValue={0.5}
+            onValueChange={(pos) => p.onCrossfader({ pos })}
+            aria-label="Crossfader"
+          />
+        </Tooltip>
+        <Caption aria-hidden="true">Y</Caption>
+        <Caption aria-hidden="true" className="ml-1">
+          Curve
+        </Caption>
+        <Knob
+          size="sm"
+          value={p.crossfader.curve}
+          onValueChange={(curve) => p.onCrossfader({ curve })}
+          aria-label="Crossfader curve"
+        />
       </div>
     </section>
   );

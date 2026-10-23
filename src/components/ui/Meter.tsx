@@ -1,7 +1,7 @@
 /**
  * A vertical LED level meter, as long as a fader: a column of round LEDs on
  * the deck colour (`METER_LEDS`, −20 to +10), lit ones glowing, with the dB
- * labels beside them. Takes the lit count rather than the level, so a live
+ * labels beside them unless `labels` is off (a shared `MeterScale` serves several). Takes the lit count rather than the level, so a live
  * meter re-renders only when an LED changes; the top (red) LED also lights
  * while `clip` is held.
  */
@@ -59,16 +59,24 @@ export function Meter({ lit, clip, labels = true, className, ...aria }: MeterPro
           );
         })}
       </span>
-      {labels && (
-        <span
-          aria-hidden="true"
-          className="flex w-(--meter-label-w) flex-col justify-around text-(length:--meter-label-fs) text-fg-muted leading-none tabular-nums"
-        >
-          {TOP_DOWN.map((led) => (
-            <span key={led.db}>{led.label}</span>
-          ))}
-        </span>
-      )}
+      {labels && <MeterScale />}
     </div>
+  );
+}
+
+/** The dB labels alone, one per LED and as tall as a meter, so one column can serve every meter beside it. */
+export function MeterScale({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex h-(--fader-len) w-(--meter-label-w) flex-col justify-around text-(length:--meter-label-fs) text-fg-muted leading-none tabular-nums",
+        className,
+      )}
+    >
+      {TOP_DOWN.map((led) => (
+        <span key={led.db}>{led.label}</span>
+      ))}
+    </span>
   );
 }
