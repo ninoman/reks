@@ -676,7 +676,7 @@ on waveform or knob sizes was found.
 
 ### 9.5 DJM 3-band EQ and Sound Color FX (2026-10-23)
 
-For the 3-band view (issue #56): EQ, FX knob, effect select and PARAMETER. Spec: [`research/djm-eq-fx.md`](research/djm-eq-fx.md).
+For the 3-band EQ layout (issue #56): EQ, FX knob, effect select and PARAMETER. Spec: [`research/djm-eq-fx.md`](research/djm-eq-fx.md).
 Not checked on a real DJM.
 
 - Channel EQ, all three bands −26 / +6 dB, with an EQ CURVE switch

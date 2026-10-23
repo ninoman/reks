@@ -1,7 +1,7 @@
-# Three-band EQ and channel FX view (research, 2026-10-23)
+# Three-band EQ and channel FX (research, 2026-10-23)
 
-Status: **proposal**, no code yet. Spec for the engine side of issue #56: a
-mixer view with a 3-band EQ (HI / MID / LOW) and a per-channel FX knob in
+Status: **proposal**, no code yet. Spec for the engine side of issue #56: an
+EQ layout setting (4-band · 3-band) whose 3-band layout has a 3-band EQ (HI / MID / LOW) and a per-channel FX knob in
 the fourth knob slot, with an effect selector and a PARAMETER knob, modelled on the DJM-900NXS2 / DJM-A9.
 Layout and wireframe: [`deck-mixer-layout.md`](deck-mixer-layout.md) §9.
 Sources with dates: [`../research.md`](../research.md) §9.5. Nothing here is
@@ -144,7 +144,7 @@ send unit, out of scope here.
 
 ### Recommendation
 
-Maintainer's call, 2026-10-23: the view gets an effect selector and a
+Maintainer's call, 2026-10-23: the 3-band layout gets an effect selector and a
 PARAMETER knob, as on the DJM.
 
 - **v1: FILTER, ECHO, REVERB** (the DJM's FILTER, DUB ECHO and SPACE, under
@@ -298,50 +298,66 @@ control below.
 Same rule as `effectiveMix` (`deck-mixer-layout.md` §6): the store keeps
 the user's positions, hidden controls send neutral values.
 
-| Engine value | Simple / Advanced | 3-band view |
-|---|---|---|
-| `EqHi`, `EqMid1`, `EqMid2`, `EqLo` | stored 4-band positions | 0.5 |
-| `Eq3Hi`, `Eq3Mid`, `Eq3Lo` | 0.5 | stored 3-band positions |
-| `Fx` (per channel) | 0.5 | stored position |
-| FX select, PARAMETER | unchanged (no effect while every `Fx` is 0.5) | stored |
-| X and Y filter units | as today | off |
-| FILTER assign | as today | defaults (1–2 X, 3–4 Y) |
-| X-F assign | as today | off (THRU) |
+Two settings (§5): **EQ** 4-band · 3-band and the existing **Mixer view**
+Simple · Advanced, which applies to both EQ layouts.
+
+| Engine value | 4-band (Simple, Advanced as today) | 3-band Simple | 3-band Advanced |
+|---|---|---|---|
+| `EqHi`, `EqMid1`, `EqMid2`, `EqLo` | stored 4-band positions | 0.5 | 0.5 |
+| `Eq3Hi`, `Eq3Mid`, `Eq3Lo` | 0.5 | stored 3-band positions | stored 3-band positions |
+| `Fx` (per channel) | 0.5 | stored | stored |
+| FX select, PARAMETER | unchanged (no effect while every `Fx` is 0.5) | stored | stored |
+| X and Y filter units | as today | off | off |
+| FILTER assign | as today | defaults (1–2 X, 3–4 Y) | defaults |
+| X-F assign | as today | off (THRU) | stored |
+| Crossfader position, curve | as today | no effect (all THRU) | stored |
 
 - The 3-band and 4-band EQ positions are stored separately, since the
   same knob angle means different things.
-- Switching views ramps one EQ to noon and the other to its stored values
+- Switching EQ layouts ramps one EQ to noon and the other to its stored values
   in the same 10 ms, so the change sounds like turning knobs, never a
   click. The engine needs no EQ mode.
 - Engine start state: everything at 0.5, so a single deck still plays
   through bit for bit (the existing graph test covers it once
   `ThreeBandEq` and the FX blocks are in the strip).
-- Leaving the view while an echo or reverb rings: its knob goes to 0.5, so
+- Leaving 3-band while an echo or reverb rings: its knob goes to 0.5, so
   the tail rings out as it would on the DJM.
 
 ## 5. Open questions from the issue
 
-- **UI label.** A third `MixerView` value, not a separate EQ setting: the
-  fourth knob replaces the X/Y row and the assigns, so "3-band" combined
-  with Advanced would not make sense. Settings → Mixer, Mixer view:
-  **Simple · Advanced · 3-band**, with the hint "Three-band EQ and an
-  effect knob on each channel". Stored as `three_band`. Knob rows **HI · MID
-  · LOW · FX**; the FX row's label shows the selected effect (FILTER, ECHO,
-  REVERB) and a knob is lit when off centre. FX select (three buttons) and
-  PARAMETER are one row in the mixer's shared section; the PARAMETER label
-  follows the effect (RESONANCE, FEEDBACK, DECAY). The wireframe (#58)
-  drew the selector as "later" and needs that row added. The Filters show/hide setting
-  is disabled in 3-band, as in Advanced. No vendor names.
-- **Crossfader.** Not in v1. The view is Simple's layout with a different
-  EQ, every channel is THRU, so a crossfader would do nothing. If wanted
-  later: a separate Crossfader show/hide setting that adds the X-F
-  assigns and crossfader to Simple and 3-band alike. There is no DSP
-  coupling.
+- **Settings** (maintainer's call, 2026-10-23, following the wireframe in
+  #58). Settings → Mixer gets a new **EQ** setting, **4-band · 3-band**,
+  stored as `mix.mixer_eq` (`MixerEq` in `reks-core` `settings.rs`, default
+  4-band), next to the existing **Mixer view** Simple · Advanced, which
+  applies to both. No third `MixerView` value. **Filters** Show · Hide stays
+  for 4-band Simple only (disabled in 3-band and in Advanced). Knob rows in
+  3-band: **HI · MID · LOW · FX**; the FX row's label shows the selected
+  effect (FILTER, ECHO, REVERB) and a knob is lit when off centre. FX select
+  (three buttons) and PARAMETER are one row in the mixer's shared section;
+  the PARAMETER label follows the effect (RESONANCE, FEEDBACK, DECAY). No
+  vendor names.
+- **Crossfader.** By Mixer view, as in 4-band:
+  - 3-band Simple: no X-F assigns, no crossfader; every channel THRU.
+  - 3-band Advanced: 3-band Simple plus the X-F assign row, the crossfader
+    and its curve. No FILTER assigns and no X/Y row in either: the FX knob
+    replaces them.
+- **Mixer heights** (wireframe #58, commit b28ecaa, with the FX row; 2 decks
+  at 1440×900 / 1280×800):
+
+  | Layout | Mixer | Waveform | Library rows |
+  |---|---|---|---|
+  | 3-band Simple | ~333 px | ~119 px | 12 / 9 |
+  | 3-band Advanced | ~393 px | ~179 px | 10 / 6 |
+
+  With 4 decks the mixer is 440 px; its faders take up to 60 px of the
+  spare height as fits (3-band Advanced +47), and any rest goes into row
+  spacing.
 - **Filter resonance.** The global PARAMETER knob while FILTER is
   selected, with the X/Y RESONANCE law (§3). No setting.
 - **Shortcuts.** There are no filter or FX shortcuts today (`mixKeys.ts` has
-  decks and the crossfader only), and v1 adds none. X C V do nothing in 3-band,
-  as in Simple; the Shortcuts popover leaves them out. The knob itself
+  decks and the crossfader only), and v1 adds none. X C V follow the
+  crossfader: they work in 3-band Advanced and do nothing in 3-band Simple,
+  as in Simple today; the Shortcuts popover leaves them out there. The knob itself
   takes the shared knob keys (arrows) and double-click to centre.
 - **Knob UI.** Centre detent: a drag that crosses 0.5 sticks there for
   ±0.03 of travel (the dead zone), the software form of CENTER LOCK.

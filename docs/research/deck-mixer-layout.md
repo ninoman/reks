@@ -564,7 +564,7 @@ Constraints:
 
 ## 8. Decision impact
 
-- The 3-band view (§9) adds blocks to the D21 mixer and changes none.
+- The 3-band EQ layout (§9) adds blocks to the D21 mixer and changes none.
   Record it under D21 as proposed when it is built.
 
 - D21 accepts beat loops as preparation and says "loop rolls, slip mode and
@@ -577,18 +577,20 @@ Constraints:
 - No other decision conflicts. D30 (1-deck player) and D26 (UI system) are
   unchanged. Concept C's folded rail would need a line in `ui.md` only.
 
-## 9. Three-band view (issue #56)
+## 9. Three-band EQ layout (issue #56)
 
-A third mixer view, research 2026-10-23: a 3-band EQ (HI · MID · LOW), an
-FX knob per channel in the fourth knob slot, and an effect selector with a
-PARAMETER knob; Simple's layout otherwise. Full engine spec, curves and tests:
+An EQ layout setting, research 2026-10-23: 3-band gives a 3-band EQ (HI ·
+MID · LOW), an FX knob per channel in the fourth knob slot, and an effect
+selector with a PARAMETER knob, in place of the X/Y filters and FILTER
+assigns. Mixer view Simple · Advanced (§6) applies to both layouts. Full engine spec, curves and tests:
 [`djm-eq-fx.md`](djm-eq-fx.md). In short:
 
 | | Value |
 |---|---|
-| Setting | `MixerView` gains `three_band`, labelled "3-band" |
+| Settings | new EQ 4-band · 3-band (`mix.mixer_eq`); Mixer view Simple · Advanced for both; Filters show/hide only in 4-band Simple |
 | EQ | LOW shelf 250 Hz, MID bell 1 kHz (Q 0.7), HI shelf 3 kHz; −26 / +6 dB each (corners and Q **UNVERIFIED**) |
 | FX knob (per channel) | centre off, dead zone 0.485–0.515; FILTER: left LP 20 kHz → 50 Hz, right HP 20 Hz → 10 kHz; ECHO: mids left, highs right; REVERB: mids+lows left, mids+highs right (figures **UNVERIFIED**) |
 | FX select, PARAMETER | one for the mixer: FILTER · ECHO · REVERB; PARAMETER = resonance, feedback or decay |
-| Hidden controls | 4-band EQ at noon, X/Y filters off, assigns default, THRU, as in §6 |
-| Crossfader, shortcuts | none, as in Simple |
+| Hidden controls | 4-band EQ at noon, X/Y filters off, FILTER assigns default; in Simple also THRU, as in §6 |
+| Crossfader, X C V | 3-band Advanced only |
+| Mixer height (2 decks) | ~333 px Simple, ~393 px Advanced (wireframe #58) |
