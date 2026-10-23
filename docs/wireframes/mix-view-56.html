@@ -201,13 +201,15 @@ td .del { color: var(--gone); }
 .m-legend { position: relative; }
 .legend-new { width: calc(100% + 4px); justify-content: flex-end; padding-right: 3px; margin-right: -4px; }
 .fxsel { height: 18px; padding: 0 3px 0 4px; display: inline-flex; align-items: center; gap: 1px; border: 1px solid var(--ink-2); background: var(--box); border-radius: 3px; font: 600 8.5px var(--font-ui); text-transform: uppercase; letter-spacing: 0.02em; color: var(--ink); }
-.param { display: flex; padding-left: 2px; }
-.param-cap { position: absolute; left: 2px; top: 178px; font-size: 8px; }
+.param { display: flex; padding-left: 2px; position: relative; }
+.param-cap { position: absolute; left: 2px; top: 25px; font-size: 8px; }
 .callout.plain { color: var(--new); background: var(--new-bg); border-color: var(--new); }
-.mixwrap { position: absolute; width: var(--mixer-w); height: 440px; border-radius: 6px;
-  background: repeating-linear-gradient(45deg, transparent 0 6px, var(--box-2) 6px 12px); outline: 1px dashed var(--ink-3); }
-.mixwrap .empty-label { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font: 700 22px var(--font-mono); color: var(--ink); }
-.sw.hatch { background: repeating-linear-gradient(45deg, transparent 0 3px, var(--box-2) 3px 6px); border: 1px dashed var(--ink-3); }
+.mixwrap { position: absolute; }
+/* 4 decks: a mixer shorter than the 440 px stack spreads its rows instead of leaving space empty. */
+.mixer.spread .m-top { flex: 1; }
+.mixer.spread .m-legend, .mixer.spread .m-strip { justify-content: space-between; }
+.mixer.spread .m-row, .mixer.spread .m-rowcap { box-shadow: inset 0 -1px 0 var(--new); }
+.mixer.spread .new-row { box-shadow: inset 0 0 0 1px var(--new); }
 </style>
 </head>
 <body>
@@ -229,7 +231,6 @@ td .del { color: var(--gone); }
   <span><i class="sw new"></i>new in the 3-band views</span>
   <span><i class="sw lit"></i>lit: a switch that is on, or any channel knob off-centre (every view)</span>
   <span><i class="sw later"></i>later, pending research</span>
-  <span><i class="sw hatch"></i>empty mixer space (4 decks)</span>
 </div>
 
 <section class="block" aria-labelledby="h-mixers">
@@ -246,7 +247,7 @@ td .del { color: var(--gone); }
 
 <section class="block" aria-labelledby="h-frames4">
   <h2 id="h-frames4">3 · Mix panel at 1440 × 900, 4 decks</h2>
-  <p class="lede">Two compact decks stack beside the mixer on each side (<code>--deck-h-compact</code> 216 px, 440 px a side), so the mixer stays 440 px in every view and the library keeps 8 rows (5 at 1280 × 800). A shorter view gives its faders and the master meter up to 60 px (<code>--fader-bonus</code>, #46); the rest stays empty at the bottom of the mixer (hatched). Accepted for the 3-band views, which leave the most.</p>
+  <p class="lede">Two compact decks stack beside the mixer on each side (<code>--deck-h-compact</code> 216 px, 440 px a side), so the mixer stays 440 px in every view and the library keeps 8 rows (5 at 1280 × 800). A shorter view gives its faders and the master meter up to 60 px (<code>--fader-bonus</code>, #46). Whatever is still spare goes into the spacing between the rows (maintainer, 2026-10-23), so the mixer always fills the 440 px and nothing sits empty: the strip columns and the legend lay out with <code>justify-content: space-between</code>, which keeps their rows lined up because each column has the same rows. Thin rules under the rows show the wider spacing.</p>
   <div class="frames" id="frames4"></div>
 </section>
 
@@ -296,7 +297,7 @@ td .del { color: var(--gone); }
         <tr><td>Mixer height</td><td class="num">440</td><td class="num">356</td><td class="num">292</td><td class="num">292</td><td class="num" data-opt-h>~355</td></tr>
         <tr><td>Waveform, 2 decks</td><td class="num">226</td><td class="num">142</td><td class="num">78</td><td class="num">78</td><td class="num" data-opt-w>~141</td></tr>
         <tr><td>Library rows 1440×900 / 1280×800</td><td class="num">8 / 5</td><td class="num">12 / 8</td><td class="num">14 / 10</td><td class="num">14 / 10</td><td class="num" data-opt-r>12 / 8</td></tr>
-        <tr><td>4 decks (mixer 440)</td><td class="num">no spare</td><td class="num" data-e4="simple">faders +60</td><td class="num" data-e4="bare">faders +60</td><td class="num" data-e4="three">faders +60</td><td class="num" data-e4="threeA">faders +60</td></tr>
+        <tr><td>4 decks (mixer 440)</td><td class="num">fits, no change</td><td class="num" data-e4="simple">faders +60</td><td class="num" data-e4="bare">faders +60</td><td class="num" data-e4="three">faders +60</td><td class="num" data-e4="threeA">faders +60</td></tr>
         <tr><td>X C V keys</td><td>crossfader</td><td>nothing</td><td>nothing</td><td>nothing</td><td>crossfader</td></tr>
       </tbody>
     </table>
@@ -315,7 +316,7 @@ td .del { color: var(--gone); }
     <li><b>MID: set by the research task.</b> <span>#59 proposes one real bell at 1 kHz (not HM + LM together), −26 / +6 dB, Q 0.7, UNVERIFIED.</span></li>
     <li><b>Resonance: a PARAMETER knob under the effect select.</b> <span>Global, in the legend column (§5). Note: #59 proposed no PARAMETER knob in v1 and a fixed Q 1.4; this answer adds it. Its centre or default is where that Q would sit.</span></li>
     <li><b>Positions across layouts: start flat.</b> <span>Each layout keeps its own positions; the first switch to 3-band starts with every knob at centre.</span></li>
-    <li><b>4 decks: shown.</b> <span>§3 draws the empty space each view leaves at 4 decks.</span></li>
+    <li><b>4 decks: shown, no empty space.</b> <span>§3: after the 60 px fader bonus, the spare height is spread over the row spacing.</span></li>
   </ol>
 </section>
 
@@ -367,7 +368,7 @@ function eqValue(ch, cap) {
   return 0.5;
 }
 
-function mixer(viewKey, { faderLen = 96, h } = {}) {
+function mixer(viewKey, { faderLen = 96, h, spread = false } = {}) {
   const v = VIEWS[viewKey];
   const isNew = (cap) => v.three && ["Mid", "Low", "Filter"].includes(cap);
   const capRows = ["Level", ...v.eq, ...(v.three ? ["Filter"] : []), ...(v.assigns ? ["Filter"] : []), "Cue", "", ...(v.xfAssign ? ["X-F"] : [])];
@@ -375,11 +376,9 @@ function mixer(viewKey, { faderLen = 96, h } = {}) {
   const legend = capRows.map((c) => {
     if (c === "") return `<div class="scale m-fader ${my}" style="--len:${faderLen}px">${scale()}</div>`;
     if (v.three && c === "Filter") return `<div class="m-rowcap new-row legend-new"><span class="fxsel" title="Effect select (one for all channels)">Filter ▾</span></div>`;
-    if (v.three && c === "Cue") return `<div class="m-rowcap" style="width:100%;justify-content:space-between"><span class="param">${knob(22, 0.5, { label: "parameter" })}</span><span class="cap">Cue</span></div>`;
+    if (v.three && c === "Cue") return `<div class="m-rowcap" style="width:100%;justify-content:space-between"><span class="param">${knob(22, 0.5, { label: "parameter" })}<span class="cap param-cap">Param</span></span><span class="cap">Cue</span></div>`;
     return `<div class="m-rowcap${isNew(c) ? " new-row legend-new" : ""}"><span class="cap">${c}</span></div>`;
   }).join("");
-  // PARAMETER's caption sits under its knob, in the free space left of the dB scale.
-  const paramCap = v.three ? `<span class="cap param-cap">Param</span>` : "";
   const strips = [0, 1, 2, 3].map((ch) => {
     const rows = [];
     rows.push(`<div class="m-row">${chKnob(22, 0.5, "level")}</div>`);
@@ -406,9 +405,9 @@ function mixer(viewKey, { faderLen = 96, h } = {}) {
   const filterRow = v.filterRow ? `<div class="m-filters">${fu("X", false, "LP")}${fu("Y", false, "HP")}</div>` : "";
   const xfRow = v.xfRow ? `<div class="m-xf"><span class="cap">X</span><span class="hfader"><i></i></span><span class="cap">Y</span><span class="cap" style="margin-left:4px">Curve</span>${knob(22, 0.5)}</div>` : "";
   const height = h ?? (v.h ? `${v.h}px` : "auto");
-  return `<div class="mixer" style="--h:${height}" data-view="${viewKey}">
+  return `<div class="mixer${spread ? " spread" : ""}" style="--h:${height}" data-view="${viewKey}">
     <span class="gear" aria-hidden="true">⚙</span>
-    <div class="m-top"><div class="m-legend">${paramCap}<span class="m-head"></span>${legend}</div>${strips}${master}</div>
+    <div class="m-top"><div class="m-legend"><span class="m-head"></span>${legend}</div>${strips}${master}</div>
     ${filterRow}${xfRow}</div>`;
 }
 
@@ -487,7 +486,7 @@ function frame2(viewKey) {
 function frame4(viewKey) {
   const top = 82, bonus = viewKey === "full" ? 0 : 60;
   return `<div class="frame">${chrome(4, 88 + 440)}${deckCompact(12, top, 528, 1)}${deckCompact(12, top + 224, 528, 2)}`
-    + `<div class="mixwrap" style="left:548px;top:${top}px">${mixer(viewKey, { faderLen: 96 + bonus, h: "auto" })}<span class="empty-label"></span></div>`
+    + `<div class="mixwrap" style="left:548px;top:${top}px">${mixer(viewKey, { faderLen: 96 + bonus, h: "auto" })}</div>`
     + `${deckCompact(900, top, 528, 3)}${deckCompact(900, top + 224, 528, 4)}</div>`;
 }
 const CARDS = [["full", "4-band Advanced (Full)"], ["simple", "4-band Simple"], ["bare", "4-band Simple, filters hidden"], ["three", "3-band Simple"], ["threeA", "3-band Advanced"]];
@@ -501,14 +500,15 @@ function renderFrames() {
   document.getElementById("frames4").innerHTML = CARDS.map(([k, t]) => `<div class="frame-card"><h3>${t}${k.startsWith("three") ? ' <span class="tag new">new</span>' : ""}</h3>
       <div class="fit" data-fit data-w="1440"><div class="scaled">${frame4(k)}</div></div>
       <div class="frame-cap" data-cap4="${k}"></div></div>`).join("");
-  // Measure what each view leaves empty in the 440 px mixer.
+  // Measure each view's natural height, then spread the spare over the row spacing.
   document.querySelectorAll("#frames4 .mixwrap").forEach((w) => {
-    const m = w.querySelector(".mixer"), k = m.dataset.view, empty = Math.max(0, 440 - m.offsetHeight);
-    w.querySelector(".empty-label").textContent = empty > 4 ? `${empty} px empty` : "";
-    w.querySelector(".empty-label").style.height = `${empty}px`;
-    document.querySelector(`[data-cap4="${k}"]`).innerHTML = `<span>mixer <b>440</b></span><span>faders <b>${k === "full" ? 96 : 156}</b></span><span>empty <b>${empty > 4 ? empty : 0}</b> px</span><span>waveform <b>66</b></span><span>library <b>8</b> rows (<b>5</b> at 1280×800)</span>`;
+    const m = w.querySelector(".mixer"), k = m.dataset.view, spare = Math.max(0, 440 - m.offsetHeight);
+    const gaps = m.querySelector(".m-strip").children.length - 1, each = spare / gaps;
+    if (spare > 0) { m.classList.add("spread"); m.style.setProperty("--h", "440px"); }
+    const sp = spare > 4 ? `+${spare} px over ${gaps} row gaps (~${each.toFixed(1)} px each)` : "none";
+    document.querySelector(`[data-cap4="${k}"]`).innerHTML = `<span>mixer <b>440</b></span><span>faders <b>${k === "full" ? 96 : 156}</b></span><span>row spacing <b>${sp}</b></span><span>waveform <b>66</b></span><span>library <b>8</b> rows (<b>5</b> at 1280×800)</span>`;
     const cell = document.querySelector(`[data-e4="${k}"]`);
-    if (cell) cell.textContent = `faders +60, ${empty > 4 ? empty : 0} px empty`;
+    if (cell) cell.textContent = `faders +60, rows +${spare} px`;
   });
 }
 
