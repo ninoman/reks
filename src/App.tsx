@@ -24,7 +24,6 @@ import { DevicesDialog } from "./components/DevicesDialog";
 import { DeviceTree } from "./components/DeviceTree";
 import { ErrorMessage } from "./components/ErrorMessage";
 import { ExportWizard } from "./components/ExportWizard";
-import { FilterBar } from "./components/FilterBar";
 import { HistoryImportDialog } from "./components/HistoryImportDialog";
 import { HistoryTree } from "./components/HistoryTree";
 import { ImportWizard } from "./components/ImportWizard";
@@ -35,7 +34,6 @@ import { PlayerDeck } from "./components/PlayerDeck";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
 import { ReportDialog } from "./components/ReportDialog";
-import { RuleBuilder } from "./components/RuleBuilder";
 import { SessionView } from "./components/SessionView";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { StickListView } from "./components/StickListView";
@@ -54,7 +52,6 @@ import { usePanels } from "./store/panels";
 import { togglePlayer } from "./store/player";
 import { usePlaylists } from "./store/playlists";
 import { offerCrashReport } from "./store/report";
-import { useRules } from "./store/rules";
 import { startMixerLookSync, startThemeSync, startUiSync, useSettings } from "./store/settings";
 import { useTags } from "./store/tags";
 
@@ -64,11 +61,9 @@ const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta"]);
 export default function App() {
   const table = useTrackTable();
   const error = useLibrary((s) => s.error);
-  const filterBarOpen = usePanels((s) => s.filterBarOpen);
   const sessionOpen = useHistory((s) => s.openId !== null);
   const stickListOpen = useDeviceBrowser((s) => s.open !== null);
   const mixOpen = usePanels((s) => s.mixOpen);
-  const rulesOpen = useRules((s) => s.open);
   useMixShortcuts();
 
   useEffect(() => {
@@ -151,8 +146,6 @@ export default function App() {
           ) : (
             <>
               <LibraryToolbar table={table} />
-              {filterBarOpen && <FilterBar />}
-              {filterBarOpen && rulesOpen && <RuleBuilder />}
               {error !== null && (
                 <ErrorMessage className="border-b border-border px-2.5 py-1" message={error} />
               )}

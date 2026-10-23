@@ -1,5 +1,5 @@
 /**
- * Which optional parts of the library window are shown: the filter bar above
+ * Which optional parts of the library window are shown: the Filters drawer beside
  * the table, the track info panel on the right, and the mix panel (instead of
  * the player deck) above the library. Selecting a row never opens the info
  * panel; only its toolbar button does.
@@ -17,7 +17,7 @@ export interface PanelsState {
 }
 
 export const usePanels = create<PanelsState>()((set) => ({
-  filterBarOpen: true,
+  filterBarOpen: false,
   infoOpen: false,
   mixOpen: false,
   toggleFilterBar() {
