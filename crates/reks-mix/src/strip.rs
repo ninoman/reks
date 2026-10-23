@@ -1,10 +1,13 @@
 //! One mixer channel strip (Xone:92 music channel, R§9.1): trim → EQ →
-//! filter assign → channel fader → crossfader assign, with the CUE taps
+//! 3-band EQ → channel FX → filter assign → channel fader → crossfader
+//! assign, with the CUE taps
 //! after the trim (pre-EQ) and before the fader (post-EQ). Works on one
 //! block of interleaved stereo at a time and never allocates.
 
-use crate::control::{ChannelParam, FilterUnit};
+use crate::channel_fx::ChannelFx;
+use crate::control::{ChannelParam, FilterUnit, FxKind};
 use crate::dsp::eq::{ChannelEq, EqBand};
+use crate::dsp::eq3::{Eq3Band, ThreeBandEq};
 use crate::dsp::filter::Filter;
 use crate::dsp::level::ChannelLevel;
 use crate::dsp::meter::PeakMeter;
@@ -46,6 +49,10 @@ pub(crate) struct CueTaps<'a> {
 pub(crate) struct Strip {
     level: ChannelLevel,
     eq: ChannelEq,
+    /// The 3-band layout's EQ and FX knob; at noon / centre in the 4-band
+    /// layout, where both pass the signal bit for bit.
+    eq3: ThreeBandEq,
+    fx: ChannelFx,
     filter_assign: AssignSwitch,
     /// This channel's copies of filter units X and Y, all set alike. The
     /// filters are linear, so filtering each channel's copy sounds the same
@@ -71,6 +78,8 @@ impl Strip {
         Self {
             level: ChannelLevel::new(1.0, sample_rate),
             eq: ChannelEq::new(sample_rate),
+            eq3: ThreeBandEq::new(sample_rate),
+            fx: ChannelFx::new(sample_rate),
             filter_assign: AssignSwitch::new(filter, sample_rate),
             filters: [Filter::new(sample_rate), Filter::new(sample_rate)],
             warm: [false; 2],
@@ -90,11 +99,27 @@ impl Strip {
             ChannelParam::EqMid1 => self.eq.set(EqBand::Mid1, value),
             ChannelParam::EqMid2 => self.eq.set(EqBand::Mid2, value),
             ChannelParam::EqLo => self.eq.set(EqBand::Lo, value),
+            ChannelParam::Eq3Hi => self.eq3.set(Eq3Band::Hi, value),
+            ChannelParam::Eq3Mid => self.eq3.set(Eq3Band::Mid, value),
+            ChannelParam::Eq3Lo => self.eq3.set(Eq3Band::Lo, value),
+            ChannelParam::Fx => self.fx.set_knob(value),
             ChannelParam::Fader => self.level.set_fader(value),
             ChannelParam::FilterAssign => self.filter_assign.set(assign_of(value)),
             ChannelParam::XfadeAssign => self.xfade_assign.set(assign_of(value)),
             ChannelParam::Cue => self.cue.set(if value >= 0.5 { 1.0 } else { 0.0 }),
         }
+    }
+
+    pub(crate) fn set_fx_kind(&mut self, kind: FxKind) {
+        self.fx.set_kind(kind);
+    }
+
+    pub(crate) fn set_fx_parameter(&mut self, value: f32) {
+        self.fx.set_parameter(value);
+    }
+
+    pub(crate) fn set_beat_frames(&mut self, frames: Option<f64>) {
+        self.fx.set_beat_frames(frames);
     }
 
     /// This channel's copy of a filter unit, for settings.
@@ -137,6 +162,8 @@ impl Strip {
             add_weighted(taps.pre, buf, &self.cue_gain);
         }
         self.eq.process(buf);
+        self.eq3.process(buf);
+        self.fx.process(buf);
         self.filter(buf);
         self.meter.process(buf);
         if cued {

@@ -33,6 +33,7 @@ const settings: Settings = {
   deckWaveform: "rgb",
   theme: "booth",
   syncAlign: "bar",
+  mixerEq: "fourBand",
   mixerView: "simple",
   mixerFilters: "show",
   cacheDir: "/Users/dj/Library/Caches/reks",
@@ -113,8 +114,9 @@ describe("SettingsDialog", () => {
 
   it("stores the mixer view and filters; Filters is disabled in Advanced", async () => {
     await openDialog();
-    const mixer = showTab("Mixer");
-    expect(mixer.querySelector('[aria-checked="true"]')?.textContent).toContain("Simple");
+    showTab("Mixer");
+    const view = screen.getByRole("radiogroup", { name: "Mixer view" });
+    expect(view.querySelector('[aria-checked="true"]')?.textContent).toContain("Simple");
     const filters = screen.getByRole("radiogroup", { name: "Filters" });
     expect(filters.querySelector('[aria-checked="true"]')?.textContent).toBe("Show");
     fireEvent.click(screen.getByRole("radio", { name: "Hide" }));
@@ -124,6 +126,20 @@ describe("SettingsDialog", () => {
     for (const name of ["Show", "Hide"]) {
       expect(screen.getByRole("radio", { name }).hasAttribute("disabled")).toBe(true);
     }
+  });
+
+  it("stores the EQ layout; Filters is disabled in 3-band, also in Simple", async () => {
+    vi.mocked(ipc.settingsSet).mockResolvedValue({ ...settings, mixerEq: "threeBand" });
+    await openDialog();
+    showTab("Mixer");
+    const eq = screen.getByRole("radiogroup", { name: "EQ" });
+    expect(eq.querySelector('[aria-checked="true"]')?.textContent).toContain("4-band");
+    expect(screen.getByRole("radio", { name: "Show" }).hasAttribute("disabled")).toBe(false);
+    fireEvent.click(screen.getByRole("radio", { name: /3-band/ }));
+    await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ mixerEq: "threeBand" }));
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: "Show" }).hasAttribute("disabled")).toBe(true),
+    );
   });
 
   it("opens on the tab it is asked for and focuses its first control", async () => {

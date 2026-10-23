@@ -90,6 +90,16 @@ impl Mixer {
                 }
             }
             Control::Filter { unit, param, value } => self.set_filter(unit, param, value),
+            Control::ChannelFx { kind } => {
+                for s in &mut self.strips {
+                    s.set_fx_kind(kind);
+                }
+            }
+            Control::FxParameter { value } => {
+                for s in &mut self.strips {
+                    s.set_fx_parameter(value);
+                }
+            }
             Control::Crossfader { pos, curve } => {
                 self.xfader.set_pos(pos);
                 self.xfader.set_curve(curve);
@@ -144,6 +154,13 @@ impl Mixer {
                     s.filter_mut(unit).set_modes(m);
                 }
             }
+        }
+    }
+
+    /// Channel `ch`'s deck tempo, for its echo.
+    pub(crate) fn set_beat_frames(&mut self, ch: usize, frames: Option<f64>) {
+        if let Some(s) = self.strips.get_mut(ch) {
+            s.set_beat_frames(frames);
         }
     }
 

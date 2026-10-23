@@ -52,6 +52,12 @@ describe("mixerDeviations", () => {
     ]);
   });
 
+  it("counts the 3-band EQ and the FX knob outside its dead zone", () => {
+    expect(run({ ...DEFAULT_CHANNEL, eq3Mid: 0.3 })).toEqual(["Channel 2 EQ not flat"]);
+    expect(run({ ...DEFAULT_CHANNEL, fx: 0.51 })).toEqual([]);
+    expect(run({ ...DEFAULT_CHANNEL, fx: 0.2 })).toEqual(["Channel 2 FX on"]);
+  });
+
   it("counts the filter only when it is assigned and on", () => {
     const on = { x: { ...filter, on: true }, y: filter };
     expect(run({ ...DEFAULT_CHANNEL, filterAssign: "x" }, DEFAULT_MASTER, on)).toEqual([

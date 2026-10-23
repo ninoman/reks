@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Fader } from "./Fader";
-import { Knob, knobKeyValue, knobMark } from "./Knob";
+import { Knob, knobDragValue, knobKeyValue, knobMark } from "./Knob";
 
 afterEach(cleanup);
 
@@ -27,6 +27,22 @@ describe("Knob", () => {
     // Already at the default: nothing to send.
     fireEvent.doubleClick(knob);
     expect(change).not.toHaveBeenCalled();
+  });
+
+  it("drags 160 px for the whole range; a detent holds drags near it", () => {
+    expect(knobDragValue(0.5, 16, false)).toBeCloseTo(0.6);
+    expect(knobDragValue(0.5, 80, true)).toBeCloseTo(0.6);
+    expect(knobDragValue(0.9, 100, false)).toBe(1);
+    // Crossing centre: sticks at 0.5 within ±0.03, moves on past it.
+    expect(knobDragValue(0.4, 18, false, 0.5)).toBe(0.5);
+    expect(knobDragValue(0.4, 20, false, 0.5)).toBe(0.5);
+    expect(knobDragValue(0.4, 22, false, 0.5)).toBeCloseTo(0.5375);
+    expect(knobDragValue(0.4, 18, false)).toBeCloseTo(0.5125);
+  });
+
+  it("is lit on request", () => {
+    render(<Knob lit value={0.8} onValueChange={() => {}} aria-label="FX" />);
+    expect(screen.getByRole("slider", { name: "FX" }).hasAttribute("data-lit")).toBe(true);
   });
 
   it("does nothing while disabled", () => {

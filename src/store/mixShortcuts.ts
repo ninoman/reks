@@ -23,7 +23,7 @@ export function useMixShortcuts() {
       const action = mixKeyAction(
         e,
         usePanels.getState().mixOpen ? mix.deckCount : 1,
-        mixerParts(mix.look).assigns,
+        mixerParts(mix.look).crossfader,
       );
       if (action === null) return;
       e.preventDefault();

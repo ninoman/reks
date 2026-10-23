@@ -258,6 +258,7 @@ describe("useExportWizard", () => {
       deckWaveform: "threeBand",
       theme: "graphite",
       syncAlign: "bar",
+      mixerEq: "fourBand",
       mixerView: "simple",
       mixerFilters: "show",
       cacheDir: "/cache",
