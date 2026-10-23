@@ -337,7 +337,7 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 - CUE is held, not clicked (pointer down/up, Enter/Space, and the A/J keys
   down/up): paused on the cue point it previews while held and returns on
   release; PLAY during the preview keeps it playing.
-- Tempo range button cycles ±6, ±10 (default), ±16 and WIDE (±100%; the
+- Tempo range button cycles ±6, ±10 (default), ±16 and WIDE (±100%, labelled `W`; the
   slow end stands still), as on a CDJ-3000.
 - Sync aligns (Settings → Decks, `mix.sync_align`): **Bar** (default; SYNC
   lines up the downbeats too) or **Beat**. Replaces the deck's BAR button;
@@ -407,16 +407,26 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 Modelled on rekordbox's 2Deck Horizontal. Approved wireframe:
 <https://claude.ai/artifact/1bLg3dZwjRfL4nXbYvFdzD> (revision 3).
 
-**Size** (task 23). 2 decks: `--deck-h` = `--mixer-h` (440 px in Advanced; 356 / 292 in the Simple views, so the decks follow the mixer); the waveform takes the spare height (222 px; `--deck-wave-min-h` 60 is the floor) and the
-quick-loop row sits under the overview. 4 decks (`compact`): `--deck-h-compact` 216 px, two stacked make the mixer's
-440; header 30, overview 14, waveform 60, and the quick-loop grid beside the pads. The panel is capped by
+**Size** (task 23). 2 decks: `--deck-h` = `--mixer-h` (440 px in Advanced; 356 / 292 in the Simple views, so the decks follow the mixer); the waveform takes the spare height (`--deck-wave-min-h` 60 is the floor). 4 decks (`compact`): `--deck-h-compact` 216 px, two stacked make the mixer's
+440; header 30 (artwork 24), overview 14, waveform 60. Both have the same controls row (below). The panel is capped by
 `--mix-panel-max-h` = window height − `--app-chrome-h` (82) − `--library-min-h` (246: toolbar and filters 116, column
 header, 4 rows). Width is what's left on each side: 448 px at a 1280 px window (minimum `--deck-min-w` 440),
-528 at 1440, 768 at 1920; extra width goes to the header and waveforms, the pads stop at 336 px.
+528 at 1440, 768 at 1920.
 
-Compact bottom row (80 px, 4 px gaps), left to right: a 60 px cluster (CUE · PLAY round 28 px; Q · SYNC; MASTER across),
-pads (tabs 20 + two 26 px rows), the 3 × 2 loop grid. At 1280 px the pads are 46 px wide (research §7 asked 52): the
-row has 378 px for cluster 60 + loop grid 104 + pads, and the tabs read tight there. 1440 px and up have room.
+**Controls row** (2026-10-23), left to right: Q over CUE and PLAY · pad mode tabs over the 2 × 4 pads · the quick-loop
+block (IN OUT / ½ size 2× / LOOP RELOOP) · MASTER over SYNC. One CSS grid (`--deck-ctl-cols`); every column has the
+same three rows (`--deck-ctl-rows`: the tabs' 20 px, then one row per pad row), so Q, IN / OUT sit level with the tabs
+and CUE, ½ size 2×, MASTER level with the first pad row. The deck section is an inline-size container
+(`data-deck-size` = `mix` / `compact` / `solo`, rules in `tokens.css`) and the row scales with its width (`clamp()` on
+`cqw`): height 92–116 px on 2 decks (80 on 4), loop block 100–148, MASTER / SYNC 52–88, gaps 4–10; CUE and PLAY are
+round, one pad row across; the pads take the rest. Below 30rem (a 1280 px window) the deck's 2xs labels drop to 10 px
+and the page picker hides its page count, so RELOOP, MASTER and the tabs fit.
+
+| Window | Deck | Row columns 2 decks (CUE · pads · loop · sync) | 4 decks | Pad (2 / 4 decks) |
+|---|---|---|---|---|
+| 1280 × 800 | 448 | 32 · 170 · 100 · 52 | 26 · 176 · 100 · 52 | 40 × 32 / 42 × 26 |
+| 1440 × 900 | 528 | 32 · 235 · 107 · 56 | 26 · 241 · 107 · 56 | – |
+| 1920 × 1080 | 768 | 44 · 393 · 143 · 83 | 26 · 411 · 143 · 83 | 95 × 44 / 99 × 26 |
 
 Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light give the same numbers; library rows =
 `(grid height − header) / 26`, whole rows):
@@ -436,9 +446,8 @@ Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light g
 | Header (40 px; 30 compact) | Deck number (lit when loaded) · artwork (eject ⏏ on hover or focus; dashed box without artwork) · title / artist · key (in the Settings notation; a readout with KEY under it, not a pill) · BPM with tempo % under it · remaining over elapsed time |
 | Zoomed waveform (spare height, min 60 px; the player deck 72 px) | Playhead centred, beat lines, hot cue and loop markers, sync phase meter on the top edge when synced. Zoom − / + float top right on hover or focus-within, zoom level between them. Drag to skim |
 | Overview (20 px; 14 compact) | Whole track, played part shaded, hot cue ticks in cue colour, cue point, loop bar. Keyboard seek slider |
-| Quick loop (24 px; compact: the 3 × 2 grid beside the pads) | `LoopBlock` row: IN · OUT · ½ · size · 2× · LOOP · RELOOP, in every pad mode (see [Quick loop](#quick-loop-task-21)) |
-| Bottom (92 px; compact 80, see Size) | Q over CUE and PLAY (round, 32 px), at the bottom of their column · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · MASTER and SYNC (bottom-aligned like Q, CUE and PLAY) |
-| Tempo column (44 px) | Range button (±6 / ±10 / ±16 / WIDE) and **M** (master tempo, ghost; disabled until task 10 picks an engine) · full-height fader · nudge |
+| Controls (see Controls row) | Q over CUE and PLAY (round) · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · `LoopBlock` (see [Quick loop](#quick-loop-task-21)) · MASTER over SYNC |
+| Tempo column (44 px) | Range button (±6 / ±10 / ±16 / W, for WIDE) and **M** (master tempo, ghost; disabled until task 10 picks an engine) · full-height fader · nudge |
 
 - **BPM edit**: double-click (or Enter when focused) turns the BPM into a
   number field; Enter or blur saves, Esc cancels. Tempo = typed ÷ the
@@ -516,11 +525,12 @@ take-master controls; task 15's per-deck zoom became one `MixStore.waveZoom`
 (maintainer, 2026-10-22). Pure helpers in `mixView.ts`:
 `JUMP_PAGES`, `LOOP_PAGES` (FINE = a 1/32 `beatJump`; the engine's 10 ms
 `fineJump` is unused by the deck), `formatBeats`, `snapToDetent`,
-`tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` (= `--mixer-h`), `--deck-h-compact` 216, `--loop-block-w` 104,
+`tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` (= `--mixer-h`), `--deck-h-compact` 216,
 `--deck-header-h` 40 / `-compact` 30, `--deck-min-w` 440, `--deck-wave-h` 72 (player deck), `--deck-wave-min-h` 60,
-`--deck-overview-h` 20 / `-compact` 14, `--deck-bottom-h-compact` 80, `--deck-cluster-w`, `--deck-views-h`, `--deck-bottom-h` 92, `--deck-solo-h`, `--deck-art`
-40, `--deck-pads-max-w` 336, `--deck-transport`, `--deck-sync-w`,
-`--deck-tempo-w`, `--pad-h` 26, `--fader-detent` 6.
+`--deck-overview-h` 20 / `-compact` 14, `--deck-views-h`, `--deck-solo-h`, `--deck-art` 40 / `-compact` 24,
+`--deck-pads-max-w` 336 (player deck), `--deck-controls-h-compact` 80, `--deck-ctl-rows`; scaled per deck
+(`[data-deck-size]`): `--deck-controls-h`, `--deck-pad-row-h`, `--deck-transport-w`, `--loop-block-w`, `--deck-sync-w`,
+`--deck-gap`, `--deck-ctl-cols`; `--deck-tempo-w`, `--pad-h` 26, `--fader-detent` 6.
 
 **Keys** follow rekordbox's default PERFORMANCE keys (Performance 1,
 [rekordbox 7.0.5 shortcut reference](https://cdn.rekordbox.com/files/20241203185020/rekordbox7.0.5_default_keyboard_shortcut_reference_EN.pdf))
@@ -556,10 +566,10 @@ eject, the memory cue list, renames.
 [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §5.
 `mix/LoopBlock` is on every deck in every pad mode, from `Button
 variant="control"` and the new `ui/Readout` (a mono value box, `dimmed` when
-not in effect). `layout="row"` is one 24 px line under the overview (2-deck decks, which have
-the height); `layout="grid"` is the 3 × 2 block (`--loop-block-w` 104: IN OUT /
-½ size 2× / LOOP RELOOP) beside the pads on the 4-deck (compact) decks, and
-between the waveform and the pads of the player deck.
+not in effect). It is a 3-row block (`--loop-block-w`: IN OUT /
+½ size 2× / LOOP RELOOP), its rows level with the pad tabs and pads, right of
+the pads on the mixer decks (2 and 4) and between the waveform and the pads
+of the player deck.
 
 | Control | Not looping | Looping |
 |---|---|---|

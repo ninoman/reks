@@ -1,10 +1,11 @@
 /**
  * One deck, laid out like rekordbox's 2Deck Horizontal: header, zoomed
- * waveform, overview, then CUE / PLAY, the pads and MASTER / SYNC, with the
- * tempo column down the right edge. In 2-deck mode the deck is as tall as the
- * mixer and the waveform takes the spare height, with the quick-loop row under
- * the overview; `compact` (4 decks) is 216 px tall with a quick-loop grid
- * beside the pads. The same in every state: what can't act yet is disabled, not hidden. Drop a track
+ * waveform, overview, then the controls row (CUE / PLAY, the pads, the quick
+ * loop block, MASTER / SYNC), with the tempo column down the right edge. In
+ * 2-deck mode the deck is as tall as the mixer and the waveform takes the
+ * spare height; `compact` (4 decks) is the same deck 216 px tall. The
+ * controls scale with the deck's width (`data-deck-size`, tokens.css).
+ * The same in every state: what can't act yet is disabled, not hidden. Drop a track
  * from the table to load it. `solo` is the library's player deck on its own,
  * full window width: CUE / PLAY left of the waveforms and the pads right of
  * them, so the deck is one row shorter; no MASTER or SYNC (nothing to sync
@@ -197,7 +198,6 @@ export function DeckStrip({
       cueKey={keyFor({ type: "cue" })}
       playKey={playKey === "" ? undefined : playKey}
       grid={grid}
-      compact={compact}
       quantise={loaded && (view?.quantise ?? false)}
       onCue={actions.cue}
       onTogglePlay={actions.togglePlay}
@@ -231,7 +231,6 @@ export function DeckStrip({
     <DeckSyncButtons
       deck={deck}
       ready={grid}
-      compact={compact}
       master={view?.master ?? false}
       sync={view?.sync ?? false}
       masterKey={keyFor({ type: "master" })}
@@ -241,11 +240,9 @@ export function DeckStrip({
     />
   );
 
-  // Under the overview where the deck has height to spare; beside the pads where it doesn't.
   const loopBlock = (
     <LoopBlock
       deck={deck}
-      layout={solo || compact ? "grid" : "row"}
       state={loopBlockState(view, loaded, grid, meta.lastLoop)}
       loaded={loaded}
       keyFor={keyFor}
@@ -279,15 +276,14 @@ export function DeckStrip({
   return (
     <section
       aria-label={`Deck ${deck + 1}`}
+      data-deck-size={solo ? "solo" : compact ? "compact" : "mix"}
       data-dropping={dropping || undefined}
       onDragOver={onDragOver}
       onDragLeave={() => setDropping(false)}
       onDrop={onDrop}
       className={cn(
-        "flex min-w-(--deck-min-w) shrink-0 gap-2 rounded-md border border-border bg-surface p-2 data-[dropping]:border-dashed data-[dropping]:border-accent",
+        "@container flex min-w-(--deck-min-w) shrink-0 gap-2 rounded-md border border-border bg-surface p-2 data-[dropping]:border-dashed data-[dropping]:border-accent",
         solo ? "h-(--deck-solo-h)" : compact ? "h-(--deck-h-compact)" : "h-(--deck-h)",
-        compact &&
-          "[--deck-header-h:var(--deck-header-h-compact)] [--deck-overview-h:var(--deck-overview-h-compact)]",
       )}
     >
       <div className={cn("flex min-w-0 flex-1 flex-col", compact ? "gap-1" : "gap-1.5")}>
@@ -319,29 +315,11 @@ export function DeckStrip({
         ) : (
           <>
             {views}
-            {!compact && loopBlock}
-            <div
-              className={cn(
-                "flex shrink-0",
-                compact ? "h-(--deck-bottom-h-compact) gap-1" : "h-(--deck-bottom-h) gap-2",
-              )}
-            >
-              {compact ? (
-                <>
-                  <div className="grid w-(--deck-cluster-w) shrink-0 grid-cols-2 content-end gap-1">
-                    {transport}
-                    {sync}
-                  </div>
-                  {pads}
-                  {loopBlock}
-                </>
-              ) : (
-                <>
-                  {transport}
-                  {pads}
-                  {sync}
-                </>
-              )}
+            <div className="grid h-(--deck-controls-h) shrink-0 grid-cols-(--deck-ctl-cols) gap-x-(--deck-gap)">
+              {transport}
+              {pads}
+              {loopBlock}
+              {sync}
             </div>
           </>
         )}

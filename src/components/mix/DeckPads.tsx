@@ -93,7 +93,7 @@ export function DeckPads(props: DeckPadsProps) {
   const [memPageWanted, setMemPage] = useState(0);
   const memPage = Math.min(memPageWanted, memPages - 1);
   return (
-    <div className="@container flex min-w-0 max-w-(--deck-pads-max-w) flex-1 flex-col gap-1">
+    <div className="@container flex min-w-0 flex-1 flex-col gap-1">
       <div className="flex h-(--ctl-h-xs) shrink-0 items-center gap-1">
         {/* Mode tabs, not a lit switch (that is Q's look): equal tabs, the chosen one outlined like the hot cues. */}
         <ShortcutTooltip shortcut={keyFor({ type: "padMode" })} hint="Next pad mode">
