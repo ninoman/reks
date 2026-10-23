@@ -559,25 +559,35 @@ describe("DeckStrip sizes", () => {
   const block = () => screen.getByRole("group", { name: "Deck 2 quick loop" });
   const pads = () => screen.getByRole("radiogroup", { name: "Deck 2 pad mode" });
 
-  it("2 decks: as tall as the mixer, the quick-loop row under the views", () => {
+  /** The controls row holds CUE / PLAY, the pads, the quick loop and MASTER / SYNC, in that order. */
+  function expectControlsRow() {
+    const row = block().parentElement;
+    expect(row?.className).toContain("grid-cols-(--deck-ctl-cols)");
+    expect(row?.contains(pads())).toBe(true);
+    const order = ["Deck 2 cue", "Deck 2 pad mode", "Deck 2 quick loop", "Deck 2 master"].map(
+      (name) =>
+        Array.from(row?.children ?? []).findIndex(
+          (c) =>
+            c.querySelector(`[aria-label="${name}"]`) !== null ||
+            c.getAttribute("aria-label") === name,
+        ),
+    );
+    expect(order).toEqual([0, 1, 2, 3]);
+  }
+
+  it("2 decks: as tall as the mixer, the quick loop right of the pads", () => {
     setup({ view: view(), meta: loadedMeta() });
     expect(deck().className).toContain("h-(--deck-h)");
-    expect(deck().className).not.toContain("--deck-h-compact");
-    expect(block().className).toContain("h-6");
-    // A column child, not a sibling of the pads.
-    expect(block().parentElement).toBe(deck().querySelector("header")?.parentElement);
+    expect(deck().dataset.deckSize).toBe("mix");
+    expectControlsRow();
   });
 
-  it("4 decks: 216 px with a short header and overview, the quick-loop grid beside the pads", () => {
+  it("4 decks: 216 px, the same controls row as 2 decks", () => {
     setup({ view: view(), meta: loadedMeta(), compact: true });
     expect(deck().className).toContain("h-(--deck-h-compact)");
-    expect(deck().className).toContain("--deck-header-h:var(--deck-header-h-compact)");
-    expect(deck().className).toContain("--deck-overview-h:var(--deck-overview-h-compact)");
-    expect(block().className).toContain("w-(--loop-block-w)");
-    // The same bottom row as the pads.
-    const row = block().parentElement;
-    expect(row?.className).toContain("h-(--deck-bottom-h-compact)");
-    expect(row?.contains(pads())).toBe(true);
+    // The compact header, overview, art and controls row sizes hang off this (tokens.css).
+    expect(deck().dataset.deckSize).toBe("compact");
+    expectControlsRow();
   });
 
   it("4 decks keep every control: Q, CUE, PLAY, MASTER and SYNC", () => {

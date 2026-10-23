@@ -674,6 +674,10 @@ nothing; 25 needs 22–24.
     wide, not 52 (a 60 px CUE / PLAY / Q / SYNC / MASTER cluster and the loop
     grid take the rest); measurements in `ui.md` (5 library rows at
     1280 × 800, 8 at 1440 × 900).
+    Revised 2026-10-23 (maintainer): 2 and 4 decks share one controls row
+    (CUE / PLAY · pads · quick-loop block · MASTER / SYNC) that scales with
+    the deck's width; the 4-deck pads are now 42 px wide at 1280 px and the
+    artwork 24 px. See `ui.md` "Controls row".
 24. [x] **Settings → Mixer and the mixer's settings button** ([#45](https://github.com/ninoman/reks/issues/45)) (§6).
     - `reks-core` `settings.rs`: `mix.mixer_view` (`MixerView`: simple,
       advanced; default simple) and `mix.mixer_filters` (`MixerFilters`:
