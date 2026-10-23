@@ -44,6 +44,7 @@ import { keepsSpace, PLAYER_PLAY_KEY, waveZoomKey } from "./lib/keys";
 import { dismissSplash } from "./lib/splash";
 import { useAnalysis } from "./store/analysis";
 import { useDeviceBrowser } from "./store/deviceBrowser";
+import { useFilterPresets } from "./store/filterPresets";
 import { useHistory } from "./store/history";
 import { useLibrary } from "./store/library";
 import { useMix } from "./store/mix";
@@ -87,6 +88,7 @@ export default function App() {
     void s.loadFacets();
     void usePlaylists.getState().load();
     void useTags.getState().load();
+    void useFilterPresets.getState().load();
     void useHistory.getState().load();
     void useAnalysis.getState().subscribe();
     void offerCrashReport();

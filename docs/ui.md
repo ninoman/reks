@@ -148,11 +148,11 @@ menu items `--menu-item-h`.
 | `Tabs` + `TabsList`, `TabsTrigger`, `TabsContent` | `orientation`: horizontal, vertical (a sidebar, Settings); chosen tab in the `selected` tint; arrow keys move between tabs | Radix Tabs |
 | `Chip` | label pill (`onRemove`, `removeLabel`; `onActivate` makes it a button); `tone`: neutral, notice | – |
 | `Toast` | bottom-centre message with an optional action (Undo); one at a time via `store/toasts` + `ToastHost` | – |
-| `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |
+| `Badge` | `variant`: neutral, accent, muted, danger and outline (a ringed word on a row: the Filters drawer's "not" / "all"); `size`: sm, md | – |
 | `Kbd` | `variant`: default, inverse | – |
 | `Tooltip` | `content`, `shortcut`, `side` | Radix Tooltip |
 | Shortcut hint | `Button` / `IconButton` take `shortcut` (+ `hint`, default `aria-label`) and show it in a tooltip on hover/focus; the key text comes from `lib/mixKeys` (`deckKeyHint`, `crossfaderKeyHint`) or `lib/keys` (`PLAYER_PLAY_KEY`), never a literal | `ShortcutTooltip` |
-| `DropdownMenu*` | Content, Item (`variant`: default, danger), CheckboxItem, Separator | Radix DropdownMenu |
+| `DropdownMenu*` | Content, Item (`variant`: default, danger; `inset` lines it up with checkbox items), CheckboxItem, Group / Label, Separator | Radix DropdownMenu |
 | `ContextMenu*` | Content, Item, CheckboxItem (`checked="indeterminate"` shows a dash), Sub / SubTrigger / SubContent, Group / Label, Separator; wrap the whole area, not each row | Radix ContextMenu |
 | `Popover*` | Content (`align`, `sideOffset`) | Radix Popover |
 | `Dialog*` | Content `size`: sm, md, lg, xl (960 px, the grid editor), `closeOnOutsideClick`; Header, Title, Description, Body, Footer | Radix Dialog |
@@ -211,8 +211,8 @@ stack top to bottom and share the height. With more than one list, each has a
 header (name, track count, × to close); closing the main list moves the first
 pane up into it. Each pane is its own library store
 ([`panes.ts`](../src/store/panes.ts)) with its own sort and selection, handed
-to `TrackTable` through `LibraryStoreContext`. Search, filters, the rule
-builder and the info panel stay with the main list. A playlist shows in one
+to `TrackTable` through `LibraryStoreContext`. Search, the Filters drawer
+and the info panel stay with the main list. A playlist shows in one
 list at a time. Rows dragged from one list onto a playlist pane sorted by
 position are added at the drop line. Edits that change rows reach every list
 (`allLibraries()`). An (i) on the tree's Playlists row explains all this in a
@@ -721,54 +721,128 @@ re-queries. Pure helpers (coverage, search, create offers) are in
   for the whole selection; a tag only some selected tracks have is mixed and a
   click adds it to all; the menu stays open; the search field offers
   "Create 'X' in <category>".
-- `TagPicker` (Popover body, search + checkboxes by category): the Filters drawer's
-  My Tags field (`FilterState.tagIds` → `tagAny`, counted in the Filters badge).
+- `TagPicker` (Popover body, search + checkboxes by category): the tag drawer
+  and context menu's body. The Filters drawer has one row per category instead
+  (see below).
 - `TrackTags`: the info panel's removable chips and the "Edit tags" button.
 - "My Tags" table column, hidden until switched on.
 - States: loading, load error with Retry, no tags in a category (its add field
   is always there), no match for the search.
 - Dev: `npm run dev` serves tags from [`mockTags.ts`](../src/dev/mockTags.ts).
 
-## Rule builder and smart playlists (D29)
+## Filters drawer and smart playlists (D35)
 
-The **Advanced** button in the Filters drawer opens the builder under the fields
-(`RuleBuilder` → `RuleGroup` → `RuleRow` → `RuleValueEditor`; the last three
-take props, `RuleBuilder` reads the stores). State is
-[`store/rules.ts`](../src/store/rules.ts), the tree edits are pure functions in
-[`ruleTree.ts`](../src/store/ruleTree.ts). The builder edits a *draft* (rows may
-be unfinished); `toRule` turns the finished rows into the `RuleNode` that
-`library.rule` sends with every query, ANDed with the bar, only while the
-Filters switch is on.
+One query, edited in the Filters drawer ([wireframe](wireframes/filters-drawer.html),
+concept A): rows on a rail, ANDed until you ask for OR. It narrows whatever the
+tree shows (the chosen playlist is `library.playlistId`, outside the drawer).
+State is [`store/rules.ts`](../src/store/rules.ts); the draft and every edit are
+pure functions in [`ruleTree.ts`](../src/store/ruleTree.ts). `toRule` turns
+the rows that filter into the `RuleNode` that `library.rule` sends with every
+query (D29), only while the Filters switch is on.
 
-- Plain language: a group reads "Tracks that match **all / any / none** of
-  these" (none = `any` with `not`); rows read "has / doesn't have" tag, "in /
-  not in" playlist, "is / is not" for the rest. A summary line above the
-  rows says what the conditions mean and the live `total`.
-- No Apply button: finished edits re-query after 50 ms and only when the rule
-  changed; the table keeps the old rows until the new first page lands. An
-  unfinished row is muted ("Not applied yet") and left out.
-- Three levels at most (the core allows 8); nested groups hang off an indented
-  left rule in `border`. "Last played" rows take a fixed date: a saved rule
-  cannot hold "last 30 days".
-- Keyboard: Enter in a row's fields adds a row below and focuses its field
-  Select; Delete / Backspace on the field Select of an empty row removes it.
-  Groups are `fieldset`s labelled "Group: match any".
-- The Filters badge and Advanced badge count bar and builder; **Clear all**
-  clears both with one Undo toast (`ui/Toast`, `store/toasts`).
-- Quick paths: a playlist's context menu "Show tracks not in this playlist"
-  and a tag chip's label ("Filter by tag X") add a row and open the builder.
-- **Save as smart playlist…** sends `createSmart` and clears the builder (the
-  rule lives in the playlist now). In the tree a smart list has its own icon;
-  with one shown, `SmartListHeader` offers a "Smart" badge (tooltip says why
-  it can't be edited by hand), "Updates automatically" and **Edit rules**,
-  which shows the whole collection as a live preview with the rule in the
-  builder and Save rules / Cancel (`setRule`). Dropping tracks on it, "Insert
-  divider" and "Remove from" are refused, with the reason beside them. The
-  export wizard marks smart lists and the dry run notes that they are written
-  as fixed lists.
-- States: empty builder, unfinished rows, no match (`EmptyResult`, also for a
-  smart list and an empty playlist), save errors in the dialog.
-- Dev: `mockSmart.ts` evaluates rules and smart lists like the core.
+Components: `FilterDrawer` (chrome, banners, Clear all, save) → `RuleBuilder`
+(reads the stores, the root level, "+ Add filter") → `RuleLevel` / nested
+group card (`RuleGroup.tsx`) → `RuleRow` → `RuleValueEditor`, with
+`FieldChooser` (Add filter: search over fields and values) and `ValuePicker` (`PickerPopover`,
+`ListPicker`: the operator on top, a checklist with search, count and Clear,
+and loading / error-with-Retry / empty states). All but `RuleBuilder` and
+`FilterDrawer` take props. Sizes: `--query-rail-w`, `--query-dot`,
+`--query-label-w`, `--query-row-h`.
+
+- **Default fields**: BPM, Key, Genre, Rating and the first My Tags category
+  are rows from the start, empty ("Any"); an empty row filters nothing. The
+  list is the user's: the row menu's "Keep in default fields", and "Reset
+  default fields" under Add filter. Stored in settings `ui.state.filterFields`
+  (`bpm`, `key`, …, `tag:<category id>`; `null` = built in). A default row
+  removed stays out until the next fresh drawer (Clear all).
+- **One row per field per level**; each My Tags category is a field of its
+  own (marked `#`), any / all / none of its tags, so categories AND. Add
+  filter greys the fields shown on the level ("shown") and jumps to their row.
+  A default field used anywhere in the query (say inside a group) shows no
+  extra empty row; it comes back when that use goes. Repeats only inside groups.
+- **Order**: an added row goes after the last row on its level that isn't an
+  unused default, so what filters stays at the top; default rows keep their
+  place when set (`insertIndex`).
+- **Operators in the pickers**: lists (Genre, Key, Colour, Playlist) Any of /
+  None of (= Exclude); a tag category also All of (a blue "all" mark; "not"
+  is red); Rating at least / exactly / at most; BPM and Plays two inputs,
+  either side optional; Last played never / since a date (no relative "last
+  N days"); File missing / present. Lists of more than one value are an "any"
+  group of single filters; tags "all" an "all" group of one-tag `tagAny`s;
+  rating at most / exactly are `ratingMin` with `not` / combined. `fromRule`
+  reads these shapes back as the same rows (no core change).
+- **Rail and connectors**: "and" / "or" between rows; a click switches the
+  whole level (no mixed and/or on one level). Lit while both sides filter.
+- **Row menu** (`···`, or Shift+F10 on the row): Or… (wraps the row in an
+  "any" group with an empty row whose field list opens; in a group that
+  already reads "or" it just adds the row; three levels at most), Exclude,
+  Pause (kept, dashed and struck through, left out of `toRule`), Keep in
+  default fields, Remove. × on a set row empties a default row or removes
+  an added one. Group header: Any / All / None of these, Ungroup, Remove
+  group; "+ Or…" adds an alternative.
+- **Keyboard**: the row's dot on the rail is its handle: ↑ / ↓ between rows,
+  Enter opens the value (or focuses a range's minimum), Space pauses,
+  Backspace / Delete empties a set row or removes an empty one, Shift+F10 the
+  menu. A row just added takes focus with its picker open. `/` anywhere in
+  the drawer outside a text field opens the root Add filter
+  (`rules.addOpen`).
+- **Add filter search** (`FieldChooser`, matching in
+  [`filterSearch.ts`](../src/store/filterSearch.ts)): a combobox (focus stays
+  in the search box, ↑ / ↓ / Home / End move, Enter picks, options are
+  `aria-activedescendant`). Blank, it lists the fields by group; typed, it
+  lists values first: a number 40–300 is "BPM around" it ± 2
+  (`BPM_SEARCH_TOLERANCE`), "4*" / "4 stars" / "★★★★" a rating at least,
+  a key typed exactly in any notation (shown in the user's), then genres and
+  tags (with their category) by name, starting matches first, eight at most;
+  then fields whose name matches. A value on the root level sets or extends
+  its field's row like a quick path (`addValue` → `fillRow`); in a group it
+  adds a row there; on a row waiting for its field it sets that row.
+- **No count or summary in the drawer**: the table shows both. The Filters
+  button's badge counts the rows that filter (`activeRowCount`); its tooltip
+  has the one-line `summarize` text. No Apply button: edits re-query after
+  50 ms and only when the rule changed.
+- **States**: off (rows dimmed but editable, a banner "Filters are set aside.
+  N kept." with Turn on), nothing left on the root level ("No filters here"),
+  pickers loading / error with Retry (genres, keys and colours from
+  `library_facets`, `facetsError`; tags from the tag store), an empty group,
+  no match (`EmptyResult`: "Undo last change" back to the last draft whose
+  result had tracks, and "Clear filters").
+- **Clear all** empties the drawer to the default fields with one Undo toast;
+  the shown playlist stays.
+- **Quick paths** fill rows: a tag chip's label ("Filter by tag X") fills
+  that tag's category row; a playlist's "Show tracks not in this playlist"
+  fills a Playlist row with None of (`fillRow`). Both open the drawer.
+- **Saved filters** (D35; list in
+  [`filterPresets.ts`](../src/store/filterPresets.ts), the loaded one in
+  `rules.preset`): `SavedFiltersPicker` under the drawer's title names the
+  loaded one ("Saved filters" when none) and opens a list: a click loads it
+  (the drawer is replaced and filters turn on; an Undo toast brings back a
+  drawer that held something), hovering shows its `summarize` text, each has
+  Rename (in place), Duplicate, Move up / down and Delete (Undo toast
+  re-creates it in its place), rows drag to reorder, a search field from 9
+  on. States: loading, error with Retry, none yet, no match, a rule a newer
+  reks wrote (refused with a toast). A loaded one that no longer matches the
+  drawer shows **edited** and a banner with **Update** (`setRule`) and
+  **Revert**; nothing auto-saves. Clear all unloads it (its Undo loads it
+  again); renamed or deleted elsewhere, the name follows or goes (the rows
+  stay). The toolbar's ▾ next to Filters (or ↓ on the Filters button) lists
+  them too, with Show / Hide filters.
+- **Save…** (`SaveFilterDialog`): a name suggested from the rows
+  (`suggestName`: "Unplayed, 124–130 BPM", 40 characters at most, "My
+  filter" when nothing fits), selected, and **Keep it as** Saved filter /
+  Smart playlist, remembered in settings `ui.filterSaveTarget`. A saved
+  filter whose name is taken (any case) asks first, then Replace overwrites
+  that one; it stays loaded. A smart playlist saves the whole drawer
+  (`createSmart`) and empties it (the rule lives in the playlist now). In the tree a smart list
+  has its own icon; with one shown, `SmartListHeader` offers a "Smart" badge,
+  "Updates automatically" and **Edit rules**, which fills the drawer with its
+  rule (unused default fields empty around it), shows the whole collection
+  as a live preview and puts Save rules / Cancel in a banner (`setRule`).
+  Dropping tracks on it, "Insert divider" and "Remove from" are refused, with
+  the reason beside them. The export wizard marks smart lists and the dry
+  run notes that they are written as fixed lists.
+- Dev: `mockSmart.ts` evaluates rules and smart lists like the core;
+  `mockPresets.ts` keeps saved filters like `filter_preset.rs`.
 
 ## Adding a component or variant
 

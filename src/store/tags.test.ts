@@ -12,7 +12,9 @@ vi.mock("../lib/ipc", () => ({
 const ipc = await import("../lib/ipc");
 const tagsGet = vi.mocked(ipc.tagsGet);
 const tagsMutate = vi.mocked(ipc.tagsMutate);
-const { noFilters, useLibrary } = await import("./library");
+const { useLibrary } = await import("./library");
+const { useRules } = await import("./rules");
+const { findRow, newGroup, newRow } = await import("./ruleTree");
 const { useTags } = await import("./tags");
 
 const tree: TagTree = {
@@ -42,7 +44,6 @@ beforeEach(() => {
   });
   useTags.setState({ tree: null, status: "loading", error: null, managerOpen: false });
   useLibrary.setState({
-    filters: noFilters,
     pages: new Map([[0, [row(1, [10]), row(2, []), row(3, [11])]]]),
   });
 });
@@ -114,17 +115,18 @@ describe("tags store", () => {
     expect(useLibrary.getState().pages.get(0)?.[1]?.tags).toEqual([12]);
   });
 
-  it("deleting a tag drops it from the active filter", async () => {
-    useLibrary.setState({ filters: { ...noFilters, tagIds: [10, 11] } });
+  it("deleting a tag drops it from the drawer's rows", async () => {
+    useTags.setState({ tree });
+    const row = newRow({ field: "tag", category: 1, ids: [10, 11], all: false });
+    useRules.setState({ root: newGroup("all", [row]) });
     tagsGet.mockResolvedValue({
       categories: [{ id: 1, name: "Genre", tags: [{ id: 11, name: "Techno", trackCount: 0 }] }],
     });
     await useTags.getState().mutate({ type: "delete", id: 10 });
-    expect(useLibrary.getState().filters.tagIds).toEqual([11]);
+    expect(findRow(useRules.getState().root, row.id)?.value).toMatchObject({ ids: [11] });
   });
 
-  it("deleting a tag outside the filter just re-queries", async () => {
-    useLibrary.setState({ filters: { ...noFilters, tagIds: [11] } });
+  it("deleting a tag re-queries the loaded rows", async () => {
     const gen = useLibrary.getState().generation;
     await useTags.getState().mutate({ type: "delete", id: 10 });
     expect(useLibrary.getState().generation).toBeGreaterThan(gen);

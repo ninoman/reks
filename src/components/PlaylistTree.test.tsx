@@ -16,6 +16,7 @@ vi.mock("../lib/ipc", () => ({
 const ipc = await import("../lib/ipc");
 const playlistsMutate = vi.mocked(ipc.playlistsMutate);
 const { useLibrary } = await import("../store/library");
+const { usePanels } = await import("../store/panels");
 const { usePlaylists } = await import("../store/playlists");
 const { initialTree } = await import("../store/playlistTree");
 const { useRules } = await import("../store/rules");
@@ -86,13 +87,13 @@ describe("PlaylistTree", () => {
   it("selecting a playlist sorts by position; a folder or the collection drops that sort", () => {
     render(<PlaylistTree />);
     fireEvent.click(item("Warm-up"));
-    expect(useLibrary.getState().filters.playlistId).toBe(2);
+    expect(useLibrary.getState().playlistId).toBe(2);
     expect(useLibrary.getState().sort).toEqual({ column: "playlistPosition", descending: false });
     fireEvent.click(item("Gigs"));
-    expect(useLibrary.getState().filters.playlistId).toBe(1);
+    expect(useLibrary.getState().playlistId).toBe(1);
     expect(useLibrary.getState().sort.column).toBe("dateAdded");
     fireEvent.click(item("Collection"));
-    expect(useLibrary.getState().filters.playlistId).toBeNull();
+    expect(useLibrary.getState().playlistId).toBeNull();
   });
 
   it("the Playlists root row opens and closes the whole tree", () => {
@@ -240,9 +241,9 @@ describe("PlaylistTree", () => {
       fireEvent.contextMenu(item("Peak"));
       fireEvent.click(await screen.findByRole("menuitem", { name: "Edit rules" }));
       await waitFor(() => expect(useRules.getState().editing?.playlistId).toBe(3));
-      expect(useRules.getState().open).toBe(true);
+      expect(usePanels.getState().filterBarOpen).toBe(true);
       // The collection is the edit's own view.
-      expect(useLibrary.getState().filters.playlistId).toBeNull();
+      expect(useLibrary.getState().playlistId).toBeNull();
     });
 
     it("a static playlist has no Edit rules; its menu can exclude it instead", async () => {
@@ -251,9 +252,11 @@ describe("PlaylistTree", () => {
       await screen.findByRole("menuitem", { name: "Rename" });
       expect(screen.queryByRole("menuitem", { name: "Edit rules" })).toBeNull();
       fireEvent.click(screen.getByRole("menuitem", { name: "Show tracks not in this playlist" }));
-      const row = useRules.getState().root.rules[0];
-      expect(row).toMatchObject({ not: true, value: { field: "playlist", id: 2 } });
-      expect(useLibrary.getState().filters.playlistId).toBeNull();
+      const row = useRules
+        .getState()
+        .root.rules.find((r) => r.kind === "row" && r.value.field === "playlist");
+      expect(row).toMatchObject({ not: true, value: { field: "playlist", ids: [2] } });
+      expect(useLibrary.getState().playlistId).toBeNull();
     });
 
     it("leaving an edit for another playlist drops it and keeps the earlier draft", async () => {
@@ -266,7 +269,7 @@ describe("PlaylistTree", () => {
       expect(useRules.getState().editing).not.toBeNull();
       fireEvent.click(item("Warm-up"));
       expect(useRules.getState().editing).toBeNull();
-      expect(useLibrary.getState().filters.playlistId).toBe(2);
+      expect(useLibrary.getState().playlistId).toBe(2);
     });
   });
 });

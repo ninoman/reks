@@ -3,10 +3,12 @@
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     // UI code only; Rust is formatted by rustfmt. `.claude/` holds agent worktrees.
-    // docs/research/wireframes: standalone wireframe pages published as artifacts, not app code.
+    // docs/wireframes, docs/research/wireframes: standalone wireframe pages published as
+    // artifacts, not app code.
     "includes": [
       "**",
       "!**/.claude",
+      "!**/docs/wireframes",
       "!**/docs/research/wireframes",
       "!**/src-tauri",
       "!**/crates",

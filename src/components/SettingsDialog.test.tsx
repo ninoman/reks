@@ -47,6 +47,8 @@ const settings: Settings = {
     volume: 1,
     rowDensity: "default",
     columnsVersion: 1,
+    filterFields: null,
+    filterSaveTarget: "filter",
   },
 };
 const roots: LibraryRoot[] = [

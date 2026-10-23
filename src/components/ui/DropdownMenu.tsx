@@ -9,12 +9,19 @@ import {
   menuContentVariants,
   menuIndicatorClass,
   menuItemVariants,
+  menuLabelClass,
   menuSeparatorClass,
 } from "./menu";
 
 export { menuContentVariants as dropdownMenuContentVariants };
 export const DropdownMenu = Menu.Root;
 export const DropdownMenuTrigger = Menu.Trigger;
+export const DropdownMenuGroup = Menu.Group;
+
+/** Heading of a `DropdownMenuGroup`. */
+export function DropdownMenuLabel({ className, ...props }: ComponentProps<typeof Menu.Label>) {
+  return <Menu.Label className={cn(menuLabelClass, className)} {...props} />;
+}
 
 export function DropdownMenuContent({
   className,

@@ -116,6 +116,20 @@ export function GripIcon() {
   );
 }
 
+/** "···": a row's menu. */
+export function MoreIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="M3.5 8h.01M8 8h.01M12.5 8h.01"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function PlusIcon() {
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">

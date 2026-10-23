@@ -1,7 +1,7 @@
 /**
  * Settings (stored in Rust, `reks-core` `settings.rs`): loaded at start-up,
- * where they seed the library, panels and mix stores (volume, output
- * device); edited in the
+ * where they seed the library, panels, mix (volume, output device) and
+ * Filters drawer (default fields) stores; edited in the
  * Settings dialog. Library window state (`UiState`) is saved by
  * `startUiSync`, `UI_SAVE_MS` after the last change.
  */
@@ -28,6 +28,7 @@ import { applyTheme } from "../lib/theme";
 import { useLibrary } from "./library";
 import { useMix } from "./mix";
 import { usePanels } from "./panels";
+import { useRules } from "./rules";
 
 export const UI_SAVE_MS = 300;
 
@@ -98,6 +99,8 @@ export function currentUi(): UiState {
     volume: useMix.getState().volume,
     rowDensity: panels.rowDensity,
     columnsVersion,
+    filterFields: useRules.getState().defaultFields,
+    filterSaveTarget: useRules.getState().saveTarget,
   };
 }
 
@@ -114,6 +117,8 @@ function applyUi(ui: UiState, columns: ColumnDefaults) {
     rowDensity: ui.rowDensity,
   });
   useMix.getState().setVolume(ui.volume);
+  useRules.getState().setDefaultFields(ui.filterFields ?? null);
+  useRules.getState().setSaveTarget(ui.filterSaveTarget ?? "filter");
 }
 
 export const useSettings = create<SettingsStore>()((set, get) => {
@@ -206,6 +211,10 @@ export function startUiSync(): () => void {
     useLibrary.subscribe(check),
     usePanels.subscribe(check),
     useMix.subscribe((s, prev) => s.volume !== prev.volume && check()),
+    useRules.subscribe(
+      (s, prev) =>
+        (s.defaultFields !== prev.defaultFields || s.saveTarget !== prev.saveTarget) && check(),
+    ),
   ];
   return () => {
     if (timer !== null) clearTimeout(timer);

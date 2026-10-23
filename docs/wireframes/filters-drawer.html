@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filters Drawer Redesign</title>
+<meta name="description" content="Wireframes for one Filters view: default fields and one row per tag category, ANDed by default, OR groups, and saved filters.">
+<style>
+/*
+ * Wireframe: the Filters drawer as one query builder (bar + Advanced merged),
+ * concept A. Drawers are drawn 1:1 at --sheet-w (300px,
+ * src/styles/tokens.css); low-fidelity greys, one accent for "this filters".
+ */
+:root {
+  --paper: #f4f4f7; --sheet: #ffffff; --ink: #1c1c24; --ink-2: #5d5d6c; --ink-3: #8a8a99; --line: #c7c7d2;
+  --box: #ffffff; --box-2: #f0f0f4; --table: #e6e6ec;
+  --new: #4247c9; --new-bg: #e9eafb; --gone: #b4383d; --gone-bg: #f8e4e5;
+  --later: #9a6a00; --later-bg: #fbf1d9; --shadow: 0 8px 24px rgb(20 20 40 / 16%);
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --sheet-w: 300px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #131318; --sheet: #1a1a21; --ink: #e8e8ef; --ink-2: #a3a3b3; --ink-3: #737384; --line: #3b3b48;
+  --box: #1f1f27; --box-2: #23232c; --table: #24242d;
+  --new: #a3a6ff; --new-bg: #26274a; --gone: #ff8a8f; --gone-bg: #4a2326;
+  --later: #f1c45c; --later-bg: #3d3216; --shadow: 0 8px 24px rgb(0 0 0 / 50%);
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #131318; --sheet: #1a1a21; --ink: #e8e8ef; --ink-2: #a3a3b3; --ink-3: #737384; --line: #3b3b48;
+  --box: #1f1f27; --box-2: #23232c; --table: #24242d;
+  --new: #a3a6ff; --new-bg: #26274a; --gone: #ff8a8f; --gone-bg: #4a2326;
+  --later: #f1c45c; --later-bg: #3d3216; --shadow: 0 8px 24px rgb(0 0 0 / 50%);
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 24px 16px 64px; display: flex; flex-direction: column; gap: 36px; }
+h1 { font-size: 26px; line-height: 1.2; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 19px; margin: 0; text-wrap: balance; }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 0; max-width: 80ch; }
+ul, ol { margin: 0; padding-left: 20px; }
+li { max-width: 78ch; }
+li + li { margin-top: 4px; }
+.lede { color: var(--ink-2); font-size: 15px; }
+code { font-family: var(--font-mono); font-size: 0.88em; }
+section.block { display: flex; flex-direction: column; gap: 16px; }
+.topbar { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-start; justify-content: space-between; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--sheet); flex-shrink: 0; }
+.seg button { font: 500 13px var(--font-ui); color: var(--ink); background: transparent; border: 0; padding: 5px 11px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--sheet); }
+.seg button:focus-visible { outline: 2px solid var(--new); outline-offset: -2px; }
+.tag { display: inline-block; font: 600 10px var(--font-ui); letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; vertical-align: 2px; }
+.tag.rec { background: var(--new-bg); color: var(--new); }
+.tag.later { background: var(--later-bg); color: var(--later); }
+.tag.core { border: 1px dashed var(--later); color: var(--later); }
+.card { background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.changes { display: flex; flex-direction: column; gap: 8px; }
+.principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.principles .card b { display: block; margin-bottom: 2px; }
+.principles .card span { color: var(--ink-2); font-size: 13px; }
+
+/* ---- Frames: drawer + notes ---- */
+.frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(560px, 100%), 1fr)); gap: 20px; }
+.frame { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.frame.wide { grid-column: 1 / -1; }
+.frame > .notes { flex: 1 1 200px; min-width: 200px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.frame > .notes h3 small { display: block; font-weight: 400; color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+.notes ol { padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.notes ol li { display: grid; grid-template-columns: 20px 1fr; gap: 6px; margin: 0; }
+.n { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--ink); color: var(--sheet); font: 700 10px/1 var(--font-ui); font-style: normal; flex-shrink: 0; vertical-align: 1px; }
+.notes .n { margin-top: 2px; }
+.stage { position: relative; flex-shrink: 0; }
+.mark { position: absolute; }
+
+/* ---- Drawer ---- */
+.drawer { width: var(--sheet-w); background: var(--box-2); border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; font-size: 12.5px; position: relative; }
+.dh { display: flex; align-items: center; gap: 8px; padding: 9px 10px 4px 12px; }
+.dh b { font-size: 13.5px; }
+.dh .sp { flex: 1; }
+.x { color: var(--ink-3); font-size: 15px; line-height: 1; padding: 0 2px; }
+.switch { width: 28px; height: 16px; border-radius: 8px; background: var(--line); position: relative; flex-shrink: 0; display: inline-block; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--sheet); }
+.switch.on { background: var(--new); }
+.switch.on::after { left: 14px; }
+/* Saved filters line under the title. */
+.saved { display: flex; align-items: center; gap: 6px; padding: 2px 10px 2px 10px; }
+.saved .pick { max-width: 190px; }
+.lnk { color: var(--new); margin-left: auto; font-size: 12px; white-space: nowrap; }
+.lnk.dis { color: var(--ink-3); }
+.edited { font-size: 11px; color: var(--later); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.edited::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--later); }
+.strip { margin: 4px 10px 0; padding: 5px 6px 5px 9px; border-radius: 6px; background: var(--later-bg); display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.strip .sp { flex: 1; }
+.body { padding: 8px 10px 4px; display: flex; flex-direction: column; gap: 6px; }
+.body.dim .q, .body.dim .add { opacity: 0.45; }
+
+/* The query: a rail on the left, connectors sit on it between rows. */
+.q { position: relative; padding-left: 22px; display: flex; flex-direction: column; }
+.q::before { content: ""; position: absolute; left: 10px; top: 15px; bottom: 15px; border-left: 1px solid var(--line); }
+.row { display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 3px 4px 3px 7px; border-radius: 6px; border: 1px solid transparent; position: relative; }
+.row::before { content: ""; position: absolute; left: -16px; top: 50%; width: 7px; height: 7px; margin-top: -4px; border-radius: 50%; background: var(--box-2); border: 1px solid var(--ink-3); }
+.row.on { border-color: var(--new); background: var(--box); }
+.row.on::before { background: var(--new); border-color: var(--new); }
+.row.paused { border-style: dashed; border-color: var(--ink-3); }
+.row.paused .lab, .row.paused .val { opacity: 0.55; }
+.row.paused .lab { text-decoration: line-through; }
+.row.paused::before { border-style: dashed; }
+.row.focus { box-shadow: 0 0 0 2px var(--new-bg), 0 0 0 3px var(--new); }
+.lab { width: 94px; flex-shrink: 0; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row.on .lab { color: var(--ink); font-weight: 600; }
+/* A My Tags category row: the tag mark tells "Genre" the category from Genre the field. */
+.lab .tg { display: inline-block; font: 700 10px var(--font-ui); color: var(--ink-3); margin-right: 3px; }
+.row.on .lab .tg { color: var(--new); }
+.val { flex: 1; display: flex; gap: 4px; align-items: center; justify-content: flex-end; min-width: 0; color: var(--ink-3); }
+.act { width: 16px; flex-shrink: 0; color: var(--ink-3); text-align: center; letter-spacing: -1px; font-weight: 700; }
+.act.hot { color: var(--ink); background: var(--table); border-radius: 4px; }
+.clr { color: var(--ink-3); font-size: 13px; line-height: 1; width: 12px; text-align: center; flex-shrink: 0; }
+.pick { border: 1px solid var(--line); border-radius: 5px; height: 24px; padding: 0 6px 0 8px; display: inline-flex; align-items: center; gap: 5px; background: var(--box); color: var(--ink); min-width: 0; max-width: 150px; white-space: nowrap; }
+.pick > span { overflow: hidden; text-overflow: ellipsis; }
+.pick::after { content: "▾"; color: var(--ink-3); font-size: 10px; flex-shrink: 0; }
+.pick.ph { color: var(--ink-3); }
+.pick.op { border-color: transparent; background: transparent; color: var(--ink-2); padding: 0 2px 0 4px; }
+.pick.bare { border-color: transparent; background: transparent; padding-left: 2px; font-weight: 600; }
+.pick.bare.ph { font-weight: 400; }
+.inp { width: 46px; height: 24px; border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; display: inline-flex; align-items: center; background: var(--box); color: var(--ink); font-variant-numeric: tabular-nums; }
+.inp.ph { color: var(--ink-3); }
+.inp.wide { width: 100%; }
+.neg { font: 700 9.5px var(--font-ui); text-transform: uppercase; letter-spacing: 0.04em; color: var(--gone); background: var(--gone-bg); padding: 1px 4px; border-radius: 3px; flex-shrink: 0; }
+.all { font: 700 9.5px var(--font-ui); text-transform: uppercase; letter-spacing: 0.04em; color: var(--new); background: var(--new-bg); padding: 1px 4px; border-radius: 3px; flex-shrink: 0; }
+.conn { position: relative; height: 16px; }
+.conn span { position: absolute; left: -12px; top: 50%; transform: translate(-50%, -50%); font: 700 9px/1 var(--font-ui); text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--box-2); color: var(--ink-3); }
+.conn.on span { color: var(--ink); border-color: var(--ink-2); background: var(--box); }
+.conn.or span { color: var(--new); border-color: var(--new); background: var(--new-bg); }
+.conn.hover span { box-shadow: 0 0 0 3px var(--new-bg); border-color: var(--new); color: var(--new); }
+
+.grp { border: 1px solid var(--new); border-radius: 8px; background: var(--box); padding: 4px 4px 6px; display: flex; flex-direction: column; gap: 2px; position: relative; }
+.grp::before { content: ""; position: absolute; left: -16px; top: 14px; width: 7px; height: 7px; border-radius: 50%; background: var(--new); }
+.grp-h { display: flex; align-items: center; gap: 4px; padding: 0 2px 0 6px; color: var(--ink-2); font-size: 11.5px; }
+.grp-h .sp { flex: 1; }
+.grp .q { padding-left: 20px; }
+.grp .q::before { left: 9px; }
+.grp .row::before { left: -15px; }
+.grp .conn span { left: -11px; }
+.grp .row.on { background: var(--box-2); }
+.grp .lab { width: 84px; }
+
+.add { display: flex; align-items: center; gap: 8px; padding: 4px 0 0 22px; }
+.btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--box); color: var(--ink); font-size: 12.5px; white-space: nowrap; }
+.btn.sm { height: 22px; padding: 0 8px; font-size: 12px; }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); padding: 0 6px; }
+.btn.prim { background: var(--ink); border-color: var(--ink); color: var(--sheet); }
+.btn.dis { color: var(--ink-3); border-color: var(--line); background: transparent; }
+.btn.focus { box-shadow: 0 0 0 2px var(--new-bg), 0 0 0 3px var(--new); }
+.kbd { font: 600 10px var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; color: var(--ink-2); background: var(--box); }
+.foot { margin-top: 6px; border-top: 1px solid var(--line); padding: 8px 10px; display: flex; gap: 8px; align-items: center; }
+.banner { margin: 6px 10px 0; padding: 7px 9px; border-radius: 6px; background: var(--box); border: 1px solid var(--line); font-size: 12px; display: flex; flex-direction: column; gap: 6px; }
+.banner .acts { display: flex; gap: 6px; }
+
+/* Popovers and menus */
+.pop { position: absolute; z-index: 3; width: 248px; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); padding: 6px; font-size: 12.5px; display: flex; flex-direction: column; gap: 2px; }
+.pop .search { border: 1px solid var(--new); border-radius: 5px; height: 26px; display: flex; align-items: center; padding: 0 8px; gap: 6px; margin-bottom: 4px; color: var(--ink); }
+.pop .search.ph { color: var(--ink-3); border-color: var(--line); }
+.pop .search i { color: var(--ink-3); font-style: normal; }
+.pop .h { font: 600 10px var(--font-ui); text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-3); padding: 6px 6px 2px; }
+.pop .it { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 4px; min-height: 26px; }
+.pop .it.sel { background: var(--new-bg); }
+.pop .it small { margin-left: auto; color: var(--ink-3); }
+.pop .it em { font-style: normal; color: var(--ink-2); }
+.pop .it.danger { color: var(--gone); }
+.pop .it.muted { color: var(--ink-3); }
+.pop .it .ck { width: 12px; color: var(--new); font-weight: 700; flex-shrink: 0; }
+.pop .it .act { margin-left: auto; }
+.pop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+.pop .lbl { font-size: 11.5px; color: var(--ink-2); padding: 2px 6px 0; }
+.pop .fld { padding: 2px 6px 4px; }
+.pop .radio { display: flex; gap: 8px; align-items: flex-start; padding: 4px 6px; border-radius: 5px; border: 1px solid var(--line); margin: 0 6px 4px; }
+.pop .radio.on { border-color: var(--new); background: var(--new-bg); }
+.pop .radio small { display: block; color: var(--ink-2); font-size: 11px; line-height: 1.35; }
+.pop .row-acts { display: flex; justify-content: flex-end; gap: 6px; padding: 4px 6px 2px; }
+.rd { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--ink-3); flex-shrink: 0; margin-top: 3px; }
+.rd.on { border: 4px solid var(--new); }
+.cb { width: 13px; height: 13px; border: 1px solid var(--ink-3); border-radius: 3px; flex-shrink: 0; position: relative; }
+.cb.on { background: var(--new); border-color: var(--new); }
+.cb.on::after { content: ""; position: absolute; left: 3.5px; top: 0.5px; width: 3px; height: 7px; border: solid var(--sheet); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.mini-seg { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; margin-bottom: 4px; }
+.mini-seg span { flex: 1; text-align: center; padding: 3px 0; font-size: 11.5px; color: var(--ink-2); border-right: 1px solid var(--line); }
+.mini-seg span:last-child { border-right: 0; }
+.mini-seg span.on { background: var(--ink); color: var(--sheet); }
+.tip { position: absolute; z-index: 3; background: var(--ink); color: var(--sheet); font-size: 11.5px; padding: 5px 8px; border-radius: 5px; width: 190px; line-height: 1.35; }
+.pop .foot2 { display: flex; justify-content: space-between; color: var(--ink-3); font-size: 11.5px; padding: 4px 6px 0; border-top: 1px solid var(--line); margin-top: 4px; }
+
+/* In-context app frame */
+.ctx-scroll { overflow-x: auto; max-width: 100%; }
+.app { width: 980px; height: 560px; border: 1px solid var(--line); border-radius: 10px; background: var(--sheet); display: grid; grid-template-rows: 38px 1fr; overflow: hidden; }
+.tb { display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.tb .srch { width: 220px; height: 24px; border: 1px solid var(--line); border-radius: 5px; padding: 0 8px; color: var(--ink-3); display: flex; align-items: center; }
+.tb .sp { flex: 1; }
+.badge { font: 700 10px/1 var(--font-ui); background: var(--new); color: var(--sheet); border-radius: 8px; padding: 2px 5px; }
+.main { display: grid; grid-template-columns: 180px 1fr var(--sheet-w); min-height: 0; }
+.tree { border-right: 1px solid var(--line); padding: 10px; display: flex; flex-direction: column; gap: 7px; }
+.tree i { display: block; height: 9px; border-radius: 3px; background: var(--table); }
+.tbl { padding: 8px 12px; display: flex; flex-direction: column; overflow: hidden; }
+.tbl .tr { display: grid; grid-template-columns: 2fr 1.4fr 50px 40px 1fr 60px; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--box-2); font-size: 11.5px; color: var(--ink-2); }
+.tbl .tr.h { color: var(--ink-3); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+.tbl .tr i { display: block; height: 8px; margin-top: 4px; border-radius: 3px; background: var(--table); }
+.main .drawer { width: auto; border-radius: 0; border-width: 0 0 0 1px; height: 100%; overflow: hidden; }
+.empty { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--ink-2); font-size: 13px; text-align: center; }
+.empty b { color: var(--ink); font-size: 14px; }
+.empty .acts { display: flex; gap: 6px; }
+.tblbox { width: 340px; height: 260px; border: 1px solid var(--line); border-radius: 8px; background: var(--sheet); display: flex; flex-direction: column; }
+.tblbox .tr { display: grid; grid-template-columns: 2fr 1fr 40px; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 10.5px; color: var(--ink-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); font-weight: 600; }
+.tbl-scroll { overflow-x: auto; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 16px; }
+.eg { font-family: var(--font-mono); font-size: 12px; background: var(--box-2); border-radius: 5px; padding: 6px 8px; display: block; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="topbar">
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <h1>Filters drawer: one view</h1>
+    <p class="lede">Today the drawer has a fixed form (Genre, Key, BPM…) and, behind <b>Advanced</b>, a separate rule builder ANDed with it; <b>Save as smart playlist</b> keeps only the Advanced rows. This merges both into one query: the main fields are there from the start, more can be added, everything is AND until you ask for OR, and a query can be kept as a saved filter or a smart playlist.</p>
+  </div>
+  <div class="seg" role="group" aria-label="Theme">
+    <button type="button" data-theme-set="light">Light</button>
+    <button type="button" data-theme-set="auto" aria-pressed="true">Auto</button>
+    <button type="button" data-theme-set="dark">Dark</button>
+  </div>
+</header>
+
+<section class="block">
+  <h2>Revision 3 (concept A chosen)</h2>
+  <div class="card changes">
+    <ul>
+      <li><b>My Tags: one row per tag category</b>, each "any of / all of / none of" within the category, rows ANDed like any other field. Only the <b>first category</b> is a default row; the others come from Add filter. A field appears once per level; repeats only happen inside OR groups.</li>
+      <li><b>Added rows go next to the rows that filter</b>, above the unused default rows.</li>
+      <li><b>No track count and no summary line in the drawer.</b> The table already shows the count and its empty state; the rows themselves are the readable query (see "Why no summary line" below).</li>
+      <li><b>Saved filters</b>: a picker at the top of the drawer to load, update and manage named filters; one <b>Save…</b> asks "saved filter or smart playlist".</li>
+      <li><b>Everything here is in the first cut</b>: value search, Pause, saved filters and the toolbar quick-pick (S4).</li>
+      <li><b>Last played</b> is "never" or "since a date"; no relative "last N days" filter. Today's bar options (last 30 / 90 / 365 days) go away.</li>
+      <li>Concepts B (chips) and C (query rows) are dropped.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="block">
+  <h2>Principles</h2>
+  <div class="principles">
+    <div class="card"><b>An empty field filters nothing</b><span>Default fields show "Any". Setting a value turns the row on (outline, filled dot). No enable step, no Apply.</span></div>
+    <div class="card"><b>AND by default, OR where you need it</b><span>OR within a field is multi-select (key 8A or 9A). OR across fields is <b>Or…</b> on a row, or a click on the connector.</span></div>
+    <div class="card"><b>The table is the feedback</b><span>The drawer doesn't repeat the count; edits apply after a short pause and the table updates in place.</span></div>
+    <div class="card"><b>Keep what you use</b><span>Save the drawer as a filter you load in one click, or as a smart playlist in the tree. What you see is what you save.</span></div>
+    <div class="card"><b>Try things without losing them</b><span>Pause a row, Exclude it, Undo after Clear all or after loading a saved filter over your edits.</span></div>
+  </div>
+</section>
+
+<section class="block">
+  <h2>Concept A, in frames</h2>
+
+  <div class="frame wide">
+    <div class="ctx-scroll">
+      <div class="app" aria-label="Library window with the Filters drawer open">
+        <div class="tb">
+          <span class="srch">Search</span>
+          <span class="btn">Filters <span class="badge">4</span></span>
+          <span class="switch on" title="Filters on"></span>
+          <span class="sp"></span>
+          <span class="btn ghost">Columns</span>
+          <span class="btn ghost">My Tags</span>
+        </div>
+        <div class="main">
+          <div class="tree"><i style="width:70%"></i><i style="width:55%"></i><i style="width:80%"></i><i style="width:60%"></i><i style="width:45%"></i><i style="width:75%"></i></div>
+          <div class="tbl">
+            <div class="tr h"><span>Title</span><span>Artist</span><span>BPM</span><span>Key</span><span>Genre</span><span>Rating</span></div>
+            <div class="tr"><i></i><i></i><span>126.0</span><span>8A</span><span>Techno</span><span>★★★★</span></div>
+            <div class="tr"><i></i><i></i><span>128.0</span><span>9A</span><span>Techno</span><span>★★★</span></div>
+            <div class="tr"><i></i><i></i><span>124.5</span><span>8A</span><span>Techno</span><span>★★★★★</span></div>
+            <div class="tr"><i></i><i></i><span>130.0</span><span>9A</span><span>Techno</span><span>★★★★</span></div>
+            <div class="tr"><i></i><i></i><span>127.0</span><span>8A</span><span>Techno</span><span>★★</span></div>
+            <div class="tr"><i></i><i></i><span>125.0</span><span>9A</span><span>Techno</span><span>★★★★</span></div>
+            <div class="tr"><i></i><i></i><span>129.0</span><span>8A</span><span>Techno</span><span>★★★</span></div>
+            <div class="tr"><i></i><i></i><span>126.0</span><span>9A</span><span>Techno</span><span>★★★★</span></div>
+            <div class="tr"><i></i><i></i><span>128.0</span><span>8A</span><span>Techno</span><span>★★★★★</span></div>
+            <div class="tr"><i></i><i></i><span>124.0</span><span>9A</span><span>Techno</span><span>★★★</span></div>
+          </div>
+          <div class="drawer">
+            <div class="dh"><b>Filters</b><span class="sp"></span><span class="x">×</span></div>
+            <div class="saved"><span class="pick bare"><span>Peak techno</span></span><span class="lnk">Clear all</span></div>
+            <div class="body">
+              <div class="q">
+                <div class="row on"><span class="lab">BPM</span><span class="val"><span class="inp">124</span>–<span class="inp">130</span></span><span class="act">···</span></div>
+                <div class="conn on"><span>and</span></div>
+                <div class="row on"><span class="lab">Key</span><span class="val"><span class="pick"><span>8A, 9A</span></span></span><span class="act">···</span></div>
+                <div class="conn on"><span>and</span></div>
+                <div class="row on"><span class="lab">Genre</span><span class="val"><span class="pick"><span>Techno</span></span></span><span class="act">···</span></div>
+                <div class="conn on"><span>and</span></div>
+                <div class="row on"><span class="lab"><span class="tg">#</span>Situation</span><span class="val"><span class="neg">not</span><span class="pick"><span>Warm-up</span></span></span><span class="act">···</span></div>
+                <div class="conn"><span>and</span></div>
+                <div class="row"><span class="lab">Rating</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+                <div class="conn"><span>and</span></div>
+                <div class="row"><span class="lab"><span class="tg">#</span>Genre</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+              </div>
+              <div class="add"><span class="btn ghost">+ Add filter</span></div>
+            </div>
+            <div class="foot" style="margin-top:auto"><span class="btn">Save…</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3>A0 · In place<small>Same spot and width as today. The on/off switch stays in the toolbar; the badge counts rows that filter (4). The saved filter "Peak techno" is loaded.</small></h3>
+    </div>
+  </div>
+
+  <div class="frames">
+
+    <!-- A1 -->
+    <div class="frame">
+      <div class="stage">
+        <div class="drawer">
+          <div class="dh"><b>Filters</b><span class="sp"></span><span class="x">×</span></div>
+          <div class="saved"><span class="pick bare ph"><span>Saved filters</span></span><span class="lnk dis">Clear all</span></div>
+          <div class="body">
+            <div class="q">
+              <div class="row"><span class="lab">BPM</span><span class="val"><span class="inp ph">min</span>–<span class="inp ph">max</span></span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab">Key</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab">Genre</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab">Rating</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab"><span class="tg">#</span>Genre</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+            </div>
+            <div class="add"><span class="btn ghost">+ Add filter</span></div>
+          </div>
+          <div class="foot"><span class="btn dis">Save…</span></div>
+        </div>
+        <i class="n mark" style="left:-15px;top:40px">1</i>
+        <i class="n mark" style="left:-15px;top:96px">2</i>
+        <i class="n mark" style="left:-15px;top:240px">3</i>
+        <i class="n mark" style="left:-15px;top:290px">4</i>
+      </div>
+      <div class="notes">
+        <h3>A1 · First open<small>Default fields, nothing set.</small></h3>
+        <ol>
+          <li><i class="n">1</i><span>Saved filters picker (S1). Clear all and Save… are disabled until something filters.</span></li>
+          <li><i class="n">2</i><span>Default fields: <b>BPM, Key, Genre, Rating</b> and the first tag category. Empty rows: hollow dot, muted label, faint connector. They cost nothing.</span></li>
+          <li><i class="n">3</i><span><b>The first My Tags category</b> (here Genre) is a default row too; the other categories are one click away in Add filter, each as its own row. The <b>#</b> mark tells the tag category "Genre" from the Genre field.</span></li>
+          <li><i class="n">4</i><span><b>Add filter</b> for the rest (Colour, Playlist, Plays, Last played, File). Which fields start in the drawer is the user's: <b>···</b> → "Keep in default fields".</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- A2 -->
+    <div class="frame">
+      <div class="stage" style="padding-bottom:190px">
+        <div class="drawer">
+          <div class="dh"><b>Filters</b><span class="sp"></span><span class="x">×</span></div>
+          <div class="saved"><span class="pick bare ph"><span>Saved filters</span></span><span class="lnk">Clear all</span></div>
+          <div class="body">
+            <div class="q">
+              <div class="row on"><span class="lab">BPM</span><span class="val"><span class="inp">124</span>–<span class="inp">130</span></span><span class="clr">×</span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab">Key</span><span class="val"><span class="pick"><span>8A, 9A</span></span></span><span class="clr">×</span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab"><span class="tg">#</span>Components</span><span class="val"><span class="all">all</span><span class="pick"><span>Vocal, Piano</span></span></span><span class="clr">×</span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on focus"><span class="lab"><span class="tg">#</span>Situation</span><span class="val"><span class="pick"><span>Peak time, Closing</span></span></span><span class="clr">×</span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab">Genre</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab">Rating</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab"><span class="tg">#</span>Genre</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+            </div>
+            <div class="add"><span class="btn ghost">+ Add filter</span></div>
+          </div>
+        </div>
+        <div class="pop" style="left:52px;top:256px">
+          <div class="mini-seg"><span class="on">Any of</span><span>All of</span><span>None of</span></div>
+          <div class="search ph"><i>⌕</i>Search Situation</div>
+          <div class="it"><span class="cb"></span>Warm-up</div>
+          <div class="it"><span class="cb on"></span>Peak time</div>
+          <div class="it"><span class="cb on"></span>Closing</div>
+          <div class="it"><span class="cb"></span>After hours</div>
+          <div class="foot2"><span>2 selected</span><span style="color:var(--new)">Clear</span></div>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>A2 · Added rows, tag categories<small>"Vocal <i>and</i> piano, played at peak time <i>or</i> closing, 124–130 in 8A/9A."</small></h3>
+        <ol>
+          <li><i class="n">1</i><span>Each category row picks only that category's tags. <b>Any of</b> (default) shows the names; <b>All of</b> adds a blue <span class="all">all</span>; <b>None of</b> a red <span class="neg">not</span>.</span></li>
+          <li><i class="n">2</i><span>Rows are ANDed, so "Components: Vocal" and "Situation: Peak time" means both, which is how DJs use categories (what it is × when to play it).</span></li>
+          <li><i class="n">3</i><span>Same picker shape for Genre, Key, Colour, Playlist, with <b>Any of / None of</b>. Ranges: fill one side for "at least / at most".</span></li>
+          <li><i class="n">4</i><span><b>Added rows</b> (Components, Situation) go right after the last row that filters, above the unused defaults, so what filters stays together at the top. Default rows keep their place when set; nothing jumps while you type.</span></li>
+          <li><i class="n">5</i><span><b>×</b> empties a default field (it stays) or removes an added row. Hidden until a value is set.</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- A3 -->
+    <div class="frame wide">
+      <div class="stage" style="width:540px;padding-bottom:510px">
+        <div class="drawer">
+          <div class="dh"><b>Filters</b><span class="sp"></span><span class="x">×</span></div>
+          <div class="saved"><span class="pick bare ph"><span>Saved filters</span></span><span class="lnk">Clear all</span></div>
+          <div class="body">
+            <div class="q">
+              <div class="row on"><span class="lab">Genre</span><span class="val"><span class="pick"><span>Techno</span></span></span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab">Rating</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+            </div>
+            <div class="add"><span class="btn ghost focus">+ Add filter</span><span class="kbd">/</span></div>
+          </div>
+        </div>
+        <div class="pop" style="left:22px;top:150px">
+          <div class="search ph"><i>⌕</i>Field or value…</div>
+          <div class="h">Music</div>
+          <div class="it muted">BPM <small>shown</small></div>
+          <div class="it muted">Key <small>shown</small></div>
+          <div class="it muted">Genre <small>shown</small></div>
+          <div class="h">Library</div>
+          <div class="it muted">Rating <small>shown</small></div>
+          <div class="it sel">Colour</div>
+          <div class="it">Playlist</div>
+          <div class="h">My Tags</div>
+          <div class="it muted"># Genre <small>shown</small></div>
+          <div class="it"># Components</div>
+          <div class="it"># Situation</div>
+          <div class="it"># Imported</div>
+          <div class="h">History</div>
+          <div class="it">Plays</div>
+          <div class="it">Last played</div>
+          <div class="h">File</div>
+          <div class="it">File missing</div>
+          <div class="foot2"><span>Reset default fields</span><span>esc</span></div>
+        </div>
+        <div class="pop" style="left:290px;top:150px;width:240px">
+          <div class="search"><i>⌕</i>tech<span style="color:var(--new)">|</span></div>
+          <div class="h">Values</div>
+          <div class="it sel">Genre <em>is</em> Techno</div>
+          <div class="it">Genre <em>is</em> Tech House</div>
+          <div class="it"># Components <em>has</em> Techy</div>
+          <div class="h">Fields</div>
+          <div class="it muted">No field matches "tech"</div>
+          <div class="foot2"><span>↵ add · ⇥ next</span><span>esc</span></div>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>A3 · Add filter<small>One search box for fields <i>and</i> values.</small></h3>
+        <ol>
+          <li><i class="n">1</i><span>Empty search: fields by group. A field already on this level is greyed "shown"; picking it jumps to that row instead of adding a second one. Inside an OR group every field is offered.</span></li>
+          <li><i class="n">2</i><span>My Tags lists every category, each a field of its own. The new row lands after the rows that filter (here between Genre and the empty Rating) and its value picker opens at once.</span></li>
+          <li><i class="n">3</i><span>Typing matches values too: genres, tags (with their category), keys ("8a"), BPM ("128" → 126–130), stars ("4*"). Enter sets that row, or adds it. If the row already has values, the new one is added to them (Techno → Techno, Tech House).</span></li>
+          <li><i class="n">4</i><span><kbd class="kbd">/</kbd> in the drawer opens this from anywhere.</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- A4 -->
+    <div class="frame">
+      <div class="stage">
+        <div class="drawer">
+          <div class="dh"><b>Filters</b><span class="sp"></span><span class="x">×</span></div>
+          <div class="saved"><span class="pick bare ph"><span>Saved filters</span></span><span class="lnk">Clear all</span></div>
+          <div class="body">
+            <div class="q">
+              <div class="row on"><span class="lab">BPM</span><span class="val"><span class="inp">126</span>–<span class="inp">132</span></span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="grp">
+                <div class="grp-h"><span class="pick op"><span>Any of these</span></span><span class="sp"></span><span class="act">···</span></div>
+                <div class="q">
+                  <div class="row on"><span class="lab"><span class="tg">#</span>Situation</span><span class="val"><span class="pick"><span>Peak time</span></span></span><span class="act">···</span></div>
+                  <div class="conn or"><span>or</span></div>
+                  <div class="row on"><span class="lab">Rating</span><span class="val"><span class="pick"><span>★★★★ +</span></span></span><span class="act">···</span></div>
+                </div>
+                <div class="add" style="padding-left:20px"><span class="btn ghost sm">+ Or…</span></div>
+              </div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab">Key</span><span class="val"><span class="pick"><span>8A, 9A, 10A</span></span></span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab">Genre</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab"><span class="tg">#</span>Genre</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+            </div>
+            <div class="add"><span class="btn ghost">+ Add filter</span></div>
+          </div>
+          <div class="foot"><span class="btn">Save…</span></div>
+        </div>
+        <i class="n mark" style="left:-15px;top:120px">1</i>
+        <i class="n mark" style="right:-15px;top:120px">2</i>
+        <i class="n mark" style="left:-15px;top:212px">3</i>
+      </div>
+      <div class="notes">
+        <h3>A4 · OR across fields<small>"Peak-time tracks <i>or</i> anything rated 4+, in this BPM and key range."</small></h3>
+        <ol>
+          <li><i class="n">1</i><span>Made from the Situation row: <b>···</b> → <b>Or…</b>. The row moves into a new group with an empty row below it, and Add filter opens on that row. One action, no "add group, then move".</span></li>
+          <li><i class="n">2</i><span>Group header menu: Any of these / All of these / None of these, Ungroup, Remove group. Accent border and dot: it filters as one unit.</span></li>
+          <li><i class="n">3</i><span><b>+ Or…</b> adds another alternative. A field can repeat inside a group ("Situation: Peak time" or "Situation: Closing" with Rating 5★). Groups nest one more level (three in all, as today).</span></li>
+          <li><i class="n">4</i><span>Rating is used inside the group, so its empty default row doesn't show at the top level. It comes back if the group goes.</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- A5 -->
+    <div class="frame">
+      <div class="stage" style="padding-bottom:150px">
+        <div class="drawer">
+          <div class="dh"><b>Filters</b><span class="sp"></span><span class="x">×</span></div>
+          <div class="saved"><span class="pick bare ph"><span>Saved filters</span></span><span class="lnk">Clear all</span></div>
+          <div class="body">
+            <div class="q">
+              <div class="row on"><span class="lab">BPM</span><span class="val"><span class="inp">124</span>–<span class="inp">130</span></span><span class="act">···</span></div>
+              <div class="conn on hover"><span>and</span></div>
+              <div class="row on"><span class="lab">Key</span><span class="val"><span class="pick"><span>8A, 9A</span></span></span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row paused"><span class="lab">Genre</span><span class="val"><span class="pick"><span>Techno</span></span></span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab"><span class="tg">#</span>Situation</span><span class="val"><span class="pick"><span>Peak time</span></span></span><span class="act hot">···</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="tip" style="left:-4px;top:52px;width:200px">Click to match <b>any</b> of these instead of all (applies to this whole level).</div>
+        <div class="pop" style="left:100px;top:208px;width:210px">
+          <div class="it">Or…<small>this or another filter</small></div>
+          <div class="it">Exclude<small>none of these</small></div>
+          <div class="it">Pause<small>keep, don't apply</small></div>
+          <hr>
+          <div class="it"><span class="cb on"></span>Keep in default fields</div>
+          <hr>
+          <div class="it danger">Remove</div>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>A5 · Row menu and connector<small>Everything about a row in one place.</small></h3>
+        <ol>
+          <li><i class="n">1</i><span><b>Connector</b>: click "and" to switch the whole level to "or" (and back). Mixed and/or on one level isn't possible, so the chain reads one way.</span></li>
+          <li><i class="n">2</i><span><b>Pause</b> (Genre): dashed, struck through, left out of the query, kept in place: "what if I drop Techno?". <kbd class="kbd">Space</kbd> on the row's dot does it too.</span></li>
+          <li><i class="n">3</i><span><b>Keep in default fields</b>: the row shows on every fresh drawer. Unticked and removed, it stays out until "Reset default fields".</span></li>
+          <li><i class="n">4</i><span>Keyboard: <kbd class="kbd">↑</kbd><kbd class="kbd">↓</kbd> between rows, <kbd class="kbd">Enter</kbd> opens the value, <kbd class="kbd">⌫</kbd> empties / removes, <kbd class="kbd">⇧F10</kbd> or <kbd class="kbd">···</kbd> opens this menu.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div style="display:flex;flex-direction:column;gap:4px">
+    <h2>Saved filters</h2>
+    <p class="lede">A saved filter is a named drawer you load in one click. It narrows whatever you're looking at (the collection or the playlist chosen in the tree), stays editable, and lives in the Filters drawer, not in the playlist tree or on USB sticks. A smart playlist is the other way to keep a query: a list of its own, in the tree, exported as a fixed list.</p>
+  </div>
+  <div class="frames">
+
+    <!-- S1 -->
+    <div class="frame">
+      <div class="stage" style="padding-bottom:200px">
+        <div class="drawer">
+          <div class="dh"><b>Filters</b><span class="sp"></span><span class="x">×</span></div>
+          <div class="saved"><span class="pick bare ph" style="box-shadow:0 0 0 2px var(--new-bg),0 0 0 3px var(--new)"><span>Saved filters</span></span><span class="lnk dis">Clear all</span></div>
+          <div class="body">
+            <div class="q">
+              <div class="row"><span class="lab">BPM</span><span class="val"><span class="inp ph">min</span>–<span class="inp ph">max</span></span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab">Key</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="pop" style="left:8px;top:58px;width:270px">
+          <div class="search ph"><i>⌕</i>Search saved filters</div>
+          <div class="it sel"><span class="ck"></span>Peak techno<span class="act">···</span></div>
+          <div class="it"><span class="ck"></span>Warm-up deep<span class="act">···</span></div>
+          <div class="it"><span class="ck"></span>Never played, 4★+<span class="act">···</span></div>
+          <div class="it"><span class="ck"></span>Vocal closers<span class="act">···</span></div>
+          <div class="tip" style="position:static;width:auto;margin:2px 6px 4px;background:var(--box-2);color:var(--ink-2)">BPM 124–130, key 8A or 9A, genre Techno, Situation not Warm-up</div>
+          <div class="foot2"><span>Drag to reorder</span><span>esc</span></div>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>S1 · Load<small>The picker at the top of the drawer.</small></h3>
+        <ol>
+          <li><i class="n">1</i><span>Click a name: the drawer is replaced with that filter at once (default fields it doesn't use stay empty around it). If you had unsaved edits, an Undo toast brings them back; no confirm dialog.</span></li>
+          <li><i class="n">2</i><span>Hover or arrow onto an item for a short description of its rows (the one place a plain-text summary helps: the rows aren't visible yet).</span></li>
+          <li><i class="n">3</i><span>Item <b>···</b>: Rename, Duplicate, Delete (Undo toast). Search appears with more than 8.</span></li>
+          <li><i class="n">4</i><span>Empty state: "No saved filters yet. Set some filters, then Save…".</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- S2 -->
+    <div class="frame">
+      <div class="stage">
+        <div class="drawer">
+          <div class="dh"><b>Filters</b><span class="sp"></span><span class="x">×</span></div>
+          <div class="saved"><span class="pick bare"><span>Peak techno</span></span><span class="edited">edited</span><span class="lnk">Clear all</span></div>
+          <div class="strip"><span>Changed since you saved it.</span><span class="sp"></span><span class="btn sm prim">Update</span><span class="btn sm ghost">Revert</span></div>
+          <div class="body">
+            <div class="q">
+              <div class="row on"><span class="lab">BPM</span><span class="val"><span class="inp">124</span>–<span class="inp">132</span></span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab">Key</span><span class="val"><span class="pick"><span>8A, 9A</span></span></span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab">Genre</span><span class="val"><span class="pick"><span>Techno</span></span></span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab"><span class="tg">#</span>Situation</span><span class="val"><span class="neg">not</span><span class="pick"><span>Warm-up</span></span></span><span class="act">···</span></div>
+            </div>
+            <div class="add"><span class="btn ghost">+ Add filter</span></div>
+          </div>
+          <div class="foot"><span class="btn">Save…</span></div>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>S2 · Loaded, then changed<small>BPM max went from 130 to 132.</small></h3>
+        <ol>
+          <li><i class="n">1</i><span>The picker shows the loaded filter's name. Any change marks it <span class="edited">edited</span> and shows <b>Update</b> (overwrite) and <b>Revert</b>.</span></li>
+          <li><i class="n">2</i><span>Editing is never blocked and never auto-saved: you can tweak a saved filter for one set and walk away; it stays as saved.</span></li>
+          <li><i class="n">3</i><span><b>Save…</b> still saves as a new one (S3). <b>Clear all</b> also unloads the name.</span></li>
+          <li><i class="n">4</i><span>A saved filter that names a deleted tag or playlist loads with that row marked "Tag deleted" and left out, like a smart list.</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- S3 -->
+    <div class="frame">
+      <div class="stage" style="padding-bottom:20px">
+        <div class="drawer">
+          <div class="dh"><b>Filters</b><span class="sp"></span><span class="x">×</span></div>
+          <div class="saved"><span class="pick bare ph"><span>Saved filters</span></span><span class="lnk">Clear all</span></div>
+          <div class="body">
+            <div class="q">
+              <div class="row on"><span class="lab">BPM</span><span class="val"><span class="inp">124</span>–<span class="inp">130</span></span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab">Key</span><span class="val"><span class="pick"><span>8A, 9A</span></span></span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab">Last played</span><span class="val"><span class="pick"><span>Never</span></span></span><span class="act">···</span></div>
+            </div>
+            <div class="add"><span class="btn ghost">+ Add filter</span></div>
+          </div>
+          <div class="foot"><span class="btn focus">Save…</span></div>
+        </div>
+        <div class="pop" style="left:8px;top:16px;width:282px">
+          <div class="lbl">Name</div>
+          <div class="fld"><span class="inp wide" style="border-color:var(--new)">Unplayed 124–130</span></div>
+          <div class="lbl">Keep it as</div>
+          <div class="radio on"><span class="rd on"></span><span>Saved filter<small>In this drawer. Narrows whatever you're looking at.</small></span></div>
+          <div class="radio"><span class="rd"></span><span>Smart playlist<small>In the playlist tree, updates by itself, goes to USB as a fixed list.</small></span></div>
+          <div class="row-acts"><span class="btn sm ghost">Cancel</span><span class="btn sm prim">Save</span></div>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>S3 · Save…<small>One button, one question.</small></h3>
+        <ol>
+          <li><i class="n">1</i><span>Name is pre-filled from the rows ("Unplayed 124–130"), selected so typing replaces it. Enter saves.</span></li>
+          <li><i class="n">2</i><span>The choice is remembered. Smart playlist keeps today's flow (it leaves the drawer empty, since the rule now lives in the list); a saved filter stays loaded (S2 without "edited").</span></li>
+          <li><i class="n">3</i><span>Duplicate name: "Peak techno already exists · Replace it?" inline, no second dialog.</span></li>
+          <li><i class="n">4</i><span>Editing a smart playlist's rules keeps its own banner with <b>Save rules / Cancel</b> and hides the saved-filter picker.</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- S4 -->
+    <div class="frame">
+      <div class="stage" style="padding-bottom:150px">
+        <div class="drawer" style="width:auto;min-width:300px;background:var(--sheet)">
+          <div class="dh" style="padding-bottom:8px;border-bottom:1px solid var(--line)"><span style="color:var(--ink-3)">Search</span><span class="sp"></span><span class="btn sm">Filters <span class="badge">4</span> <span style="color:var(--ink-3)">▾</span></span><span class="switch on"></span></div>
+        </div>
+        <div class="pop" style="left:90px;top:44px;width:210px">
+          <div class="it sel"><span class="ck">✓</span>Peak techno</div>
+          <div class="it"><span class="ck"></span>Warm-up deep</div>
+          <div class="it"><span class="ck"></span>Never played, 4★+</div>
+          <hr>
+          <div class="it">Show filters</div>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>S4 · From the toolbar<small>Switch saved filters with the drawer closed.</small></h3>
+        <ol>
+          <li><i class="n">1</i><span>The Filters button gets a ▾ part listing saved filters; the main part still toggles the drawer. Handy mid-set when the info panel is open instead.</span></li>
+          <li><i class="n">2</i><span>Picking one loads it as in S1 (Undo toast if it replaced edits) and turns the Filters switch on. Keyboard: <kbd class="kbd">↓</kbd> on the button opens the menu.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <h2>States</h2>
+  <div class="frames">
+    <div class="frame wide">
+      <div class="stage">
+        <div class="drawer">
+          <div class="dh"><b>Filters</b><span class="sp"></span><span class="x">×</span></div>
+          <div class="saved"><span class="pick bare"><span>Peak techno</span></span><span class="lnk">Clear all</span></div>
+          <div class="banner"><span>Filters are set aside. 3 kept.</span><div class="acts"><span class="btn sm">Turn on</span></div></div>
+          <div class="body dim">
+            <div class="q">
+              <div class="row on"><span class="lab">BPM</span><span class="val"><span class="inp">124</span>–<span class="inp">130</span></span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab">Key</span><span class="val"><span class="pick"><span>8A, 9A</span></span></span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab">Genre</span><span class="val"><span class="pick"><span>Techno</span></span></span><span class="act">···</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="tblbox">
+          <div class="tr"><span>Title</span><span>Artist</span><span>BPM</span></div>
+          <div class="empty"><b>No tracks match these filters</b><span>The last change left nothing.</span><div class="acts"><span class="btn sm">Undo last change</span><span class="btn sm ghost">Clear filters</span></div></div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="drawer">
+          <div class="dh"><b>Filters</b><span class="sp"></span><span class="x">×</span></div>
+          <div class="banner"><span>Editing <b>Peak time</b> (smart playlist). The table previews your whole library.</span><div class="acts"><span class="btn sm prim">Save rules</span><span class="btn sm ghost">Cancel</span></div></div>
+          <div class="body">
+            <div class="q">
+              <div class="row on"><span class="lab">BPM</span><span class="val"><span class="inp">126</span>–<span class="inp">132</span></span><span class="act">···</span></div>
+              <div class="conn on"><span>and</span></div>
+              <div class="row on"><span class="lab"><span class="tg">#</span>Situation</span><span class="val"><span class="pick"><span>Peak time</span></span></span><span class="act">···</span></div>
+              <div class="conn"><span>and</span></div>
+              <div class="row"><span class="lab">Key</span><span class="val"><span class="pick ph"><span>Any</span></span></span><span class="act">···</span></div>
+            </div>
+            <div class="add"><span class="btn ghost">+ Add filter</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>Off · no match · editing a smart playlist</h3>
+        <ol>
+          <li><i class="n">1</i><span><b>Off</b> (toolbar switch): rows dimmed but editable, one banner says what's kept.</span></li>
+          <li><i class="n">2</i><span><b>No match</b> lives in the table, not the drawer: <code>EmptyResult</code> gains "Undo last change" and "Clear filters".</span></li>
+          <li><i class="n">3</i><span><b>Editing a smart playlist</b>: its rule fills the drawer, Save rules / Cancel replace the footer.</span></li>
+          <li><i class="n">4</i><span>Facets loading: pickers say "Loading…"; load error: "Couldn't load genres · Retry". Tags loading: category rows show a placeholder row.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <h2>Why no summary line</h2>
+  <div class="card">
+    <p>Today's builder already has one (<code>summarize</code> in <code>src/store/ruleTree.ts</code>), and it is correct, but it reads badly as soon as the query isn't a plain AND list. From its own tests:</p>
+    <span class="eg">Has tag Peak or Deep · not in playlist Warm-up · BPM is 120–128</span>
+    <span class="eg">(Has tag Peak or genre is House) · none of (in playlist Warm-up)</span>
+    <p style="margin-top:8px">With tag categories, "all of" and longer lists it only gets longer, and in a 300px drawer it would repeat, in worse words, what the rows right below it already say. So the drawer drops it. It stays where the rows aren't visible: the saved-filter tooltip (S1) and the Filters button's tooltip, capped at one line with "…".</p>
+  </div>
+</section>
+
+<section class="block">
+  <h2>Behaviour</h2>
+  <div class="cols">
+    <div class="card">
+      <h3 style="margin-bottom:8px">Query</h3>
+      <ul>
+        <li>One draft tree (<code>GroupDraft</code>) holds everything; the old <code>FilterState</code> form goes away. The playlist chosen in the tree stays outside, as today, and the drawer narrows it.</li>
+        <li>Root level is <b>all</b>. Empty, unfinished and paused rows are left out by <code>toRule</code>; so is an empty group (an empty "any" would match nothing).</li>
+        <li>One row per field per level; tag categories count as separate fields. Repeats only inside OR groups. A default field used anywhere in the query shows no extra empty row.</li>
+        <li>Order: an added row goes after the last row that filters on its level, above the unused defaults. Default rows keep their place when set.</li>
+        <li>Finished edits re-query after the existing 50 ms pause, only if the rule changed.</li>
+        <li>Clear all: empties default fields, removes added rows and groups, unloads a saved filter; one Undo toast.</li>
+        <li>On/off switch, Filters badge and both Save targets use the same tree.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:8px">Fields</h3>
+      <ul>
+        <li><b>Lists</b> (Genre, Key, Colour, Playlist): any of / none of. <b>Tag category</b>: any of / all of / none of.</li>
+        <li><b>Numbers</b> (BPM, Plays): min–max, either side optional. <b>Rating</b>: at least / exactly / at most.</li>
+        <li><b>Last played</b>: never / since a date (Exclude: "not played since"). <b>File</b>: missing / present.</li>
+        <li>Default fields: BPM, Key, Genre, Rating and the first My Tags category; user-editable, stored with the other settings.</li>
+        <li>Quick paths stay: "Filter by tag X" fills that tag's category row; "Show tracks not in this playlist" adds a Playlist row.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:8px">Model and storage</h3>
+      <ul>
+        <li>Tag category any → <code>TagAny</code>; all → <code>all</code> group of one-tag <code>TagAny</code>s; none → <code>TagAny</code> with <code>not</code>. No core change.</li>
+        <li>Genre / Colour "any of" → <code>any</code> group of single filters. Rating at most / exactly → <code>RatingMin</code> with <code>not</code> / combined.</li>
+        <li><span class="tag core">core</span> <b>Saved filters</b>: a <code>filter_preset</code> table (name, position, rule JSON <code>RuleNode</code>, timestamps), a migration and create / rename / update / delete / reorder ops, same reference rules as smart lists. Kept in the library, so they survive a reinstall and travel with it.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <h2>Decided (2026-10-23)</h2>
+  <div class="card">
+    <ul>
+      <li>Concept A. One row per tag category; only the first category is a default row.</li>
+      <li>Added rows sit next to the rows that filter, above the unused defaults.</li>
+      <li>First cut has everything: value search in Add filter, Pause, saved filters, the toolbar quick-pick.</li>
+      <li>No "played in the last N days"; Last played is never / since a date.</li>
+      <li>No track count or summary line in the drawer; the summary stays in tooltips.</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+<script>
+// Theme switch for previewing; the page follows the OS by default.
+for (const b of document.querySelectorAll("[data-theme-set]")) {
+  b.addEventListener("click", () => {
+    const t = b.dataset.themeSet;
+    if (t === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", t);
+    for (const o of document.querySelectorAll("[data-theme-set]")) o.setAttribute("aria-pressed", String(o === b));
+  });
+}
+</script>
+</body>
+</html>

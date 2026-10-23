@@ -85,6 +85,8 @@ pub fn run() {
             commands::playlist_rule,
             commands::tags_get,
             commands::tags_mutate,
+            commands::filter_presets_get,
+            commands::filter_presets_mutate,
             commands::artwork_get,
             commands::artwork_thumb,
             commands::scan_start,

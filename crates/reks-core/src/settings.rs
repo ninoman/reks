@@ -221,6 +221,20 @@ pub struct UiState {
     /// Version of the UI's default column set that `hidden_columns` was
     /// saved against; the UI hides columns newly defaulted to hidden once.
     pub columns_version: u32,
+    /// The Filters drawer's default fields (`bpm`, `key`, …, `tag:<category id>`);
+    /// `None` until the user changes them (UI defaults). Only the UI reads them.
+    pub filter_fields: Option<Vec<String>>,
+    /// What the Filters drawer's Save… makes, as last chosen (D35).
+    pub filter_save_target: FilterSaveTarget,
+}
+
+/// A saved filter (in the drawer) or a smart playlist (in the tree).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FilterSaveTarget {
+    #[default]
+    Filter,
+    Smart,
 }
 
 impl Default for UiState {
@@ -233,6 +247,8 @@ impl Default for UiState {
             volume: 1.0,
             row_density: RowDensity::Default,
             columns_version: 0,
+            filter_fields: None,
+            filter_save_target: FilterSaveTarget::Filter,
         }
     }
 }
@@ -672,6 +688,8 @@ mod tests {
             volume: 0.5,
             row_density: RowDensity::Compact,
             columns_version: 1,
+            filter_fields: Some(vec!["bpm".into(), "tag:3".into()]),
+            filter_save_target: FilterSaveTarget::Smart,
         };
         lib.update_settings(SettingsPatch {
             audio_device: Some(Some("Speakers".into())),

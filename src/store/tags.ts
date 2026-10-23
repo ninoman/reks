@@ -16,7 +16,6 @@ import {
   tagsGet,
   tagsMutate,
 } from "../lib/ipc";
-import { useLibrary } from "./library";
 import { usePanels } from "./panels";
 import { allLibraries } from "./panes";
 import { applyTags } from "./tagModel";
@@ -85,13 +84,8 @@ export const useTags = create<TagsState>()((set, get) => {
     mutate(op) {
       return edit(op, () => {
         if (op.type !== "delete") return;
-        // The deleted id may be in the active filter and is on loaded rows.
-        const lib = useLibrary.getState();
-        const known = new Set(get().tree?.categories.flatMap((c) => c.tags.map((t) => t.id)));
-        const tagIds = lib.filters.tagIds.filter((id) => known.has(id));
-        if (tagIds.length !== lib.filters.tagIds.length) lib.setFilters({ tagIds });
-        else lib.refresh(true);
-        for (const pane of allLibraries().slice(1)) pane.getState().refresh(true);
+        // The deleted id is on loaded rows; the Filters drawer drops it from its rows (`rules.ts`).
+        for (const lib of allLibraries()) lib.getState().refresh(true);
       });
     },
     assign: (trackIds, tagIds) => change({ type: "assign", trackIds, tagIds }),

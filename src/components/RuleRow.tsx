@@ -1,130 +1,278 @@
 /**
- * One condition: field, is / is not, value, remove. Presentational: the
- * builder passes the row and the actions. An unfinished row (a field, no
- * value yet) is muted and says it is not applied.
+ * One row of the Filters drawer: its dot on the rail, the field, the value
+ * picker, × and the ··· menu (Or…, Exclude, Pause, Keep in default fields,
+ * Remove). A row that filters is outlined; a paused one is dashed and struck
+ * through. Presentational: the builder passes the row and the actions.
  *
- * Keys: Enter in the row's fields adds a row below; Delete or Backspace on
- * the field Select of a row with no field removes the row.
+ * The dot is the row's keyboard handle: ↑ / ↓ move between rows, Enter
+ * opens the value, Space pauses, Backspace / Delete empties a set row or
+ * removes an empty one, Shift+F10 opens the menu.
  */
-import { type KeyboardEvent, useEffect, useRef } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+
 import { cn } from "../lib/cn";
+import type { RowFocus } from "../store/rules";
 import {
-  isRowComplete,
-  negationLabels,
+  type FieldKey,
+  fieldKey,
+  isRowActive,
+  isRowSet,
   type RowDraft,
   type RowValue,
-  RULE_FIELDS,
-  type RuleField,
 } from "../store/ruleTree";
-import { CloseIcon } from "./icons";
-import { type RuleChoices, RuleValueEditor } from "./RuleValueEditor";
+import { FieldChooser } from "./FieldChooser";
+import { CloseIcon, MoreIcon } from "./icons";
+import { type RowPatch, type RuleChoices, RuleValueEditor } from "./RuleValueEditor";
+import { Badge } from "./ui/Badge";
+import { Button } from "./ui/Button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/DropdownMenu";
 import { IconButton } from "./ui/IconButton";
-import { Select } from "./ui/Select";
 
 export interface RuleRowActions {
-  setField(rowId: string, field: RuleField | null): void;
-  setNot(rowId: string, not: boolean): void;
-  setValue(rowId: string, value: RowValue): void;
+  updateRow(rowId: string, patch: RowPatch & { paused?: boolean }): void;
+  clearRow(rowId: string): void;
   remove(rowId: string): void;
-  addRowAfter(rowId: string): void;
+  or(rowId: string): void;
+  chooseField(rowId: string, key: FieldKey): void;
+  chooseValue(rowId: string, value: RowValue): void;
+  keepDefault(key: FieldKey, keep: boolean): void;
+  clearFocus(): void;
+}
+
+/** A hint at the right of a menu item. */
+function Hint({ children }: { children: string }) {
+  return <span className="ml-auto pl-3 text-xs text-fg-subtle">{children}</span>;
 }
 
 export function RuleRow({
   row,
+  label,
+  isTag,
   choices,
   actions,
-  autoFocus,
-  onFocused,
-  removable,
+  focus,
+  isDefault,
+  keepsPlace,
+  canOr,
 }: {
   row: RowDraft;
+  /** The field's name; `null` while the row waits for its field. */
+  label: string | null;
+  /** A My Tags category (marked #, apart from the Genre field). */
+  isTag: boolean;
   choices: RuleChoices;
   actions: RuleRowActions;
-  /** Take focus on the field Select (a row that was just added). */
-  autoFocus: boolean;
-  onFocused: () => void;
-  /** False for the only row of the builder. */
-  removable: boolean;
+  /** Set when this row should take focus. */
+  focus: RowFocus | null;
+  /** Its field is one of the default fields. */
+  isDefault: boolean;
+  /** A default row on the root level: × empties it instead of removing it. */
+  keepsPlace: boolean;
+  canOr: boolean;
 }) {
-  const fieldRef = useRef<HTMLSelectElement>(null);
+  const handleRef = useRef<HTMLButtonElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const waiting = row.value.field === null;
+
   useEffect(() => {
-    if (!autoFocus) return;
-    fieldRef.current?.focus();
-    onFocused();
-  }, [autoFocus, onFocused]);
+    if (focus === null) return;
+    handleRef.current?.focus();
+    if (focus.open) (waiting ? setChooserOpen : setPickerOpen)(true);
+    actions.clearFocus();
+  }, [focus, actions, waiting]);
 
-  const field = row.value.field;
-  const [yes, no] = negationLabels(field);
-  const unfinished = field !== null && !isRowComplete(row);
+  const key = fieldKey(row.value);
+  const set = isRowSet(row);
+  const active = isRowActive(row);
+  const name = label === null ? "New filter" : isTag ? `${label} (My Tags)` : label;
+  const v = row.value;
 
-  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    const t = e.target;
-    if (e.key === "Enter" && (t instanceof HTMLInputElement || t instanceof HTMLSelectElement)) {
+  function onKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
       e.preventDefault();
-      actions.addRowAfter(row.id);
-    } else if (
-      (e.key === "Delete" || e.key === "Backspace") &&
-      t === fieldRef.current &&
-      field === null &&
-      removable
-    ) {
+      const handles = [
+        ...(e.currentTarget
+          .closest("[data-query]")
+          ?.querySelectorAll<HTMLElement>("[data-row-handle]") ?? []),
+      ];
+      const at = handles.indexOf(e.currentTarget);
+      handles[at + (e.key === "ArrowUp" ? -1 : 1)]?.focus();
+    } else if (e.key === "Enter") {
       e.preventDefault();
-      actions.remove(row.id);
+      (waiting ? setChooserOpen : setPickerOpen)(true);
+    } else if (e.key === "Backspace" || e.key === "Delete") {
+      e.preventDefault();
+      if (set) actions.clearRow(row.id);
+      else actions.remove(row.id);
+    } else if ((e.key === "F10" && e.shiftKey) || e.key === "ContextMenu") {
+      e.preventDefault();
+      setMenuOpen(true);
     }
   }
 
   return (
-    // The keys are shortcuts on the row's own controls; each control keeps its normal keyboard use.
     // biome-ignore lint/a11y/useSemanticElements: a div group keeps the row's controls in one flex line
     <div
       role="group"
-      aria-label={field === null ? "Condition" : `Condition: ${field}`}
-      className={cn("flex flex-wrap items-center gap-1.5", unfinished && "opacity-60")}
-      onKeyDown={onKeyDown}
+      aria-label={`${name} filter`}
+      data-active={active || undefined}
+      data-paused={row.paused || undefined}
+      className={cn(
+        "relative flex min-h-(--query-row-h) items-center gap-1 rounded-sm border border-transparent py-0.5 pr-0.5 pl-1.5",
+        "has-[[data-row-handle]:focus-visible]:outline-solid has-[[data-row-handle]:focus-visible]:outline-(length:--focus-ring-width) has-[[data-row-handle]:focus-visible]:outline-focus-ring",
+        active && "border-accent bg-surface",
+        row.paused && "border-dashed border-fg-subtle",
+      )}
     >
-      <Select
-        ref={fieldRef}
-        size="sm"
-        aria-label="Field"
-        className="w-28"
-        value={field ?? ""}
-        onChange={(e) =>
-          actions.setField(row.id, e.target.value === "" ? null : (e.target.value as RuleField))
-        }
+      <button
+        ref={handleRef}
+        type="button"
+        data-row-handle
+        aria-label={`${name}${row.paused ? ", paused" : ""}`}
+        aria-keyshortcuts="Enter Space Backspace Shift+F10"
+        title={set ? (row.paused ? "Resume (Space)" : "Pause (Space)") : undefined}
+        className="absolute inset-y-0 left-[calc(var(--query-rail-w)*-1)] flex w-(--query-rail-w) cursor-default items-center justify-center outline-hidden"
+        onClick={() => set && actions.updateRow(row.id, { paused: !row.paused })}
+        onKeyDown={onKeyDown}
       >
-        <option value="">Choose…</option>
-        {RULE_FIELDS.map((f) => (
-          <option key={f.field} value={f.field}>
-            {f.label}
-          </option>
-        ))}
-      </Select>
-      <Select
-        size="sm"
-        aria-label="Is or is not"
-        className="w-32"
-        value={row.not ? "not" : "is"}
-        onChange={(e) => actions.setNot(row.id, e.target.value === "not")}
-      >
-        <option value="is">{yes}</option>
-        <option value="not">{no}</option>
-      </Select>
-      <RuleValueEditor
-        value={row.value}
-        choices={choices}
-        onChange={(v) => actions.setValue(row.id, v)}
-      />
-      {unfinished && <span className="text-xs text-fg-muted">Not applied yet</span>}
-      <IconButton
-        size="xs"
-        aria-label="Remove condition"
-        title="Remove condition"
-        className="ml-auto"
-        disabled={!removable}
-        onClick={() => actions.remove(row.id)}
-      >
-        <CloseIcon />
-      </IconButton>
+        <span
+          className={cn(
+            "size-(--query-dot) rounded-full border border-fg-subtle bg-bg-subtle",
+            active && "border-accent bg-accent",
+            row.paused && "border-dashed",
+          )}
+        />
+      </button>
+
+      {v.field === null ? (
+        <FieldChooser
+          trigger={
+            <Button size="sm" variant="ghost" className="flex-1 justify-start text-fg-muted">
+              Choose a field…
+            </Button>
+          }
+          open={chooserOpen}
+          onOpenChange={setChooserOpen}
+          shown={new Set()}
+          source={choices}
+          tagsStatus={choices.tagsStatus}
+          onPick={(k) => actions.chooseField(row.id, k)}
+          onPickValue={(value) => actions.chooseValue(row.id, value)}
+        />
+      ) : (
+        <>
+          <span
+            className={cn(
+              "w-(--query-label-w) shrink-0 truncate text-sm text-fg-muted",
+              active && "font-semibold text-fg",
+              row.paused && "line-through opacity-55",
+            )}
+          >
+            {isTag && (
+              <span
+                aria-hidden
+                className={cn("mr-0.5 text-2xs font-bold text-fg-subtle", active && "text-accent")}
+              >
+                #
+              </span>
+            )}
+            {label}
+          </span>
+          <span
+            className={cn(
+              "flex min-w-0 flex-1 items-center justify-end gap-1",
+              row.paused && "opacity-55",
+            )}
+          >
+            {row.not && (
+              <Badge variant="danger" className="uppercase">
+                not
+              </Badge>
+            )}
+            {v.field === "tag" && v.all && !row.not && (
+              <Badge variant="outline" className="uppercase">
+                all
+              </Badge>
+            )}
+            <RuleValueEditor
+              label={name}
+              row={row}
+              choices={choices}
+              open={pickerOpen}
+              onOpenChange={setPickerOpen}
+              onChange={(patch) => actions.updateRow(row.id, patch)}
+            />
+          </span>
+        </>
+      )}
+
+      {set && (
+        <IconButton
+          size="xs"
+          aria-label={keepsPlace ? `Clear ${name}` : `Remove ${name}`}
+          title={keepsPlace ? "Clear" : "Remove"}
+          onClick={() => (keepsPlace ? actions.clearRow(row.id) : actions.remove(row.id))}
+        >
+          <CloseIcon />
+        </IconButton>
+      )}
+
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <IconButton size="xs" aria-label={`${name} options`} title="Options (Shift+F10)">
+            <MoreIcon />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="min-w-52">
+          <DropdownMenuItem inset disabled={!canOr} onSelect={() => actions.or(row.id)}>
+            Or…
+            <Hint>this or another filter</Hint>
+          </DropdownMenuItem>
+          <DropdownMenuCheckboxItem
+            checked={row.not}
+            disabled={v.field === null}
+            onCheckedChange={(not) =>
+              actions.updateRow(row.id, {
+                not,
+                // "Not all of" can't be said; Exclude means none of them.
+                ...(v.field === "tag" && v.all ? { value: { ...v, all: false } } : {}),
+              })
+            }
+          >
+            Exclude
+            <Hint>none of these</Hint>
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem
+            checked={row.paused}
+            disabled={!set}
+            onCheckedChange={(paused) => actions.updateRow(row.id, { paused })}
+          >
+            Pause
+            <Hint>keep, don't apply</Hint>
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem
+            checked={isDefault}
+            disabled={key === null}
+            onCheckedChange={(keep) => key !== null && actions.keepDefault(key, keep)}
+          >
+            Keep in default fields
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem inset variant="danger" onSelect={() => actions.remove(row.id)}>
+            Remove
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

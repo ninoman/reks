@@ -118,7 +118,7 @@ describe("usePlaylists", () => {
     usePlaylists.getState().requestDelete(set);
     await usePlaylists.getState().resolveDelete(true);
     expect(playlistsMutate).toHaveBeenCalledWith({ type: "delete", id: 7 });
-    expect(useLibrary.getState().filters.playlistId).toBeNull();
+    expect(useLibrary.getState().playlistId).toBeNull();
     expect(useLibrary.getState().sort.column).toBe("dateAdded");
   });
 
@@ -208,7 +208,7 @@ describe("usePlaylists", () => {
       usePlaylists.getState().openInPane(8);
       expect(paneIds()).toEqual([8]);
       const pane = usePanes.getState().panes[0];
-      expect(pane?.store.getState().filters.playlistId).toBe(8);
+      expect(pane?.store.getState().playlistId).toBe(8);
       expect(pane?.store.getState().sort.column).toBe("playlistPosition");
     });
 
@@ -216,7 +216,7 @@ describe("usePlaylists", () => {
       usePlaylists.getState().openInPane(8);
       usePlaylists.getState().select(8);
       expect(paneIds()).toEqual([]);
-      expect(useLibrary.getState().filters.playlistId).toBe(8);
+      expect(useLibrary.getState().playlistId).toBe(8);
     });
 
     it("closing the main list moves the first pane up into it", () => {
@@ -224,7 +224,7 @@ describe("usePlaylists", () => {
       usePlaylists.getState().openInPane(8);
       usePlaylists.getState().closeMainList();
       expect(paneIds()).toEqual([]);
-      expect(useLibrary.getState().filters.playlistId).toBe(8);
+      expect(useLibrary.getState().playlistId).toBe(8);
       expect(usePlaylists.getState().tree.selectedId).toBe(8);
     });
 

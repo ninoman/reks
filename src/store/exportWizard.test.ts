@@ -270,6 +270,8 @@ describe("useExportWizard", () => {
         volume: 1,
         rowDensity: "default",
         columnsVersion: 1,
+        filterFields: null,
+        filterSaveTarget: "filter",
       },
       anlzPreference: "reksFirst",
       onelibraryKeyBuiltin: false,

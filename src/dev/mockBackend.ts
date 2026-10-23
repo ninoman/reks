@@ -23,6 +23,7 @@ import type {
   ExportReportView,
   ExportSelection,
   Facets,
+  FilterPresetOp,
   ImportPreview,
   ImportReport,
   KeyInfo,
@@ -43,6 +44,7 @@ import { mockBrowse } from "./mockBrowse";
 import { mockGrid } from "./mockGrid";
 import { mockHistory } from "./mockHistory";
 import { mockMix } from "./mockMix";
+import { createMockPresets } from "./mockPresets";
 import { mockReport } from "./mockReport";
 import { createMockSmart } from "./mockSmart";
 import { createMockTags } from "./mockTags";
@@ -151,6 +153,7 @@ for (const t of TRACKS) {
 }
 const history = mockHistory(TRACKS);
 const tags = createMockTags(TRACKS.length);
+const presets = createMockPresets();
 
 /** A row as the backend returns it: with its current tags. */
 const tagged = (r: TrackRow): TrackRow => ({ ...r, tags: tags.tagsOf(r.id) });
@@ -295,6 +298,8 @@ let settings: Settings = {
     volume: 0.8,
     rowDensity: "default",
     columnsVersion: 1,
+    filterFields: null,
+    filterSaveTarget: "filter",
   },
 };
 
@@ -1145,6 +1150,10 @@ mockIPC((cmd, payload) => {
       return tags.tree();
     case "tags_mutate":
       return tags.mutate(args.op as TagOp);
+    case "filter_presets_get":
+      return presets.list();
+    case "filter_presets_mutate":
+      return presets.mutate(args.op as FilterPresetOp);
     case "settings_get":
       return settings;
     case "settings_set":

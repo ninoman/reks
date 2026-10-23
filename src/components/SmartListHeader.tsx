@@ -13,7 +13,7 @@ import { Tooltip } from "./ui/Tooltip";
 
 export function SmartListHeader() {
   const nodes = usePlaylists((s) => s.nodes);
-  const shown = useLibrary((s) => s.filters.playlistId);
+  const shown = useLibrary((s) => s.playlistId);
   const node = shownPlaylist(nodes, shown);
   if (node === null || !node.smart) return null;
 

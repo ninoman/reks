@@ -927,7 +927,7 @@ Date of decisions: 2026-10-18.
 
 ## D29. My Tags, rule-tree filters and smart playlists
 
-- Date: 2026-10-21. Status: accepted (maintainer's plan). Tasks:
+- Date: 2026-10-21. Status: accepted (maintainer's plan; the UI part is replaced by D35). Tasks:
   [`phases/phase-1.md`](phases/phase-1.md) "My Tags, advanced filtering and
   smart playlists".
 - Decision:
@@ -1137,6 +1137,54 @@ Date of decisions: 2026-10-18.
 - Risks: the relay URL is public in an open-source binary. Defences are a
   per-IP rate limit (3 a minute), size caps and a version header; add
   Turnstile if spam shows up.
+
+## D35. One Filters view and saved filters
+
+- Date: 2026-10-23. Status: accepted (maintainer's call). Wireframe:
+  [`wireframes/filters-drawer.html`](wireframes/filters-drawer.html). Tasks:
+  [`phases/phase-1.md`](phases/phase-1.md) "One Filters view and saved
+  filters". Changes the UI side of D29; the core rule tree stays.
+- Decision:
+  - **One view.** The filter form and the Advanced builder merge into one
+    rule tree in the Filters drawer; `FilterState` goes away. Default fields
+    (BPM, Key, Genre, Rating and the first My Tags category) are rows from
+    the start; an empty row filters nothing. The rest come from **Add
+    filter**, a search over fields and values. The user picks the default
+    fields (a setting).
+  - **AND by default.** Rows sit on a rail joined by "and"; clicking a
+    connector switches that level to "or". OR within a field is
+    multi-select; OR across fields is **Or…** on a row, which wraps it in a
+    group. Three levels at most, as before.
+  - **My Tags**: one row per category ("any of / all of / none of" its
+    tags), so categories AND with each other. A field appears once per
+    level; repeats only inside groups.
+  - **Order**: an added row goes after the last row that filters, above the
+    unused defaults; default rows keep their place.
+  - Rows can be excluded (NOT) and **paused** (kept, left out of the query).
+  - **No count or summary in the drawer**: the table shows the count and
+    the no-match state (`EmptyResult` gains "Undo last change"). The plain
+    summary is only used in tooltips, where the rows aren't visible; with
+    groups and negation it reads worse than the rows.
+  - **Saved filters**: named rule trees in the library (`filter_preset`
+    table), loaded from a picker in the drawer or the toolbar Filters
+    button's menu. A loaded one is editable, shows "edited" with Update /
+    Revert, and narrows whatever list is shown. One **Save…** asks: saved
+    filter or smart playlist. Saving keeps the whole drawer, which also
+    fixes D29's builder-only save. Core: migration 0012 (`filter_preset`:
+    name unique case-insensitively, dense `position`, `rule` JSON
+    `RuleNode`); `Library::filter_presets` lists them in order,
+    `filter_preset_mutate` takes `FilterPresetOp` (create, rename, setRule,
+    duplicate as "<name> copy" after the original, delete, move). Tag and
+    playlist ids are kept as saved, as in smart lists: a deleted one still
+    loads and matches no track, and the UI shows its row unfinished. A rule
+    that does not parse lists with `rule: null`. UI: the Save… choice is
+    remembered in `UiState.filter_save_target`; reordering is drag, or Move
+    up / down in each one's menu for the keyboard.
+  - **Last played** is "never" or "since a date". The form's relative "last
+    30 / 90 / 365 days" goes, and no relative filter is added to the core.
+- Rejected: a query as chips (every edit is a popover); Notion-style
+  field · operator · value rows (needs ~380px); saved filters in settings
+  (the core owns library data, and presets reference tags and playlists).
 
 ## Open risks (cross-cutting)
 

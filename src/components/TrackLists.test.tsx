@@ -81,7 +81,7 @@ describe("TrackLists", () => {
     // The main list's x: Warm-up moves up and the view is single again.
     fireEvent.click(screen.getByRole("button", { name: "Close Collection" }));
     expect(lists()).toBe(1);
-    expect(useLibrary.getState().filters.playlistId).toBe(2);
+    expect(useLibrary.getState().playlistId).toBe(2);
     expect(screen.queryByRole("button", { name: /^Close/ })).toBeNull();
   });
 
