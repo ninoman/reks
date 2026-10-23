@@ -654,6 +654,21 @@ Date of decisions: 2026-10-18.
   `soundtouch` (SPDX `LGPL-2.1`, needs a `deny.toml` note). Choose by listening test.
   Status 2026-10-21: licences and cost checked (R§9.3), `reks keylock-render`
   ready; the choice is pending the maintainer's listening (phase 5 task 10).
+- Master tempo (status: **proposed** 2026-10-23, pending task 10's
+  listening): the deck's **M** turns on a key lock head built on
+  `timestretch` 0.15's real-time `Keylock` profile (two-band SOLA). Why this
+  one first: already in the tree and licence-checked (MIT, `cargo deny`
+  passes), pure Rust (no C++ toolchain or libclang on any platform), lowest
+  latency (≈ 12.7 ms) and no allocation measured in the callback (R§9.3).
+  It sits behind one module, [`keylock.rs`](../crates/reks-mix/src/keylock.rs),
+  so another engine is a local swap if listening prefers it. A jump primes
+  the engine synchronously (reset, preroll, output dropped until the target
+  leaves it), so the deck needs no latency compensation; leaving key lock
+  bakes the crossfade's fade-out from the engine, since its output is not the
+  source at the head. Limits: used where the step is 0.25–2 and the source
+  is at the engine's rate (the app resamples at load, D5), else varispeed;
+  the profile fades to varispeed beyond ±35% (WIDE). Each jump with M on
+  costs one priming run on the audio thread, so tiny loops cost more CPU.
 - Rejected: live-performance scope (MIDI mapping, recording, stage reliability;
   a second product, needs its own decision); embedding Mixxx (C++/Qt
   application, not a library); WebView audio (D4); rodio for the mixer (no

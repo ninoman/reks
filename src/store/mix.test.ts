@@ -68,6 +68,7 @@ const deckView = (over: Partial<DeckView> = {}): DeckView => ({
   syncBar: false,
   locked: false,
   quantise: true,
+  masterTempo: false,
   master: false,
   ...over,
 });

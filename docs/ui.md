@@ -437,7 +437,7 @@ Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light g
 | Overview (20 px; 14 compact) | Whole track, played part shaded, hot cue ticks in cue colour, cue point, loop bar. Keyboard seek slider |
 | Quick loop (24 px; compact: the 3 × 2 grid beside the pads) | `LoopBlock` row: IN · OUT · ½ · size · 2× · LOOP · RELOOP, in every pad mode (see [Quick loop](#quick-loop-task-21)) |
 | Bottom (92 px; compact 80, see Size) | Q over CUE and PLAY (round, 32 px), at the bottom of their column · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · MASTER and SYNC (bottom-aligned like Q, CUE and PLAY) |
-| Tempo column (44 px) | Range button (±6 / ±10 / ±16 / WIDE) and **M** (master tempo, ghost; disabled until task 10 picks an engine) · full-height fader · nudge |
+| Tempo column (44 px) | Range button (±6 / ±10 / ±16 / WIDE) and **M** (master tempo: key lock, lit when on) · full-height fader · nudge |
 
 - **BPM edit**: double-click (or Enter when focused) turns the BPM into a
   number field; Enter or blur saves, Esc cancels. Tempo = typed ÷ the

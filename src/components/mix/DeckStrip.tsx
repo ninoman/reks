@@ -42,6 +42,7 @@ export interface DeckActions {
   toggleSync: () => void;
   takeMaster: () => void;
   toggleQuantise: () => void;
+  toggleMasterTempo: () => void;
   /** Jumps to a set hot cue, sets an empty one at the playhead. */
   hotCuePad: (slot: number) => void;
   /** Sets, renames or deletes a cue (stored in the library). */
@@ -352,12 +353,14 @@ export function DeckStrip({
         loaded={loaded}
         tempo={tempo}
         range={meta.tempoRange}
+        masterTempo={loaded && (view?.masterTempo ?? false)}
         // The 2-deck fader is about twice as long as the player deck's; the 4-deck one is about as long.
         ticks={solo || compact ? 7 : 13}
         slowerKey={keyFor({ type: "nudge", dir: -1 })}
         fasterKey={keyFor({ type: "nudge", dir: 1 })}
         onTempo={actions.setTempo}
         onRange={actions.setTempoRange}
+        onMasterTempo={actions.toggleMasterTempo}
         onNudge={actions.nudge}
       />
     </section>

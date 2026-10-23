@@ -155,6 +155,7 @@ function emptyDeck(): Deck {
       syncBar: false,
       locked: false,
       quantise: true,
+      masterTempo: false,
       master: false,
       loopRegion: null,
       loopIn: null,
@@ -524,6 +525,9 @@ function control(c: MixControl) {
     case "quantise":
       v.quantise = c.on;
       break;
+    case "masterTempo":
+      v.masterTempo = c.on;
+      break;
   }
 }
 
@@ -540,6 +544,7 @@ function load(deck: number, id: number, analysed: boolean): DeckLoaded {
     sync: prev?.view.sync ?? false,
     syncBar: prev?.view.syncBar ?? false,
     quantise: prev?.view.quantise ?? true,
+    masterTempo: prev?.view.masterTempo ?? false,
   };
   d.grid = analysed;
   // A new track on the master hands the role on at the next tick.

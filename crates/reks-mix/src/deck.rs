@@ -3,7 +3,9 @@
 //!
 //! At exactly unit step (speed 1.0 and the source at the engine's rate) the
 //! deck copies source frames, so playback is bit-exact; at any other step it
-//! reads through [`Varispeed`]. The graph sets the speed before every block
+//! reads through [`Varispeed`], so pitch follows tempo. With master tempo on
+//! it reads through [`KeyLock`] instead, at any step it covers, so the key
+//! stays put. The graph sets the speed before every block
 //! (tempo × nudge, or what sync asks for). Slower than the resampler goes
 //! (WIDE tempo near −100%) the deck fades out and holds its position.
 //!
@@ -17,8 +19,20 @@ use crate::graph::{
     DeckState, LoopRegion, Ramp, FINE_JUMP_MS, LOOP_MAX_BEATS, LOOP_MIN_BEATS, LOOP_XFADE_MS,
     SEEK_XFADE_MS, TEMPO_MAX, TEMPO_MIN,
 };
+use crate::keylock::{self, KeyLock};
 use crate::source::{DeckSource, AUTO_LOOP_SLOTS, HOT_CUE_SLOTS};
 use crate::varispeed::{Varispeed, MIN_STEP};
+
+/// The read head a deck plays through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Head {
+    /// Whole source frames at unit step.
+    Copy,
+    /// [`Varispeed`]: pitch follows tempo.
+    Varispeed,
+    /// [`KeyLock`]: master tempo, the key stays put.
+    KeyLock,
+}
 
 /// What a deck does once its gate has faded out.
 #[derive(Debug, Default)]
@@ -36,6 +50,9 @@ enum Pending {
 struct Tail {
     position: f64,
     step: f64,
+    /// The fade-out was rendered into [`Deck::tail_buf`] (from key lock,
+    /// whose output is not the source read at `position`).
+    baked: bool,
     /// Frames of the crossfade still to play, `len..=1`.
     left: u32,
     /// Length of this crossfade in frames.
@@ -77,8 +94,11 @@ pub(crate) struct Deck {
     /// Source time of the next frame while copying (always whole then).
     position: f64,
     vs: Varispeed,
-    /// `vs` holds the position (the deck is reading through it).
-    resampling: bool,
+    kl: KeyLock,
+    /// The head playing; `vs` or `kl` holds the position while it plays.
+    head: Head,
+    /// Master tempo (key lock): tempo changes keep the key.
+    master_tempo: bool,
     /// Source frames per output frame for the current block.
     step: f64,
     /// Too slow to resample: the head stands still once `motion` is silent.
@@ -93,6 +113,8 @@ pub(crate) struct Deck {
     seeks: u32,
     transports: u32,
     tail: Option<Tail>,
+    /// A baked [`Tail`], interleaved; the longest crossfade.
+    tail_buf: Box<[f32]>,
     /// [`SEEK_XFADE_MS`] in frames.
     xfade: u32,
     /// [`LOOP_XFADE_MS`] in frames.
@@ -126,14 +148,19 @@ pub(crate) struct Deck {
 }
 
 impl Deck {
-    /// Allocates the varispeed head; `None` if rubato refuses its setup.
+    /// Allocates the varispeed and key lock heads; `None` if rubato or
+    /// timestretch refuses its setup.
     pub(crate) fn new(sample_rate: u32) -> Option<Self> {
+        let xfade = (sample_rate * SEEK_XFADE_MS / 1000).max(1);
+        let loop_xfade = (sample_rate * LOOP_XFADE_MS / 1000).max(1);
         Some(Self {
             src: None,
             engine_rate: sample_rate.max(1),
             position: 0.0,
             vs: Varispeed::new()?,
-            resampling: false,
+            kl: KeyLock::new(sample_rate)?,
+            head: Head::Copy,
+            master_tempo: false,
             step: 1.0,
             held: false,
             motion: Ramp::new(1.0, sample_rate),
@@ -143,8 +170,9 @@ impl Deck {
             seeks: 0,
             transports: 0,
             tail: None,
-            xfade: (sample_rate * SEEK_XFADE_MS / 1000).max(1),
-            loop_xfade: (sample_rate * LOOP_XFADE_MS / 1000).max(1),
+            tail_buf: vec![0.0; xfade.max(loop_xfade) as usize * 2].into_boxed_slice(),
+            xfade,
+            loop_xfade,
             looping: None,
             loop_in: None,
             last_loop: None,
@@ -182,10 +210,10 @@ impl Deck {
 
     /// Source time of the next frame.
     pub(crate) fn position(&self) -> f64 {
-        if self.resampling {
-            self.vs.position()
-        } else {
-            self.position
+        match self.head {
+            Head::Copy => self.position,
+            Head::Varispeed => self.vs.position(),
+            Head::KeyLock => self.kl.position(),
         }
     }
 
@@ -317,6 +345,11 @@ impl Deck {
             }
             Control::Quantise { on, .. } => {
                 self.quantise = on;
+                None
+            }
+            Control::MasterTempo { on, .. } => {
+                // The head changes at the next frame, with a crossfade.
+                self.master_tempo = on;
                 None
             }
             Control::BeatJump { beats, .. } => {
@@ -795,18 +828,41 @@ impl Deck {
 
     fn jump_with(&mut self, to: f64, xfade: u32) {
         let from = self.position();
-        if self.audible() && to != from {
-            // A jump during a crossfade restarts it from the head heard most
-            // recently.
-            self.tail = Some(Tail {
-                position: from,
-                step: self.step,
-                left: xfade,
-                len: xfade,
-            });
+        if to != from {
+            // A refcount, not a copy: the head is borrowed mutably below.
+            let src = self.src.clone();
+            self.fade_from(src.as_deref(), from, xfade);
         }
-        self.resampling = false;
+        self.head = Head::Copy;
         self.position = to;
+    }
+
+    /// While audible, fades the current head (at `from`) out under the one
+    /// that plays next. A fade during a crossfade restarts it from the head
+    /// heard most recently. Key lock's output is not the source at `from`,
+    /// so its fade-out is rendered ahead, before the head is reused.
+    fn fade_from(&mut self, src: Option<&DeckSource>, from: f64, xfade: u32) {
+        if !self.audible() {
+            return;
+        }
+        let baked = match src {
+            Some(src) if self.head == Head::KeyLock => {
+                let frames = (xfade as usize * 2).min(self.tail_buf.len());
+                for f in self.tail_buf[..frames].as_chunks_mut::<2>().0 {
+                    let (l, r) = self.kl.next(src, self.step);
+                    *f = [l, r];
+                }
+                true
+            }
+            _ => false,
+        };
+        self.tail = Some(Tail {
+            position: from,
+            step: self.step,
+            baked,
+            left: xfade,
+            len: xfade,
+        });
     }
 
     /// Runs `action` now when silent, else after a fade-out.
@@ -834,13 +890,13 @@ impl Deck {
             Pending::Cue => {
                 self.stop();
                 self.leave_loop_unless(self.cue);
-                self.resampling = false;
+                self.head = Head::Copy;
                 self.position = self.cue;
                 None
             }
             Pending::Load(src) => {
                 self.stop();
-                self.resampling = false;
+                self.head = Head::Copy;
                 self.position = 0.0;
                 self.cue = 0.0;
                 self.looping = None;
@@ -862,29 +918,55 @@ impl Deck {
         self.src.as_ref().map_or(0, |s| s.frames())
     }
 
-    /// The current head's frame at `step`, switching between copying and
-    /// resampling as the step crosses 1.0.
-    fn read(&mut self, src: &DeckSource) -> (f32, f32) {
-        if self.step == 1.0 {
-            if self.resampling {
-                // Back to copying: round onto a whole frame, crossfading
-                // from the resampled head if that moves it.
-                let at = self.vs.position();
-                self.resampling = false;
-                self.position = at;
-                if at.fract() != 0.0 {
-                    self.jump(at.round());
-                }
-            }
-            let out = src.frame(self.position as i64);
-            self.position += 1.0;
-            out
+    /// The head for the current step: key lock with master tempo where it
+    /// covers the step (and the source is at the engine's rate, as the app
+    /// loads it), else copying at unit step and resampling off it.
+    fn wanted_head(&self) -> Head {
+        if self.master_tempo && self.rate_ratio() == 1.0 && keylock::in_range(self.step) {
+            Head::KeyLock
+        } else if self.step == 1.0 {
+            Head::Copy
         } else {
-            if !self.resampling {
-                self.vs.jump(src, self.position, self.step);
-                self.resampling = true;
+            Head::Varispeed
+        }
+    }
+
+    /// The current head's frame at `step`, changing heads as the step or
+    /// master tempo asks.
+    fn read(&mut self, src: &DeckSource) -> (f32, f32) {
+        let want = self.wanted_head();
+        if want != self.head {
+            self.switch_head(src, want);
+        }
+        match self.head {
+            Head::Copy => {
+                let out = src.frame(self.position as i64);
+                self.position += 1.0;
+                out
             }
-            self.vs.next(src, self.step)
+            Head::Varispeed => self.vs.next(src, self.step),
+            Head::KeyLock => self.kl.next(src, self.step),
+        }
+    }
+
+    /// Moves playback onto `want` where the current head is. Copying to
+    /// resampling is seamless (the same samples); back to copying rounds
+    /// onto a whole frame and crossfades if that moves the head. Into or
+    /// out of key lock the sound changes, so that crossfades too, unless a
+    /// jump's crossfade is already running.
+    fn switch_head(&mut self, src: &DeckSource, want: Head) {
+        let at = self.position();
+        let to = if want == Head::Copy { at.round() } else { at };
+        let key_change = self.head == Head::KeyLock || want == Head::KeyLock;
+        if to != at || (key_change && self.tail.is_none()) {
+            self.fade_from(Some(src), at, self.xfade);
+        }
+        self.head = want;
+        self.position = to;
+        match want {
+            Head::Copy => {}
+            Head::Varispeed => self.vs.jump(src, to, self.step),
+            Head::KeyLock => self.kl.jump(src, to, self.step),
         }
     }
 
@@ -909,7 +991,12 @@ impl Deck {
                     // x runs 1 -> 0: old head cos-out, new head sin-in.
                     let x = t.left as f32 / t.len as f32;
                     let (old, new) = ((x * FRAC_PI_2).sin(), (x * FRAC_PI_2).cos());
-                    let (ol, or) = src.frame_lerp(t.position);
+                    let (ol, or) = if t.baked {
+                        let i = (t.len - t.left) as usize * 2;
+                        (self.tail_buf[i], self.tail_buf[i + 1])
+                    } else {
+                        src.frame_lerp(t.position)
+                    };
                     l = l * new + ol * old;
                     r = r * new + or * old;
                     t.position += t.step;
@@ -973,6 +1060,7 @@ impl Deck {
             sync_bar: self.sync_bar,
             locked: self.locked,
             quantise: self.quantise,
+            master_tempo: self.master_tempo,
             master: false,
             loop_region: self.looping.map(Loop::region),
             loop_in: self.loop_in.map(|f| f.round() as i64),

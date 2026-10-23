@@ -654,6 +654,8 @@ export interface DeckView {
   /** Following the master's tempo and phase. */
   locked: boolean;
   quantise: boolean;
+  /** Master tempo (key lock): the tempo fader keeps the key. */
+  masterTempo: boolean;
   /** This deck is the sync master (`MixState.masterDeck`). */
   master: boolean;
   /** The active loop; null when not looping. */
@@ -822,6 +824,7 @@ export type MixControl =
   /** Halve (`double: false`) or double the active loop; by time without a grid. */
   | { type: "loopResize"; deck: number; double: boolean }
   | { type: "quantise"; deck: number; on: boolean }
+  | { type: "masterTempo"; deck: number; on: boolean }
   | { type: "channel"; ch: number; param: ChannelParam; value: number }
   | { type: "filter"; unit: FilterUnit; param: FilterParam; value: number }
   | { type: "crossfader"; pos: number; curve: number }
