@@ -692,6 +692,10 @@ re-queries. Pure helpers (coverage, search, create offers) are in
 
 ## Rule builder and smart playlists (D29)
 
+Being replaced by one Filters view with saved filters (D35,
+[wireframe](wireframes/filters-drawer.html)); this section describes what is
+built today.
+
 The **Advanced** button in the Filters drawer opens the builder under the fields
 (`RuleBuilder` → `RuleGroup` → `RuleRow` → `RuleValueEditor`; the last three
 take props, `RuleBuilder` reads the stores). State is

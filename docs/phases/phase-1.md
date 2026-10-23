@@ -671,6 +671,34 @@ Added 2026-10-21. One PR per task; tasks 4 and 2–3 can run in parallel once 1 
    save as smart playlist, smart lists in the tree; "Edit rules" reads the
    saved rule with `playlist_rule`.
 
+### One Filters view and saved filters (D35)
+
+Added 2026-10-23. Wireframe:
+[`wireframes/filters-drawer.html`](../wireframes/filters-drawer.html). One PR
+per task; 6 and 7 can run in parallel, 8 needs 7, 9 needs 6 and 7.
+
+6. [ ] **Core saved filters**: next free migration (`filter_preset`: name,
+   position, rule JSON `RuleNode`, timestamps), `reks-core::filter_preset`
+   (list, create, rename, update, duplicate, delete, reorder; names unique
+   case-insensitively), the same reference handling as smart lists (a
+   deleted tag or playlist leaves the row unfinished), commands, round-trip
+   tests.
+7. [ ] **UI one query**: the drawer edits one `GroupDraft`; `FilterState`
+   and the Advanced button go. Default fields from a setting (BPM, Key,
+   Genre, Rating, first tag category), one row per tag category (any / all
+   / none), operators in the pickers, added rows after the last active row,
+   connector and/or toggle, row menu (Or…, Exclude, Pause, Keep in default
+   fields, Remove), keyboard map, quick paths, Clear all with Undo, badge,
+   `EmptyResult` "Undo last change". No count or summary in the drawer.
+   Rewrite the `ui.md` filter sections.
+8. [ ] **UI Add filter search**: fields by group and values (genres, tags
+   with their category, keys, BPM ± tolerance, stars); Enter adds or
+   extends the row; `/` opens it.
+9. [ ] **UI saved filters**: picker in the drawer (load with Undo toast,
+   rename, duplicate, delete, reorder, summary tooltip), "edited" with
+   Update / Revert, one **Save…** (saved filter or smart playlist; the smart
+   path saves the whole drawer), toolbar Filters button menu.
+
 ## Acceptance criteria
 
 Tracked in [#16](https://github.com/ninoman/reks/issues/16).
