@@ -564,6 +564,9 @@ Constraints:
 
 ## 8. Decision impact
 
+- The 3-band view (§9) adds blocks to the D21 mixer and changes none.
+  Record it under D21 as proposed when it is built.
+
 - D21 accepts beat loops as preparation and says "loop rolls, slip mode and
   saved loops still need a decision". Manual IN/OUT, reloop and
   halve/double are a scope extension. They are recorded in D21 as
@@ -573,3 +576,18 @@ Constraints:
   They are noted under D21 with the spec in §6 as proposed.
 - No other decision conflicts. D30 (1-deck player) and D26 (UI system) are
   unchanged. Concept C's folded rail would need a line in `ui.md` only.
+
+## 9. Three-band view (issue #56)
+
+A third mixer view, research 2026-10-23: a 3-band EQ (HI · MID · LOW) and a
+one-knob filter per channel in the fourth knob slot, with Simple's layout
+otherwise. Full engine spec, curves and tests:
+[`djm-eq-fx.md`](djm-eq-fx.md). In short:
+
+| | Value |
+|---|---|
+| Setting | `MixerView` gains `three_band`, labelled "3-band" |
+| EQ | LOW shelf 250 Hz, MID bell 1 kHz (Q 0.7), HI shelf 3 kHz; −26 / +6 dB each (corners and Q **UNVERIFIED**) |
+| FILTER knob | left LP 20 kHz → 50 Hz, right HP 20 Hz → 10 kHz, dead zone 0.485–0.515, fixed Q 1.4 (ends and Q **UNVERIFIED**) |
+| Hidden controls | 4-band EQ at noon, X/Y filters off, assigns default, THRU, as in §6 |
+| Crossfader, shortcuts | none, as in Simple |
