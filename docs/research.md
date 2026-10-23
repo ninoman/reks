@@ -665,6 +665,15 @@ https://github.com/Signalsmith-Audio/signalsmith-stretch ·
 https://github.com/jefflongo/rubberband-rs ·
 https://github.com/breakfastquay/rubberband · https://breakfastquay.com/rubberband/
 
+### 9.4 Deck loop controls and deck/mixer layouts (2026-10-22)
+
+Loop conventions (rekordbox 7.2.18, Traktor Pro 4, Serato DJ Pro, Engine DJ
+5.1, SC6000, CDJ-3000), software mixer layouts, DJM/Xone channel order,
+measurements of reks's own layout, four layout concepts and a quick-loop
+spec: [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md),
+sources with dates in its §3. Proposal only; no published usability guidance
+on waveform or knob sizes was found.
+
 ---
 
 ## 10. Play history and playlist dividers (Phases 2 and 2.5)

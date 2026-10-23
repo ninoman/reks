@@ -620,6 +620,24 @@ Date of decisions: 2026-10-18.
   cut is a notch (Q 2), not the Xone:92 guide's "low Q", which at full cut
   sounded like a kill. Was: the Xone:92's 2.5 kHz / 2 kHz / 350 Hz / 250 Hz,
   mids +6 / −30 dB.
+- Manual loops, reloop and an always-visible loop block (status:
+  **proposed** 2026-10-22, awaiting the maintainer). Add loop IN / OUT
+  (also without a grid), RELOOP/EXIT with the last loop kept, ½ / 2× and a
+  loop size readout on every deck, so a loop can be set or changed in any
+  pad mode. Rationale: same as beat loops, auditioning a transition or a
+  layer; every reference product keeps these on the deck (rekordbox,
+  Traktor, Engine, CDJ-3000). Still out: slip, loop roll, emergency loop.
+  Spec and sources: [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §5;
+  phase 5 tasks 20–21.
+- Simple and advanced mixer views (maintainer's request, 2026-10-23; spec
+  **proposed**): a Settings → Mixer group, also opened from a gear on the
+  mixer, chooses Simple (no filter assign, crossfader or crossfader assign;
+  filters optionally hidden) or Advanced (the whole model). Hidden controls
+  hold values that change nothing (default filter assigns, crossfader
+  assigns THRU, hidden filters off), and the user's positions come back in
+  Advanced. UI only; the DSP model above is unchanged. Spec:
+  [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §6;
+  phase 5 tasks 24–25.
 - Filter LFOs: dropped 2026-10-20 (maintainer's call). The Xone:92 has one
   per filter (R§9.1); reks models the filters without them. Adding them back
   needs a new decision.

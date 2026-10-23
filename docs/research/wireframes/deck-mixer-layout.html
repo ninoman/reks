@@ -1,0 +1,1045 @@
+<meta charset="utf-8">
+<title>reks Deck and Mixer Layouts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a drafting sheet. Controls on top, one to-scale 1440×900 frame, then the notes for the chosen concept and two reference tables. */
+:root {
+  --paper: #f4f4f7; --sheet: #ffffff; --ink: #1c1c24; --ink-2: #5d5d6c; --line: #c7c7d2;
+  --box: #ffffff; --box-2: #e9e9ef; --wave: #2b2b35; --wave-ink: #d4d4de;
+  --new: #4247c9; --new-bg: #e6e7fa; --lit: #1c1c24; --lit-ink: #ffffff; --waste: #b9b9c6;
+  --font-ui: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #131318; --sheet: #1a1a21; --ink: #e8e8ef; --ink-2: #a3a3b3; --line: #3b3b48;
+  --box: #1f1f27; --box-2: #2b2b35; --wave: #0b0b0f; --wave-ink: #b9b9c9;
+  --new: #a3a6ff; --new-bg: #2a2b57; --lit: #e8e8ef; --lit-ink: #131318; --waste: #4a4a58; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #131318; --sheet: #1a1a21; --ink: #e8e8ef; --ink-2: #a3a3b3; --line: #3b3b48;
+  --box: #1f1f27; --box-2: #2b2b35; --wave: #0b0b0f; --wave-ink: #b9b9c9;
+  --new: #a3a6ff; --new-bg: #2a2b57; --lit: #e8e8ef; --lit-ink: #131318; --waste: #4a4a58; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 24px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 24px; }
+h1 { font-size: 26px; line-height: 1.2; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-size: 18px; margin: 0; text-wrap: balance; }
+h3 { font-size: 14px; margin: 0; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); }
+p { margin: 0; max-width: 72ch; }
+.lede { color: var(--ink-2); }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); padding-block: 8px; border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--paper); }
+.group { display: flex; align-items: center; gap: 8px; }
+.group[hidden] { display: none; }
+.group > span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--sheet); }
+.seg button { font: 500 13px var(--font-ui); color: var(--ink); background: transparent; border: 0; padding: 5px 11px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--lit); color: var(--lit-ink); }
+.seg button:focus-visible { outline: 2px solid var(--new); outline-offset: -2px; }
+.seg button[hidden] { display: none; }
+.stage { background: var(--sheet); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; position: relative; }
+.stage.full { overflow-x: auto; }
+.frame { position: relative; transform-origin: 0 0; font-family: var(--font-ui); background: var(--paper); }
+.caption-row { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); }
+.caption-row b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; color: var(--ink-2); align-items: center; }
+.sw { display: inline-block; width: 18px; height: 12px; border: 1px solid var(--line); vertical-align: -2px; margin-right: 6px; border-radius: 2px; }
+.sw.new { background: var(--new-bg); border-color: var(--new); }
+.sw.moved { border: 1.5px dashed var(--ink); }
+.sw.behind { border: 1.5px dotted var(--ink-2); background: repeating-linear-gradient(45deg, transparent 0 3px, var(--box-2) 3px 6px); }
+.sw.waste { background: repeating-linear-gradient(45deg, transparent 0 3px, var(--waste) 3px 5px); }
+.sw.wave { background: var(--wave); }
+
+/* frame boxes */
+.b { position: absolute; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 10px; line-height: 1.2; color: var(--ink); white-space: pre-line; overflow: hidden; border-radius: 2px; }
+.b.al { justify-content: flex-start; text-align: left; padding-left: 4px; }
+.b.ar { justify-content: flex-end; text-align: right; padding-right: 2px; }
+.b.vt { align-items: flex-start; padding-top: 6px; }
+.b.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.b.big { font-size: 12px; font-weight: 600; }
+.b.dim { color: var(--ink-2); }
+.b.small { font-size: 8px; }
+.k-chrome { background: var(--box-2); border-bottom: 1px solid var(--line); border-radius: 0; justify-content: flex-start; padding-left: 12px; font-weight: 600; }
+.k-bar { background: var(--paper); border-bottom: 1px solid var(--line); border-radius: 0; }
+.k-panel { background: var(--box); border: 1px solid var(--line); border-radius: 6px; }
+.k-chpanel { background: var(--box-2); border: 1px solid var(--line); border-radius: 4px; }
+.k-wave { background: var(--wave); color: var(--wave-ink); border-radius: 2px; }
+.k-ov { background: var(--wave); color: var(--wave-ink); opacity: 0.8; font-size: 8px; }
+.k-playhead { background: var(--wave-ink); opacity: 0.9; }
+.k-loopband { background: var(--new); opacity: 0.65; border-radius: 0; }
+.k-ctl { background: var(--box); border: 1px solid var(--line); font-weight: 600; font-size: 9px; }
+.k-round { background: var(--box); border: 1px solid var(--ink-2); border-radius: 50%; font-weight: 700; font-size: 9px; }
+.k-readout { background: var(--box-2); border: 1px solid var(--line); font-family: var(--font-mono); font-weight: 600; }
+.k-pad { background: var(--box); border: 1px solid var(--line); font-size: 9px; }
+.k-pad.set { border: 1.5px solid var(--ink-2); }
+.k-knob { background: var(--box-2); border: 1px solid var(--ink-2); border-radius: 50%; }
+.k-vfader { background: var(--box-2); border: 1px solid var(--line); border-radius: 3px; }
+.k-vfader::after { content: ""; position: absolute; left: -3px; right: -3px; top: 40%; height: 8px; background: var(--ink-2); border-radius: 2px; }
+.k-hfader { background: var(--box-2); border: 1px solid var(--line); border-radius: 3px; font-size: 8px; color: var(--ink-2); }
+.k-meter { background: repeating-linear-gradient(180deg, var(--ink-2) 0 3px, transparent 3px 11px); opacity: 0.55; font-size: 7px; }
+.k-scale { color: var(--ink-2); font-size: 7.5px; line-height: 1.32; align-items: flex-start; }
+.k-badge { background: var(--lit); color: var(--lit-ink); font-family: var(--font-mono); font-weight: 700; font-size: 11px; }
+.k-chbadge { background: var(--lit); color: var(--lit-ink); font-family: var(--font-mono); font-weight: 700; font-size: 9px; }
+.k-art { background: var(--box-2); border: 1px dashed var(--line); }
+.k-text, .k-lanetxt { background: transparent; }
+.k-lanetxt { color: var(--wave-ink); font-size: 9px; }
+.k-cap { color: var(--ink-2); font-size: 8px; font-weight: 600; letter-spacing: 0.04em; }
+.k-rule { background: var(--line); }
+.k-lib { background: var(--box); border: 1px solid var(--line); border-radius: 0; color: var(--ink-2); font-size: 12px; }
+.k-lib.strong { color: var(--ink); font-weight: 600; font-size: 13px; }
+.k-libchrome { background: var(--box-2); border: 1px solid var(--line); border-radius: 0; color: var(--ink-2); font-size: 11px; }
+.k-waste { background: repeating-linear-gradient(45deg, transparent 0 6px, var(--waste) 6px 8px); border: 1px dashed var(--ink-2); color: var(--ink); font-weight: 600; font-size: 11px; }
+.k-note { color: var(--ink-2); font-size: 8.5px; }
+.k-seg { display: flex; padding: 0; border: 1px solid var(--line); background: var(--box); }
+.k-seg i { flex: 1; display: flex; align-items: center; justify-content: center; font-style: normal; border-right: 1px solid var(--line); font-weight: 600; font-size: 8.5px; white-space: nowrap; overflow: hidden; }
+.k-seg i:last-child { border-right: 0; }
+.k-seg i.on { background: var(--lit); color: var(--lit-ink); }
+.k-seg.outline i.on { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.k-seg.chrome i { font-size: 11px; font-weight: 500; }
+.is-lit { background: var(--lit) !important; color: var(--lit-ink) !important; }
+.is-new { background: var(--new-bg); border-color: var(--new) !important; color: var(--ink); }
+.is-new.is-lit { background: var(--new) !important; color: var(--sheet) !important; }
+.k-readout.is-new { background: var(--new-bg); }
+.is-moved { outline: 1.5px dashed var(--ink); outline-offset: 1px; }
+.is-behind { border: 1.5px dotted var(--ink-2); background: repeating-linear-gradient(45deg, transparent 0 4px, var(--box-2) 4px 8px); color: var(--ink); }
+
+/* notes */
+.notes { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; background: var(--sheet); border: 1px solid var(--line); border-radius: 6px; padding: 20px; }
+.notes > div { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.notes ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 13px; }
+.kv dt { color: var(--ink-2); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--sheet); }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+th { font-weight: 600; background: var(--box-2); position: sticky; top: 0; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.grp td { background: var(--paper); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px; color: var(--ink-2); }
+td .flag { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 0 5px; border-radius: 3px; margin-left: 4px; }
+.flag.new { background: var(--new-bg); color: var(--new); }
+.flag.mv { border: 1px dashed var(--ink); }
+.flag.bh { border: 1px dotted var(--ink-2); }
+.loopspec { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; background: var(--sheet); border: 1px solid var(--line); border-radius: 6px; padding: 20px; }
+.loopspec > div { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.mini { position: relative; background: var(--box); border: 1px solid var(--line); border-radius: 6px; }
+kbd { font-family: var(--font-mono); font-size: 11.5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--box); white-space: nowrap; }
+.foot { font-size: 12px; color: var(--ink-2); }
+@media (max-width: 760px) { .notes, .loopspec { grid-template-columns: minmax(0, 1fr); } h1 { font-size: 22px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h3>reks · phase 5 · proposal, 2026-10-22</h3>
+    <h1>Deck and mixer layouts</h1>
+    <p class="lede">Four layout concepts for the deck section, each drawn at 1 deck, 2 decks and 4 decks, plus today's layout as measured in the dev build. Frames are to scale: one frame pixel is one window pixel. Switch the window size to see what each concept does at 1280×800 and 1920×1080. Every concept adds the same always-visible quick-loop block; the table at the end maps every existing control to its place.</p>
+  </header>
+
+  <div class="controls" role="toolbar" aria-label="Wireframe view">
+    <div class="group"><span id="lbl-c">Concept</span><div class="seg" role="group" aria-labelledby="lbl-c" id="seg-c"></div></div>
+    <div class="group"><span id="lbl-n">Decks</span><div class="seg" role="group" aria-labelledby="lbl-n" id="seg-n"></div></div>
+    <div class="group"><span id="lbl-s">Window</span><div class="seg" role="group" aria-labelledby="lbl-s" id="seg-s"></div></div>
+    <div class="group" id="grp-v"><span id="lbl-v">Mixer view</span><div class="seg" role="group" aria-labelledby="lbl-v" id="seg-v"></div></div>
+    <div class="group" id="grp-m"><span id="lbl-m">C mixer</span><div class="seg" role="group" aria-labelledby="lbl-m" id="seg-m"></div></div>
+    <div class="group"><span id="lbl-z">Zoom</span><div class="seg" role="group" aria-labelledby="lbl-z" id="seg-z"></div></div>
+  </div>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <div class="stage" id="stage"><div class="frame" id="frame" role="img"></div></div>
+    <div class="caption-row" id="metrics"></div>
+    <div class="legend">
+      <span><i class="sw wave"></i>waveform</span>
+      <span><i class="sw new"></i>new control (quick loop)</span>
+      <span><i class="sw moved"></i>moved compared with today</span>
+      <span><i class="sw behind"></i>hidden by a toggle or setting</span>
+      <span><i class="sw waste"></i>unused space today</span>
+    </div>
+  </section>
+
+  <section class="notes" id="notes" aria-live="polite"></section>
+
+  <section class="loopspec">
+    <div>
+      <h2>Quick-loop block</h2>
+      <p>The same seven controls in every concept, always on the deck whatever the pad mode. A row where the deck is wide and short of height, a 3 × 2 block beside the pads where it is short.</p>
+      <div class="mini" id="mini-row" style="height:64px"></div>
+      <div class="mini" id="mini-grid" style="height:128px;width:168px"></div>
+      <p class="foot">LOOP is lit while any loop plays (beat, manual, memory or auto loop). The readout shows the active loop's length, or dimmed, the size LOOP will use next.</p>
+    </div>
+    <div>
+      <h2>What each control does</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Control</th><th>Not looping</th><th>Looping</th><th>Keys (deck 2 / 3)</th></tr></thead>
+        <tbody>
+          <tr><td>IN</td><td>Sets a loop-in point at the playhead (nearest beat with Q). Marked on the waveform.</td><td>Moves the loop's start to the playhead (nearest beat with Q), end kept.</td><td><kbd>D</kbd> / <kbd>K</kbd></td></tr>
+          <tr><td>OUT</td><td>With an IN behind the head: loop from IN to here (nearest beat with Q), looping at once. No grid needed.</td><td>Moves the loop's end to the playhead (nearest beat with Q), start kept.</td><td><kbd>F</kbd> / <kbd>L</kbd></td></tr>
+          <tr><td>½ · 2×</td><td>Halves or doubles the size LOOP will use (1/32 … 512).</td><td>Halves or doubles the loop, start kept.</td><td><kbd>Shift D</kbd> <kbd>Shift G</kbd> / <kbd>Shift K</kbd> <kbd>Shift ;</kbd></td></tr>
+          <tr><td>LOOP</td><td>Loop of the shown size from the playhead (quantised).</td><td>Leaves the loop.</td><td><kbd>Shift F</kbd> / <kbd>Shift L</kbd> (today's key)</td></tr>
+          <tr><td>RELOOP</td><td>Jumps back into the last loop, or a memory loop just called, and loops.</td><td>Leaves the loop and keeps it for RELOOP.</td><td><kbd>G</kbd> / <kbd>;</kbd></td></tr>
+        </tbody>
+      </table></div>
+      <p class="foot">Keys follow rekordbox's default Performance 1 layout, like the other deck keys; Option moves each to deck 1 / 4. Engine commands, sync, quantise, beat jump and memory-loop rules: <code>docs/research/deck-mixer-layout.md</code>.</p>
+    </div>
+  </section>
+
+  <section class="loopspec" id="simple">
+    <div>
+      <h2>Simple and advanced mixer</h2>
+      <p>One setting chooses how much of the mixer shows, in every concept. Simple hides the filter assign switches, the crossfader and its assign switches; it can also hide both filter units. Use <b>Mixer view</b> above to see each frame both ways.</p>
+      <div class="mini" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+        <h3>Settings · Mixer</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between">
+          <div style="min-width:0"><b>Mixer view</b><br><span class="foot">Simple hides filter assign, crossfader and crossfader assign.</span></div>
+          <span class="seg" aria-hidden="true"><button type="button" tabindex="-1" aria-pressed="true">Simple</button><button type="button" tabindex="-1" aria-pressed="false">Advanced</button></span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between">
+          <div style="min-width:0"><b>Filters</b><br><span class="foot">Simple view only. Hidden filters are off.</span></div>
+          <span class="seg" aria-hidden="true"><button type="button" tabindex="-1" aria-pressed="true">Show</button><button type="button" tabindex="-1" aria-pressed="false">Hide</button></span>
+        </div>
+      </div>
+      <p class="foot">The <b>⚙</b> in the mixer's top-left corner (C: on the rail; D: in the centre column) opens Settings on the Mixer tab, with focus on Mixer view.</p>
+    </div>
+    <div>
+      <h2>What hides, and what it does while hidden</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Control</th><th>Simple</th><th>Simple, no filters</th><th>While hidden</th></tr></thead>
+        <tbody>
+          <tr><td>FILTER assign X · off · Y</td><td>hidden</td><td>hidden</td><td>Channels 1–2 on X, 3–4 on Y (today's defaults)</td></tr>
+          <tr><td>X-F assign X · off · Y</td><td>hidden</td><td>hidden</td><td>Off (THRU) on every channel</td></tr>
+          <tr><td>Crossfader and curve</td><td>hidden</td><td>hidden</td><td>No effect, since nothing is assigned; X C V do nothing</td></tr>
+          <tr><td>Filter X and Y: ON, FREQ, RES, HP · BP · LP</td><td>shown</td><td>hidden</td><td>Both units off</td></tr>
+          <tr><td>Trim, EQ, CUE, faders, meters, master, cue section</td><td>shown</td><td>shown</td><td>–</td></tr>
+        </tbody>
+      </table></div>
+      <p class="foot">Hidden settings are kept, not reset: switching back to Advanced restores them. The engine gets the values the view implies, so what you hear always matches what you see. Advanced shows everything, as today.</p>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>Side by side</h2>
+    <p class="lede">Numbers are computed from the frames above. Library rows count whole 26 px rows of the track table.</p>
+    <div class="tablewrap"><table id="compare"></table></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>Where every control goes</h2>
+    <p class="lede">Every control and readout on the decks, the mixer and the player bar today (from <code>src/components/mix/</code> and <code>PlayerBar.tsx</code>), and its place in each concept. Nothing is removed.</p>
+    <div class="tablewrap"><table id="inventory"></table></div>
+  </section>
+
+  <p class="foot">Greyscale boxes, not a visual design: colours, type and component looks stay as in <code>src/styles/tokens.css</code> and <code>src/components/ui/</code>. Today's frames use sizes measured in the dev build (headless, dev mock) on 2026-10-22.</p>
+</div>
+
+<script id="data" type="application/json">
+{
+"concepts": {
+  "T": {"name": "Today", "short": "Today",
+    "rationale": "As built after phase 5 task 18, measured in the dev build. Decks 1–2 left and 3–4 right of a 358 × 493 px mixer; every deck is 260 px tall in 2- and 4-deck mode; 1 deck is the flat 162 px player deck.",
+    "pros": ["Hardware mental model: two players either side of a 4-channel mixer.", "One deck design for 2 and 4 decks."],
+    "cons": ["2 decks: 233 px of empty card under each deck, while the waveform is 72 px tall.", "Library left with 6 rows (2 decks) and 5 rows (4 decks) at 1440×900; 3 rows at 1280×800, where the 4-deck panel also scrolls inside its 62vh cap.", "Loops only through the LOOP pad mode or F: no loop size readout, no ½/2×, no reloop, no manual IN/OUT.", "Crossfader is 119 px, shorter than a channel fader (108 px) plus its cap.", "1 deck: deck keys are off, and decks 1/3/4 or mixer settings left from the Mix panel keep acting unseen."],
+    "loop": "LOOP pad mode only (2 × 4 sizes per page) and Shift F / Shift L.",
+    "w1280": "Decks shrink to the 440 px minimum; the 4-deck panel (528 px) scrolls inside 496 px; the library shows 3 rows.",
+    "moves": "Reference frame."},
+  "A": {"name": "A · Console", "short": "A",
+    "rationale": "Keeps today's model, decks hugging a central mixer with deck N on channel N's side, and fixes the space. The mixer is re-laid to 440 px tall: filter units move into a row above a crossfader that spans the strips, the dB scale is printed once in the legend column, and rows tighten from 28 to 26 px. Two decks then grow to the mixer's height and spend it on the waveform; four decks stack in the same 440 px. The quick-loop row sits under the overview when there is height, and becomes a 3 × 2 block beside the pads in 4-deck and 1-deck mode.",
+    "pros": ["Smallest change from today: same components, two densities.", "2-deck waveform about 3× taller (72 → 226 px) at the same width.", "Library 6 → 8 rows (2 decks) and 5 → 8 rows (4 decks) at 1440×900; 3 → 5 at 1280×800, with no panel scroll.", "Crossfader roughly doubles in length."],
+    "cons": ["Deck waveforms stay deck-wide (~460 px at 1440), so comparing two tracks means looking left and right.", "4-deck waveforms 72 → ~66 px; header 40 → 30 px.", "Mixer needs a re-layout (filter row, shared meter scale, fader 108 → 96 px)."],
+    "loop": "2 decks: row under the overview. 4 decks and 1 deck: 3 × 2 block between pads and MASTER/SYNC (1 deck: between waveform and pads).",
+    "w1280": "Decks 448 px wide (above the 440 minimum). Section 448 px, so the 62vh cap (496) no longer scrolls; library 5 rows (today 3).",
+    "moves": "Mixer: filter X/Y from beside the crossfader to a row above it; crossfader across the strips; dB labels from each meter to the legend column; filter FREQ knob 28 → 32 px. Deck: overview under the waveform as now; 4-deck header and overview slimmer. Nothing behind a toggle."},
+  "B": {"name": "B · Lanes", "short": "B",
+    "rationale": "Built around the prep job of comparing two tracks: every zoomed waveform becomes a full-width lane across the top, all sharing one centre playhead line, so beats, phrases and drops line up visually. Under the lanes, each deck keeps its header, overview, quick-loop row, transport, pads, sync and tempo, without its waveform, either side of a wide mixer whose filter units stand at its outer edges.",
+    "pros": ["Widest waveforms by far: 1416 px at 1440 (3.2× today).", "Phase and phrase alignment readable at a glance across decks.", "Deck control blocks have room for taller pads."],
+    "cons": ["Tallest section (550–558 px with the Advanced mixer): library 4 rows at 1440×900; at 1280×800 it passes the 62vh cap and leaves 0–1 rows. The Simple mixer brings 2 decks back to 8 rows.", "A deck's title and BPM sit away from its waveform; lanes need their own deck tag.", "4-deck lanes 44 px thin.", "Largest code change: the waveform leaves DeckStrip; focus order and drop targets span two places."],
+    "loop": "Row under the overview in each deck block; the loop band and pending IN draw in the lane.",
+    "w1280": "Lanes keep full width (1256 px), but the 550 px section passes the 496 px cap: the panel scrolls, or the library drops to 0–1 rows (4 with the Simple mixer, 2 decks). It would need a lanes-only collapse at this size (not drawn).",
+    "moves": "Zoomed waveform from the deck card to a lane on top (overview stays in the deck block). Filter units to the mixer's outer edges. Zoom −/+ and sync phase move with the waveform into the lane."},
+  "C": {"name": "C · Docked", "short": "C",
+    "rationale": "Treats the mixer as something you set and then mostly leave. Decks become full-width rows, the layout already approved for the 1-deck player, stacked 1 to 4, and the mixer docks at the right edge. The mixer can fold to a rail that keeps channel faders, cue buttons, meters, master and crossfader, giving the waveforms about 200 px more. Open is the default.",
+    "pros": ["Most library space with the Advanced mixer: 9 rows at 1440×900 in both 2- and 4-deck mode (today 6 and 5).", "One deck shape for 1, 2 and 4 decks, so switching modes does not reshuffle controls.", "Folding the mixer widens every waveform; the 1-deck view can show channel 2 and master on the rail."],
+    "cons": ["Breaks the hardware picture: decks 3–4 move from the right of the mixer to under decks 1–2.", "Folded, EQ, trim, filters, assigns, curve and the cue section are behind a toggle.", "4-deck rows are 96 px: no header row (title, key and BPM in a narrow info column).", "4 decks: waveforms 275 px wide with the mixer open (today 444), 469 px folded."],
+    "loop": "3 × 2 block between the waveform and the pads, in every mode.",
+    "w1280": "With the mixer open the waveforms get narrow (2 decks 299 px, 4 decks 115 px); folded, 493 / 309 px. Library 6 rows. Four decks at this size only work folded.",
+    "moves": "Mixer from the centre to the right edge; decks 3 and 4 from the right side to rows 3–4; in 4-deck mode the header becomes an info column. Folded mixer: listed controls behind the toggle."},
+  "D": {"name": "D · Columns", "short": "D",
+    "rationale": "Each deck stands directly above the channel it plays through: 1 | 2 | master, filters and crossfader | 3 | 4. One vertical glance goes from a track's waveform to its EQ and fader, and a killed LO or a filter assign is visible right under the deck it affects. Channel knobs run in a row under each deck; the master section, both filter units and the crossfader share the centre column.",
+    "pros": ["Strongest deck-to-channel link; mixer state of a deck shows under it.", "No separate mixer card to scan; master and crossfader centred.", "2 decks: the two decks get wide columns either side of the centre."],
+    "cons": ["4 decks: columns 276 px wide and waveforms ~200 px, the narrowest of all.", "The hardware's vertical strip order turns into rows; captions repeat per block.", "2 decks need slim strips for channels 1 and 4 at the outer edges.", "Tall (510 px): library 6 rows at 1440×900; at 1280×800 it passes the 62vh cap and leaves 2 rows."],
+    "loop": "Row under the overview in each column; grid beside the pads in 1-deck mode.",
+    "w1280": "4-deck columns 236 px; waveforms ~160 px. Not workable for four decks at this size.",
+    "moves": "Channel strips leave the mixer card and sit under their decks; EQ knobs horizontal; filter units and master into a centre column; tempo fader shortened to the deck part of the column."}
+},
+"inventory": [
+ ["Deck header", null],
+ ["Deck number (lit when loaded)", ["Header, left", "Same", "Deck block header; repeated as the lane tag", "Header (2 decks); info column (4 decks)", "Column header"]],
+ ["Artwork; eject on hover/focus", ["Header", "Same", "Deck block header", "Header; info column (4 decks)", "Column header"]],
+ ["Title / artist", ["Header", "Same", "Deck block header; title also on the lane", "Header; info column (4 decks)", "Column header"]],
+ ["Key readout", ["Header", "Same", "Deck block header", "Header; info column (4 decks)", "Column header"]],
+ ["BPM (double-click to type) + tempo %", ["Header", "Same", "Deck block header; BPM on the lane tag", "Header; info column (4 decks)", "Column header"]],
+ ["Remaining / elapsed time", ["Header, right", "Same", "Deck block header", "Header; info column (4 decks)", "Column header"]],
+ ["Waveforms", null],
+ ["Zoomed waveform (drag to skim, Cmd/Ctrl+scroll)", ["Under header, 72 px", "Same, 2 decks ~220 px tall", "Full-width lane on top [moved]", "In the row, between transport and loop block [moved]", "In the column"]],
+ ["Marks: hot cues, memory, cue point, loop band", ["On both views", "Same; adds pending IN mark", "Lane and overview", "Same", "Same"]],
+ ["Zoom − / + and level (hover, focus)", ["Waveform top right [hover]", "Same [hover]", "Lane top right [hover]", "Same [hover]", "Same [hover]"]],
+ ["Sync phase meter (followers)", ["Waveform top edge", "Same", "Lane top edge", "Same", "Same"]],
+ ["Warning line (no grid, grid pending, errors)", ["Waveform bottom edge", "Same", "Lane bottom edge", "Same", "Same"]],
+ ["Overview (keyboard seek slider)", ["Under the waveform", "Same", "Deck block, under the header [moved]", "Under the waveform", "Under the waveform"]],
+ ["Empty / loading / analysing / error with Retry, Eject", ["Waveform slot", "Same", "Lane and deck block", "Same", "Same"]],
+ ["Transport", null],
+ ["Q (quantise)", ["Over CUE", "Same", "Same", "Same; over CUE·PLAY in 4-deck rows", "Same"]],
+ ["CUE (hold to preview)", ["Bottom left, round", "Same", "Same", "Same", "Same"]],
+ ["PLAY / PAUSE", ["Bottom left, round", "Same", "Same", "Same; beside CUE in 4-deck rows", "Same"]],
+ ["Pads", null],
+ ["Pad mode tabs HOT CUE · MEMORY · JUMP · LOOP", ["Over the pads", "Same", "Same", "Same", "Same"]],
+ ["Page picker ◀ n/m ▶", ["Right of the tabs", "Same", "Same", "Same", "Same"]],
+ ["8 pads (hot cues A–H, memory, jump, loop sizes)", ["2 × 4", "Same", "2 × 4; 1 × 8 in 1-deck", "Same", "Same"]],
+ ["Pad rename (double-click), × delete, memory right-click menu", ["On the pads", "Same", "Same", "Same", "Same"]],
+ ["Loops", null],
+ ["Beat loop sizes (LOOP pad mode)", ["Pads", "Kept", "Kept", "Kept", "Kept"]],
+ ["Quick loop: IN · OUT · ½ · size · 2× · LOOP · RELOOP", ["None (Shift F / Shift L only)", "Row under overview; block beside pads [new]", "Row in deck block [new]", "Block beside pads [new]", "Row under overview [new]"]],
+ ["Sync", null],
+ ["MASTER", ["Right of the pads", "Same", "Same", "Same", "Bottom row of the column"]],
+ ["SYNC", ["Right of the pads", "Same", "Same", "Same", "Bottom row of the column"]],
+ ["Tempo", null],
+ ["Tempo range ±6 / ±10 / ±16 / WIDE", ["Tempo column top", "Same", "Same", "Same", "Same"]],
+ ["M (master tempo, disabled)", ["Tempo column top", "Same", "Same", "Same", "Same"]],
+ ["Tempo fader (detent, double-click resets)", ["Tempo column, full height", "Same", "Same", "Same, row height", "Deck part of the column"]],
+ ["Nudge − / + (hold)", ["Tempo column bottom", "Same", "Same", "Same", "Same"]],
+ ["Drop a track onto a deck", ["Whole deck card", "Same", "Deck block and its lane", "Whole row", "Whole column"]],
+ ["Mixer channel (× 4)", null],
+ ["Channel number", ["Strip top, caption", "Lit badge like the deck's", "Same as A", "Same as A", "Block header"]],
+ ["LEVEL (trim)", ["Strip row 1", "Same", "Same", "Same; folded: behind toggle [behind]", "Knob row of the block"]],
+ ["EQ HI · MID 1 · MID 2 · LO", ["Strip rows 2–5", "Same", "Same", "Same; folded: behind toggle [behind]", "Knob row of the block"]],
+ ["FILTER assign X · off · Y", ["Strip row 6", "Same", "Same", "Same; folded: behind toggle [behind]", "Switch row of the block"]],
+ ["CUE (Shift+click adds)", ["Strip row 7", "Same", "Same", "Same; also on the rail", "Switch row of the block"]],
+ ["Channel fader", ["Strip", "Same, 96 px", "Same", "Same; also on the rail", "Block, bottom"]],
+ ["Channel meter (9 LEDs)", ["Beside the fader, dB labels on each", "Beside the fader; one dB scale in the legend [moved]", "Same as A", "Same as A; rail too", "Beside the block's fader"]],
+ ["X-F assign X · off · Y", ["Strip bottom", "Same", "Same", "Same; folded: behind toggle [behind]", "Switch row of the block"]],
+ ["Row captions (legend)", ["Left of channel 1", "Same, plus the dB scale", "Same", "Same", "Above each block's knobs"]],
+ ["Master and cue", null],
+ ["Master level", ["Master column", "Same", "Same", "Same; also on the rail", "Centre column"]],
+ ["Master meter", ["Master column", "Same", "Same", "Same; also on the rail", "Centre column"]],
+ ["Cue level", ["Master column", "Same", "Same", "Same; folded: behind toggle [behind]", "Centre column"]],
+ ["Cue / Mix", ["Master column", "Same", "Same", "Same; folded: behind toggle [behind]", "Centre column"]],
+ ["Split", ["Master column", "Same", "Same", "Same; folded: behind toggle [behind]", "Centre column"]],
+ ["Post EQ", ["Master column", "Same", "Same", "Same; folded: behind toggle [behind]", "Centre column"]],
+ ["Filters X and Y", null],
+ ["ON", ["Beside the crossfader", "Filter row above the crossfader [moved]", "Mixer outer edges [moved]", "As A; folded: behind toggle [behind]", "Centre column [moved]"]],
+ ["FREQ", ["Beside the crossfader, 28 px", "Filter row, 32 px [moved]", "Mixer outer edges, 32 px [moved]", "As A; folded: behind toggle [behind]", "Centre column [moved]"]],
+ ["RES", ["Beside the crossfader", "Filter row [moved]", "Mixer outer edges [moved]", "As A; folded: behind toggle [behind]", "Centre column [moved]"]],
+ ["HP · BP · LP (Shift+click combines)", ["Beside the crossfader", "Filter row [moved]", "Mixer outer edges [moved]", "As A; folded: behind toggle [behind]", "Centre column [moved]"]],
+ ["Crossfader", null],
+ ["Crossfader", ["Between the filter units, 119 px", "Across the strips [moved]", "Under the strips [moved]", "Across the mixer; on the rail when folded", "Centre column bottom [moved]"]],
+ ["Curve", ["Under the crossfader", "Right end of the crossfader row [moved]", "Same as A", "Same as A; folded: behind toggle [behind]", "Centre column"]],
+ ["Player bar", null],
+ ["1 deck / 2 decks / 4 decks", ["Player bar left", "Same", "Same", "Same", "Same"]],
+ ["Status line and errors", ["Player bar", "Same", "Same", "Same", "Same"]],
+ ["Shortcuts popover", ["Player bar (2/4 decks)", "Same", "Same", "Same", "Same"]],
+ ["Start / Stop output", ["Player bar", "Same", "Same", "Same", "Same"]],
+ ["Volume", ["Player bar", "Same", "Same", "Same", "Same"]],
+ ["Output device", ["Player bar right", "Same", "Same", "Same", "Same"]],
+ ["Mixer view (new, every concept)", null],
+ ["Mixer settings button ⚙ (opens Settings at Mixer)", ["None", "Mixer top-left corner [new]", "Mixer top-left corner [new]", "Mixer top-left; rail top-right [new]", "Centre column [new]"]],
+ ["Settings → Mixer: view Simple / Advanced, filters Show / Hide", ["None", "Settings dialog, Mixer tab [new]", "Settings dialog, Mixer tab [new]", "Settings dialog, Mixer tab [new]", "Settings dialog, Mixer tab [new]"]],
+ ["FILTER assign, X-F assign, crossfader, curve in Simple view", ["Always shown", "Hidden; defaults apply [behind]", "Hidden; defaults apply [behind]", "Hidden; defaults apply [behind]", "Hidden; defaults apply [behind]"]],
+ ["Filter units with Filters: Hide", ["Always shown", "Hidden; both off [behind]", "Hidden; both off [behind]", "Hidden; both off [behind]", "Hidden; both off [behind]"]],
+ ["New in every concept (fixes)", null],
+ ["Deck playing out of view (e.g. deck 1 in 2-deck mode)", ["Nothing shows it", "Chip in the player bar: 'Deck 1 playing' [new]", "Same [new]", "Same [new]", "Same [new]"]],
+ ["Channel 2 not flat in 1-deck mode", ["Nothing shows it", "Chip in the player deck header [new]", "Same [new]", "Rail shows channel 2 [new]", "Channel 2 block shown [new]"]]
+]
+}
+</script>
+
+<script>
+(() => {
+const DATA = JSON.parse(document.getElementById('data').textContent);
+const SIZES = { '1280': [1280, 800], '1440': [1440, 900], '1920': [1920, 1080] };
+const TITLES = { 1: 'Glass Ember', 2: 'Echo Sun', 3: 'Motion Sun', 4: 'River Signal' };
+const ARTISTS = { 1: 'Marte Vy', 2: 'Oskar Lind', 3: 'Ana Reis', 4: 'Teo Kask' };
+const M = 12, TOP = 80, LIBC = 116, ROW = 26, LOOPGRID = 104;
+let W = 1440, H = 900, boxes = [], metrics = {};
+
+const add = (x, y, w, h, kind, label = '', o = {}) => { boxes.push({ x, y, w, h, kind, label, ...o }); };
+const seg = (x, y, w, h, items, on, o = {}) => add(x, y, w, h, 'seg', '', { items, on, ...o });
+
+function chrome(n) {
+  add(0, 0, W, 40, 'chrome', 'reks · app header (Scan, Import, Export)');
+  add(0, 40, W, 40, 'bar');
+  seg(M, 48, 210, 24, ['1 deck', '2 decks', '4 decks'], [1, 2, 4].indexOf(n), { cls: 'chrome' });
+  const r = W - M;
+  add(r - 160, 48, 160, 24, 'ctl', 'Output device ▾');
+  add(r - 258, 56, 90, 8, 'hfader', '');
+  add(r - 366, 48, 100, 24, 'ctl', 'Start output');
+  let left = r - 366;
+  if (n > 1) { add(r - 452, 48, 78, 24, 'ctl', 'Shortcuts'); left = r - 452; }
+  add(M + 222, 48, left - 8 - (M + 222), 24, 'text', 'MacBook Speakers · 44.1 kHz · 256 · no dropouts', { al: true, dim: true });
+}
+
+function library(y) {
+  y = Math.round(y);
+  const th = H - y - LIBC;
+  const rows = Math.max(0, Math.floor((th - ROW) / ROW));
+  add(0, y, 240, H - y, 'lib', 'Sidebar\nCollection · Playlists\nDevices · Histories', { vt: true });
+  add(240, y, W - 240, Math.min(LIBC, H - y), 'libchrome', 'Library toolbar, search, filter bar (2 rows): 116 px');
+  if (th > 0) add(240, y + LIBC, W - 240, th, 'lib', `Track table · ${rows} rows`, { strong: true });
+  metrics.lib = rows; metrics.section = y - TOP;
+}
+
+function header(x, y, w, h, n, o = {}) {
+  if (w < 300) {
+    // Narrow column: badge over artwork at the left, BPM and key/time stacked at the right.
+    add(x, y, 18, 16, 'badge', String(n));
+    add(x, y + 20, 18, 18, 'art');
+    add(x + w - 92, y, 92, h / 2, 'text', '128.00 +0.00%', { ar: true, mono: true });
+    add(x + w - 92, y + h / 2, 92, h / 2, 'text', '8A · −3:12.4', { ar: true, mono: true });
+    add(x + 22, y, w - 22 - 96, h, 'text', `${TITLES[n]}\n${ARTISTS[n]}`, { al: true });
+    return;
+  }
+  const b = Math.min(22, h - 8);
+  add(x, y + (h - b) / 2, b, b, 'badge', String(n));
+  const art = h - 4;
+  add(x + b + 6, y + 2, art, art, 'art');
+  const tw = 56, bw = 64, kw = 32;
+  let rx = x + w - tw;
+  add(rx, y, tw, h, 'text', '−3:12.4\n2:48.0', { ar: true, mono: true });
+  rx -= bw + 6; add(rx, y, bw, h, 'text', '128.00\n+0.00 %', { ar: true, mono: true, big: h >= 36 });
+  rx -= kw + 6; add(rx, y, kw, h, 'text', '8A\nKEY', { ar: true, mono: true });
+  if (o.chip) { rx -= 136; add(rx, y + (h - 18) / 2, 128, 18, 'ctl', o.chip, { isNew: true }); }
+  const tx = x + b + 6 + art + 6;
+  add(tx, y, rx - 6 - tx, h, 'text', `${TITLES[n]}\n${ARTISTS[n]}`, { al: true });
+}
+
+function info(x, y, w, h, n) {
+  add(x, y, 20, 20, 'badge', String(n));
+  add(x + 26, y, 28, 28, 'art');
+  add(x + 58, y, w - 58, 30, 'text', `${TITLES[n]}\n${ARTISTS[n]}`, { al: true });
+  add(x, y + 34, w, h - 34, 'text', '8A · 128.00 · +0.00 %\n−3:12.4 / 2:48.0', { al: true, mono: true });
+}
+
+function wave(x, y, w, h, o = {}) {
+  add(x, y, w, h, 'wave', h >= 40 ? 'Zoomed waveform' : '');
+  add(x + w / 2, y, 1, h, 'playhead');
+  if (o.lit) add(x + w / 2 - w * 0.1, y + h - 5, w * 0.2, 5, 'loopband');
+  if (o.moved) boxes[boxes.length - (o.lit ? 3 : 2)].moved = true;
+  if (!metrics.wave) metrics.wave = [Math.round(w), Math.round(h)];
+}
+const overview = (x, y, w, h) => add(x, y, w, h, 'ov', h >= 14 ? 'Overview · seek' : '');
+
+const transportW = (h) => (h >= 84 ? 32 : 2 * Math.min(28, h - 24) + 4);
+function transport(x, y, h) {
+  if (h >= 84) {
+    add(x, y + h - 32, 32, 32, 'round', '▶');
+    add(x, y + h - 68, 32, 32, 'round', 'CUE');
+    add(x + 6, y + h - 92, 20, 20, 'ctl', 'Q');
+    return;
+  }
+  const s = Math.min(28, h - 24);
+  add(x, y + h - s, s, s, 'round', 'CUE');
+  add(x + s + 4, y + h - s, s, s, 'round', '▶');
+  add(x, y + h - s - 22, 2 * s + 4, 18, 'ctl', 'Q');
+}
+
+function pads(x, y, w, h, o = {}) {
+  const th = 18, pp = 56;
+  seg(x, y, w - pp - 4, th, w > 300 ? ['HOT CUE', 'MEMORY', 'JUMP', 'LOOP'] : ['CUE', 'MEM', 'JUMP', 'LOOP'], 0, { cls: 'outline' });
+  add(x + w - pp, y, pp, th, 'text', '◀ 1/1 ▶', { mono: true, dim: true });
+  const rows = o.rows ?? 2, cols = 8 / rows;
+  const gy = y + th + 4, gh = h - th - 4;
+  const ph = (gh - (rows - 1) * 4) / rows, pw = (w - (cols - 1) * 4) / cols;
+  const L = ['A Intro', 'B Drop', 'C', 'D Break', 'E', 'F', 'G', 'H'];
+  for (let i = 0; i < 8; i++) {
+    const r = Math.floor(i / cols), c = i % cols;
+    add(x + c * (pw + 4), gy + r * (ph + 4), pw, ph, 'pad', L[i], { set: [0, 1, 3].includes(i) });
+  }
+  if (!metrics.pad) metrics.pad = [Math.round(pw), Math.round(ph)];
+}
+
+function syncBtns(x, y, w, h) {
+  const bh = Math.min(28, (h - 6) / 2);
+  add(x, y + h - bh, w, bh, 'ctl', 'SYNC');
+  add(x, y + h - 2 * bh - 6, w, bh, 'ctl', 'MASTER');
+}
+
+function tempo(x, y, w, h) {
+  add(x - 9, y, 1, h, 'rule');
+  add(x, y, w - 22, 18, 'ctl', '±10');
+  add(x + w - 20, y, 20, 18, 'ctl', 'M', { dim: true });
+  add(x + (w - 12) / 2, y + 24, 12, h - 50, 'vfader');
+  add(x, y + h - 20, (w - 4) / 2, 20, 'ctl', '−');
+  add(x + (w + 4) / 2, y + h - 20, (w - 4) / 2, 20, 'ctl', '+');
+}
+
+function loopRow(x, y, h, o = {}) {
+  if (o.compact) {
+    // Two lines for a narrow deck: IN OUT ½ size 2× over LOOP RELOOP.
+    const rh = (h - 4) / 2;
+    [['IN', 30], ['OUT', 34], ['½', 22], [o.lit ? '8' : '4', 40, 'readout'], ['2×', 22]].reduce((cx, [l, w, k]) => { add(cx, y, w, rh, k ?? 'ctl', l, { isNew: true }); return cx + w + 4; }, x);
+    add(x, y + rh + 4, 70, rh, 'ctl', 'LOOP', { isNew: true, lit: o.lit });
+    add(x + 74, y + rh + 4, 70, rh, 'ctl', 'RELOOP', { isNew: true });
+    return;
+  }
+  const items = [['IN', 30], ['OUT', 34], 0, ['½', 24], ['4', 44, 'readout'], ['2×', 24], 0, ['LOOP', 48, 'loop'], ['RELOOP', 58]];
+  let cx = x;
+  for (const it of items) {
+    if (!it) { cx += 6; continue; }
+    const [l, w, k] = it;
+    add(cx, y, w, h, k === 'readout' ? 'readout' : 'ctl', k === 'readout' && o.lit ? '8 beats' : l === '4' ? '4 beats' : l, { isNew: true, lit: k === 'loop' && o.lit });
+    cx += w + 4;
+  }
+}
+function loopGrid(x, y, w, h, o = {}) {
+  const rh = (h - 8) / 3, half = (w - 4) / 2, s = 22;
+  add(x, y, half, rh, 'ctl', 'IN', { isNew: true });
+  add(x + half + 4, y, half, rh, 'ctl', 'OUT', { isNew: true });
+  add(x, y + rh + 4, s, rh, 'ctl', '½', { isNew: true });
+  add(x + s + 4, y + rh + 4, w - 2 * s - 8, rh, 'readout', o.lit ? '8' : '4', { isNew: true });
+  add(x + w - s, y + rh + 4, s, rh, 'ctl', '2×', { isNew: true });
+  add(x, y + 2 * (rh + 4), half, rh, 'ctl', 'LOOP', { isNew: true, lit: o.lit });
+  add(x + half + 4, y + 2 * (rh + 4), half, rh, 'ctl', 'RELOOP', { isNew: true });
+}
+
+/* A deck with the bottom row under the views (today's 2/4-deck deck). */
+function stackDeck(x, y, w, h, n, o) {
+  add(x, y, w, h, 'panel');
+  const p = 8, tw = 44;
+  tempo(x + w - p - tw, y + p, tw, h - 2 * p);
+  const cx = x + p, cw = w - 2 * p - tw - 17;
+  let cy = y + p;
+  header(cx, cy, cw, o.hdr, n); cy += o.hdr + 6;
+  const loopH = o.loop === 'row' ? 24 : o.loop === 'row2' ? 44 : 0;
+  const syncRowH = o.syncRow ? 26 : 0;
+  if (o.wave !== 0) {
+    const fixed = o.ov + 4 + 6 + (loopH ? loopH + 6 : 0) + syncRowH + o.bottom;
+    const wh = o.wave === 'fill' ? y + h - p - cy - fixed : o.wave;
+    wave(cx, cy, cw, wh, { lit: o.lit, moved: o.waveMoved }); cy += wh + 4;
+  }
+  overview(cx, cy, cw, o.ov);
+  if (o.ovMoved) boxes[boxes.length - 1].moved = true;
+  cy += o.ov + 6;
+  if (loopH) { loopRow(cx, cy, loopH, { lit: o.lit, compact: o.loop === 'row2' }); cy += loopH + 6; }
+  if (syncRowH) {
+    add(cx, cy, (cw - 4) / 2, 20, 'ctl', 'MASTER', { moved: true });
+    add(cx + (cw + 4) / 2, cy, (cw - 4) / 2, 20, 'ctl', 'SYNC', { moved: true });
+    cy += syncRowH;
+  }
+  const bh = y + h - p - cy, trW = transportW(bh);
+  transport(cx, cy, bh);
+  const syncW = o.sync === false ? 0 : 60;
+  let right = cx + cw - (syncW ? syncW + 8 : 0);
+  if (o.loop === 'grid') { right -= LOOPGRID; loopGrid(right, cy, LOOPGRID, bh, { lit: o.lit }); right -= 8; }
+  const px = cx + trW + 8;
+  pads(px, cy, Math.min(o.padsMax ?? 336, right - px), bh);
+  if (syncW) syncBtns(cx + cw - syncW, cy, syncW, bh);
+}
+
+/* A deck laid out in one row under its header (today's player deck). */
+function rowDeck(x, y, w, h, n, o) {
+  add(x, y, w, h, 'panel');
+  const p = 8, tw = 44;
+  tempo(x + w - p - tw, y + p, tw, h - 2 * p);
+  const cx = x + p, cw = w - 2 * p - tw - 17;
+  let cy = y + p, rx = cx;
+  if (o.inline) { info(cx, cy, o.inline, h - 2 * p, n); rx += o.inline + 8; if (o.inlineMoved) boxes.slice(-4).forEach((b) => { b.moved = true; }); }
+  else { header(cx, cy, cw, o.hdr, n, { chip: o.chip }); cy += o.hdr + 6; }
+  const rh = y + h - p - cy;
+  transport(rx, cy, rh); rx += transportW(rh) + 8;
+  let right = cx + cw;
+  if (o.sync) { syncBtns(right - 60, cy, 60, rh); right -= 68; }
+  const pw = o.pads ?? 336;
+  pads(right - pw, cy, pw, rh); right -= pw + 8;
+  if (o.loop === 'grid') { loopGrid(right - LOOPGRID, cy, LOOPGRID, rh, { lit: o.lit }); right -= LOOPGRID + 8; }
+  const vw = right - rx, ovh = o.ov ?? 20, wh = rh - ovh - 4;
+  wave(rx, cy, vw, wh, { lit: o.lit, moved: o.waveMoved }); overview(rx, cy + wh + 4, vw, ovh);
+}
+
+function lknob(cx, y, k, label) {
+  const lw = Math.max(26, k + 4);
+  add(cx - lw / 2, y, lw, 10, 'cap', label);
+  add(cx - k / 2, y + 12, k, k, 'knob');
+}
+
+function strip(x, top, sw, o, ch) {
+  const row = o.row, fader = o.fader;
+  add(x + sw / 2 - 9, top, 18, 13, 'chbadge', String(ch));
+  let ry = top + 16;
+  for (let i = 0; i < 5; i++) {
+    const k = i === 0 ? (o.trimK ?? 20) : (o.eqK ?? 26);
+    add(x + (sw - k) / 2, ry + (row - k) / 2, k, k, 'knob', '', o.behind ? { behind: true } : {});
+    ry += row;
+  }
+  if (!o.simple) { seg(x + 4, ry + (row - 16) / 2, sw - 8, 16, ['X', '·', 'Y'], ch <= 2 ? 0 : 2, { lit: true }); ry += row; }
+  add(x + (sw - 32) / 2, ry + (row - 16) / 2, 32, 16, 'ctl', 'CUE'); ry += row;
+  const mW = o.sharedScale ? 8 : 24, fw = 14, gx = x + (sw - (fw + 4 + mW)) / 2;
+  add(gx, ry + 4, fw, fader, 'vfader');
+  add(gx + fw + 4, ry + 4, mW, fader, 'meter', o.sharedScale ? '' : '+10\n0\n−20', { moved: false });
+  ry += fader + 8;
+  if (!o.simple) seg(x + 4, ry + (row - 16) / 2, sw - 8, 16, ['X', '·', 'Y'], 1, { lit: true });
+}
+
+/* Mixer view: 'adv' (everything), 'simple' (no assign rows, no crossfader), 'nofilt' (simple without filter units). */
+let MV = 'adv';
+const view = (o) => ({ ...o, simple: MV !== 'adv', noFilters: MV === 'nofilt' });
+const gear = (x, y) => add(x, y, 20, 16, 'ctl', '⚙', { isNew: true });
+
+/* The height a mixer needs for its rows; a taller box gives the rest to the faders. */
+function mixerNaturalH(o) {
+  const rows = 5 + 1 + (o.simple ? 0 : 2);
+  let h = 8 + 16 + rows * o.row + o.fader + 8;
+  if (o.filters === 'row' && !o.noFilters) h += 8 + 56;
+  if (o.filters === 'row' && !o.simple) h += 4 + 28;
+  if (o.filters === 'sides' && !o.simple) h += 6 + 28;
+  return h + 8;
+}
+
+function masterCol(x, top, w, h, o) {
+  add(x, top, w, 12, 'cap', 'MASTER');
+  lknob(x + w / 2, top + 14, 28, 'LEVEL');
+  const meterH = Math.min(o.fader, h - 210);
+  add(x + (w - 10) / 2, top + 60, 10, meterH, 'meter');
+  let y = top + 60 + meterH + 8;
+  add(x, y, w, 12, 'cap', 'CUE'); y += 14;
+  lknob(x + w / 2, y, 24, 'LEVEL'); y += 40;
+  lknob(x + w / 2, y, 24, 'CUE/MIX'); y += 42;
+  add(x + 6, y, w - 12, 16, 'ctl', 'SPLIT'); y += 20;
+  add(x + 6, y, w - 12, 16, 'ctl', 'POST EQ');
+}
+
+function filterRow(x, y, w, h, u, o) {
+  const mv = { moved: o.moved };
+  add(x, y, 54, 14, 'cap', `FILTER ${u}`, mv);
+  add(x + 58, y, 30, 14, 'ctl', 'ON', mv);
+  const ky = y + 16;
+  lknob(x + 17, ky - 2, 32, 'FREQ'); boxes[boxes.length - 1].moved = o.moved;
+  lknob(x + 52, ky + 4, 22, 'RES'); boxes[boxes.length - 1].moved = o.moved;
+  const bw = 28;
+  ['HP', 'BP', 'LP'].forEach((t, i) => add(x + 68 + i * (bw + 2), ky + 14, bw, 18, 'ctl', t, { lit: (u === 'X' && i === 2) || (u === 'Y' && i === 0), ...mv }));
+}
+function filterUnit(x, y, w, h, u) {
+  add(x, y, 50, 14, 'cap', `FILTER ${u}`);
+  add(x + 54, y, 28, 14, 'ctl', 'ON');
+  lknob(x + 22, y + 20, 28, 'FREQ');
+  lknob(x + 64, y + 24, 22, 'RES');
+  ['HP', 'BP', 'LP'].forEach((t, i) => add(x + i * 30, y + h - 18, 27, 16, 'ctl', t, { lit: (u === 'X' && i === 2) || (u === 'Y' && i === 0) }));
+}
+function filterCol(x, y, w, h, u) {
+  add(x, y, w, 12, 'cap', `FILTER ${u}`, { moved: true });
+  add(x + (w - 34) / 2, y + 16, 34, 16, 'ctl', 'ON', { moved: true });
+  lknob(x + w / 2, y + 40, 32, 'FREQ'); boxes[boxes.length - 1].moved = true;
+  lknob(x + w / 2, y + 96, 24, 'RES'); boxes[boxes.length - 1].moved = true;
+  ['HP', 'BP', 'LP'].forEach((t, i) => add(x + (w - 40) / 2, y + 140 + i * 22, 40, 18, 'ctl', t, { moved: true, lit: (u === 'X' && i === 2) || (u === 'Y' && i === 0) }));
+}
+function crossfaderRow(x, y, w, h, o = {}) {
+  const fy = y + (h - 14) / 2;
+  add(x, fy, 12, 14, 'cap', 'X');
+  const fw = w - 12 - 12 - 8 - 62;
+  add(x + 14, fy, fw, 14, 'hfader', 'crossfader', { moved: o.moved });
+  add(x + 14 + fw + 2, fy, 12, 14, 'cap', 'Y');
+  add(x + w - 60, fy, 36, 14, 'cap', 'CURVE', { moved: o.moved });
+  add(x + w - 20, y + (h - 20) / 2, 20, 20, 'knob', '', { moved: o.moved });
+  metrics.xf = Math.round(fw);
+}
+
+function mixer(x, y, w, h, o) {
+  add(x, y, w, h, 'panel');
+  if (o.filters !== 'between') o = { ...o, fader: o.fader + Math.min(60, Math.max(0, h - mixerNaturalH(o))) };
+  const p = 8, legW = o.sharedScale ? 40 : 46, sideW = o.filters === 'sides' && !o.noFilters ? 88 : 0, masterW = o.masterW ?? 64;
+  const sw = (w - 2 * p - legW - masterW - 6 - (sideW ? 2 * (sideW + 8) : 0)) / 4;
+  const sx = x + p + (sideW ? sideW + 8 : 0), top = y + p, row = o.row;
+  if (o.filters !== 'between') gear(sx + legW - 24, top - 2);
+  let ry = top + 16;
+  const legend = o.simple ? ['LEVEL', 'HI', 'MID 1', 'MID 2', 'LO', 'CUE'] : ['LEVEL', 'HI', 'MID 1', 'MID 2', 'LO', 'FILTER', 'CUE'];
+  legend.forEach((r) => { add(sx, ry, legW - 4, row, 'cap', r, { ar: true }); ry += row; });
+  if (o.sharedScale) add(sx, ry + 4, legW - 6, o.fader, 'scale', '+10\n+6\n+3\n0\n−3\n−6\n−10\n−15\n−20', { ar: true, mono: true, moved: true });
+  const xfY = ry + o.fader + 8;
+  if (!o.simple) add(sx, xfY, legW - 4, row, 'cap', 'X-F', { ar: true });
+  const stripBottom = xfY + (o.simple ? 0 : row);
+  for (let c = 0; c < 4; c++) strip(sx + legW + c * sw, top, sw, o, c + 1);
+  const mx = sx + legW + 4 * sw + 6;
+  add(mx - 3, top, 1, stripBottom - top, 'rule');
+  masterCol(mx, top, masterW, stripBottom - top, o);
+  metrics.mixer = [Math.round(w), Math.round(h)];
+  if (o.filters === 'sides') {
+    if (sideW) {
+      filterCol(x + p, top, sideW, stripBottom - top, 'X');
+      filterCol(x + w - p - sideW, top, sideW, stripBottom - top, 'Y');
+    }
+    const yb = stripBottom + 6;
+    if (!o.simple) crossfaderRow(sx + legW, yb, 4 * sw + masterW, y + h - p - yb, { moved: true });
+  } else if (o.filters === 'row') {
+    let yb = stripBottom + 8;
+    if (!o.noFilters) {
+      const fh = 56, half = (w - 2 * p - 8) / 2;
+      add(x + p, yb - 4, w - 2 * p, 1, 'rule');
+      filterRow(x + p, yb, half, fh, 'X', { moved: true });
+      filterRow(x + p + half + 8, yb, half, fh, 'Y', { moved: true });
+      yb += fh + 4;
+    }
+    if (!o.simple) crossfaderRow(x + p, yb, w - 2 * p, y + h - p - yb, { moved: true });
+  } else {
+    const yb = stripBottom + 10, bh = y + h - p - yb;
+    add(x + p, yb - 5, w - 2 * p, 1, 'rule');
+    filterUnit(x + p, yb, 90, bh, 'X');
+    filterUnit(x + w - p - 90, yb, 90, bh, 'Y');
+    const fx = x + p + 98, fw = w - 2 * p - 196;
+    add(fx, yb + 16, 10, 14, 'cap', 'X');
+    add(fx + 12, yb + 16, fw - 24, 14, 'hfader', '119 px');
+    add(fx + fw - 10, yb + 16, 10, 14, 'cap', 'Y');
+    lknob(fx + fw / 2, yb + 40, 20, 'CURVE');
+    metrics.xf = 119;
+  }
+}
+
+function rail(x, y, w, h, chans) {
+  add(x, y, w, h, 'panel');
+  add(x + 8, y + 8, w - 44, 20, 'ctl', 'Open mixer ◂', { isNew: true });
+  gear(x + w - 28, y + 10);
+  const masterW = 34, cw = (w - 16 - masterW - 6) / chans.length, fy = y + 34;
+  const xfH = chans.length > 1 && MV === 'adv' ? 26 : 0;
+  const fh = h - 34 - 8 - xfH - 22;
+  chans.forEach((c, i) => {
+    const cx = x + 8 + i * cw;
+    add(cx + (cw - 16) / 2, fy, 16, 12, 'chbadge', String(c));
+    add(cx + 2, fy + 16, cw - 4, 16, 'ctl', 'CUE');
+    add(cx + cw / 2 - 9, fy + 38, 10, fh - 38, 'vfader');
+    add(cx + cw / 2 + 4, fy + 38, 5, fh - 38, 'meter');
+  });
+  const mx = x + w - 8 - masterW;
+  add(mx, fy, masterW, 12, 'cap', 'MASTER');
+  add(mx + (masterW - 20) / 2, fy + 16, 20, 20, 'knob');
+  add(mx + (masterW - 8) / 2, fy + 40, 8, fh - 40, 'meter');
+  add(x + 8, y + h - 8 - xfH - 18, w - 16, 16, 'note', 'Trim, EQ, filters, assigns, curve, cue section: open the mixer', { behind: true });
+  if (xfH) { add(x + 8, y + h - 8 - 20, w - 16, 20, 'hfader', 'X · crossfader · Y'); metrics.xf = Math.round(w - 16); }
+}
+
+function lane(x, y, w, h, n) {
+  add(x, y, w, h, 'wave', '', { moved: true });
+  add(x + 6, y + 4, 18, 16, 'badge', String(n));
+  add(x + 30, y + 4, 360, 16, 'lanetxt', `${TITLES[n]} · 128.00 · −3:12.4`, { al: true });
+  if (!metrics.wave) metrics.wave = [Math.round(w), Math.round(h)];
+}
+
+function channelBlock(x, y, w, h, ch, o = {}) {
+  add(x, y, w, h, 'chpanel');
+  add(x + 6, y + 6, 18, 13, 'chbadge', String(ch));
+  const labels = ['LEVEL', 'HI', 'MID 1', 'MID 2', 'LO'], step = (w - 16) / 5;
+  labels.forEach((l, i) => lknob(x + 8 + step * (i + 0.5), y + 22, i === 0 ? 20 : 26, l));
+  const ry = y + 66, third = (w - 16 - 8) / 3;
+  add(x + 8 + third + 4, ry, third, 18, 'ctl', 'CUE');
+  if (MV === 'adv') {
+    seg(x + 8, ry, third, 18, ['X', '·', 'Y'], ch <= 2 ? 0 : 2, { lit: true });
+    seg(x + 8 + 2 * (third + 4), ry, third, 18, ['X', '·', 'Y'], 1, { lit: true });
+    add(x + 8, ry + 20, third, 10, 'cap', 'FILTER');
+    add(x + 8 + 2 * (third + 4), ry + 20, third, 10, 'cap', 'X-F');
+  }
+  const fy = ry + 36, fh = y + h - 8 - fy;
+  add(x + w / 2 - 12, fy, 14, fh, 'vfader');
+  add(x + w / 2 + 6, fy, 22, fh, 'meter', '+10\n0\n−20');
+}
+
+function slimStrip(x, y, w, h, ch) {
+  add(x, y, w, h, 'chpanel');
+  const rows = MV === 'adv' ? 8 : 6;
+  strip(x, y + 8, w, view({ row: 26, fader: Math.max(60, h - 8 - 16 - rows * 26 - 16), sharedScale: false }), ch);
+}
+
+function centreCol(x, y, w, h) {
+  add(x, y, w, h, 'panel');
+  const p = 10;
+  add(x + p, y + p, 60, 12, 'cap', 'MASTER');
+  lknob(x + p + 26, y + p + 14, 30, 'LEVEL');
+  add(x + p + 60, y + p + 4, 10, 100, 'meter');
+  add(x + w / 2 + 6, y + p, 60, 12, 'cap', 'CUE');
+  lknob(x + w / 2 + 24, y + p + 14, 24, 'LEVEL');
+  lknob(x + w / 2 + 74, y + p + 14, 24, 'CUE/MIX');
+  add(x + w / 2 + 6, y + p + 56, 50, 16, 'ctl', 'SPLIT');
+  add(x + w / 2 + 62, y + p + 56, 56, 16, 'ctl', 'POST EQ');
+  gear(x + w - p - 20, y + p + 74);
+  const fy = y + p + 124;
+  if (MV !== 'nofilt') {
+    filterRow(x + p, fy, w - 2 * p, 52, 'X', { moved: true });
+    filterRow(x + p, fy + 64, w - 2 * p, 52, 'Y', { moved: true });
+  }
+  if (MV === 'adv') crossfaderRow(x + p, y + h - p - 44, w - 2 * p, 44, { moved: true });
+  metrics.mixer = [Math.round(w), Math.round(h)];
+}
+
+const MIX = {
+  today: { row: 28, fader: 108, filters: 'between', masterW: 58, eqK: 28, trimK: 22 },
+  a: { row: 26, fader: 96, filters: 'row', sharedScale: true, masterW: 64 },
+  b: { row: 26, fader: 96, filters: 'sides', sharedScale: true, masterW: 64 },
+  b4: { row: 24, fader: 80, filters: 'sides', sharedScale: true, masterW: 64, eqK: 24 },
+  c: { row: 24, fader: 86, filters: 'row', sharedScale: true, masterW: 64, eqK: 24 },
+};
+
+function build(c, n, size, mixerOpen, mv = 'adv') {
+  [W, H] = SIZES[size];
+  boxes = []; metrics = {};
+  MV = c === 'T' ? 'adv' : mv;
+  chrome(n);
+  const G = 8;
+  if (c === 'T') {
+    if (n === 1) { rowDeck(M, TOP, W - 2 * M, 162, 2, { hdr: 40 }); library(TOP + 170); }
+    else {
+      const mw = 358, mh = 493, mx = Math.round((W - mw) / 2) + (W === 1440 ? 0 : 0);
+      const dw = Math.round((W - 2 * M - mw - 2 * G) / 2);
+      const decks = n === 2 ? [[2, 0], [3, 0]] : [[1, 0], [2, 1], [3, 0], [4, 1]];
+      decks.forEach(([d, r]) => stackDeck(d <= 2 ? M : mx + mw + G, TOP + r * 268, dw, 260, d, { hdr: 40, wave: 72, ov: 20, bottom: 92 }));
+      mixer(mx, TOP, mw, mh, MIX.today);
+      if (n === 2) { add(M, TOP + 268, dw, mh - 268, 'waste', 'Empty: 233 px under deck 2'); add(mx + mw + G, TOP + 268, dw, mh - 268, 'waste', 'Empty: 233 px under deck 3'); }
+      const sec = n === 2 ? Math.max(mh, 260) : Math.max(mh, 528);
+      const cap = Math.round(H * 0.62);
+      if (sec > cap) add(M, TOP + cap - 22, W - 2 * M, 22, 'waste', `Panel scrolls: ${sec} px of decks in a ${cap} px panel (62vh)`);
+      library(TOP + Math.min(sec + 8, cap));
+    }
+  }
+  if (c === 'A') {
+    // Two decks take the mixer's height; four need 440 px, and a shorter mixer stretches its faders.
+    const mo = view(MIX.a), mw = 344, mh = n === 2 ? mixerNaturalH(mo) : 440;
+    const mx = Math.round((W - mw) / 2), dw = Math.round((W - 2 * M - mw - 2 * G) / 2);
+    if (n === 1) { rowDeck(M, TOP, W - 2 * M, 162, 2, { hdr: 40, loop: 'grid', chip: 'Channel 2 EQ not flat' }); library(TOP + 170); }
+    else {
+      mixer(mx, TOP, mw, mh, mo);
+      if (n === 2) {
+        stackDeck(M, TOP, dw, mh, 2, { hdr: 40, wave: 'fill', ov: 20, loop: 'row', bottom: 92, lit: true });
+        stackDeck(mx + mw + G, TOP, dw, mh, 3, { hdr: 40, wave: 'fill', ov: 20, loop: 'row', bottom: 92 });
+      } else {
+        const dh = (mh - G) / 2;
+        [[1, 0], [2, 1], [3, 0], [4, 1]].forEach(([d, r]) => stackDeck(d <= 2 ? M : mx + mw + G, TOP + r * (dh + G), dw, dh, d, { hdr: 30, wave: 'fill', ov: 14, loop: 'grid', bottom: 74, lit: d === 2 }));
+      }
+      library(TOP + mh + 8);
+    }
+  }
+  if (c === 'B') {
+    if (n === 1) {
+      lane(M, TOP + 8, W - 2 * M, 80, 2);
+      add(W / 2, TOP + 8, 1, 80, 'playhead');
+      const y = TOP + 96, h = 124;
+      add(M, y, W - 2 * M, h, 'panel');
+      const p = 8, tw = 44;
+      tempo(W - M - p - tw, y + p, tw, h - 2 * p);
+      header(M + p, y + p, 520, 36, 2);
+      overview(M + p + 532, y + p + 8, W - 2 * M - 2 * p - tw - 10 - 532, 20);
+      boxes[boxes.length - 1].moved = true;
+      const ry = y + p + 42, rh = h - 2 * p - 42;
+      transport(M + p, ry, rh);
+      loopRow(M + p + transportW(rh) + 12, ry + (rh - 24), 24, {});
+      pads(M + p + transportW(rh) + 12 + 300, ry, W - 2 * M - 2 * p - tw - 10 - transportW(rh) - 12 - 300, rh, { rows: 1 });
+      library(y + h + 8);
+    } else {
+      const lh = n === 2 ? 72 : 44, ln = n === 2 ? [2, 3] : [1, 2, 3, 4];
+      ln.forEach((d, i) => lane(M, TOP + 8 + i * (lh + 4), W - 2 * M, lh, d));
+      const lanesH = ln.length * (lh + 4) - 4;
+      add(W / 2, TOP + 8, 1, lanesH, 'playhead');
+      const cy = TOP + 8 + lanesH + 8;
+      const mo = view(n === 2 ? MIX.b : MIX.b4), mw = mo.noFilters ? 344 : 520;
+      const mh = Math.max(mixerNaturalH(mo), n === 2 ? 250 : 340), mx = Math.round((W - mw) / 2);
+      mixer(mx, cy, mw, mh, mo);
+      const dw = Math.round((W - 2 * M - mw - 2 * G) / 2);
+      if (n === 2) {
+        stackDeck(M, cy, dw, mh, 2, { hdr: 40, wave: 0, ov: 22, loop: 'row', bottom: 0, ovMoved: true, lit: true });
+        stackDeck(mx + mw + G, cy, dw, mh, 3, { hdr: 40, wave: 0, ov: 22, loop: 'row', bottom: 0, ovMoved: true });
+      } else {
+        const dh = (mh - G) / 2;
+        [[1, 0], [2, 1], [3, 0], [4, 1]].forEach(([d, r]) => stackDeck(d <= 2 ? M : mx + mw + G, cy + r * (dh + G), dw, dh, d, { hdr: 30, wave: 0, ov: 16, loop: 'grid', bottom: 0, ovMoved: true }));
+      }
+      library(cy + mh + 8);
+    }
+  }
+  if (c === 'C') {
+    const railW = 150, mw = mixerOpen ? 344 : railW, mx = W - M - mw, dw = mx - G - M;
+    if (n === 1) {
+      rowDeck(M, TOP, W - 2 * M - railW - G, 162, 2, { hdr: 40, loop: 'grid' });
+      rail(W - M - railW, TOP, railW, 162, [2]);
+      library(TOP + 170);
+    } else {
+      const mo = view(MIX.c), mh = Math.max(mixerNaturalH(mo), n === 2 ? 308 : 386);
+      if (mixerOpen) mixer(mx, TOP, mw, mh, mo); else rail(mx, TOP, mw, mh, [1, 2, 3, 4]);
+      if (mixerOpen) boxes.filter((b) => b.kind === 'panel').slice(-1)[0].moved = true;
+      if (n === 2) {
+        const dh = (mh - G) / 2;
+        stackless(2, TOP, dh, true); stackless(3, TOP + dh + G, dh, false);
+        function stackless(d, y, h, lit) { rowDeck(M, y, dw, h, d, { hdr: 36, loop: 'grid', sync: true, pads: 300, lit }); }
+      } else {
+        const dh = (mh - 3 * 6) / 4;
+        [1, 2, 3, 4].forEach((d, i) => rowDeck(M, TOP + i * (dh + 6), dw, dh, d, { inline: 168, inlineMoved: true, loop: 'grid', sync: true, pads: 280, ov: 14, lit: d === 2 }));
+      }
+      library(TOP + mh + 8);
+    }
+  }
+  if (c === 'D') {
+    if (n === 1) {
+      const bw = 300;
+      rowDeck(M, TOP, W - 2 * M - bw - G, 170, 2, { hdr: 40, loop: 'grid' });
+      channelBlock(W - M - bw, TOP, bw, 170, 2);
+      library(TOP + 178);
+    } else if (n === 4) {
+      const cw0 = 280, cw = (W - 2 * M - cw0 - 4 * G) / 4, cx = M + 2 * (cw + G);
+      const xs = [M, M + cw + G, cx + cw0 + G, cx + cw0 + G + cw + G];
+      const dh = 300, bh = 196;
+      [1, 2, 3, 4].forEach((d, i) => {
+        stackDeck(xs[i], TOP, cw, dh, d, { hdr: 40, wave: 'fill', ov: 14, loop: 'row2', syncRow: true, bottom: 74, sync: false, lit: d === 2 });
+        channelBlock(xs[i], TOP + dh + 6, cw, bh, d);
+      });
+      centreCol(cx, TOP, cw0, dh + 6 + bh);
+      library(TOP + dh + 6 + bh + 8);
+    } else {
+      const cw0 = 280, sw = 64, cw = (W - 2 * M - cw0 - 2 * sw - 4 * G) / 2;
+      const x2 = M + sw + G, cx = x2 + cw + G, x3 = cx + cw0 + G;
+      const dh = 300, bh = 196;
+      slimStrip(M, TOP, sw, dh + 6 + bh, 1);
+      slimStrip(W - M - sw, TOP, sw, dh + 6 + bh, 4);
+      [[2, x2], [3, x3]].forEach(([d, x]) => {
+        stackDeck(x, TOP, cw, dh, d, { hdr: 40, wave: 'fill', ov: 18, loop: 'row', bottom: 74, lit: d === 2 });
+        channelBlock(x, TOP + dh + 6, cw, bh, d);
+      });
+      centreCol(cx, TOP, cw0, dh + 6 + bh);
+      library(TOP + dh + 6 + bh + 8);
+    }
+  }
+  return { boxes, metrics: { ...metrics } };
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch])); }
+
+function renderBoxes(target, list) {
+  const parts = [];
+  for (const b of list) {
+    if (b.w <= 0 || b.h <= 0) continue;
+    const cls = ['b', `k-${b.kind}`];
+    if (b.al) cls.push('al'); if (b.ar) cls.push('ar'); if (b.vt) cls.push('vt');
+    if (b.mono) cls.push('mono'); if (b.big) cls.push('big'); if (b.dim) cls.push('dim');
+    if (b.isNew) cls.push('is-new'); if (b.lit && b.kind !== 'seg') cls.push('is-lit');
+    if (b.moved) cls.push('is-moved'); if (b.behind) cls.push('is-behind');
+    if (b.set) cls.push('set'); if (b.strong) cls.push('strong'); if (b.cls) cls.push(b.cls);
+    const st = `left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px`;
+    let inner = esc(b.label);
+    if (b.kind === 'seg') inner = b.items.map((t, i) => `<i class="${i === b.on ? 'on' : ''}">${esc(t)}</i>`).join('');
+    parts.push(`<div class="${cls.join(' ')}" style="${st}">${inner}</div>`);
+  }
+  target.innerHTML = parts.join('');
+}
+
+/* ---------- page state ---------- */
+const state = { c: 'A', n: 2, s: '1440', m: 'open', v: 'adv', z: 'fit' };
+try { const saved = JSON.parse(localStorage.getItem('reks-wire') || 'null'); if (saved) Object.assign(state, saved); } catch (e) { /* storage unavailable */ }
+const h = location.hash.replace('#', '');
+const hm = /^([TABCD])([124])?$/i.exec(h);
+if (hm) { state.c = hm[1].toUpperCase(); if (hm[2]) state.n = Number(hm[2]); }
+
+const OPTS = {
+  c: [['T', 'Today'], ['A', 'A · Console'], ['B', 'B · Lanes'], ['C', 'C · Docked'], ['D', 'D · Columns']],
+  n: [[1, '1 deck'], [2, '2 decks'], [4, '4 decks']],
+  s: [['1280', '1280×800'], ['1440', '1440×900'], ['1920', '1920×1080']],
+  v: [['adv', 'Advanced'], ['simple', 'Simple'], ['nofilt', 'Simple, no filters']],
+  m: [['open', 'Open'], ['rail', 'Folded']],
+  z: [['fit', 'Fit'], ['full', '1:1']],
+};
+for (const key of Object.keys(OPTS)) {
+  const el = document.getElementById(`seg-${key}`);
+  el.innerHTML = OPTS[key].map(([v, l]) => `<button type="button" id="opt-${key}-${v}" data-k="${key}" data-v="${v}">${esc(l)}</button>`).join('');
+  el.addEventListener('click', (e) => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    const v = btn.dataset.v; state[key] = key === 'n' ? Number(v) : v;
+    try { localStorage.setItem('reks-wire', JSON.stringify(state)); } catch (err) { /* ignore */ }
+    render();
+  });
+}
+
+const stage = document.getElementById('stage'), frame = document.getElementById('frame');
+function fit() {
+  const [fw, fh] = SIZES[state.s];
+  frame.style.width = `${fw}px`; frame.style.height = `${fh}px`;
+  if (state.z === 'full') { stage.classList.add('full'); frame.style.transform = 'none'; stage.style.height = `${fh + 2}px`; }
+  else { stage.classList.remove('full'); const s = (stage.clientWidth - 2) / fw; frame.style.transform = `scale(${s})`; stage.style.height = `${fh * s + 2}px`; }
+}
+new ResizeObserver(fit).observe(stage);
+
+function fmtWave(m) { return m.wave ? `${m.wave[0]} × ${m.wave[1]} px` : '—'; }
+
+function render() {
+  for (const key of Object.keys(OPTS)) for (const [v] of OPTS[key]) {
+    const b = document.getElementById(`opt-${key}-${v}`);
+    b.setAttribute('aria-pressed', String(state[key] === (key === 'n' ? Number(v) : v)));
+  }
+  document.getElementById('grp-m').hidden = state.c !== 'C' || state.n === 1;
+  document.getElementById('grp-v').hidden = state.c === 'T';
+  const { boxes: list, metrics: mt } = build(state.c, state.n, state.s, state.m === 'open', state.v);
+  renderBoxes(frame, list);
+  const con = DATA.concepts[state.c];
+  frame.setAttribute('aria-label', `${con.name}, ${state.n} deck${state.n > 1 ? 's' : ''}, ${state.s} window`);
+  fit();
+  const items = [
+    ['Deck section', `${mt.section} px tall`],
+    ['Waveform (first deck)', fmtWave(mt)],
+    ['Pads', mt.pad ? `${mt.pad[0]} × ${mt.pad[1]} px` : '—'],
+    ['Mixer', mt.mixer ? `${mt.mixer[0]} × ${mt.mixer[1]} px` : 'not shown'],
+    ['Crossfader', mt.xf ? `${mt.xf} px` : 'hidden'],
+    ['Library', `${mt.lib} rows`],
+  ];
+  document.getElementById('metrics').innerHTML = items.map(([k, v]) => `<span>${k}: <b>${esc(v)}</b></span>`).join('');
+  document.getElementById('notes').innerHTML = `
+    <div>
+      <h2>${esc(con.name)}</h2>
+      <p>${esc(con.rationale)}</p>
+      <h3>Pros</h3><ul>${con.pros.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+      <h3>Cons</h3><ul>${con.cons.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+    </div>
+    <div>
+      <h3>Quick loop</h3><p>${esc(con.loop)}</p>
+      <h3>At 1280×800</h3><p>${esc(con.w1280)}</p>
+      <h3>Moves compared with today</h3><p>${esc(con.moves)}</p>
+    </div>`;
+}
+
+/* ---------- static tables ---------- */
+function compareTable() {
+  const rows = [];
+  const cs = ['T', 'A', 'B', 'C', 'D'];
+  const head = `<thead><tr><th>Measure</th>${cs.map((c) => `<th>${esc(DATA.concepts[c].name)}</th>`).join('')}</tr></thead>`;
+  const m = (c, n, s, open = true, mv = 'adv') => build(c, n, s, open, mv).metrics;
+  const views = (c, n, s, f) => (c === 'T' ? f(m(c, n, s)) : ['adv', 'simple', 'nofilt'].map((v) => f(m(c, n, s, true, v))).join(' / '));
+  const line = (label, fn) => rows.push(`<tr><td>${label}</td>${cs.map((c) => `<td class="num">${fn(c)}</td>`).join('')}</tr>`);
+  line('Deck section height, 2 / 4 decks (1440×900)', (c) => `${m(c, 2, '1440').section} / ${m(c, 4, '1440').section} px`);
+  line('Library rows, 1 / 2 / 4 decks (1440×900)', (c) => `${m(c, 1, '1440').lib} / ${m(c, 2, '1440').lib} / ${m(c, 4, '1440').lib}`);
+  line('Library rows, 2 / 4 decks (1280×800)', (c) => `${m(c, 2, '1280').lib} / ${m(c, 4, '1280').lib}`);
+  line('Waveform, 2 decks (1440)', (c) => fmtWave(m(c, 2, '1440')));
+  line('Waveform, 4 decks (1440)', (c) => fmtWave(m(c, 4, '1440')));
+  line('Waveform, 1 deck (1440)', (c) => fmtWave(m(c, 1, '1440')));
+  line('Waveform, 4 decks (1280)', (c) => fmtWave(m(c, 4, '1280')) + (c === 'C' ? `; folded ${fmtWave(m(c, 4, '1280', false))}` : ''));
+  line('Crossfader length', (c) => `${m(c, 2, '1440').xf ?? '—'} px`);
+  line('Mixer, 2 decks: Advanced / Simple / no filters (1440)', (c) => views(c, 2, '1440', (x) => (x.mixer ? `${x.mixer[0]}×${x.mixer[1]}` : '—')));
+  line('Library rows, 2 decks: Advanced / Simple / no filters (1440)', (c) => views(c, 2, '1440', (x) => x.lib));
+  line('Library rows, 2 decks: Advanced / Simple / no filters (1280)', (c) => views(c, 2, '1280', (x) => x.lib));
+  line('Waveform, 2 decks: Advanced / Simple / no filters (1440)', (c) => views(c, 2, '1440', (x) => (x.wave ? `${x.wave[0]}×${x.wave[1]}` : '—')));
+  const hand = {
+    'Loop reach': { T: 'LOOP pad mode + pad (2 clicks) or Shift F; no IN/OUT, ½/2×, reloop', A: '1 click / 1 key, all loop controls visible', B: '1 click / 1 key; loop row away from the lane', C: '1 click / 1 key', D: '1 click / 1 key' },
+    'Mixer readability': { T: 'Fair: captions far from ch 3–4, short crossfader, 5 copies of the dB scale', A: 'Good: hardware order, one scale, long crossfader', B: 'Good: filters next to their side of the mixer', C: 'Good open; folded shows faders, cues, meters only', D: 'Mixed: strip order becomes rows, captions per block' },
+    'Implementation cost': { T: '—', A: 'M: mixer re-layout, deck height variants, loop block', B: 'L: waveform lanes split from DeckStrip, new focus order', C: 'M–L: row decks for 2/4, dock, rail', D: 'L: mixer split into channel blocks, centre column' },
+  };
+  for (const [label, v] of Object.entries(hand)) line(label, (c) => esc(v[c]));
+  document.getElementById('compare').innerHTML = `${head}<tbody>${rows.join('')}</tbody>`;
+}
+
+function inventoryTable() {
+  const tag = (s) => esc(s).replace('[new]', '<span class="flag new">new</span>').replace('[moved]', '<span class="flag mv">moved</span>').replace('[behind]', '<span class="flag bh">hidden</span>').replace('[hover]', '<span class="flag bh">hover</span>');
+  const head = '<thead><tr><th>Control or readout</th><th>Today</th><th>A · Console</th><th>B · Lanes</th><th>C · Docked</th><th>D · Columns</th></tr></thead>';
+  const body = DATA.inventory.map(([name, cells]) => cells === null
+    ? `<tr class="grp"><td colspan="6">${esc(name)}</td></tr>`
+    : `<tr><td>${esc(name)}</td>${cells.map((x) => `<td>${tag(x)}</td>`).join('')}</tr>`).join('');
+  document.getElementById('inventory').innerHTML = head + `<tbody>${body}</tbody>`;
+}
+
+function miniLoops() {
+  W = 300; boxes = []; loopRow(12, 20, 26, {}); renderBoxes(document.getElementById('mini-row'), boxes);
+  boxes = []; loopGrid(12, 12, 144, 104, { lit: true }); renderBoxes(document.getElementById('mini-grid'), boxes);
+}
+
+miniLoops();
+compareTable();
+inventoryTable();
+render();
+})();
+</script>
