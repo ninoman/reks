@@ -663,7 +663,7 @@ nothing; 25 needs 22–24.
     headless measurements at the three window sizes recorded in `ui.md`
     (target: library 8 rows at 1440 × 900 in 2- and 4-deck mode, 5 at
     1280 × 800).
-24. [ ] **Settings → Mixer and the mixer's settings button** ([#45](https://github.com/ninoman/reks/issues/45)) (§6).
+24. [x] **Settings → Mixer and the mixer's settings button** ([#45](https://github.com/ninoman/reks/issues/45)) (§6).
     - `reks-core` `settings.rs`: `mix.mixer_view` (`MixerView`: simple,
       advanced; default simple) and `mix.mixer_filters` (`MixerFilters`:
       show, hide; default show), in `Settings` and `SettingsPatch`.

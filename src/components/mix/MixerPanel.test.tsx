@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useMix } from "../../store/mix";
+import { useSettings } from "../../store/settings";
 import { MixerPanel, type MixerPanelProps } from "./MixerPanel";
 
 afterEach(cleanup);
@@ -25,6 +26,14 @@ function setup(cues: boolean[] = [false, false, false, false]) {
 }
 
 describe("MixerPanel", () => {
+  it("the gear opens Settings on the Mixer tab", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Mixer settings" }));
+    expect(useSettings.getState().dialogOpen).toBe(true);
+    expect(useSettings.getState().dialogTab).toBe("mixer");
+    useSettings.setState({ dialogOpen: false });
+  });
+
   it("lays out four channels, the master, both filters and the crossfader", () => {
     setup();
     for (const n of [1, 2, 3, 4]) {

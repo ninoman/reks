@@ -5,7 +5,7 @@
 //! means the default (an unreadable one is logged), so a bad row never stops
 //! the app. Keys: [`AUDIO_DEVICE`], [`AUDIO_SAMPLE_RATE`],
 //! [`AUDIO_BUFFER_FRAMES`], [`AUDIO_CUE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`THEME`],
-//! [`SYNC_ALIGN`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`].
+//! [`SYNC_ALIGN`], [`MIXER_VIEW`], [`MIXER_FILTERS`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`].
 
 use std::path::{Path, PathBuf};
 
@@ -35,6 +35,10 @@ pub const DECK_WAVEFORM: &str = "display.deck_waveform";
 pub const THEME: &str = "display.theme";
 /// [`SyncAlign`]: what a deck's SYNC lines up with the master.
 pub const SYNC_ALIGN: &str = "mix.sync_align";
+/// [`MixerView`]: which mixer controls the Mix view shows.
+pub const MIXER_VIEW: &str = "mix.mixer_view";
+/// [`MixerFilters`]: whether the simple mixer view shows the filters.
+pub const MIXER_FILTERS: &str = "mix.mixer_filters";
 /// The cache dir the user chose; absent = the app's default.
 pub const CACHE_DIR: &str = "storage.cache_dir";
 /// [`UiState`].
@@ -125,6 +129,32 @@ pub enum SyncAlign {
     Bar,
 }
 
+/// Which mixer controls the Mix view shows (phase 5 task 24; the engine is
+/// the same in both views).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MixerView {
+    /// Trim, EQ, CUE, faders, meters and master; the filters per
+    /// [`MixerFilters`]; no crossfader or assigns (default: nothing audible
+    /// changes, since every crossfader assign starts at THRU).
+    #[default]
+    Simple,
+    /// Everything: crossfader, assigns and both filter units.
+    Advanced,
+}
+
+/// Whether the simple mixer view shows the filter units; ignored in Advanced,
+/// which shows everything.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MixerFilters {
+    /// Both filter units (default).
+    #[default]
+    Show,
+    /// No filter units; the engine gets them off.
+    Hide,
+}
+
 /// Everything the Settings dialog and app start-up read.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -138,6 +168,8 @@ pub struct Settings {
     pub deck_waveform: DeckWaveform,
     pub theme: Theme,
     pub sync_align: SyncAlign,
+    pub mixer_view: MixerView,
+    pub mixer_filters: MixerFilters,
     /// The cache dir in use; changed only by [`Library::move_cache_dir`].
     pub cache_dir: PathBuf,
     pub ui: UiState,
@@ -190,6 +222,8 @@ pub struct SettingsPatch {
     pub deck_waveform: Option<DeckWaveform>,
     pub theme: Option<Theme>,
     pub sync_align: Option<SyncAlign>,
+    pub mixer_view: Option<MixerView>,
+    pub mixer_filters: Option<MixerFilters>,
     pub ui: Option<UiState>,
     pub anlz_preference: Option<AnlzPreference>,
 }
@@ -226,6 +260,8 @@ impl Library {
             deck_waveform: get(&conn, DECK_WAVEFORM)?.unwrap_or_default(),
             theme: get(&conn, THEME)?.unwrap_or_default(),
             sync_align: get(&conn, SYNC_ALIGN)?.unwrap_or_default(),
+            mixer_view: get(&conn, MIXER_VIEW)?.unwrap_or_default(),
+            mixer_filters: get(&conn, MIXER_FILTERS)?.unwrap_or_default(),
             cache_dir: self.cache_dir(),
             ui: get(&conn, UI_STATE)?.unwrap_or_default(),
             anlz_preference: get(&conn, ANLZ_PREFERENCE)?.unwrap_or_default(),
@@ -261,6 +297,12 @@ impl Library {
             }
             if let Some(a) = patch.sync_align {
                 put(&tx, SYNC_ALIGN, Some(&a))?;
+            }
+            if let Some(v) = patch.mixer_view {
+                put(&tx, MIXER_VIEW, Some(&v))?;
+            }
+            if let Some(f) = patch.mixer_filters {
+                put(&tx, MIXER_FILTERS, Some(&f))?;
             }
             if let Some(mut ui) = patch.ui {
                 ui.volume = clamp_volume(ui.volume);
@@ -573,6 +615,8 @@ mod tests {
         assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
         assert_eq!(s.theme, Theme::Graphite);
         assert_eq!(s.sync_align, SyncAlign::Bar);
+        assert_eq!(s.mixer_view, MixerView::Simple);
+        assert_eq!(s.mixer_filters, MixerFilters::Show);
         assert_eq!(s.cache_dir, dir.path().join("cache"));
         assert_eq!(s.ui, UiState::default());
         assert_eq!(s.anlz_preference, AnlzPreference::RekordboxFirst);
@@ -600,6 +644,8 @@ mod tests {
             deck_waveform: Some(DeckWaveform::ThreeBand),
             theme: Some(Theme::Paper),
             sync_align: Some(SyncAlign::Beat),
+            mixer_view: Some(MixerView::Advanced),
+            mixer_filters: Some(MixerFilters::Hide),
             ui: Some(ui.clone()),
             anlz_preference: Some(AnlzPreference::ReksFirst),
         })
@@ -624,6 +670,8 @@ mod tests {
         assert_eq!(s.deck_waveform, DeckWaveform::ThreeBand);
         assert_eq!(s.theme, Theme::Paper);
         assert_eq!(s.sync_align, SyncAlign::Beat);
+        assert_eq!(s.mixer_view, MixerView::Advanced);
+        assert_eq!(s.mixer_filters, MixerFilters::Hide);
         assert_eq!(s.ui, ui);
         assert_eq!(s.anlz_preference, AnlzPreference::ReksFirst);
         assert_eq!(lib.settings().unwrap(), s);
@@ -659,6 +707,10 @@ mod tests {
         assert_eq!(p.theme, Some(Theme::Booth));
         let p: SettingsPatch = serde_json::from_str(r#"{"syncAlign":"beat"}"#).unwrap();
         assert_eq!(p.sync_align, Some(SyncAlign::Beat));
+        let p: SettingsPatch =
+            serde_json::from_str(r#"{"mixerView":"advanced","mixerFilters":"hide"}"#).unwrap();
+        assert_eq!(p.mixer_view, Some(MixerView::Advanced));
+        assert_eq!(p.mixer_filters, Some(MixerFilters::Hide));
         let p: SettingsPatch =
             serde_json::from_str(r#"{"audioSampleRate":null,"audioBufferFrames":512}"#).unwrap();
         assert_eq!(p.audio_sample_rate, Some(None));

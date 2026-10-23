@@ -279,6 +279,8 @@ let settings: Settings = {
   deckWaveform: "rgb",
   theme: "graphite",
   syncAlign: "bar",
+  mixerView: "simple",
+  mixerFilters: "show",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
   // Like a release build.

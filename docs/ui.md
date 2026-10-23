@@ -340,6 +340,12 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 - Sync aligns (Settings → Decks, `mix.sync_align`): **Bar** (default; SYNC
   lines up the downbeats too) or **Beat**. Replaces the deck's BAR button;
   a deck already synced keeps its mode until SYNC is pressed again.
+- Mixer settings (Settings → Mixer, opened by the gear "Mixer settings" in
+  the mixer's top-left corner; `setDialogOpen(true, "mixer")` opens on that
+  tab and focuses its first control): Mixer view `mix.mixer_view` (**Simple**
+  default, Advanced) and Filters `mix.mixer_filters` (**Show** default,
+  Hide; disabled in Advanced). Stored only so far: the simple view itself is
+  phase 5 task 25 ([research §6](research/deck-mixer-layout.md)).
 - Waveform style (Settings → Decks, `display.deck_waveform`), applied to both
   views live, on the player deck too: **RGB** (default since D30; mono height,
   colour mixed from `waveform-rgb-low/mid/high` by band level), **3-band**

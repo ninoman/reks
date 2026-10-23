@@ -31,10 +31,15 @@ import { usePanels } from "./panels";
 
 export const UI_SAVE_MS = 300;
 
+/** The Settings dialog's tabs, in sidebar order. */
+export type SettingsTab = "library" | "playback" | "display" | "decks" | "mixer";
+
 export interface SettingsStore {
   settings: Settings | null;
   roots: LibraryRoot[];
   dialogOpen: boolean;
+  /** The tab the dialog opens on. */
+  dialogTab: SettingsTab;
   /** A cache move is running. */
   moving: boolean;
   error: string | null;
@@ -48,7 +53,8 @@ export interface SettingsStore {
   addRoot(path: string): Promise<LibraryRoot | null>;
   removeRoot(id: number): Promise<void>;
   moveCache(path: string): Promise<void>;
-  setDialogOpen(open: boolean): void;
+  /** Opens or closes the Settings dialog; `tab` picks the tab it opens on. */
+  setDialogOpen(open: boolean, tab?: SettingsTab): void;
 }
 
 function message(e: unknown): string {
@@ -95,6 +101,7 @@ export const useSettings = create<SettingsStore>()((set, get) => {
     settings: null,
     roots: [],
     dialogOpen: false,
+    dialogTab: "library",
     moving: false,
     error: null,
 
@@ -137,8 +144,8 @@ export const useSettings = create<SettingsStore>()((set, get) => {
       await run(async () => set({ settings: await cacheDirMove(path) }));
       set({ moving: false });
     },
-    setDialogOpen(dialogOpen) {
-      set({ dialogOpen, error: null });
+    setDialogOpen(dialogOpen, tab = "library") {
+      set({ dialogOpen, dialogTab: tab, error: null });
       // The transport's device menu and scans change settings and roots too.
       if (dialogOpen) void Promise.all([get().refresh(), get().loadRoots()]);
     },

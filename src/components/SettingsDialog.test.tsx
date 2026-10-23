@@ -33,6 +33,8 @@ const settings: Settings = {
   deckWaveform: "rgb",
   theme: "graphite",
   syncAlign: "bar",
+  mixerView: "simple",
+  mixerFilters: "show",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
   onelibraryKeyBuiltin: false,
@@ -99,7 +101,7 @@ describe("SettingsDialog", () => {
   it("groups settings in tabs, opening on the library folders", async () => {
     await openDialog();
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(tabs).toEqual(["Library", "Playback", "Display", "Decks"]);
+    expect(tabs).toEqual(["Library", "Playback", "Display", "Decks", "Mixer"]);
     const library = screen.getByRole("tabpanel", { name: "Library" });
     expect(library.textContent).toContain("/Music/House");
     expect(library.textContent).toContain("/Users/dj/Library/Caches/reks");
@@ -107,6 +109,30 @@ describe("SettingsDialog", () => {
     const display = showTab("Display");
     expect(display.textContent).toContain("Key notation");
     expect(screen.queryByText("/Music/House")).toBeNull();
+  });
+
+  it("stores the mixer view and filters; Filters is disabled in Advanced", async () => {
+    await openDialog();
+    const mixer = showTab("Mixer");
+    expect(mixer.querySelector('[aria-checked="true"]')?.textContent).toContain("Simple");
+    const filters = screen.getByRole("radiogroup", { name: "Filters" });
+    expect(filters.querySelector('[aria-checked="true"]')?.textContent).toBe("Show");
+    fireEvent.click(screen.getByRole("radio", { name: "Hide" }));
+    await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ mixerFilters: "hide" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Advanced/ }));
+    await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ mixerView: "advanced" }));
+    for (const name of ["Show", "Hide"]) {
+      expect(screen.getByRole("radio", { name }).hasAttribute("disabled")).toBe(true);
+    }
+  });
+
+  it("opens on the tab it is asked for and focuses its first control", async () => {
+    await act(async () => useSettings.getState().load([]));
+    await act(async () => useSettings.getState().setDialogOpen(true, "mixer"));
+    render(<SettingsDialog />);
+    const panel = await screen.findByRole("tabpanel", { name: "Mixer" });
+    expect(screen.getByRole("tab", { name: "Mixer" }).getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(document.activeElement).toBe(panel.querySelector('[role="radio"]')));
   });
 
   it("has no OneLibrary key field: release builds have the key built in", async () => {
