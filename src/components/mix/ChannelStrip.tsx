@@ -155,7 +155,7 @@ function legendRows(parts: MixerParts, fx: FxKind): string[] {
 export function ChannelLegend({ parts, fx }: { parts: MixerParts; fx: FxKind }) {
   const scaleGap = parts.crossfader ? "my-1" : "my-0.5";
   return (
-    <div aria-hidden="true" className="flex min-w-0 flex-1 flex-col items-end justify-between pr-1">
+    <div aria-hidden="true" className="flex shrink-0 flex-col items-end justify-between pr-1">
       {/* The header row: the mixer's settings button sits here. */}
       <span className="h-5" />
       {legendRows(parts, fx).map((caption, i) =>

@@ -50,7 +50,7 @@ export function MixerPanel(p: MixerPanelProps) {
       aria-label="Mixer"
       className="relative flex h-(--mixer-h) w-(--mixer-w) shrink-0 flex-col gap-1 rounded-md border border-border bg-surface p-2"
     >
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 justify-center">
         <IconButton
           size="xs"
           className="absolute top-1 left-1"
