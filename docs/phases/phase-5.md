@@ -751,6 +751,11 @@ nothing; 25 needs 22–24.
       positions in `effectiveMix`; heights; X C V as in Simple.
     - [x] Checked in the dev mock (1440×900, 3-band Simple and Advanced,
       2 and 4 decks; 2026-10-23).
+    - [x] FX select moved into the legend as the FX row's caption, with
+      PARAMETER in a row under it; the bottom FX row is gone, heights
+      unchanged ([fx-select-knob.html](../wireframes/fx-select-knob.html),
+      variant A; checked in the dev mock, 3-band Simple/Advanced, 2 and 4
+      decks; 2026-10-23).
     - [ ] Listening check on the maintainer's laptop (filter ends, echo
       time and feedback, reverb decay and level are UNVERIFIED figures).
     Tests: `dsp::eq3`, `dsp::channel_filter`, `dsp::channel_echo`,

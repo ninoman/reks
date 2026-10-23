@@ -208,9 +208,10 @@ describe("MixerPanel", () => {
     expect(screen.getAllByRole("radiogroup", { name: /assign/ })).toHaveLength(8);
   });
 
-  it("4-band has no FX row and no FX knobs", () => {
+  it("4-band has no FX select, PARAMETER or FX knobs", () => {
     setup();
-    expect(screen.queryByRole("region", { name: "FX" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^FX effect/ })).toBeNull();
+    expect(screen.queryByRole("slider", { name: /^FX / })).toBeNull();
     expect(screen.queryByRole("slider", { name: "Channel 1 FX" })).toBeNull();
   });
 
@@ -250,7 +251,7 @@ describe("MixerPanel", () => {
       expect(screen.queryByRole("region", { name: "Filter Y" })).toBeNull();
       expect(screen.queryByRole("radiogroup", { name: /assign/ })).toBeNull();
       expect(screen.queryByRole("slider", { name: "Crossfader" })).toBeNull();
-      expect(screen.getByRole("region", { name: "FX" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^FX effect/ })).toBeTruthy();
     });
 
     it("Advanced adds the X-F assigns and the crossfader, still no FILTER assigns", () => {
@@ -258,41 +259,43 @@ describe("MixerPanel", () => {
       expect(screen.getAllByRole("radiogroup", { name: /crossfader assign/ })).toHaveLength(4);
       expect(screen.queryByRole("radiogroup", { name: /filter assign/ })).toBeNull();
       expect(screen.queryByRole("region", { name: "Filter X" })).toBeNull();
-      const fx = screen.getByRole("region", { name: "FX" });
+      const fx = screen.getByRole("button", { name: /^FX effect/ });
       const fader = screen.getByRole("slider", { name: "Crossfader" });
-      // The FX row sits above the crossfader.
+      // The FX select sits above the crossfader.
       expect(fx.compareDocumentPosition(fader) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it("FX select lights exactly one effect and picks another", () => {
+    it("FX select, the FX row's caption, lists the effects and picks another", () => {
       const p = setup(undefined, SIMPLE3, "echo");
-      const fx = screen.getByRole("region", { name: "FX" });
-      const pressed = within(fx)
-        .getAllByRole("button")
-        .map((b) => [b.textContent, b.getAttribute("aria-pressed")]);
-      expect(pressed).toEqual([
-        ["Filter", "false"],
-        ["Echo", "true"],
-        ["Reverb", "false"],
+      const select = screen.getByRole("button", { name: "FX effect: Echo" });
+      fireEvent.keyDown(select, { key: "Enter" });
+      const items = screen
+        .getAllByRole("menuitemradio")
+        .map((el) => [el.textContent, el.getAttribute("aria-checked")]);
+      expect(items).toEqual([
+        ["FilterResonance", "false"],
+        ["EchoFeedback", "true"],
+        ["ReverbDecay", "false"],
       ]);
-      fireEvent.click(within(fx).getByRole("button", { name: "Reverb" }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name: /Reverb/ }));
       expect(p.onFx).toHaveBeenCalledWith({ kind: "reverb" });
     });
 
-    it("PARAMETER's caption and the FX row's caption follow the effect", () => {
-      for (const [kind, param, name] of [
-        ["filter", "Resonance", "Filter"],
-        ["echo", "Feedback", "Echo"],
-        ["reverb", "Decay", "Reverb"],
+    it("PARAMETER, under the FX select, is captioned and named for the effect", () => {
+      for (const [kind, caption, param] of [
+        ["filter", "Reso", "Resonance"],
+        ["echo", "Fdbk", "Feedback"],
+        ["reverb", "Decay", "Decay"],
       ] as const) {
         const p = setup(undefined, SIMPLE3, kind);
-        const fx = screen.getByRole("region", { name: "FX" });
-        expect(within(fx).getByText(param)).toBeTruthy();
+        expect(screen.getByText(caption)).toBeTruthy();
         const knob = screen.getByRole("slider", { name: `FX ${param.toLowerCase()}` });
+        const select = screen.getByRole("button", { name: /^FX effect/ });
+        expect(
+          select.compareDocumentPosition(knob) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
         fireEvent.keyDown(knob, { key: "End" });
         expect(p.onFx).toHaveBeenCalledWith({ parameter: 1 });
-        // The legend's FX row caption, besides the select button.
-        expect(screen.getAllByText(name)).toHaveLength(2);
         cleanup();
       }
     });
