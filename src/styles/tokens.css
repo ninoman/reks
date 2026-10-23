@@ -169,6 +169,7 @@
   --text-*: initial;
   --radius-*: initial;
   --shadow-*: initial;
+  --inset-shadow-*: initial;
 
   --color-bg: var(--graphite-900);
   --color-bg-subtle: var(--graphite-850);
@@ -288,6 +289,8 @@
   --shadow-overlay: 0 8px 24px rgb(0 0 0 / 45%), 0 1px 3px rgb(0 0 0 / 30%);
   /* The glow of a lit switch; the one non-overlay shadow. */
   --shadow-lit: 0 0 8px rgb(232 229 217 / 35%);
+  /* A lamp's dark inner rim, inside its border, so it reads as set into the panel. */
+  --inset-shadow-lamp: inset 0 0 0 1.5px rgb(0 0 0 / 70%);
 
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-snap: cubic-bezier(0.32, 0.72, 0, 1);
@@ -339,6 +342,7 @@
   --color-lit-fg: var(--paper-0);
   --shadow-overlay: 0 8px 24px rgb(20 20 19 / 12%), 0 1px 3px rgb(20 20 19 / 8%);
   --shadow-lit: 0 0 8px rgb(165 79 112 / 45%);
+  --inset-shadow-lamp: inset 0 0 0 1.5px rgb(20 20 19 / 25%);
   color-scheme: light;
 }
 
