@@ -130,6 +130,14 @@ pub async fn artwork_get(state: State<'_, AppState>, id: ArtworkId) -> CmdResult
         .map(Response::new)
 }
 
+/// A small JPEG of an artwork for lists, cached on disk; sent raw.
+#[tauri::command]
+pub async fn artwork_thumb(state: State<'_, AppState>, id: ArtworkId) -> CmdResult<Response> {
+    blocking(&state, move |lib| lib.artwork_thumb(id))
+        .await
+        .map(Response::new)
+}
+
 /// Scans `roots` (none: every library folder) into the library, streaming
 /// progress to `on_event`.
 #[tauri::command]

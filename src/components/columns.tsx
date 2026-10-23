@@ -6,6 +6,7 @@ import type { SortColumn, TrackRow } from "../lib/ipc";
 import { tagIndex } from "../store/tagModel";
 import { useTags } from "../store/tags";
 import { KeyLabel } from "./KeyLabel";
+import { Artwork } from "./ui/Artwork";
 import { Swatch } from "./ui/Swatch";
 
 export interface ColumnSpec {
@@ -53,7 +54,12 @@ export const COLUMNS: ColumnSpec[] = [
     header: "Title",
     width: 280,
     sort: "title",
-    cell: (r) => text(r.title),
+    cell: (r) => (
+      <span className="flex items-center gap-1.5">
+        <Artwork size="row" artworkId={r.artworkId} />
+        <span className="truncate">{text(r.title)}</span>
+      </span>
+    ),
   },
   {
     id: "artist",

@@ -138,6 +138,7 @@ const TRACKS: TrackRow[] = Array.from({ length: 3000 }, (_, i) => ({
   lastPlayed: null,
   missing: rand() < 0.02,
   needsAnalysis: rand() < 0.08,
+  artworkId: rand() < 0.7 ? i + 1 : null,
   entryPosition: null,
   tags: [],
 }));
@@ -406,6 +407,18 @@ function reanalyse(ids: number[]): number {
     }, MOCK_ANALYSIS_MS);
   }
   return ids.length;
+}
+
+/** A flat coloured JPEG per track, drawn on the fly (the mock has no pictures). */
+async function mockThumb(id: number): Promise<ArrayBuffer> {
+  const canvas = new OffscreenCanvas(48, 48);
+  const ctx = canvas.getContext("2d");
+  if (ctx === null) throw new Error("no canvas");
+  ctx.fillStyle = `hsl(${(id * 47) % 360} 45% 38%)`;
+  ctx.fillRect(0, 0, 48, 48);
+  ctx.fillStyle = `hsl(${(id * 47 + 40) % 360} 55% 62%)`;
+  ctx.fillRect(12, 12, 24, 24);
+  return (await canvas.convertToBlob({ type: "image/jpeg" })).arrayBuffer();
 }
 
 function detail(id: number): TrackDetail {
@@ -1114,6 +1127,8 @@ mockIPC((cmd, payload) => {
     case "library_track":
     case "library_update_track":
       return detail(args.id as number);
+    case "artwork_thumb":
+      return mockThumb(args.id as number);
     case "artwork_get":
       throw new Error("no artwork in the mock");
     case "playlists_get":

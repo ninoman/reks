@@ -86,6 +86,7 @@ pub fn run() {
             commands::tags_get,
             commands::tags_mutate,
             commands::artwork_get,
+            commands::artwork_thumb,
             commands::scan_start,
             commands::scan_cancel,
             commands::rbxml_preview,

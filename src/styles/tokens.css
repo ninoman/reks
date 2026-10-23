@@ -479,6 +479,7 @@
 
   /* Rows: track table and playlist tree (TS mirror: ROW_HEIGHT), menu items. */
   --row-h: 26px;
+  --row-art: 20px;
   --menu-item-h: 26px;
 
   /* Layout. */

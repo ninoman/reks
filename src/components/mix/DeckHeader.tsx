@@ -8,8 +8,8 @@ import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 import { formatClock, formatTempo } from "../../lib/mixView";
 import type { DeckTrack, TrackRef } from "../../store/mix";
-import { ArtworkThumb } from "../ArtworkThumb";
 import { EjectIcon } from "../icons";
+import { Artwork } from "../ui/Artwork";
 import { Badge } from "../ui/Badge";
 import { IconButton } from "../ui/IconButton";
 import { InlineNumber } from "../ui/InlineNumber";
@@ -56,7 +56,7 @@ export function DeckHeader({
       <Badge variant={loaded ? "accent" : "muted"} size="md" className="rounded-xs font-mono">
         {n}
       </Badge>
-      <ArtworkThumb
+      <Artwork
         size="deck"
         artworkId={track?.artworkId ?? null}
         mime={track?.artworkMime ?? ""}

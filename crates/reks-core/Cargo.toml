@@ -12,6 +12,7 @@ workspace = true
 [dependencies]
 blake3 = { workspace = true }
 deunicode = { workspace = true }
+image = { workspace = true }
 imagesize = { workspace = true }
 percent-encoding = { workspace = true }
 quick-xml = { workspace = true }

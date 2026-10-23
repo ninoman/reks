@@ -119,7 +119,7 @@ describe("usePlaylists", () => {
     await usePlaylists.getState().resolveDelete(true);
     expect(playlistsMutate).toHaveBeenCalledWith({ type: "delete", id: 7 });
     expect(useLibrary.getState().filters.playlistId).toBeNull();
-    expect(useLibrary.getState().sort.column).toBe("title");
+    expect(useLibrary.getState().sort.column).toBe("dateAdded");
   });
 
   it("create puts the node next to the selection and starts renaming it", async () => {

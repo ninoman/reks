@@ -780,6 +780,7 @@ fn serde_shapes() {
         [
             "album",
             "artist",
+            "artworkId",
             "bitRateKbps",
             "bpmX100",
             "color",

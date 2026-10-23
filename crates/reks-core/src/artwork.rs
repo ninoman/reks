@@ -19,6 +19,9 @@ use crate::error::{Error, Result};
 pub type ArtworkId = i64;
 
 const ARTWORK_DIR: &str = "artwork";
+const THUMB_DIR: &str = "thumb";
+/// Twice the largest list thumbnail, for high-DPI screens.
+const THUMB_PX: u32 = 96;
 
 impl Library {
     /// Stores picture bytes (as embedded in an audio file) and returns the
@@ -89,6 +92,28 @@ impl Library {
         }
     }
 
+    /// A small JPEG of the picture for lists, cached beside the original so
+    /// the full-size image is decoded once, not per row or per launch.
+    pub fn artwork_thumb(&self, id: ArtworkId) -> Result<Vec<u8>> {
+        let original = self.artwork_path(id)?.ok_or(Error::ArtworkNotFound(id))?;
+        let name = original.file_stem().unwrap_or_default();
+        let thumb = self
+            .cache_dir()
+            .join(ARTWORK_DIR)
+            .join(THUMB_DIR)
+            .join(Path::new(name).with_extension("jpg"));
+        if let Ok(data) = std::fs::read(&thumb) {
+            return Ok(data);
+        }
+        let data = make_thumb(&self.artwork(id)?)
+            .ok_or(Error::InvalidField {
+                field: "artwork",
+                reason: "not a decodable image".into(),
+            })?;
+        write_atomic(&thumb, &data)?;
+        Ok(data)
+    }
+
     /// Reads the picture again from the audio files of the tracks that use
     /// it and rewrites the cache file. Only bytes matching the row's hash are
     /// taken: a file whose cover changed since the scan is not this picture.
@@ -124,6 +149,16 @@ impl Library {
         }
         Ok(None)
     }
+}
+
+fn make_thumb(data: &[u8]) -> Option<Vec<u8>> {
+    let img = image::load_from_memory(data).ok()?;
+    let small = img.thumbnail(THUMB_PX, THUMB_PX).to_rgb8();
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 82)
+        .encode_image(&small)
+        .ok()?;
+    Some(out)
 }
 
 /// MIME type and file extension, sniffed from the bytes (tag MIME fields
@@ -195,6 +230,23 @@ mod tests {
             .unwrap()
             .query_row("SELECT count(*) FROM artwork", [], |r| r.get(0))
             .unwrap()
+    }
+
+    #[test]
+    fn thumb_is_a_cached_jpeg() {
+        let (_dir, lib) = lib();
+        let id = lib.store_artwork(PNG_1X1).unwrap().unwrap();
+        let thumb = lib.artwork_thumb(id).unwrap();
+        assert_eq!(&thumb[..2], &[0xFF, 0xD8]);
+        // Served from the cache the second time, even without the original.
+        std::fs::remove_file(lib.artwork_path(id).unwrap().unwrap()).unwrap();
+        assert_eq!(lib.artwork_thumb(id).unwrap(), thumb);
+    }
+
+    #[test]
+    fn thumb_of_an_unknown_id_is_not_found() {
+        let (_dir, lib) = lib();
+        assert!(matches!(lib.artwork_thumb(99), Err(Error::ArtworkNotFound(99))));
     }
 
     #[test]
