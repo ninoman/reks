@@ -27,13 +27,22 @@ use tauri::State;
 
 use crate::state::AppState;
 
-/// Error returned to the UI: the message of the underlying error.
+/// Error returned to the UI: the message of the underlying error. Every one
+/// is logged on creation, so a bug report's log tail shows the failures the
+/// user saw (D33).
 #[derive(Debug, Serialize)]
-pub struct CmdError(pub(crate) String);
+pub struct CmdError(String);
+
+impl CmdError {
+    pub(crate) fn new(message: String) -> Self {
+        tracing::warn!(error = %message, "command failed");
+        CmdError(message)
+    }
+}
 
 impl<E: std::fmt::Display> From<E> for CmdError {
     fn from(e: E) -> Self {
-        CmdError(e.to_string())
+        CmdError::new(e.to_string())
     }
 }
 
@@ -136,7 +145,7 @@ pub async fn scan_start(
             .lock()
             .map_err(|_| "scan state poisoned")?;
         if running.is_some() {
-            return Err(CmdError("a scan is already running".into()));
+            return Err(CmdError::new("a scan is already running".into()));
         }
         *running = Some(cancel.clone());
     }
@@ -206,7 +215,7 @@ pub async fn rbxml_import_start(
             .lock()
             .map_err(|_| "import state poisoned")?;
         if running.is_some() {
-            return Err(CmdError("an import is already running".into()));
+            return Err(CmdError::new("an import is already running".into()));
         }
         *running = Some(cancel.clone());
     }
@@ -278,7 +287,7 @@ pub async fn cache_dir_move(state: State<'_, AppState>, path: PathBuf) -> CmdRes
         || busy(&state.convert_cancel)
         || state.analysis.busy()
     {
-        return Err(CmdError(
+        return Err(CmdError::new(
             "wait for the scan, import, conversion or analysis to finish (or cancel it) before moving the cache"
                 .into(),
         ));
@@ -481,7 +490,7 @@ pub async fn export_apply(
             Some(p) if p.0 == plan_id => p,
             other => {
                 shown.plan = other;
-                return Err(CmdError(
+                return Err(CmdError::new(
                     "this dry run is out of date or was already exported; plan again".into(),
                 ));
             }
@@ -494,7 +503,7 @@ pub async fn export_apply(
             .lock()
             .map_err(|_| "export state poisoned")?;
         if running.is_some() {
-            return Err(CmdError("an export is already running".into()));
+            return Err(CmdError::new("an export is already running".into()));
         }
         *running = Some(cancel.clone());
     }
@@ -607,7 +616,7 @@ pub async fn convert_apply(
             Some((id, plan)) if id == plan_id => plan,
             other => {
                 shown.plan = other;
-                return Err(CmdError(
+                return Err(CmdError::new(
                     "this dry run is out of date or was already converted; plan again".into(),
                 ));
             }
@@ -620,7 +629,7 @@ pub async fn convert_apply(
             .lock()
             .map_err(|_| "convert state poisoned")?;
         if running.is_some() {
-            return Err(CmdError("a conversion is already running".into()));
+            return Err(CmdError::new("a conversion is already running".into()));
         }
         *running = Some(cancel.clone());
     }

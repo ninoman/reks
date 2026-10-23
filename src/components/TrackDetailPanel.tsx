@@ -31,6 +31,7 @@ import { replaceRowEverywhere } from "../store/panes";
 import { primaryIndex } from "../store/selection";
 import { useKeyLabel } from "../store/settings";
 import { ArtworkThumb } from "./ArtworkThumb";
+import { ErrorMessage } from "./ErrorMessage";
 import { GridEditorDialog } from "./GridEditor";
 import { PlayedIn } from "./PlayedIn";
 import { TrackTags } from "./TrackTags";
@@ -152,13 +153,7 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
   if (detail === null || initial === null || form === null) {
     return (
       <Panel>
-        {error !== null ? (
-          <div className="text-danger select-text" role="alert">
-            {error}
-          </div>
-        ) : (
-          <p className={muted}>Loading…</p>
-        )}
+        {error !== null ? <ErrorMessage message={error} /> : <p className={muted}>Loading…</p>}
       </Panel>
     );
   }
@@ -281,11 +276,7 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
             />
           </Field>
         </div>
-        {error !== null && (
-          <div className="text-danger select-text" role="alert">
-            {error}
-          </div>
-        )}
+        {error !== null && <ErrorMessage message={error} />}
         {badInput.size > 0 && (
           <div className="text-danger">Numbers only in Track #, Disc #, Year.</div>
         )}

@@ -23,6 +23,7 @@ import {
   type ScanSource,
 } from "../lib/ipc";
 import { useHistory } from "../store/history";
+import { ErrorMessage } from "./ErrorMessage";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { Checkbox } from "./ui/Checkbox";
@@ -137,11 +138,7 @@ function ImportDialog() {
             />
           )}
           {step.kind === "done" && <Done report={step.report} />}
-          {error !== null && (
-            <div className="text-danger select-text" role="alert">
-              {error}
-            </div>
-          )}
+          {error !== null && <ErrorMessage message={error} />}
         </DialogBody>
         <DialogFooter>
           {step.kind === "done" ? (

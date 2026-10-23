@@ -9,6 +9,7 @@ import { formatDuration } from "../lib/format";
 import { libraryQuery, type SessionEntryRow, type TrackRow } from "../lib/ipc";
 import { useHistory } from "../store/history";
 import { defaultSort } from "../store/library";
+import { ErrorMessage } from "./ErrorMessage";
 import { Button } from "./ui/Button";
 import {
   Dialog,
@@ -104,11 +105,7 @@ export function LocateDialog({ entry }: { entry: SessionEntryRow }) {
               {rows?.length === 0 && <p className="m-2 text-fg-muted">No matching tracks.</p>}
             </div>
           </ScrollArea>
-          {error !== null && (
-            <div className="text-danger select-text" role="alert">
-              {error}
-            </div>
-          )}
+          {error !== null && <ErrorMessage message={error} />}
         </DialogBody>
         <DialogFooter>
           <Button onClick={() => h().startLocate(null)}>Cancel</Button>

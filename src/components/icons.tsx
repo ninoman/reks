@@ -39,6 +39,23 @@ export function GearIcon({ size = 18 }: { size?: number }) {
   );
 }
 
+/** Speech bubble: report a problem or send feedback. */
+export function FeedbackIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        d="M2.5 3.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H7l-3 2.5V11h-.5a1 1 0 0 1-1-1z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <rect x="7.35" y="4.4" width="1.3" height="3.4" rx="0.65" fill="currentColor" />
+      <circle cx="8" cy="9.2" r="0.8" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function SearchIcon() {
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">

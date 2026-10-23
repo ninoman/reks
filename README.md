@@ -54,6 +54,7 @@ Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md).
 | [`docs/ui.md`](docs/ui.md) | UI design system: tokens, size scale, components |
 | [`docs/mixer-dsp.md`](docs/mixer-dsp.md) | Mix-prep mixer DSP: EQ, filter, crossfader and limiter laws, sources, test tolerances |
 | [`docs/releasing.md`](docs/releasing.md) | What CI runs when, and how to cut a release |
+| [`docs/feedback.md`](docs/feedback.md) | In-app bug reports and feedback: what is sent, relay setup, triage |
 | [`fixtures/README.md`](fixtures/README.md) | Test fixtures: generated audio signal, ffmpeg commands, sample rekordbox XML |
 
 ## Building from source

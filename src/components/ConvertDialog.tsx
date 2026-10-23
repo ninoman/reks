@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { cn } from "../lib/cn";
 import type { ConvertDepth, ConvertFact, ConvertSkip, ConvertTarget } from "../lib/ipc";
 import { type Preset, presetOf, type RateChoice, useConverter } from "../store/converter";
+import { ErrorMessage } from "./ErrorMessage";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import {
@@ -303,9 +304,7 @@ function DryRunStep() {
   if (error !== null) {
     return (
       <div className="flex flex-col items-start gap-2">
-        <p className="m-0 text-danger select-text" role="alert">
-          {error}
-        </p>
+        <ErrorMessage as="p" className="m-0" message={error} />
         <Button onClick={() => void useConverter.getState().plan()}>Try again</Button>
       </div>
     );

@@ -8,6 +8,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import type { ImportPreview, ImportReport, Unmatched, UnmatchedReason } from "../lib/ipc";
 import { useImportWizard } from "../store/importWizard";
+import { ErrorMessage } from "./ErrorMessage";
 import { Button } from "./ui/Button";
 import {
   Dialog,
@@ -80,11 +81,7 @@ function Review() {
   return (
     <>
       <DialogBody>
-        {error !== null && (
-          <p className="text-danger" role="alert">
-            {error}
-          </p>
-        )}
+        {error !== null && <ErrorMessage as="p" message={error} />}
         {preview === null ? (
           previewing && <p className="text-fg-muted">Reading the collection…</p>
         ) : (

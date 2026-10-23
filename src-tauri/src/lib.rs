@@ -7,7 +7,9 @@ mod browse;
 mod commands;
 mod grid;
 mod history;
+mod logging;
 mod mix;
+mod report;
 mod startup;
 mod state;
 
@@ -49,6 +51,18 @@ pub fn run() {
         })
         .setup(|app| {
             let paths = app.path();
+            let log_dir = paths.app_log_dir()?;
+            if let Err(err) = logging::init(&log_dir) {
+                eprintln!("reks: logging disabled: {err}");
+            }
+            app.manage(logging::LogDir(log_dir));
+            // reqwest is built without a default crypto provider (see Cargo.toml).
+            if rustls::crypto::ring::default_provider()
+                .install_default()
+                .is_err()
+            {
+                tracing::warn!("a rustls crypto provider was already installed");
+            }
             // D19: app_data_dir, but app_local_data_dir on Windows (not roaming).
             let data_dir = if cfg!(windows) {
                 paths.app_local_data_dir()?
@@ -130,6 +144,12 @@ pub fn run() {
             analysis::analysis_resume,
             analysis::analysis_cancel,
             analysis::analysis_reanalyse,
+            report::report_can_send,
+            report::report_new_crash,
+            report::report_preview,
+            report::report_send,
+            report::report_save,
+            report::log_ui_error,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

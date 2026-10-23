@@ -32,6 +32,7 @@ import { usePlaylists } from "../store/playlists";
 import { useProfiles } from "../store/profiles";
 import { useSettings } from "../store/settings";
 import { DeviceList } from "./DevicesDialog";
+import { ErrorMessage } from "./ErrorMessage";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
@@ -130,11 +131,7 @@ export function ExportWizard() {
           </ol>
         </DialogHeader>
         <DialogBody className="min-h-60">
-          {stepError && error !== null && (
-            <p className="m-0 text-danger select-text" role="alert">
-              {error}
-            </p>
-          )}
+          {stepError && error !== null && <ErrorMessage as="p" className="m-0" message={error} />}
           {step === "device" && <DeviceStep />}
           {step === "playlists" && <PlaylistsStep nodes={nodes} />}
           {step === "options" && <OptionsStep />}
@@ -228,11 +225,7 @@ function ReportStep() {
   const eject = useExportWizard((s) => s.eject);
   return (
     <div className="flex flex-col gap-3 select-text">
-      {error !== null && (
-        <p className="m-0 text-danger" role="alert">
-          {error}
-        </p>
-      )}
+      {error !== null && <ErrorMessage as="p" className="m-0" message={error} />}
       {report !== null && <ReportView report={report} />}
       {eject.message !== null && (
         <p
@@ -594,9 +587,7 @@ function DryRunStep({ nodes }: { nodes: PlaylistNode[] }) {
   if (error !== null) {
     return (
       <div className="flex flex-col items-start gap-2">
-        <p className="m-0 text-danger select-text" role="alert">
-          {error}
-        </p>
+        <ErrorMessage as="p" className="m-0" message={error} />
         <Button onClick={() => void useExportWizard.getState().replan(nodes)}>Try again</Button>
       </div>
     );

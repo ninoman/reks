@@ -22,6 +22,7 @@ import { ConvertDialog } from "./components/ConvertDialog";
 import { DEFAULT_HIDDEN } from "./components/columns";
 import { DevicesDialog } from "./components/DevicesDialog";
 import { DeviceTree } from "./components/DeviceTree";
+import { ErrorMessage } from "./components/ErrorMessage";
 import { ExportWizard } from "./components/ExportWizard";
 import { FilterBar } from "./components/FilterBar";
 import { HistoryImportDialog } from "./components/HistoryImportDialog";
@@ -33,6 +34,7 @@ import { PlayerBar } from "./components/PlayerBar";
 import { PlayerDeck } from "./components/PlayerDeck";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
+import { ReportDialog } from "./components/ReportDialog";
 import { RuleBuilder } from "./components/RuleBuilder";
 import { SessionView } from "./components/SessionView";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -51,6 +53,7 @@ import { useMixShortcuts } from "./store/mixShortcuts";
 import { usePanels } from "./store/panels";
 import { togglePlayer } from "./store/player";
 import { usePlaylists } from "./store/playlists";
+import { offerCrashReport } from "./store/report";
 import { useRules } from "./store/rules";
 import { startThemeSync, startUiSync, useSettings } from "./store/settings";
 import { useTags } from "./store/tags";
@@ -90,6 +93,7 @@ export default function App() {
     void useTags.getState().load();
     void useHistory.getState().load();
     void useAnalysis.getState().subscribe();
+    void offerCrashReport();
     return () => {
       live = false;
       stopSync?.();
@@ -148,12 +152,7 @@ export default function App() {
               {filterBarOpen && <FilterBar />}
               {filterBarOpen && rulesOpen && <RuleBuilder />}
               {error !== null && (
-                <div
-                  className="border-b border-border px-2.5 py-1 text-danger select-text"
-                  role="alert"
-                >
-                  {error}
-                </div>
+                <ErrorMessage className="border-b border-border px-2.5 py-1" message={error} />
               )}
               <TrackLists columns={visibleColumns(table)} />
             </>
@@ -169,6 +168,7 @@ export default function App() {
       <ExportWizard />
       <ConvertDialog />
       <HistoryImportDialog />
+      <ReportDialog />
       <ToastHost />
     </div>
   );

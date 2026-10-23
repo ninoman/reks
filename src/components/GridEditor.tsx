@@ -25,6 +25,7 @@ import {
 } from "../lib/ipc";
 import { usePlayerPosition } from "../store/player";
 import { useTheme } from "../store/settings";
+import { ErrorMessage } from "./ErrorMessage";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import {
@@ -339,11 +340,7 @@ export function GridEditorDialog({
               {hasGrid ? "Use tapped BPM" : "Create grid"}
             </Button>
           </div>
-          {error !== null && (
-            <div className="text-danger select-text" role="alert">
-              {error}
-            </div>
-          )}
+          {error !== null && <ErrorMessage message={error} />}
         </DialogBody>
         <DialogFooter>
           <Button variant="primary" onClick={onClose}>

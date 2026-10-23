@@ -2,6 +2,17 @@
 # Run: cargo deny check
 # Adding a licence here requires a note in docs/decisions.md.
 
+# Check only what ships (release.yml matrix). Dependencies for other targets,
+# such as rustls-platform-verifier's wasm32-only webpki-root-certs
+# (CDLA-Permissive-2.0), never reach a binary (D18, 2026-10-23).
+[graph]
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+  "x86_64-unknown-linux-gnu",
+]
+
 [licenses]
 allow = [
   "MIT",

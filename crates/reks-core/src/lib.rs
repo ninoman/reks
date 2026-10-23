@@ -11,6 +11,7 @@ pub mod cue;
 pub mod db;
 pub mod deck;
 pub mod device;
+pub mod diagnostics;
 pub mod error;
 mod fileinfo;
 pub mod fsname;

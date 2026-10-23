@@ -14,6 +14,7 @@ import { outputSummary } from "../lib/mixView";
 import { useMix } from "../store/mix";
 import { usePanels } from "../store/panels";
 import { chooseOutput } from "../store/settings";
+import { ErrorMessage } from "./ErrorMessage";
 import { ShortcutHelp } from "./mix/ShortcutHelp";
 import { Button } from "./ui/Button";
 import { Segment, SegmentedControl } from "./ui/SegmentedControl";
@@ -62,9 +63,7 @@ export function PlayerBar() {
       </SegmentedControl>
       <span className="min-w-0 flex-1 truncate text-xs">
         {error !== null ? (
-          <span role="alert" className="text-danger select-text">
-            {error}
-          </span>
+          <ErrorMessage as="span" message={error} />
         ) : (
           <span role="status" className="text-fg-muted">
             {status === "starting" ? "Opening the audio output…" : (output ?? "Audio output off")}

@@ -14,6 +14,7 @@ import { type PlaylistNode, playlistRule, type RuleNode } from "../lib/ipc";
 import { type FilterState, useLibrary } from "./library";
 import { usePanels } from "./panels";
 import { usePlaylists } from "./playlists";
+import { reportAction } from "./report";
 import {
   addAfter,
   addItem,
@@ -186,7 +187,8 @@ export const useRules = create<RulesState>()((set, get) => {
       try {
         get().edit(node.id, node.name, await playlistRule(node.id));
       } catch (e) {
-        useToasts.getState().show(`Could not load the rules of “${node.name}”: ${e}`);
+        const msg = `Could not load the rules of “${node.name}”: ${e}`;
+        useToasts.getState().show(msg, reportAction(msg));
       }
     },
     cancelEdit(showList = true) {

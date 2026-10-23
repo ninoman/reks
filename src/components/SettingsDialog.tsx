@@ -14,6 +14,7 @@ import { cn } from "../lib/cn";
 import type { DeckWaveform, KeyNotation, SyncAlign, Theme } from "../lib/ipc";
 import { useScan } from "../store/scan";
 import { useSettings } from "../store/settings";
+import { ErrorMessage } from "./ErrorMessage";
 import { OutputSettings } from "./OutputSettings";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
@@ -147,11 +148,7 @@ function SettingsBody() {
         ))}
       </TabsList>
       <DialogBody className="flex-1 py-4">
-        {error !== null && (
-          <p className="m-0 text-danger" role="alert">
-            {error}
-          </p>
-        )}
+        {error !== null && <ErrorMessage as="p" className="m-0" message={error} />}
         <Panel value="library">
           <LibraryFolders />
           {settings !== null && <CacheFolder cacheDir={settings.cacheDir} />}

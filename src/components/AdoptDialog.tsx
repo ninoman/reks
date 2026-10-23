@@ -20,6 +20,7 @@ import { useHistory } from "../store/history";
 import { useLibrary } from "../store/library";
 import { usePlaylists } from "../store/playlists";
 import { useProfiles } from "../store/profiles";
+import { ErrorMessage } from "./ErrorMessage";
 import { Button } from "./ui/Button";
 import {
   Dialog,
@@ -130,11 +131,7 @@ function Adopt({ target }: { target: AdoptTarget }) {
             />
           )}
           {step.kind === "done" && <Done report={step.report} />}
-          {error !== null && (
-            <p className="m-0 text-danger select-text" role="alert">
-              {error}
-            </p>
-          )}
+          {error !== null && <ErrorMessage as="p" className="m-0" message={error} />}
         </DialogBody>
         <DialogFooter>
           {step.kind === "done" || step.kind === "failed" ? (

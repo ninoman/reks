@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { historyTrackSessions, type SessionRef } from "../lib/ipc";
 import { useHistory } from "../store/history";
+import { ErrorMessage } from "./ErrorMessage";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 
@@ -46,9 +47,7 @@ export function PlayedIn({
         <dd>{lastPlayed?.slice(0, 10) ?? "Never"}</dd>
       </dl>
       {error !== null ? (
-        <div className="text-danger select-text" role="alert">
-          {error}
-        </div>
+        <ErrorMessage message={error} />
       ) : sessions === null ? null : sessions.length === 0 ? (
         <p className="m-0 text-fg-muted">No imported sessions.</p>
       ) : (
