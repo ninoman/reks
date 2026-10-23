@@ -90,6 +90,14 @@ pub enum Error {
     #[error("{0} is a tag, not a tag category")]
     NotATagCategory(crate::tag::TagId),
 
+    /// No saved filter with this id.
+    #[error("saved filter {0} not found")]
+    FilterPresetNotFound(crate::filter_preset::FilterPresetId),
+
+    /// Another saved filter has this name (any case).
+    #[error("a saved filter named '{0}' already exists")]
+    FilterPresetNameTaken(String),
+
     /// An entry position or sibling index outside the list.
     #[error("index {index} out of range (length {len})")]
     IndexOutOfRange { index: u32, len: u32 },

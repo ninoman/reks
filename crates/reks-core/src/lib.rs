@@ -14,6 +14,7 @@ pub mod device;
 pub mod diagnostics;
 pub mod error;
 mod fileinfo;
+pub mod filter_preset;
 pub mod fsname;
 pub mod history;
 pub mod keys;
@@ -38,6 +39,7 @@ pub use db::Library;
 pub use deck::{CueMark, DeckAnchor, DeckAudio};
 pub use device::{Device, DeviceId, NewDevice, SyncedPlaylist, SyncedRecord};
 pub use error::{Error, Result};
+pub use filter_preset::{FilterPreset, FilterPresetId, FilterPresetOp, FilterPresetOutcome};
 pub use keys::{Key, KeyNotation, Mode};
 pub use manifest::{ManifestEntry, ManifestItemKind, ManifestRow};
 pub use playlist::{

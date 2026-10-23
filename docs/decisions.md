@@ -1163,7 +1163,14 @@ Date of decisions: 2026-10-18.
     button's menu. A loaded one is editable, shows "edited" with Update /
     Revert, and narrows whatever list is shown. One **Save…** asks: saved
     filter or smart playlist. Saving keeps the whole drawer, which also
-    fixes D29's builder-only save.
+    fixes D29's builder-only save. Core: migration 0012 (`filter_preset`:
+    name unique case-insensitively, dense `position`, `rule` JSON
+    `RuleNode`); `Library::filter_presets` lists them in order,
+    `filter_preset_mutate` takes `FilterPresetOp` (create, rename, setRule,
+    duplicate as "<name> copy" after the original, delete, move). Tag and
+    playlist ids are kept as saved, as in smart lists: a deleted one still
+    loads and matches no track, and the UI shows its row unfinished. A rule
+    that does not parse lists with `rule: null`.
   - **Last played** is "never" or "since a date". The form's relative "last
     30 / 90 / 365 days" goes, and no relative filter is added to the core.
 - Rejected: a query as chips (every edit is a popover); Notion-style
