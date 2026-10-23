@@ -923,6 +923,11 @@ export interface UiState {
   infoOpen: boolean;
   /** 0..1. */
   volume: number;
+  /**
+   * The Filters drawer's default fields (`bpm`, `key`, …, `tag:<category id>`);
+   * `null` until changed: BPM, Key, Genre, Rating and the first My Tags category.
+   */
+  filterFields: string[] | null;
 }
 
 export interface Settings {

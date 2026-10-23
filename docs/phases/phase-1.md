@@ -452,7 +452,7 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
   (Phase 5: `rgb` default since D30, `threeBand`, `blue`), `display.theme` (`booth`
   default, `graphite`, `paper`, `midnight`, `dusk`; see [ui.md](../ui.md)), `storage.cache_dir`
   (absent = `app_cache_dir`), `ui.state` (hidden columns, filter bar shown, filters on, track
-  info open, volume). A missing or unreadable value is its default (unreadable ones are logged).
+  info open, volume, the Filters drawer's default fields). A missing or unreadable value is its default (unreadable ones are logged).
   `settings_get` / `settings_set(patch)` (the UI stores `audioDevice` when the device changes).
 - Key notation is display only: the Key column, the track info key field and the key picker
   (still laid out as the Camelot wheel) use `Facets.keys` labels; storage stays canonical and
@@ -685,7 +685,7 @@ per task; 6 and 7 can run in parallel, 8 needs 7, 9 needs 6 and 7.
    handling as smart lists (ids kept as saved; a deleted tag or playlist
    leaves the row unfinished), `filter_presets_get` / `filter_presets_mutate`
    commands, round-trip tests.
-7. [ ] **UI one query**: the drawer edits one `GroupDraft`; `FilterState`
+7. [x] **UI one query**: the drawer edits one `GroupDraft`; `FilterState`
    and the Advanced button go. Default fields from a setting (BPM, Key,
    Genre, Rating, first tag category), one row per tag category (any / all
    / none), operators in the pickers, added rows after the last active row,

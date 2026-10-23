@@ -99,7 +99,7 @@ export const usePlaylists = create<PlaylistsState>()((set, get) => {
     await get().load();
     const lib = useLibrary.getState();
     void lib.loadFacets();
-    const shown = lib.filters.playlistId;
+    const shown = lib.playlistId;
     if (shown !== null && byId(shown) === undefined) lib.showPlaylist(null, true);
     else lib.refresh(true);
     const panes = usePanes.getState();
@@ -234,7 +234,7 @@ export const usePlaylists = create<PlaylistsState>()((set, get) => {
       if (outcome?.type !== "done") return;
       // The reloaded table showing it puts the new divider at table row `position`.
       for (const lib of allLibraries())
-        if (lib.getState().filters.playlistId === playlistId)
+        if (lib.getState().playlistId === playlistId)
           lib.getState().select({ type: "click", index: position });
       get().startDividerRename(playlistId, position, label);
     },

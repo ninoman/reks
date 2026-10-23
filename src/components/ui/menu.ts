@@ -22,3 +22,5 @@ export const menuItemVariants = cva(
 
 export const menuSeparatorClass = "-mx-1 my-1 h-px bg-border";
 export const menuIndicatorClass = "absolute left-2 inline-flex items-center text-fg";
+export const menuLabelClass =
+  "px-2 pt-1.5 pb-0.5 text-2xs font-semibold tracking-caption text-fg-subtle uppercase";

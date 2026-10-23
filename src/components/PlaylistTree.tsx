@@ -283,13 +283,13 @@ export function PlaylistTree() {
 }
 
 /**
- * Quick path: shows the whole collection without the tracks of `node` (a row
- * "not in playlist" in the rule builder). The tree selects a right-clicked
+ * Quick path: shows the whole collection without the tracks of `node` (a
+ * Playlist row "None of" in the Filters drawer). The tree selects a right-clicked
  * node, so the collection is shown first or the result would be empty.
  */
 function excludeFromView(node: PlaylistNode) {
   usePlaylists.getState().select(null);
-  useRules.getState().addCondition({ field: "playlist", id: node.id }, true);
+  useRules.getState().addCondition({ field: "playlist", ids: [node.id] }, true);
 }
 
 /** The Playlists row's (i) tooltip: how to open several lists at once. */

@@ -87,7 +87,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
   const toggleSort = useLib((s) => s.toggleSort);
   const ensureRange = useLib((s) => s.ensureRange);
   const select = useLib((s) => s.select);
-  const playlistId = useLib((s) => s.filters.playlistId);
+  const playlistId = useLib((s) => s.playlistId);
   const loadedId = usePlayerTrackId();
   const deckCount = useMix((s) => s.deckCount);
   // The My Tags column reads names from the tree: redraw when it changes.

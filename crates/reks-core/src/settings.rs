@@ -207,6 +207,9 @@ pub struct UiState {
     pub info_open: bool,
     /// Preview volume, 0..=1.
     pub volume: f32,
+    /// The Filters drawer's default fields (`bpm`, `key`, …, `tag:<category id>`);
+    /// `None` until the user changes them (UI defaults). Only the UI reads them.
+    pub filter_fields: Option<Vec<String>>,
 }
 
 impl Default for UiState {
@@ -217,6 +220,7 @@ impl Default for UiState {
             filters_enabled: true,
             info_open: false,
             volume: 1.0,
+            filter_fields: None,
         }
     }
 }
@@ -654,6 +658,7 @@ mod tests {
             filters_enabled: false,
             info_open: true,
             volume: 0.5,
+            filter_fields: Some(vec!["bpm".into(), "tag:3".into()]),
         };
         lib.update_settings(SettingsPatch {
             audio_device: Some(Some("Speakers".into())),

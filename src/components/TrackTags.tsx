@@ -43,7 +43,12 @@ export function TrackTags({ trackId, fallback }: { trackId: number; fallback: nu
               removeLabel={hit.tag.name}
               activateLabel={`Filter by tag ${hit.tag.name}`}
               onActivate={() =>
-                useRules.getState().addCondition({ field: "tag", ids: [id] }, false)
+                useRules
+                  .getState()
+                  .addCondition(
+                    { field: "tag", category: hit.category.id, ids: [id], all: false },
+                    false,
+                  )
               }
               onRemove={() => void unassign([trackId], [id])}
             >

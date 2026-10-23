@@ -12,6 +12,9 @@ export const badgeVariants = cva(
         neutral: "bg-surface-strong text-fg",
         accent: "bg-accent-solid text-accent-fg",
         muted: "bg-surface-strong text-fg-muted",
+        /** A word on a row, e.g. the Filters drawer's "not" / "all". */
+        danger: "text-danger ring-1 ring-danger ring-inset",
+        outline: "text-accent ring-1 ring-accent ring-inset",
       },
       size: {
         sm: "h-4 min-w-4 px-1 text-2xs leading-none",
