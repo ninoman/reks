@@ -202,7 +202,7 @@ and grid copied.
    `--format`, `--depth keep|16|24`, `--rate keep|max48|44100|48000`, plus
    `--dest <dir>`, `--add-as-new`, `--trash`. A playlist folder converts every
    track under it. Exits non-zero when nothing would convert or a file failed.
-8. **Hardware session**: checklist below; log in `docs/hw-test-log.md`.
+8. **Hardware session**: checklist below; log in `docs/hw-test-log.md` ([#21](https://github.com/ninoman/reks/issues/21)).
 
 ## Acceptance criteria
 

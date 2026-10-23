@@ -23,6 +23,7 @@ const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
   audioCue: null,
   keyNotation: "camelot",
   deckWaveform: "rgb",
+  theme: "graphite",
   syncAlign: "bar",
   cacheDir: "/cache",
   anlzPreference: "rekordboxFirst",

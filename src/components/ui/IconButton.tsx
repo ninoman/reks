@@ -45,7 +45,9 @@ export function IconButton({
         className={cn(
           buttonVariants({ variant, size }),
           iconButtonVariants({ size, shape }),
-          "text-fg-muted hover:text-fg aria-pressed:text-selected-fg",
+          "text-fg-muted hover:text-fg",
+          // A lit control keeps `lit-fg` (litState); other pressed buttons read as selected.
+          variant !== "control" && "aria-pressed:text-selected-fg",
           variant === "primary" && "text-accent-fg hover:text-accent-fg",
           className,
         )}

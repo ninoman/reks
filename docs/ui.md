@@ -3,20 +3,30 @@
 How the React UI is styled. Why this stack: [D26](decisions.md#d26-ui-styling-tailwind-v4--cva--radix).
 The look is adapted from a design analysis of Cursor's marketing site (pale
 canvas, dark ink, hairline depth, one scarce accent, 8px control radius) at
-desktop density, with system fonts and a derived dark theme. The reference's
-warm cream and orange were swapped for an indigo accent on cool, faintly
-indigo-tinted neutrals ("mist"). Orange failed AA contrast for small text on
-cream (3.4:1). A violet accent on the warm cream looked muddy, because the two
-hues are nearly opposite, so the neutrals now lean towards the accent's hue.
-Red, pink, green, amber and aqua already mean something here (danger, success,
-rating/warning, track colours). Indigo is 5.9:1 on the light canvas and 6.9:1
-on the dark one, and white button text on it is 6.2:1.
+desktop density, with system fonts. The colours come in five themes, picked in
+Settings → Display (`display.theme`); history in
+[D26](decisions.md#d26-ui-styling-tailwind-v4--cva--radix):
+
+| Theme | Look | Accent |
+|---|---|---|
+| Graphite (default) | dark, Claude's warm neutrals | ivory |
+| Paper | light, the same warm neutrals | rose |
+| Midnight | dark navy | blue |
+| Dusk | dark plum | lavender |
+| Booth | black, most contrast (dark rooms) | light grey |
+
+No accent is orange, amber, red or green: those already mean something here
+(warning/rating and the cue point, danger and memory cues, success and hot
+cues, the waveform's mid band), as do the track colours. Every text and button
+pair passes WCAG AA in every theme (body text 7:1 or more, filled buttons
+3:1 against panels).
 
 ## Where things live
 
 | Path | What |
 |---|---|
-| [`src/styles/tokens.css`](../src/styles/tokens.css) | **The only place that sets the look**: palette, semantic colours (light + dark), type, radii, shadow, layers, motion, control sizes, row heights |
+| [`src/styles/tokens.css`](../src/styles/tokens.css) | **The only place that sets the look**: palettes, semantic colours (one block per theme), type, radii, shadow, layers, motion, control sizes, row heights |
+| [`src/lib/theme.ts`](../src/lib/theme.ts) | Puts the theme on `<html>` (`data-theme`); `startThemeSync` in `store/settings.ts` calls it when the setting changes |
 | [`src/styles/base.css`](../src/styles/base.css) | Our reset (instead of Tailwind preflight) and element defaults (body, `user-select: none` for chrome, focus outline) |
 | [`src/styles/index.css`](../src/styles/index.css) | Entry: Tailwind, tokens, base |
 | [`src/components/ui/`](../src/components/ui/) | Base components (one per file, each exports its `cva` variants) |
@@ -33,14 +43,18 @@ No raw colours or one-off sizes outside `tokens.css`.
 
 Three layers in `tokens.css`:
 
-1. **Primitives** (`--mist-*`, `--indigo-*`, `--red-*`, `--rb-*` …) in plain
-   `:root`. Raw values; no utilities. The only hex values in `src/`.
-2. **Semantic tokens** in `@theme static`. These become utilities:
-   `--color-surface` → `bg-surface`, `--radius-md` → `rounded-md`,
+1. **Primitives** in plain `:root`: one palette per theme (`--graphite-*`,
+   `--paper-*`, `--midnight-*`, `--dusk-*`, `--booth-*`) and the shared deck,
+   LED, waveform and rekordbox colours (`--red-500`, `--led-*`, `--wave-*`,
+   `--rb-*` …). Raw values; no utilities. The only hex values in `src/`.
+2. **Semantic tokens** in `@theme static`, in Graphite's colours. These become
+   utilities: `--color-surface` → `bg-surface`, `--radius-md` → `rounded-md`,
    `--shadow-overlay` → `shadow-overlay`. Tailwind's default palette, font
    sizes, radii and shadows are dropped, so `bg-blue-500` does not exist.
-3. **Dark theme**: the semantic colours redefined under
-   `@media (prefers-color-scheme: dark)`. Components never branch on theme.
+3. **The other themes**: the semantic colours redefined under
+   `:root[data-theme="…"]`. Components never branch on theme. Canvases read
+   their colours with `getComputedStyle`, so they re-read them when
+   `useTheme()` changes (`mix/DeckWaveform`, `GridEditor`).
 
 Semantic colours: `bg`, `bg-subtle` (chrome), `row-alt`, `surface`,
 `surface-strong`, `hover`, `selected`/`selected-fg`, `knob`, `fg`,
@@ -49,13 +63,16 @@ Semantic colours: `bg`, `bg-subtle` (chrome), `row-alt`, `surface`,
 filled controls) with `accent-fg` on it, `danger` (+ `-fg`), `success`,
 `warning`, `rating`, `focus-ring`, `overlay`, `lit`/`lit-fg` (a switch that
 is on, with `shadow-lit`), `led-*` (meter LEDs), `waveform-*`, `track-*`
-(rekordbox colours: data, the same in both themes). The grid editor draws on
-its own dark deck in both themes: `deck`, `deck-fg`, `waveform-low/mid/high`
-(3-band), `grid-beat`, `grid-downbeat`, `grid-cursor`; the mixer's decks add
-`deck-cue`, `deck-hotcue`, `deck-memory`, `deck-loop` and the other waveform styles' `waveform-rgb-*` and
-`waveform-blue(-high)`.
+(rekordbox colours: data, the same in every theme), `theme-*` (each theme's
+canvas and accent, for the theme picker). The grid editor and the decks draw
+on the `deck`, the theme's darkest panel (Paper's is light, so its
+`waveform-high`, `waveform-blue-high`, `led-hot` and `grid-beat` are dark):
+`deck`, `deck-fg`, `waveform-low/mid/high` (3-band), `grid-beat`,
+`grid-downbeat`, `grid-cursor` (the accent); the mixer's decks add
+`deck-cue`, `deck-hotcue`, `deck-memory`, `deck-loop`, `deck-auto-loop` and the other waveform styles' `waveform-rgb-*` and
+`waveform-blue(-high)`. The mark colours are the same in every theme.
 
-The indigo `accent` stays scarce: primary buttons, the loaded track, the played
+The `accent` stays scarce: primary buttons, the loaded track, the played
 waveform, focus rings, drop indicators. Selection and toggles that are on
 use the neutral `selected` tint, except hardware-style switches in the Mix
 panel (`variant="control"`), which light up in `lit` so their state reads at a
@@ -63,12 +80,14 @@ glance.
 
 ### Common edits (one line each in `tokens.css`)
 
-- Accent colour: `--color-accent` and `--color-accent-solid` (+ `-hover`,
-  `-active`), in the light block and again in the dark block. They are the
-  same in light. In dark, `accent` is a light indigo (readable as text on the
-  dark background) and `accent-solid` the deeper light-theme one, so white
-  `accent-fg` passes AA on primary buttons (6.2:1). Neutrals are tinted
-  towards the accent hue; if you change the accent's hue, re-tint `--mist-*`.
+- A theme's accent: `--color-accent` (text, rings) and `--color-accent-solid`
+  (+ `-hover`, `-active`; filled controls) with `--color-accent-fg` on it, plus
+  `--color-lit`/`--shadow-lit`, in that theme's block (Graphite's in
+  `@theme`). Keep `accent-fg` at 4.5:1 or more on all three solids.
+- A new theme: a primitive palette, a `:root[data-theme]` block setting every
+  colour the others set, `--color-theme-*` for the picker, the id in
+  `THEMES` (`lib/theme.ts`), `Theme` (`ipc.ts`, reks-core `settings.rs`) and
+  the picker list in `SettingsDialog.tsx`.
 - Control radius: `--radius-md: 8px;` (sizes `md`/`lg` read it via `--ctl-r-*`).
 - Height of `md` controls: `--ctl-h-md: 28px;`.
 - Row height: `--row-h: 26px;` and `ROW_HEIGHT` in `trackTableModel.ts`
@@ -124,6 +143,7 @@ menu items `--menu-item-h`.
 | `Checkbox` | `size`: sm, md; `indeterminate` (mixed); native, wrap in a `<label>` (Biome knows it as an input) | native |
 | `Slider` | `size`: sm, md; one value | Radix Slider |
 | `SegmentedControl` + `Segment` | `size`; `variant`: default, control (chosen segment lit), outline (chosen segment ringed in `accent`, no fill: mode tabs); one choice, can't be cleared (radiogroup); segment corners nest inside the outer radius (`--seg-r`) | Radix ToggleGroup |
+| `Tabs` + `TabsList`, `TabsTrigger`, `TabsContent` | `orientation`: horizontal, vertical (a sidebar, Settings); chosen tab in the `selected` tint; arrow keys move between tabs | Radix Tabs |
 | `Chip` | removable label pill (`onRemove`, `removeLabel`) | – |
 | `Toast` | bottom-centre message with an optional action (Undo); one at a time via `store/toasts` + `ToastHost` | – |
 | `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |
@@ -181,14 +201,15 @@ Now:
    first load, so the native white background never shows.
 2. `index.html` holds the splash: the wordmark with a band of light sweeping
    across it ([`splash.css`](../src/styles/splash.css), theme tokens only, so
-   it follows the system theme; a slow fade with reduced motion).
+   it shows in the theme; a slow fade with reduced motion). `main.tsx` puts
+   the last launch's theme on `<html>` first (a copy kept in localStorage),
+   since the setting itself loads from Rust after the splash.
 3. `main.tsx` awaits `appReady()` before mounting React, so no command runs
    before `AppState` exists. App's mount effect fades the splash out
    ([`src/lib/splash.ts`](../src/lib/splash.ts), at least 900 ms on screen so
    it never blinks). If the library cannot be opened, the splash stops and
    shows the reason instead.
 
-There is no in-app theme setting yet; the app and splash follow the system.
 
 ## Player (D30)
 
@@ -268,7 +289,7 @@ had a start form before the output opened). `MixPanel` is the only part that rea
 ([`src/store/mix.ts`](../src/store/mix.ts)); `DeckStrip`, `DeckWaveform`,
 `MixerPanel`, `ChannelStrip`, `FilterUnit`, `MasterSection` and `SyncPhase`
 take props. The mixer follows the hardware: four channel strips (level, HI,
-MID 1, MID 2, LO, filter assign X/off/Y, cue, fader, crossfader assign) with
+HM (HI MID), LM (LO MID), LO, filter assign X/off/Y, cue, fader, crossfader assign) with
 one caption column, the master and cue section, then filter X, the crossfader
 and filter Y. Decks 1 and 2 sit left of it, 3 and 4 right. Two decks by
 default, and they are decks 2 and 3, the centre channels, as with two CDJs
@@ -342,7 +363,7 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   `shadow-lit` glow), the same look for every hardware-style switch.
   HP / BP / LP and channel CUE: a click picks one, Shift+click combines
   (tooltip on each); FILTER assign starts at X for channels 1–2, Y for 3–4.
-- Knobs draw a position mark (`knobMark`, `--color-knob-mark`: dark ink on the light cap in both themes).
+- Knobs draw a position mark (`knobMark`, `--color-knob-mark`: dark ink on the light cap in every theme).
 - Sizes: `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-*`, `--pad-h`,
   `--mixer-strip-w`, `--mixer-row-h`, `--mix-panel-max-h` (the panel scrolls
   inside 62% of the window height).
@@ -451,28 +472,31 @@ take-master controls; task 15's per-deck zoom became one `MixStore.waveZoom`
 40, `--deck-pads-max-w` 336, `--deck-transport`, `--deck-sync-w`,
 `--deck-tempo-w`, `--pad-h` 26, `--fader-detent` 6.
 
-**Keys** (left hand deck 2, right hand deck 3, Shift: decks 1 / 4 with four
-shown):
+**Keys** follow rekordbox's default PERFORMANCE keys (Performance 1,
+[rekordbox 7.0.5 shortcut reference](https://cdn.rekordbox.com/files/20241203185020/rekordbox7.0.5_default_keyboard_shortcut_reference_EN.pdf))
+so the same fingers work in both. Left hand deck 2, right hand deck 3;
+Option (⌥) adds decks 1 / 4 with four shown (rekordbox's decks 3 / 4).
+Shift is a key's second function, ⌘ (or Ctrl) its third:
 
 | Action | Left | Right |
 |---|---|---|
-| Cue (hold) · play · sync | A · S · D | J · K · L |
-| Nudge slower / faster (hold) | Q W | U I |
-| Hot cues A–D (any pad mode) | 1–4 | 7–0 |
-| Beat jump back / forward, last jump size | E R | O P |
-| Loop on / off, last loop size | F | ; |
-| Take master | G | H |
-| Next pad mode | T | Y |
+| Cue (hold), play below it | A, Z | H, N |
+| Sync · take master | Q · Shift Q | Y · Shift Y |
+| Nudge slower / faster (hold) | W E | U I |
+| Hot cues A–D (any pad mode) | 1–4 | 6–9 |
+| Previous / next memory cue | R T | O P |
+| Set memory cue at the playhead | Shift T | Shift P |
+| Beat jump back / forward, last jump size | ⌘ R, ⌘ T | ⌘ O, ⌘ P |
+| Loop on / off, last loop size (rekordbox: auto beat loop) | Shift F | Shift L |
+| Next pad mode (no rekordbox key) | Shift S | Shift J |
 
-| Set memory cue at the playhead | Alt A | Alt J |
-| Previous / next memory cue | Alt E, Alt R | Alt O, Alt P |
-
-Every plain letter for each hand is taken, so the memory cue keys are Alt
-on the keys they extend (CUE, beat jump). Crossfader Z / X / C, Space
-(player deck) and waveform zoom − / + (every deck at once, also with the
-Mix panel closed) are not per deck. Mouse or Tab only: hot cues E–H, other
-pads, page arrows, Q, M, tempo range, BPM edit, eject, the memory cue list,
-renames.
+Crossfader X / C / V (rekordbox has none; it puts sampler slots there),
+Space (player deck) and waveform zoom − / + (every deck at once, also
+with the Mix panel closed) are not per deck. rekordbox keys we have no
+action for yet stay free: loop in / out / exit (D F G, K L ;), halve /
+double loop, slip reverse (S, J), return to start, tempo. Mouse or Tab
+only: hot cues E–H, other pads, page arrows, Q, M, tempo range, BPM edit,
+eject, the memory cue list, renames.
 
 ### Cue editing (task 17)
 

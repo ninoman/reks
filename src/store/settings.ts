@@ -21,8 +21,10 @@ import {
   type SettingsPatch,
   settingsGet,
   settingsSet,
+  type Theme,
   type UiState,
 } from "../lib/ipc";
+import { applyTheme } from "../lib/theme";
 import { useLibrary } from "./library";
 import { useMix } from "./mix";
 import { usePanels } from "./panels";
@@ -176,6 +178,19 @@ export function startUiSync(): () => void {
 }
 
 /**
+ * Puts the theme on <html> whenever the settings bring a new one. A store
+ * listener runs inside `set`, before React re-renders, so canvases that read
+ * their colours while rendering get the new theme's. Returns the unsubscribe
+ * function.
+ */
+export function startThemeSync(): () => void {
+  return useSettings.subscribe((s, prev) => {
+    const theme = s.settings?.theme;
+    if (theme !== undefined && theme !== prev.settings?.theme) applyTheme(theme);
+  });
+}
+
+/**
  * Opens the output as `patch` says from now on (device, rate, buffer, cue)
  * and stores the choice; a running output reopens with it. A new device goes
  * back to its own rate and buffer, and that is stored too.
@@ -196,6 +211,11 @@ export function useKeyLabel(): (key: Key) => string {
   const notation = useSettings((s) => s.settings?.keyNotation ?? "classical");
   const keys = useLibrary((s) => s.facets?.keys);
   return (key) => keyLabel(key, notation, keys);
+}
+
+/** The theme in use; `null` until settings load (the last launch's theme is on <html>). */
+export function useTheme(): Theme | null {
+  return useSettings((s) => s.settings?.theme ?? null);
 }
 
 /** Whether SYNC lines up bars (Settings → Decks → Sync aligns; bar until settings load). */

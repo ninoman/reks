@@ -609,6 +609,12 @@ Date of decisions: 2026-10-18.
   controls DJs use to audition a transition, so they count as preparation,
   not the live-performance scope rejected below; loop rolls, slip mode and
   saved loops still need a decision.
+- EQ: the Xone:96 channel EQ since 2026-10-22 (maintainer's call; the rest
+  of the model stays the Xone:92's). HI 3 kHz and LO 180 Hz shelves, +6 dB /
+  kill; HI MID 1.1 kHz and LO MID 350 Hz bells, +10 / −27 dB (R§9.1). The mid
+  cut is a notch (Q 2), not the Xone:92 guide's "low Q", which at full cut
+  sounded like a kill. Was: the Xone:92's 2.5 kHz / 2 kHz / 350 Hz / 250 Hz,
+  mids +6 / −30 dB.
 - Manual loops, reloop and an always-visible loop block (status:
   **proposed** 2026-10-22, awaiting the maintainer). Add loop IN / OUT
   (also without a grid), RELOOP/EXIT with the last loop kept, ½ / 2× and a
@@ -803,8 +809,15 @@ Date of decisions: 2026-10-18.
   272) on neutrals tinted towards it (`--mist-*`, hue 285). Every text and
   button pair passes AA in both themes, including `fg-muted` on the light
   canvas (4.6:1; the warm one was 3.9:1).
-- Decision: tokens CSS-first in `src/styles/tokens.css` (`@theme`, light and dark
-  via `prefers-color-scheme`); Tailwind CSS v4 (`@tailwindcss/vite`) utilities;
+- Themes (2026-10-22, maintainer's call): the light/dark pair that followed
+  the system became five themes picked in Settings (`display.theme`):
+  Graphite (default: Claude's warm dark neutrals, ivory accent), Paper (light,
+  rose), Midnight (navy, blue), Dusk (plum, lavender), Booth (black, light grey;
+  for dark rooms). Cool accents on the warm neutrals were tried and dropped.
+  The deck follows the theme too (Paper's is light). Palettes, contrast
+  checks: [`ui.md`](ui.md#ui-design-system).
+- Decision: tokens CSS-first in `src/styles/tokens.css` (`@theme`, one block
+  per theme under `:root[data-theme]`); Tailwind CSS v4 (`@tailwindcss/vite`) utilities;
   `class-variance-authority` for variants and `clsx` + `tailwind-merge` as `cn()`;
   Radix Primitives for behaviour (Dialog, DropdownMenu, ContextMenu, Popover,
   Tooltip, Switch, Slider, ToggleGroup, ScrollArea, Slot) in `src/components/ui/`.
@@ -1028,6 +1041,20 @@ Date of decisions: 2026-10-18.
   against rekordbox 7.2.19's reference export (`fixtures/onelibrary/ref-7.2.19`)
   and synthetic PDBs; a stick written by a player's history logging is
   **UNVERIFIED** beyond the history tests.
+
+## D33. Progress tracking: GitHub Project next to the phase docs
+
+- Date: 2026-10-23 (maintainer's request).
+- Decision: the phase docs stay the plan of record (scope, design, task
+  checklists). The [reks roadmap](https://github.com/users/ninoman/projects/1)
+  Project tracks only what is open: one issue per open task, a milestone per
+  phase, `area:*` labels, and Priority, Status and Hardware fields. Each open
+  checklist item links its issue; the PR that ticks the box closes the issue
+  (`Closes #N`, see the PR template). Finished work is not back-filled as
+  issues. `needs-hw-test` issues close only with a logged result in
+  `docs/hw-test-log.md`.
+- Why: the docs carry the design and are what coding sessions read; the
+  board gives a cross-phase view of what is left without copying the plan.
 
 ## Open risks (cross-cutting)
 

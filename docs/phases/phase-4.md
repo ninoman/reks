@@ -218,7 +218,7 @@ empty in the reference, so their rows are UNVERIFIED (mapped like baken).
    rekordbox's OneLibrary files, then reads the database back with the key
    and validates it against `export.pdb` (no player has read it: task 9).
 9. **Hardware test**: checklist below on a OneLibrary-only player (borrow or
-   rent an OPUS-QUAD/XDJ-AZ/CDJ-3000X). Log results in `docs/hw-test-log.md`.
+   rent an OPUS-QUAD/XDJ-AZ/CDJ-3000X). Log results in `docs/hw-test-log.md` ([#24](https://github.com/ninoman/reks/issues/24)).
 10. [x] **Diff tool**: `reks-cli onelibrary diff <ref.db> <ours.db>` to speed up
     iteration after hardware failures. Done: `reks onelibrary diff <ours>
     <theirs> [--strict]` (databases or `dump.json`; ids, master ids and dates

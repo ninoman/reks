@@ -363,7 +363,7 @@ Divider rules
     skips), selector errors, and a backup whose import makes the stick's
     sessions skips.
 11. **Hardware session**: checklist below on CDJ-2000NXS2 and CDJ-3000; log in
-    `docs/hw-test-log.md`; turn `export.dividers` on by default only after both pass.
+    `docs/hw-test-log.md`; turn `export.dividers` on by default only after both pass ([#20](https://github.com/ninoman/reks/issues/20)).
 12. [x] **Adopt a foreign stick** (D27, [`../stick-profiles.md`](../stick-profiles.md) §4.3):
     `adopt::scan` / `adopt::apply`, read-only on the stick; history import
     (tasks 5–6) first; Link / Create under `From stick/<name>/` / Skip per

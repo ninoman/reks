@@ -276,6 +276,7 @@ let settings: Settings = {
   audioCue: null,
   keyNotation: "classical",
   deckWaveform: "rgb",
+  theme: "graphite",
   syncAlign: "bar",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",

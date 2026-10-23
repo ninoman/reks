@@ -187,7 +187,7 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
      `selected`/`onSelect` is the wizard's device step (task 10). Volumes
      the OS reports as fixed (some USB SSDs on Windows, R§6) are not listed.
    - [ ] Eject on Windows and Linux, and `volume_serial` on all three OSes,
-     against a real stick.
+     against a real stick. ([#17](https://github.com/ninoman/reks/issues/17))
 2. [x] **fsname + path planning**: implement `fsname`, `/Contents` layout, depth
    and length limits (255 full path, 8 levels), case-insensitive dedupe,
    NFC; property tests. Done in `reks-core::fsname`
@@ -453,7 +453,7 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
     - [x] `apply` (task 9) calls `run_backups(&plan.backup_plan(), ..)` first
       and aborts on error.
     - [ ] Real played-stick fixture: `played_stick_fixture_counts` is `#[ignore]`d
-      until `fixtures/rekordbox/played-<ver>/` exists (checklist step 7).
+      until `fixtures/rekordbox/played-<ver>/` exists (checklist step 7). ([#18](https://github.com/ninoman/reks/issues/18))
     - [x] Dry-run wording (`Display` for `Warning`/`Problem`) and
       `reks rb history` (task 11; `history::read_sessions` lists sessions).
     - [x] UI wording (task 10): dry-run and report text, see task 10.
@@ -472,7 +472,7 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
     - [x] Rows from the validator's read-back: `ValidationReport::manifest_rows()`.
     - [x] Call `replace_manifest` after a successful validation in `apply` (task 9).
 14. **Hardware campaign**: run the checklist on CDJ-2000NXS2 and CDJ-3000
-    (and any other player available); fix; log in `docs/hw-test-log.md`.
+    (and any other player available); fix; log in `docs/hw-test-log.md` ([#19](https://github.com/ninoman/reks/issues/19)).
     Tasks 12–13 come first: the checklist re-exports a played stick.
 15. **Stick profiles** (D27, [`../stick-profiles.md`](../stick-profiles.md) §4.1–4.2,
     §5): migration for `device`, `device_selection`, `device_synced_playlist`;

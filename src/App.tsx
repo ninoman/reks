@@ -11,7 +11,8 @@
  * when their toolbar buttons are on. Space plays and pauses the player deck
  * wherever focus is, except in text fields, dialogs and menus; Cmd/Ctrl+,
  * opens Settings.
- * Settings load first and restore the window state (columns, panels, volume).
+ * Settings load first and restore the window state (columns, panels, volume)
+ * and the theme.
  * Mounted only once the library is open (main.tsx); takes the splash down.
  */
 import { useEffect } from "react";
@@ -51,7 +52,7 @@ import { usePanels } from "./store/panels";
 import { togglePlayer } from "./store/player";
 import { usePlaylists } from "./store/playlists";
 import { useRules } from "./store/rules";
-import { startUiSync, useSettings } from "./store/settings";
+import { startThemeSync, startUiSync, useSettings } from "./store/settings";
 import { useTags } from "./store/tags";
 
 /** Pressed alone, these change nothing on screen. */
@@ -74,6 +75,7 @@ export default function App() {
       .getState()
       .setColumnVisibility(Object.fromEntries(DEFAULT_HIDDEN.map((id) => [id, false])));
     let stopSync: (() => void) | null = null;
+    const stopThemeSync = startThemeSync();
     let live = true;
     void useSettings
       .getState()
@@ -91,6 +93,7 @@ export default function App() {
     return () => {
       live = false;
       stopSync?.();
+      stopThemeSync();
     };
   }, []);
 

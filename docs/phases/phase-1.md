@@ -445,7 +445,8 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
 - One `setting` row per key, value JSON: `audio.device` (name, absent = system default;
   Phase 5 adds `audio.sample_rate`, `audio.buffer_frames`, `audio.cue`),
   `display.key_notation` (`classical` default, `camelot`, `openKey`), `display.deck_waveform`
-  (Phase 5: `rgb` default since D30, `threeBand`, `blue`), `storage.cache_dir`
+  (Phase 5: `rgb` default since D30, `threeBand`, `blue`), `display.theme` (`graphite`
+  default, `paper`, `midnight`, `dusk`, `booth`; see [ui.md](../ui.md)), `storage.cache_dir`
   (absent = `app_cache_dir`), `ui.state` (hidden columns, filter bar shown, filters on, track
   info open, volume). A missing or unreadable value is its default (unreadable ones are logged).
   `settings_get` / `settings_set(patch)` (the UI stores `audioDevice` when the device changes).
@@ -462,9 +463,9 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
   (logged). Artwork paths are relative to the cache, so the database is untouched.
 - Window state is saved 300 ms after the last change (`startUiSync`) and restored before the
   table shows; window size and position are task 14 (window-state plugin, below).
-- UI: Settings dialog (header gear button, Cmd/Ctrl+,), one view in titled groups: Folders
+- UI: Settings dialog (header gear button, Cmd/Ctrl+,), one tab per group in a sidebar: Library
   (library folders, cache folder), Playback (output device; Phase 5: sample rate, buffer,
-  headphone cue), Display (key notation), Decks
+  headphone cue), Display (theme, key notation), Decks
   (Mix view waveform style, Phase 5), Experimental (OneLibrary key, Phase 4). A stored
   device that is not connected stays listed as such.
 - Covered by reks-core and Vitest tests; the dialog was reviewed in `cargo tauri dev`.
@@ -667,6 +668,8 @@ Added 2026-10-21. One PR per task; tasks 4 and 2–3 can run in parallel once 1 
    saved rule with `playlist_rule`.
 
 ## Acceptance criteria
+
+Tracked in [#16](https://github.com/ninoman/reks/issues/16).
 
 - Import of the maintainer's real `collection.xml` (~3,000 tracks) completes in
   under 60 s on a laptop, with 100% of tracks whose files exist matched, and

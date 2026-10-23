@@ -558,6 +558,25 @@ fader curve switch) come from a retailer listing only (**UNVERIFIED**).
     Q is narrow on boost and wide on cut.
   - LO: shelf below 250 Hz; fully anticlockwise it becomes a 12 dB/oct high-pass.
   - Cue is pre-EQ by default; a master POST EQ switch changes that.
+- Music-channel EQ across models (checked 2026-10-22 against the guides'
+  text; the mic channels' 10 kHz / 2.5 kHz / 250 Hz / 100 Hz EQ is separate):
+
+  | Model, guide | HI shelf | HM bell | LM bell | LO shelf | Mid range |
+  |---|---|---|---|---|---|
+  | Xone:92, AP5345 Issue 4 | 2.5 kHz | 2 kHz | 350 Hz | 250 Hz | +6 / −30 dB |
+  | Xone:92 Limited Edition, Issue 1 (2024) | 2.4 kHz | 1.8 kHz | 320 Hz | 220 Hz | +6 / −30 dB (panel legend −27) |
+  | Xone:96, AP11645 Issue 1 | 3 kHz | 1.1 kHz | 350 Hz | 180 Hz | +10 / −27 dB |
+
+  All three: HI and LO +6 dB / −∞ (12 dB/oct kill on the '92s; the '96
+  guide gives no slope). Both '92 guides say the mid Q goes from "high Q
+  (narrow bandwidth) on boost to a low Q wide bandwidth when cutting"; none
+  gives a Q figure. The Limited Edition labels the mids HM / LM.
+  Sources: AP5345 Issue 4 (copy at
+  https://www.adorama.com/col/productManuals/AHXONE92FADR.pdf); Limited
+  Edition guide
+  https://www.allen-heath.com/content/uploads/2024/08/Xone92-Limited-Edition-User-Guide.pdf;
+  Xone:96 guide (copy at
+  https://www.veranstaltungstechnikmueller.de/pdf/Allen_Heath_Xone96_Bedienungsanleitung.pdf).
 - Filters: two stereo state-variable VCFs, X and Y. Cutoff (−3 dB point)
   30 Hz–20 kHz. HPF, BPF and LPF can be combined (HP+LP gives a notch, all
   three an "all-pass" effect), and switching is ramped to avoid clicks.
