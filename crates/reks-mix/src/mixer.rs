@@ -10,7 +10,7 @@ use crate::dsp::level::MasterLevel;
 use crate::dsp::limiter::Limiter;
 use crate::dsp::meter::PeakMeter;
 use crate::dsp::xfader::{Crossfader, XfadeGains};
-use crate::graph::{volume_gain, Ramp, DECKS};
+use crate::graph::{volume_gain, Preview, Ramp, DECKS, DUCK_MS};
 use crate::strip::{default_filter_assign, Block, CueTaps, Strip, BLOCK};
 
 /// A meter reading for the UI.
@@ -46,6 +46,8 @@ pub(crate) struct Mixer {
     /// Preview player volume ([`Control::Volume`]), on top of the master level.
     volume: Ramp,
     volume_value: f32,
+    /// The mix's gain under a preview on the master (no headphone cue).
+    duck: Ramp,
     master_meter: PeakMeter,
     limiter: Limiter,
     cue: CueBus,
@@ -72,6 +74,7 @@ impl Mixer {
             master: MasterLevel::new(1.0, sample_rate),
             volume: Ramp::new(volume_gain(1.0), sample_rate),
             volume_value: 1.0,
+            duck: Ramp::over(1.0, sample_rate, DUCK_MS),
             master_meter: PeakMeter::new(sample_rate),
             limiter: Limiter::new(sample_rate),
             cue: CueBus::new(sample_rate),
@@ -193,6 +196,7 @@ impl Mixer {
         inputs: &mut [Block; DECKS],
         out: &mut [f32],
         phones: Option<&mut [f32]>,
+        preview: Preview<'_>,
     ) {
         let n = out.len();
         let frames = n / 2;
@@ -210,10 +214,33 @@ impl Mixer {
         for (s, input) in self.strips.iter_mut().zip(inputs.iter_mut()) {
             s.process(&mut input[..n], &self.xgains[..frames], mix, &mut taps);
         }
-        for frame in mix.as_chunks_mut::<2>().0 {
-            let g = self.master.tick() * self.volume.next();
-            frame[0] *= g;
-            frame[1] *= g;
+        // With a headphone cue the preview is heard there alone (pre or post
+        // EQ alike); without one it takes over the master.
+        let on_master = phones.is_none();
+        if !on_master {
+            for (tap, p) in [&mut *taps.pre, &mut *taps.post]
+                .into_iter()
+                .flat_map(|t| t.iter_mut().zip(preview.block))
+            {
+                *tap += p;
+            }
+        }
+        self.duck.target = if on_master && preview.playing {
+            0.0
+        } else {
+            1.0
+        };
+        for (frame, p) in mix
+            .as_chunks_mut::<2>()
+            .0
+            .iter_mut()
+            .zip(preview.block.as_chunks::<2>().0)
+        {
+            let vol = self.volume.next();
+            let g = self.master.tick() * vol * self.duck.next();
+            let pg = if on_master { vol } else { 0.0 };
+            frame[0] = frame[0] * g + p[0] * pg;
+            frame[1] = frame[1] * g + p[1] * pg;
         }
         self.master_meter.process(mix);
         if let Some(phones) = phones {

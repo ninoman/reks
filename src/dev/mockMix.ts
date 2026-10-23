@@ -166,6 +166,8 @@ function emptyDeck(): Deck {
   };
 }
 
+/** ipc `PREVIEW_DECK`: the last slot, after the four mixer decks. */
+const PREVIEW_DECK = 4;
 let decks: Deck[] = [];
 let master: number | null = null;
 /** The master was playing at the last tick, so stopping hands it on. */
@@ -296,8 +298,9 @@ function snapshot(): MixState {
     deviceLost: false,
     xruns: 0,
     masterDeck: master,
-    decks: decks.map((d) => ({ ...d.view })),
-    meters: decks.map((d) => meter(d.view.playing)),
+    decks: decks.slice(0, PREVIEW_DECK).map((d) => ({ ...d.view })),
+    preview: { ...(decks[PREVIEW_DECK] ?? emptyDeck()).view },
+    meters: decks.slice(0, PREVIEW_DECK).map((d) => meter(d.view.playing)),
     masterMeter: meter(decks.some((d) => d.view.playing)),
   };
 }
@@ -578,7 +581,8 @@ export function mockMix(
           };
     case "mix_start": {
       config = args.config as MixConfig;
-      decks = Array.from({ length: 4 }, emptyDeck);
+      // Four mixer decks and the preview deck (`PREVIEW_DECK`).
+      decks = Array.from({ length: PREVIEW_DECK + 1 }, emptyDeck);
       master = null;
       masterPlaying = false;
       const channel = args.onState as Channel<MixState>;

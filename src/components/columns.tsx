@@ -2,11 +2,13 @@
 import type { ReactNode } from "react";
 
 import { formatBpm, formatDuration, formatRating } from "../lib/format";
-import type { SortColumn, TrackRow } from "../lib/ipc";
+import type { RowDensity, SortColumn, TrackRow } from "../lib/ipc";
+import type { ColumnDefaults } from "../store/settings";
 import { tagIndex } from "../store/tagModel";
 import { useTags } from "../store/tags";
 import { KeyLabel } from "./KeyLabel";
-import { Artwork } from "./ui/Artwork";
+import { QuickPlayArtwork } from "./QuickPlayArtwork";
+import { TrackWaveform } from "./TrackWaveform";
 import { Swatch } from "./ui/Swatch";
 
 export interface ColumnSpec {
@@ -18,7 +20,9 @@ export interface ColumnSpec {
   align?: "right";
   /** Takes a share of spare width when the table is narrower than its container. */
   grow?: true;
-  cell: (row: TrackRow) => ReactNode;
+  /** Only in compact rows: default rows show it in another cell already. */
+  compactOnly?: true;
+  cell: (row: TrackRow, density: RowDensity) => ReactNode;
 }
 
 const text = (v: string | number | null) => v ?? "";
@@ -49,23 +53,40 @@ export const COLUMNS: ColumnSpec[] = [
     cell: (r) => (r.entryPosition === null ? "" : r.entryPosition + 1),
   },
   {
+    id: "waveform",
+    grow: true,
+    header: "Waveform",
+    width: 200,
+    sort: null,
+    cell: (r) => <TrackWaveform trackId={r.missing ? null : r.id} durationMs={r.durationMs} />,
+  },
+  {
     id: "title",
     grow: true,
     header: "Title",
-    width: 280,
+    width: 240,
     sort: "title",
-    cell: (r) => (
-      <span className="flex items-center gap-1.5">
-        <Artwork size="row" artworkId={r.artworkId} />
-        <span className="truncate">{text(r.title)}</span>
+    cell: (r, density) => (
+      <span className="flex h-full items-center gap-1.5">
+        <QuickPlayArtwork row={r} />
+        {density === "compact" ? (
+          <span className="truncate">{text(r.title)}</span>
+        ) : (
+          <span className="flex min-w-0 flex-col leading-snug">
+            <span className="truncate">{text(r.title)}</span>
+            <span className="truncate text-fg-muted">{text(r.artist)}</span>
+          </span>
+        )}
       </span>
     ),
   },
   {
     id: "artist",
     grow: true,
+    // Default rows show the artist under the title.
+    compactOnly: true,
     header: "Artist",
-    width: 200,
+    width: 160,
     sort: "artist",
     cell: (r) => text(r.artist),
   },
@@ -81,7 +102,7 @@ export const COLUMNS: ColumnSpec[] = [
     id: "genre",
     grow: true,
     header: "Genre",
-    width: 120,
+    width: 110,
     sort: "genre",
     cell: (r) => text(r.genre),
   },
@@ -161,7 +182,7 @@ export const COLUMNS: ColumnSpec[] = [
   {
     id: "dateAdded",
     header: "Added",
-    width: 96,
+    width: 88,
     sort: "dateAdded",
     cell: (r) => r.dateAdded.slice(0, 10),
   },
@@ -209,7 +230,7 @@ export const COLUMNS: ColumnSpec[] = [
 export const COLUMN_BY_ID = new Map(COLUMNS.map((c) => [c.id, c]));
 
 /** Hidden until switched on in the column chooser. */
-export const DEFAULT_HIDDEN = [
+const DEFAULT_HIDDEN = [
   "album",
   "label",
   "remixer",
@@ -221,3 +242,10 @@ export const DEFAULT_HIDDEN = [
   "comment",
   "tags",
 ];
+
+export const COLUMN_DEFAULTS: ColumnDefaults = {
+  hidden: DEFAULT_HIDDEN,
+  version: 1,
+  // 1: room for the waveform column.
+  hiddenSince: [[1, ["lastPlayed"]]],
+};

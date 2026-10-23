@@ -195,6 +195,16 @@ pub struct Settings {
     pub onelibrary_key_builtin: bool,
 }
 
+/// Track table row height: one line (compact) or a taller row with bigger
+/// artwork and the artist under the title.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RowDensity {
+    Compact,
+    #[default]
+    Default,
+}
+
 /// Library window state kept across launches. Window size and position are
 /// Phase 1 task 14.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -207,6 +217,10 @@ pub struct UiState {
     pub info_open: bool,
     /// Preview volume, 0..=1.
     pub volume: f32,
+    pub row_density: RowDensity,
+    /// Version of the UI's default column set that `hidden_columns` was
+    /// saved against; the UI hides columns newly defaulted to hidden once.
+    pub columns_version: u32,
 }
 
 impl Default for UiState {
@@ -217,6 +231,8 @@ impl Default for UiState {
             filters_enabled: true,
             info_open: false,
             volume: 1.0,
+            row_density: RowDensity::Default,
+            columns_version: 0,
         }
     }
 }
@@ -654,6 +670,8 @@ mod tests {
             filters_enabled: false,
             info_open: true,
             volume: 0.5,
+            row_density: RowDensity::Compact,
+            columns_version: 1,
         };
         lib.update_settings(SettingsPatch {
             audio_device: Some(Some("Speakers".into())),

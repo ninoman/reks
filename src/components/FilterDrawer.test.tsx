@@ -33,6 +33,8 @@ function notation(keyNotation: "classical" | "camelot" | "openKey") {
         filtersEnabled: true,
         infoOpen: false,
         volume: 1,
+        rowDensity: "default",
+        columnsVersion: 1,
       },
     },
   });

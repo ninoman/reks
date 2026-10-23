@@ -480,6 +480,9 @@
   /* Rows: track table and playlist tree (TS mirror: ROW_HEIGHT), menu items. */
   --row-h: 26px;
   --row-art: 20px;
+  /* The track table's default (taller) rows: bigger artwork, artist under the title. */
+  --row-h-tall: 42px;
+  --row-art-tall: 36px;
   --menu-item-h: 26px;
 
   /* Layout. */
@@ -637,4 +640,10 @@
     var(--fader-len-base) +
     min(var(--fader-bonus), var(--mixer-h-advanced) - var(--mixer-h-three-advanced))
   );
+}
+
+/* The track table body at its default density (TrackTable `data-density`). */
+[data-density="default"] {
+  --row-h: var(--row-h-tall);
+  --row-art: var(--row-art-tall);
 }

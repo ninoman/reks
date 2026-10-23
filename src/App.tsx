@@ -19,7 +19,7 @@ import { useEffect } from "react";
 import { AdoptDialog } from "./components/AdoptDialog";
 import { AppHeader } from "./components/AppHeader";
 import { ConvertDialog } from "./components/ConvertDialog";
-import { DEFAULT_HIDDEN } from "./components/columns";
+import { COLUMN_DEFAULTS } from "./components/columns";
 import { DevicesDialog } from "./components/DevicesDialog";
 import { DeviceTree } from "./components/DeviceTree";
 import { ErrorMessage } from "./components/ErrorMessage";
@@ -71,14 +71,14 @@ export default function App() {
     // Defaults first so the table does not flash every column; settings may replace them.
     useLibrary
       .getState()
-      .setColumnVisibility(Object.fromEntries(DEFAULT_HIDDEN.map((id) => [id, false])));
+      .setColumnVisibility(Object.fromEntries(COLUMN_DEFAULTS.hidden.map((id) => [id, false])));
     let stopSync: (() => void) | null = null;
     const stopThemeSync = startThemeSync();
     const stopMixerLookSync = startMixerLookSync();
     let live = true;
     void useSettings
       .getState()
-      .load(DEFAULT_HIDDEN)
+      .load(COLUMN_DEFAULTS)
       .then(() => {
         if (live) stopSync = startUiSync();
       });

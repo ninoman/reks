@@ -31,6 +31,28 @@ import { usePanels } from "./panels";
 
 export const UI_SAVE_MS = 300;
 
+/** The track table's default hidden columns and their version history. */
+export interface ColumnDefaults {
+  hidden: string[];
+  /** Bumped whenever a column becomes hidden by default. */
+  version: number;
+  /** `[version, ids]`: columns hidden by default from that version on. */
+  hiddenSince: [number, string[]][];
+}
+
+/**
+ * The hidden columns to show `ui` with: the defaults until the user changed
+ * them, else their list plus the columns defaulted to hidden since it was saved.
+ */
+export function hiddenColumns(ui: UiState, columns: ColumnDefaults): string[] {
+  if (ui.hiddenColumns === null) return columns.hidden;
+  const added = columns.hiddenSince.flatMap(([v, ids]) => (v > ui.columnsVersion ? ids : []));
+  return [...new Set([...ui.hiddenColumns, ...added])];
+}
+
+/** The `ColumnDefaults.version` the shown columns follow, saved with them. */
+let columnsVersion = 0;
+
 /** The Settings dialog's tabs, in sidebar order. */
 export type SettingsTab = "library" | "playback" | "display" | "decks" | "mixer";
 
@@ -44,8 +66,8 @@ export interface SettingsStore {
   moving: boolean;
   error: string | null;
 
-  /** Loads settings and roots; `defaultHidden` seeds columns until they were changed. */
-  load(defaultHidden: string[]): Promise<void>;
+  /** Loads settings and roots; `columns` seeds the hidden columns until they were changed. */
+  load(columns: ColumnDefaults): Promise<void>;
   /** Re-reads the settings. */
   refresh(): Promise<void>;
   update(patch: SettingsPatch): Promise<void>;
@@ -74,16 +96,23 @@ export function currentUi(): UiState {
     filtersEnabled: lib.filtersEnabled,
     infoOpen: panels.infoOpen,
     volume: useMix.getState().volume,
+    rowDensity: panels.rowDensity,
+    columnsVersion,
   };
 }
 
 /** Puts `ui` into the library, panels and mix stores. */
-function applyUi(ui: UiState, defaultHidden: string[]) {
-  const hidden = ui.hiddenColumns ?? defaultHidden;
+function applyUi(ui: UiState, columns: ColumnDefaults) {
+  const hidden = hiddenColumns(ui, columns);
+  columnsVersion = columns.version;
   const lib = useLibrary.getState();
   lib.setColumnVisibility(Object.fromEntries(hidden.map((id) => [id, false])));
   lib.setFiltersEnabled(ui.filtersEnabled);
-  usePanels.setState({ filterBarOpen: ui.filterBarOpen, infoOpen: ui.infoOpen });
+  usePanels.setState({
+    filterBarOpen: ui.filterBarOpen,
+    infoOpen: ui.infoOpen,
+    rowDensity: ui.rowDensity,
+  });
   useMix.getState().setVolume(ui.volume);
 }
 
@@ -105,10 +134,10 @@ export const useSettings = create<SettingsStore>()((set, get) => {
     moving: false,
     error: null,
 
-    async load(defaultHidden) {
+    async load(columns) {
       await run(async () => {
         const [settings, roots] = await Promise.all([settingsGet(), libraryRoots()]);
-        applyUi(settings.ui, defaultHidden);
+        applyUi(settings.ui, columns);
         set({ settings, roots });
         const { audioDevice, audioSampleRate, audioBufferFrames, audioCue } = settings;
         await useMix.getState().setConfig({

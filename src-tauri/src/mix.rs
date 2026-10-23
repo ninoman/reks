@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use reks_core::{CueMark, DeckAudio, Library, TrackId};
-use reks_mix::{DeckSource, DeckState, Engine, EngineConfig, DECKS};
+use reks_mix::{DeckSource, DeckState, Engine, EngineConfig, DECKS, PREVIEW_DECK};
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 use tauri::State;
@@ -25,6 +25,9 @@ use crate::state::AppState;
 /// State snapshots sent to the UI per second (the engine makes about 60).
 const FEED_HZ: u64 = 60;
 
+/// The mixer's decks and the preview deck (`PREVIEW_DECK`, last).
+const SLOTS: usize = DECKS + 1;
+
 /// The mixer engine, when started, and what is on its decks.
 #[derive(Debug, Default)]
 pub struct Mix {
@@ -34,10 +37,10 @@ pub struct Mix {
 #[derive(Debug, Default)]
 struct MixSlot {
     engine: Option<Engine>,
-    decks: [Option<LoadedDeck>; DECKS],
+    decks: [Option<LoadedDeck>; SLOTS],
     /// Bumped by every load request per deck; a decode that finishes after
     /// a newer request is dropped.
-    generation: [u64; DECKS],
+    generation: [u64; SLOTS],
     /// Cleared to stop the state feed of the running engine.
     feed: Option<Arc<AtomicBool>>,
 }
@@ -217,6 +220,8 @@ pub struct MixState {
     /// The sync master deck; `None` when nobody is master.
     pub master_deck: Option<u8>,
     pub decks: Vec<DeckView>,
+    /// The preview deck (`PREVIEW_DECK`): the track list's quick play.
+    pub preview: DeckView,
     /// Channel meters, after EQ and filter, before the fader.
     pub meters: Vec<MeterView>,
     /// Master meter, before the limiter.
@@ -284,6 +289,7 @@ fn snapshot(slot: &mut MixSlot) -> Option<MixState> {
             .zip(ids)
             .map(|(d, id)| deck_view(d, id, rate))
             .collect(),
+        preview: deck_view(&st.preview, ids[DECKS], rate),
         meters: st.channels.iter().map(|&m| m.into()).collect(),
         master_meter: st.master.into(),
     })
@@ -437,7 +443,7 @@ fn deck_source(audio: DeckAudio) -> DeckSource {
 
 fn deck_index(deck: u8) -> CmdResult<usize> {
     let i = usize::from(deck);
-    if i < DECKS {
+    if i < DECKS || deck == PREVIEW_DECK {
         Ok(i)
     } else {
         Err(CmdError::new(format!("no deck {}", i + 1)))

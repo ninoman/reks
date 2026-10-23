@@ -44,7 +44,7 @@ import type { ColumnSpec } from "./columns";
 import { DividerLabel } from "./DividerLabel";
 import { useLibraryStore } from "./libraryStoreContext";
 import { TagSubmenu } from "./TagSubmenu";
-import { fitColumnWidths, ROW_HEIGHT } from "./trackTableModel";
+import { fitColumnWidths, ROW_HEIGHTS } from "./trackTableModel";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -75,7 +75,7 @@ const ROW = [
   "data-[divider]:bg-bg-subtle data-[divider]:data-[selected]:bg-selected",
 ].join(" ");
 
-export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
+export function TrackTable({ columns: visible }: { columns: ColumnSpec[] }) {
   const useLib = useLibraryStore();
   const total = useLib((s) => s.total);
   const dividers = useLib((s) => s.dividers);
@@ -90,6 +90,12 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
   const playlistId = useLib((s) => s.filters.playlistId);
   const loadedId = usePlayerTrackId();
   const deckCount = useMix((s) => s.deckCount);
+  const density = usePanels((s) => s.rowDensity);
+  const rowHeight = ROW_HEIGHTS[density];
+  const specs = useMemo(
+    () => (density === "compact" ? visible : visible.filter((c) => c.compactOnly !== true)),
+    [visible, density],
+  );
   // The My Tags column reads names from the tree: redraw when it changes.
   useTags((s) => s.tree);
   const nodes = usePlaylists((s) => s.nodes);
@@ -111,14 +117,19 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
   const virtualizer = useVirtualizer({
     count,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     overscan: 20,
-    // Keep keyboard-focused rows clear of the sticky header (row height + border).
-    scrollPaddingStart: ROW_HEIGHT + 1,
+    // Keep keyboard-focused rows clear of the sticky header (one compact row + border).
+    scrollPaddingStart: ROW_HEIGHTS.compact + 1,
   });
   const items = virtualizer.getVirtualItems();
   const first = items[0]?.index ?? 0;
   const last = items[items.length - 1]?.index ?? 0;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rows are re-measured when their height changes.
+  useEffect(() => {
+    virtualizer.measure();
+  }, [rowHeight, virtualizer]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new count or result generation must re-check the visible range.
   useEffect(() => {
@@ -160,7 +171,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     const pageRows = Math.max(
       1,
-      Math.floor((scrollRef.current?.clientHeight ?? ROW_HEIGHT) / ROW_HEIGHT) - 1,
+      Math.floor((scrollRef.current?.clientHeight ?? rowHeight) / rowHeight) - 1,
     );
     const moves: Record<string, number> = {
       ArrowDown: 1,
@@ -342,7 +353,11 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
               </div>
             ))}
           </div>
-          <div className="relative" style={{ height: virtualizer.getTotalSize(), width }}>
+          <div
+            className="relative"
+            data-density={density}
+            style={{ height: virtualizer.getTotalSize(), width }}
+          >
             {items.map((item) => {
               const entry = itemAt(loaded, item.index);
               const row = entry?.kind === "track" ? entry.row : undefined;
@@ -374,7 +389,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
                   data-drop={
                     dropAt?.index === item.index ? (dropAt.after ? "after" : "before") : undefined
                   }
-                  style={{ transform: `translateY(${item.start}px)`, height: ROW_HEIGHT }}
+                  style={{ transform: `translateY(${item.start}px)`, height: rowHeight }}
                   draggable={entry !== undefined && draft === null}
                   onMouseDown={(e) => onRowMouseDown(e, item.index)}
                   onDoubleClick={() => {
@@ -404,7 +419,7 @@ export function TrackTable({ columns: specs }: { columns: ColumnSpec[] }) {
                         className={c.align === "right" ? CELL_RIGHT : CELL}
                         style={{ width: c.width }}
                       >
-                        {row === undefined ? null : c.cell(row)}
+                        {row === undefined ? null : c.cell(row, density)}
                       </div>
                     ))
                   )}

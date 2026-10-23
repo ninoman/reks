@@ -8,10 +8,13 @@ import {
   useTable,
 } from "@tanstack/react-table";
 
+import type { RowDensity } from "../lib/ipc";
 import { useLibrary } from "../store/library";
 import { COLUMN_BY_ID, COLUMNS, type ColumnSpec } from "./columns";
 
 export const ROW_HEIGHT = 26;
+/** Track table row heights (tokens.css `--row-h`, `--row-h-tall`). */
+export const ROW_HEIGHTS: Record<RowDensity, number> = { compact: ROW_HEIGHT, default: 42 };
 
 const features = tableFeatures({ columnVisibilityFeature });
 const helper = createColumnHelper<typeof features, never>();

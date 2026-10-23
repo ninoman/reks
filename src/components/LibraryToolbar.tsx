@@ -1,8 +1,9 @@
 /**
- * List toolbar above the track table: search, the Filters button (shows the
- * filter bar; badge = filters set) with the on/off switch while any is set,
- * track count, background analysis progress, column chooser, and the Track
- * info button. Library-wide actions (scan, import) live in the app header.
+ * List toolbar above the track table: search and track count on the left;
+ * background analysis progress, column chooser, the Filters button (opens the
+ * Filters drawer; badge = filters set) with the on/off switch while any is
+ * set, My Tags and the Track info button on the right, beside the drawers
+ * they open. Library-wide actions (scan, import) live in the app header.
  */
 
 import { activeFilterCount, useLibrary } from "../store/library";
@@ -39,6 +40,13 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
   return (
     <div className="flex h-(--toolbar-h) shrink-0 items-center gap-2 border-b border-border px-2.5">
       <SearchBox onSearch={setText} />
+      <span className="whitespace-nowrap text-xs text-fg-muted tabular-nums">
+        {total.toLocaleString()} tracks
+        {selected > 0 ? ` · ${selected.toLocaleString()} selected` : ""}
+      </span>
+      <span className="flex-1" />
+      <AnalysisIndicator />
+      <ColumnChooser table={table} />
       <Tooltip content={filterBarOpen ? "Hide filters" : "Show filters"}>
         <Button size="sm" variant="ghost" aria-pressed={filterBarOpen} onClick={toggleFilterBar}>
           <FilterIcon />
@@ -54,13 +62,6 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
         </Button>
       </Tooltip>
       {activeFilters > 0 && <FiltersSwitch />}
-      <span className="whitespace-nowrap text-xs text-fg-muted tabular-nums">
-        {total.toLocaleString()} tracks
-        {selected > 0 ? ` · ${selected.toLocaleString()} selected` : ""}
-      </span>
-      <span className="flex-1" />
-      <AnalysisIndicator />
-      <ColumnChooser table={table} />
       <Tooltip content={tagsOpen ? "Hide My Tags" : "Show My Tags"}>
         <IconButton
           size="sm"

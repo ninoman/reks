@@ -3,7 +3,7 @@
  * `fill` (the info panel: full width, square), `deck` (`--deck-art`) or `row`
  * (`--row-art`, a track-list thumbnail that loads the small cached JPEG
  * instead of the full picture). `action` puts a button over it that shows on
- * hover or keyboard focus (the deck's eject).
+ * hover or keyboard focus (the deck's eject), or always with `actionShown`.
  */
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ReactNode } from "react";
@@ -28,6 +28,8 @@ export interface ArtworkProps extends VariantProps<typeof artworkVariants> {
   mime?: string;
   /** A button shown over the artwork on hover or focus. */
   action?: ReactNode;
+  /** Keep `action` shown without hover (e.g. while it is playing). */
+  actionShown?: boolean;
   className?: string;
 }
 
@@ -43,7 +45,14 @@ function RecordGlyph() {
   );
 }
 
-export function Artwork({ artworkId, mime = "", size, action, className }: ArtworkProps) {
+export function Artwork({
+  artworkId,
+  mime = "",
+  size,
+  action,
+  actionShown = false,
+  className,
+}: ArtworkProps) {
   const url = useArtworkUrl(artworkId, mime, size === "row");
   return (
     <div className={cn(artworkVariants({ size }), "group/art", className)}>
@@ -65,7 +74,10 @@ export function Artwork({ artworkId, mime = "", size, action, className }: Artwo
         />
       )}
       {action !== undefined && (
-        <div className="absolute inset-0 opacity-0 group-hover/art:opacity-100 focus-within:opacity-100">
+        <div
+          className="absolute inset-0 opacity-0 group-hover/art:opacity-100 focus-within:opacity-100 data-[shown]:opacity-100"
+          data-shown={actionShown || undefined}
+        >
           {action}
         </div>
       )}

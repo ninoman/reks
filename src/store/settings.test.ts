@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Settings } from "../lib/ipc";
+import type { ColumnDefaults } from "./settings";
 
 vi.mock("../lib/ipc", () => ({
   DECKS: 4,
@@ -14,7 +15,9 @@ const ipc = await import("../lib/ipc");
 const { useLibrary } = await import("./library");
 const { usePanels } = await import("./panels");
 const { useMix } = await import("./mix");
-const { startUiSync, UI_SAVE_MS, useSettings } = await import("./settings");
+const { hiddenColumns, startUiSync, UI_SAVE_MS, useSettings } = await import("./settings");
+
+const cols = (hidden: string[]): ColumnDefaults => ({ hidden, version: 1, hiddenSince: [] });
 
 const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
   audioDevice: null,
@@ -37,6 +40,8 @@ const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
     filtersEnabled: true,
     infoOpen: false,
     volume: 1,
+    rowDensity: "default",
+    columnsVersion: 1,
     ...ui,
   },
 });
@@ -66,7 +71,7 @@ describe("settings store", () => {
         volume: 0.4,
       }),
     );
-    await useSettings.getState().load(["album"]);
+    await useSettings.getState().load(cols(["album"]));
     expect(useLibrary.getState().columnVisibility).toEqual({ bpm: false });
     expect(useLibrary.getState().filtersEnabled).toBe(false);
     expect(usePanels.getState()).toMatchObject({ filterBarOpen: false, infoOpen: true });
@@ -76,14 +81,32 @@ describe("settings store", () => {
 
   it("uses the default hidden columns until they were changed", async () => {
     vi.mocked(ipc.settingsGet).mockResolvedValue(settingsOf());
-    await useSettings.getState().load(["album", "label"]);
+    await useSettings.getState().load(cols(["album", "label"]));
     expect(useLibrary.getState().columnVisibility).toEqual({ album: false, label: false });
+  });
+
+  it("hides columns defaulted to hidden after the list was saved", () => {
+    const columns: ColumnDefaults = {
+      hidden: ["d"],
+      version: 2,
+      hiddenSince: [
+        [1, ["a"]],
+        [2, ["b"]],
+      ],
+    };
+    const ui = (u: Partial<Settings["ui"]>) => settingsOf(u).ui;
+    expect(hiddenColumns(ui({ hiddenColumns: ["x"], columnsVersion: 1 }), columns)).toEqual([
+      "x",
+      "b",
+    ]);
+    expect(hiddenColumns(ui({ hiddenColumns: ["x"], columnsVersion: 2 }), columns)).toEqual(["x"]);
+    expect(hiddenColumns(ui({ hiddenColumns: null }), columns)).toEqual(["d"]);
   });
 
   it("saves window state once, after changes settle", async () => {
     vi.mocked(ipc.settingsGet).mockResolvedValue(settingsOf());
     vi.mocked(ipc.settingsSet).mockResolvedValue(settingsOf());
-    await useSettings.getState().load(["album"]);
+    await useSettings.getState().load(cols(["album"]));
     const stop = startUiSync();
     usePanels.getState().toggleInfo();
     useLibrary.getState().setColumnVisibility({ album: false, bpm: false });
@@ -98,6 +121,8 @@ describe("settings store", () => {
         filtersEnabled: true,
         infoOpen: true,
         volume: 1,
+        rowDensity: "default",
+        columnsVersion: 1,
       },
     });
     // A change undone before the delay saves nothing.

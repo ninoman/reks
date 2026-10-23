@@ -55,6 +55,29 @@ export function stripPeaks(
   return { bands, mono };
 }
 
+/**
+ * A whole track's `columns` stretched over a canvas `width` × `height`
+ * device pixels (no transform): the track-list thumbnail.
+ */
+export function drawOverview(
+  ctx: CanvasRenderingContext2D,
+  palette: WavePalette,
+  style: DeckWaveform,
+  columns: Uint8Array,
+  width: number,
+  height: number,
+) {
+  ctx.clearRect(0, 0, width, height);
+  const count = columns.length / 4;
+  if (count === 0 || width === 0) return;
+  const { bands, mono } = stripPeaks(columns, 0, count / width, width);
+  const mid = height / 2;
+  for (const bar of waveBars(style, bands, mono, height, palette)) {
+    ctx.fillStyle = bar.colour;
+    ctx.fillRect(bar.x, mid - bar.half, 1, 2 * bar.half);
+  }
+}
+
 /** What a strip draws; a new strip is made when any of it changes. */
 export interface StripSpec {
   columns: Uint8Array;
