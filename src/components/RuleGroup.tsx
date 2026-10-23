@@ -18,6 +18,7 @@ import {
   type ItemDraft,
   isRowActive,
   type RowDraft,
+  type RowValue,
 } from "../store/ruleTree";
 import { FieldChooser } from "./FieldChooser";
 import { ChevronDownIcon, PlusIcon } from "./icons";
@@ -39,6 +40,7 @@ export interface RuleLevelActions extends RuleRowActions {
   toggleMode(groupId: string): void;
   ungroup(groupId: string): void;
   addField(groupId: string, key: FieldKey): void;
+  addValue(groupId: string, value: RowValue): void;
 }
 
 export interface RuleLevelProps {
@@ -162,9 +164,10 @@ function NestedGroup(props: RuleLevelProps) {
           open={chooserOpen}
           onOpenChange={setChooserOpen}
           shown={new Set()}
-          categories={choices.tags?.categories ?? null}
+          source={choices}
           tagsStatus={choices.tagsStatus}
           onPick={(key) => actions.addField(group.id, key)}
+          onPickValue={(value) => actions.addValue(group.id, value)}
         />
       </div>
     </div>

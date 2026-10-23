@@ -4,7 +4,8 @@
  * fields as rows from the start, more from "+ Add filter", ANDed until a
  * connector or Or… says "or" (`RuleBuilder`). It narrows whatever the tree
  * shows. The on/off switch lives in the toolbar next to that button, so it
- * works with the drawer hidden. Escape closes the drawer.
+ * works with the drawer hidden. Escape closes the drawer; `/` (outside a text
+ * field) opens Add filter.
  */
 import { type ReactNode, useState } from "react";
 
@@ -31,6 +32,15 @@ export function FiltersSwitch() {
     >
       <Switch aria-label="Apply filters" checked={enabled} onCheckedChange={setEnabled} />
     </Tooltip>
+  );
+}
+
+/** Typing goes to the field, not to the drawer's shortcuts. */
+function isTextEntry(t: EventTarget | null): boolean {
+  return (
+    t instanceof HTMLInputElement ||
+    t instanceof HTMLTextAreaElement ||
+    (t instanceof HTMLElement && t.isContentEditable)
   );
 }
 
@@ -63,6 +73,15 @@ export function FilterDrawer() {
         if (e.key === "Escape" && e.currentTarget.contains(e.target as Node)) {
           e.stopPropagation();
           close();
+        } else if (
+          e.key === "/" &&
+          !e.metaKey &&
+          !e.ctrlKey &&
+          !e.altKey &&
+          !isTextEntry(e.target)
+        ) {
+          e.preventDefault();
+          useRules.getState().setAddOpen(true);
         }
       }}
     >

@@ -29,6 +29,7 @@ import { usePlaylists } from "./playlists";
 import { reportAction } from "./report";
 import {
   addField,
+  addValue,
   chooseField,
   clearRow,
   defaultKeys,
@@ -97,6 +98,13 @@ export interface RulesState {
   addField(groupId: string, key: FieldKey): void;
   /** Gives the empty row made by Or… its field. */
   chooseField(rowId: string, key: FieldKey): void;
+  /** Add filter's search: a value for `groupId` (sets or extends the root row of its field). */
+  addValue(groupId: string, value: RowValue): void;
+  /** The empty row made by Or… takes a value found by the search. */
+  chooseValue(rowId: string, value: RowValue): void;
+  /** The root level's Add filter menu; `/` in the drawer opens it. */
+  addOpen: boolean;
+  setAddOpen(open: boolean): void;
   /** Or…: this row or another filter. */
   or(rowId: string): void;
   setMode(groupId: string, mode: GroupMode): void;
@@ -214,6 +222,22 @@ export const useRules = create<RulesState>()((set, get) => {
     },
     chooseField(rowId, key) {
       apply(chooseField(get().root, rowId, key), { id: rowId, open: true });
+    },
+    addValue(groupId, value) {
+      const key = fieldKey(value);
+      set((s) => ({ dismissed: s.dismissed.filter((k) => k !== key) }));
+      const made = addValue(get().root, groupId, value);
+      apply(made.root, { id: made.rowId, open: false });
+    },
+    chooseValue(rowId, value) {
+      apply(updateRow(get().root, rowId, { value, not: false, paused: false }), {
+        id: rowId,
+        open: false,
+      });
+    },
+    addOpen: false,
+    setAddOpen(open) {
+      set({ addOpen: open });
     },
     or(rowId) {
       const made = orRow(get().root, rowId);

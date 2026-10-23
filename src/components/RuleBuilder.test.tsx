@@ -100,8 +100,8 @@ describe("RuleBuilder", () => {
     useRules.setState({ root: freshRoot([]), dismissed: [...DEFAULTS] });
     render(<RuleBuilder />);
     expect(screen.getByText("No filters here. Add one below.")).toBeTruthy();
-    fireEvent.keyDown(screen.getByRole("button", { name: "Add filter" }), { key: "Enter" });
-    fireEvent.click(screen.getByRole("menuitem", { name: "Plays" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+    fireEvent.click(screen.getByRole("option", { name: "Plays" }));
     expect(screen.getByRole("group", { name: "Plays filter" })).toBeTruthy();
     expect(screen.getByRole("spinbutton", { name: "Minimum Plays" })).toBeTruthy();
   });

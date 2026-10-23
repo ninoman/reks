@@ -777,6 +777,21 @@ export function fillRow(
   };
 }
 
+/**
+ * A value picked in Add filter's search: on the root level it sets or
+ * extends that field's row, like a quick path; in a nested group it is a new
+ * row there.
+ */
+export function addValue(
+  root: GroupDraft,
+  groupId: string,
+  value: RowValue,
+): { root: GroupDraft; rowId: string } {
+  if (groupId === root.id) return fillRow(root, value, false);
+  const row = newRow(value);
+  return { root: insertInto(root, groupId, row), rowId: row.id };
+}
+
 /** Tag ids gone from the tree leave their rows; rows of a deleted category go. */
 export function pruneTags(
   root: GroupDraft,

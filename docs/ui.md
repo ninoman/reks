@@ -704,7 +704,7 @@ query (D29), only while the Filters switch is on.
 Components: `FilterDrawer` (chrome, banners, Clear all, save) → `RuleBuilder`
 (reads the stores, the root level, "+ Add filter") → `RuleLevel` / nested
 group card (`RuleGroup.tsx`) → `RuleRow` → `RuleValueEditor`, with
-`FieldChooser` (the field list) and `ValuePicker` (`PickerPopover`,
+`FieldChooser` (Add filter: search over fields and values) and `ValuePicker` (`PickerPopover`,
 `ListPicker`: the operator on top, a checklist with search, count and Clear,
 and loading / error-with-Retry / empty states). All but `RuleBuilder` and
 `FilterDrawer` take props. Sizes: `--query-rail-w`, `--query-dot`,
@@ -744,9 +744,20 @@ and loading / error-with-Retry / empty states). All but `RuleBuilder` and
 - **Keyboard**: the row's dot on the rail is its handle: ↑ / ↓ between rows,
   Enter opens the value (or focuses a range's minimum), Space pauses,
   Backspace / Delete empties a set row or removes an empty one, Shift+F10 the
-  menu. A row just added takes focus with its picker open. `/` for Add
-  filter comes with the value search (phase 1 task 8, the seam is
-  `FieldChooser`'s `onPick`).
+  menu. A row just added takes focus with its picker open. `/` anywhere in
+  the drawer outside a text field opens the root Add filter
+  (`rules.addOpen`).
+- **Add filter search** (`FieldChooser`, matching in
+  [`filterSearch.ts`](../src/store/filterSearch.ts)): a combobox (focus stays
+  in the search box, ↑ / ↓ / Home / End move, Enter picks, options are
+  `aria-activedescendant`). Blank, it lists the fields by group; typed, it
+  lists values first: a number 40–300 is "BPM around" it ± 2
+  (`BPM_SEARCH_TOLERANCE`), "4*" / "4 stars" / "★★★★" a rating at least,
+  a key typed exactly in any notation (shown in the user's), then genres and
+  tags (with their category) by name, starting matches first, eight at most;
+  then fields whose name matches. A value on the root level sets or extends
+  its field's row like a quick path (`addValue` → `fillRow`); in a group it
+  adds a row there; on a row waiting for its field it sets that row.
 - **No count or summary in the drawer**: the table shows both. The Filters
   button's badge counts the rows that filter (`activeRowCount`); its tooltip
   has the one-line `summarize` text. No Apply button: edits re-query after

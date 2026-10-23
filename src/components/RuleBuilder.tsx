@@ -4,7 +4,7 @@
  * pickers' choices and the actions; edits apply as they are made (no Apply
  * button), and the table is the feedback (no count or summary here).
  */
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import type { KeyInfo } from "../lib/ipc";
 import { useLibrary } from "../store/library";
@@ -18,6 +18,7 @@ import { PlusIcon } from "./icons";
 import { RuleLevel } from "./RuleGroup";
 import type { RuleChoices } from "./RuleValueEditor";
 import { Button } from "./ui/Button";
+import { Kbd } from "./ui/Kbd";
 import type { OptionsStatus } from "./ValuePicker";
 
 const NO_KEYS: readonly KeyInfo[] = [];
@@ -68,7 +69,7 @@ export function RuleBuilder() {
   const tree = useTags((s) => s.tree);
   const actions = useRules.getState();
   const choices = useRuleChoices();
-  const [addOpen, setAddOpen] = useState(false);
+  const addOpen = useRules((s) => s.addOpen);
 
   const defaults = useMemo(
     () => defaultKeys(defaultFields, tree?.categories.map((c) => c.id) ?? null),
@@ -97,17 +98,19 @@ export function RuleBuilder() {
       <div className="pl-(--query-rail-w)">
         <FieldChooser
           trigger={
-            <Button size="sm" variant="ghost" className="text-fg-muted">
+            <Button size="sm" variant="ghost" className="text-fg-muted" aria-keyshortcuts="/">
               <PlusIcon />
               Add filter
+              <Kbd aria-hidden>/</Kbd>
             </Button>
           }
           open={addOpen}
-          onOpenChange={setAddOpen}
+          onOpenChange={actions.setAddOpen}
           shown={shownKeys(root, root)}
-          categories={tree?.categories ?? null}
+          source={choices}
           tagsStatus={choices.tagsStatus}
           onPick={(key) => actions.addField(root.id, key)}
+          onPickValue={(value) => actions.addValue(root.id, value)}
           onResetDefaults={actions.resetDefaults}
         />
       </div>

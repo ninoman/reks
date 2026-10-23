@@ -12,7 +12,14 @@ import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 
 import { cn } from "../lib/cn";
 import type { RowFocus } from "../store/rules";
-import { type FieldKey, fieldKey, isRowActive, isRowSet, type RowDraft } from "../store/ruleTree";
+import {
+  type FieldKey,
+  fieldKey,
+  isRowActive,
+  isRowSet,
+  type RowDraft,
+  type RowValue,
+} from "../store/ruleTree";
 import { FieldChooser } from "./FieldChooser";
 import { CloseIcon, MoreIcon } from "./icons";
 import { type RowPatch, type RuleChoices, RuleValueEditor } from "./RuleValueEditor";
@@ -34,6 +41,7 @@ export interface RuleRowActions {
   remove(rowId: string): void;
   or(rowId: string): void;
   chooseField(rowId: string, key: FieldKey): void;
+  chooseValue(rowId: string, value: RowValue): void;
   keepDefault(key: FieldKey, keep: boolean): void;
   clearFocus(): void;
 }
@@ -155,9 +163,10 @@ export function RuleRow({
           open={chooserOpen}
           onOpenChange={setChooserOpen}
           shown={new Set()}
-          categories={choices.tags?.categories ?? null}
+          source={choices}
           tagsStatus={choices.tagsStatus}
           onPick={(k) => actions.chooseField(row.id, k)}
+          onPickValue={(value) => actions.chooseValue(row.id, value)}
         />
       ) : (
         <>

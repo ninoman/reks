@@ -4,6 +4,7 @@ import type { RuleNode } from "../lib/ipc";
 import {
   activeRowCount,
   addField,
+  addValue,
   canOr,
   clearRow,
   defaultKeys,
@@ -465,6 +466,25 @@ describe("row edits", () => {
     const added = fillRow(root, { field: "playlist", ids: [7] }, true);
     expect(findRow(added.root, added.rowId)).toMatchObject({ not: true });
     expect(added.root.rules.findIndex((r) => r.id === added.rowId)).toBe(3);
+  });
+
+  it("addValue extends the root row of its field, and adds a row in a nested group", () => {
+    let root = freshRoot(DEFAULTS);
+    const genreRow = root.rules[2] as RowDraft;
+    root = addValue(root, root.id, { field: "genre", genres: ["House"] }).root;
+    const extended = addValue(root, root.id, { field: "genre", genres: ["Techno"] });
+    expect(extended.rowId).toBe(genreRow.id);
+    expect(findRow(extended.root, genreRow.id)?.value).toEqual({
+      field: "genre",
+      genres: ["House", "Techno"],
+    });
+    const group = newGroup("any", [newRow({ field: "genre", genres: ["Disco"] })]);
+    const nested = addValue(newGroup("all", [group]), group.id, {
+      field: "genre",
+      genres: ["Funk"],
+    });
+    expect(findGroup(nested.root, group.id)?.rules).toHaveLength(2);
+    expect(findRow(nested.root, nested.rowId)?.value).toEqual({ field: "genre", genres: ["Funk"] });
   });
 
   it("pruneTags drops deleted tags and the rows of deleted categories", () => {

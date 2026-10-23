@@ -100,6 +100,7 @@ beforeEach(() => {
     defaultFields: null,
     dismissed: [],
     lastMatched: null,
+    addOpen: false,
   });
   useToasts.setState({ toast: null });
   notation("classical");
@@ -236,7 +237,7 @@ describe("FilterDrawer", () => {
       openMenu(screen.getByRole("button", { name: "Genre options" }));
       fireEvent.click(screen.getByRole("menuitem", { name: /Or…/ }));
       // The empty row's field list is open (the rest is hidden from it while it is).
-      fireEvent.click(await screen.findByRole("menuitem", { name: "Rating" }));
+      fireEvent.click(await screen.findByRole("option", { name: "Rating" }));
       const group = screen.getByRole("group", { name: "Group: any of these" });
       expect(within(group).getByRole("group", { name: "Genre filter" })).toBeTruthy();
       expect(within(group).getByRole("group", { name: "Rating filter" })).toBeTruthy();
@@ -286,9 +287,9 @@ describe("FilterDrawer", () => {
     openPicker("Genre");
     fireEvent.click(screen.getByRole("checkbox", { name: "House" }));
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Escape" });
-    openMenu(screen.getByRole("button", { name: "Add filter" }));
-    expect(screen.getByRole("menuitem", { name: /^BPM\s*shown$/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("menuitem", { name: "# Situation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+    expect(screen.getByRole("option", { name: /^BPM\s*shown$/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("option", { name: "# Situation" }));
     const order = screen.getAllByRole("group", { name: / filter$/ }).map((g) => g.ariaLabel);
     expect(order).toEqual([
       "BPM filter",
@@ -300,6 +301,70 @@ describe("FilterDrawer", () => {
     ]);
     // Its picker opens at once.
     expect(await screen.findByRole("checkbox", { name: "Peak time" })).toBeTruthy();
+  });
+
+  describe("Add filter search", () => {
+    const search = () => screen.getByRole("combobox", { name: "Find a field or value" });
+    const picker = (name: string) =>
+      within(row(name)).getByRole("button", { name: new RegExp(`^${esc(name)}: `) });
+
+    it("finds a value and Enter sets its row; a second one extends it", () => {
+      render(<FilterDrawer />);
+      fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+      fireEvent.change(search(), { target: { value: "tech" } });
+      const options = screen.getAllByRole("option").map((o) => o.ariaLabel);
+      expect(options).toEqual(["Genre is Techno", "# Genre has Techno"]);
+      fireEvent.keyDown(search(), { key: "Enter" });
+      expect(picker("Genre").getAttribute("aria-label")).toBe("Genre: Techno");
+      expect(row("Genre").dataset.active).toBe("true");
+
+      fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+      fireEvent.change(search(), { target: { value: "house" } });
+      fireEvent.click(screen.getByRole("option", { name: "Genre is House" }));
+      expect(picker("Genre").getAttribute("aria-label")).toMatch(/Techno.*House|House.*Techno/);
+    });
+
+    it("arrows move through values, then fields; a tag lands in its category's row", () => {
+      render(<FilterDrawer />);
+      fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+      fireEvent.change(search(), { target: { value: "peak" } });
+      fireEvent.keyDown(search(), { key: "ArrowDown" });
+      // One value only: the arrow wraps back to it.
+      expect(search().getAttribute("aria-activedescendant")).toBe(
+        screen.getByRole("option", { name: "# Situation has Peak time" }).id,
+      );
+      fireEvent.keyDown(search(), { key: "Enter" });
+      expect(picker("Situation (My Tags)").getAttribute("aria-label")).toBe(
+        "Situation (My Tags): Peak time",
+      );
+    });
+
+    it("reads BPM, stars and keys; says when nothing matches", () => {
+      render(<FilterDrawer />);
+      fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+      fireEvent.change(search(), { target: { value: "128" } });
+      expect(screen.getByRole("option", { name: "BPM around 128, 126–130" })).toBeTruthy();
+      fireEvent.change(search(), { target: { value: "4*" } });
+      expect(screen.getByRole("option", { name: "Rating at least ★★★★" })).toBeTruthy();
+      fireEvent.change(search(), { target: { value: "8a" } });
+      fireEvent.keyDown(search(), { key: "Enter" });
+      expect(picker("Key").getAttribute("aria-label")).toBe("Key: Am");
+      fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+      fireEvent.change(search(), { target: { value: "zzz" } });
+      expect(screen.getByText("Nothing matches “zzz”.")).toBeTruthy();
+    });
+
+    it("/ in the drawer opens it, but not while typing in a field", () => {
+      render(<FilterDrawer />);
+      fireEvent.keyDown(handle("BPM"), { key: "/" });
+      expect(search()).toBeTruthy();
+      fireEvent.keyDown(search(), { key: "Escape" });
+      cleanup();
+      useRules.setState({ addOpen: false });
+      render(<FilterDrawer />);
+      fireEvent.keyDown(screen.getByRole("spinbutton", { name: "Minimum BPM" }), { key: "/" });
+      expect(screen.queryByRole("combobox", { name: "Find a field or value" })).toBeNull();
+    });
   });
 
   it("Clear all empties the drawer with an Undo toast and keeps the playlist", async () => {

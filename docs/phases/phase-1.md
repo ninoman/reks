@@ -693,7 +693,7 @@ per task; 6 and 7 can run in parallel, 8 needs 7, 9 needs 6 and 7.
    fields, Remove), keyboard map, quick paths, Clear all with Undo, badge,
    `EmptyResult` "Undo last change". No count or summary in the drawer.
    Rewrite the `ui.md` filter sections.
-8. [ ] **UI Add filter search**: fields by group and values (genres, tags
+8. [x] **UI Add filter search**: fields by group and values (genres, tags
    with their category, keys, BPM ± tolerance, stars); Enter adds or
    extends the row; `/` opens it.
 9. [ ] **UI saved filters**: picker in the drawer (load with Undo toast,
