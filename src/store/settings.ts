@@ -229,3 +229,18 @@ export function useTheme(): Theme | null {
 export function syncBar(): boolean {
   return (useSettings.getState().settings?.syncAlign ?? "bar") === "bar";
 }
+
+/**
+ * Keeps the mixer's view (Settings → Mixer) in the mix store, which sends
+ * what the engine gets for the controls that view hides. Call after `load`;
+ * returns the unsubscribe function.
+ */
+export function startMixerLookSync(): () => void {
+  const apply = (s: Settings | null) => {
+    if (s !== null) useMix.getState().setLook({ view: s.mixerView, filters: s.mixerFilters });
+  };
+  apply(useSettings.getState().settings);
+  return useSettings.subscribe((state, prev) => {
+    if (state.settings !== prev.settings) apply(state.settings);
+  });
+}

@@ -345,8 +345,16 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   the mixer's top-left corner; `setDialogOpen(true, "mixer")` opens on that
   tab and focuses its first control): Mixer view `mix.mixer_view` (**Simple**
   default, Advanced) and Filters `mix.mixer_filters` (**Show** default,
-  Hide; disabled in Advanced). Stored only so far: the simple view itself is
-  phase 5 task 25 ([research §6](research/deck-mixer-layout.md)).
+  Hide; disabled in Advanced). **Simple** hides the FILTER and X-F assign
+  rows, the crossfader and the curve; **Filters: Hide** also hides the
+  filter row. Hidden controls keep the user's positions in the store, but
+  the engine gets `effectiveMix(values, look)` (`lib/mixView.ts`): channels
+  1–2 on filter X, 3–4 on Y, crossfader assigns THRU, and with the filters
+  hidden both units off. The store sends these on every change, on each
+  view switch (`setLook`, fed from settings by `startMixerLookSync`) and at
+  start; Advanced sends the user's positions again. X C V do nothing in
+  Simple and the Shortcuts list leaves them out (`mixKeyAction(e, decks,
+  crossfader)`). Spec: [research §6](research/deck-mixer-layout.md).
 - Waveform style (Settings → Decks, `display.deck_waveform`), applied to both
   views live, on the player deck too: **RGB** (default since D30; mono height,
   colour mixed from `waveform-rgb-low/mid/high` by band level), **3-band**
@@ -380,6 +388,13 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   HP / BP / LP and channel CUE: a click picks one, Shift+click combines
   (tooltip on each); FILTER assign starts at X for channels 1–2, Y for 3–4.
 - Knobs draw a position mark (`knobMark`, `--color-knob-mark`: dark ink on the light cap in every theme).
+- Mixer height per view (task 25): Advanced 440, Simple 356, Simple with
+  the filters hidden 292 (`--mixer-h-advanced` / `-simple` / `-simple-bare`).
+  The Mix panel's `data-mixer` picks one (`mixerSize`) and re-declares
+  `--deck-h`, which a `var()` on `:root` would not follow. With 4 decks the
+  mixer stays 440 and its faders (`--fader-len`) and the master meter take
+  the difference, 60 px at most (`--fader-bonus`). In Simple the master
+  meter has no dB labels and fills the row.
 - Sizes (mixer 344 × 440, `--mixer-w` × `--mixer-h`; strips 52, rows 26, faders 96,
   filter FREQ `--knob-lg` 32; ![Mixer, dark](img/mixer-2-decks-dark.jpg) ![Mixer, light](img/mixer-2-decks-light.jpg)):
   `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-*`, `--pad-h`,
@@ -391,8 +406,7 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 Modelled on rekordbox's 2Deck Horizontal. Approved wireframe:
 <https://claude.ai/artifact/1bLg3dZwjRfL4nXbYvFdzD> (revision 3).
 
-**Size** (task 23). 2 decks: `--deck-h` = `--mixer-h` (440 px, so the decks follow the mixer when
-task 25 changes its height); the waveform takes the spare height (222 px; `--deck-wave-min-h` 60 is the floor) and the
+**Size** (task 23). 2 decks: `--deck-h` = `--mixer-h` (440 px in Advanced; 356 / 292 in the Simple views, so the decks follow the mixer); the waveform takes the spare height (222 px; `--deck-wave-min-h` 60 is the floor) and the
 quick-loop row sits under the overview. 4 decks (`compact`): `--deck-h-compact` 216 px, two stacked make the mixer's
 440; header 30, overview 14, waveform 60, and the quick-loop grid beside the pads. The panel is capped by
 `--mix-panel-max-h` = window height − `--app-chrome-h` (82) − `--library-min-h` (246: toolbar and filters 116, column

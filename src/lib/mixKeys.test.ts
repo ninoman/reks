@@ -256,3 +256,13 @@ describe("key hints", () => {
     expect(crossfaderKeyHint()).toBe("X C V");
   });
 });
+
+describe("mixKeyAction in the Simple mixer view", () => {
+  it("does nothing on X C V, and keeps the other keys", () => {
+    for (const code of ["KeyX", "KeyC", "KeyV"]) {
+      expect(mixKeyAction(key(code), 2, true)).not.toBeNull();
+      expect(mixKeyAction(key(code), 2, false)).toBeNull();
+    }
+    expect(mixKeyAction(key("KeyZ"), 2, false)).toEqual({ type: "play", deck: 1 });
+  });
+});

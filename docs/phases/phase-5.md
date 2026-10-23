@@ -685,7 +685,7 @@ nothing; 25 needs 22–24.
     Tests: `settings.rs` round trip and defaults, `SettingsDialog.test.tsx`
     (Mixer group, Filters disabled in Advanced, opening at a section),
     `MixerPanel.test.tsx` (gear opens Settings on the Mixer tab).
-25. [ ] **Simple mixer view** ([#46](https://github.com/ninoman/reks/issues/46)) (§6). Needs 22–24.
+25. [x] **Simple mixer view** ([#46](https://github.com/ninoman/reks/issues/46)) (§6). Needs 22–24.
     - `effectiveMix(values, view)` in `mixView.ts`: Simple sends the
       default filter assigns (1–2 X, 3–4 Y) and THRU for every crossfader
       assign; filters hidden sends both units off. The store sends the
@@ -694,8 +694,11 @@ nothing; 25 needs 22–24.
     - Simple hides the FILTER and X-F assign rows, the crossfader and
       curve; filters hidden also hides the filter row. X C V do nothing in
       Simple and leave the Shortcuts list.
-    - Mixer height per view (440 / 356 / 292); 2 decks follow it; in
-      4-deck mode a shorter mixer gives up to 60 px to its faders.
+    - Mixer height per view (440 / 356 / 292, `--mixer-h-*`, set by the Mix
+      panel's `data-mixer`); 2 decks follow it; in 4-deck mode the mixer
+      stays 440 and a shorter view gives 60 px (`--fader-bonus`) to its
+      faders. The Simple master meter drops its dB labels and takes the
+      height that is left.
     - `decisions.md` D21: the mixer views note becomes accepted.
     Tests: `mixView.test.ts` (`effectiveMix` for every view),
     `mix.test.ts` (engine values in Simple, stored values back in

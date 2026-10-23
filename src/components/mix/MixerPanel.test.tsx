@@ -2,13 +2,16 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { MixerLook } from "../../lib/mixView";
 import { useMix } from "../../store/mix";
 import { useSettings } from "../../store/settings";
 import { MixerPanel, type MixerPanelProps } from "./MixerPanel";
 
 afterEach(cleanup);
 
-function setup(cues: boolean[] = [false, false, false, false]) {
+const ADVANCED: MixerLook = { view: "advanced", filters: "show" };
+
+function setup(cues: boolean[] = [false, false, false, false], look: MixerLook = ADVANCED) {
   const s = useMix.getState();
   const props: MixerPanelProps = {
     channels: s.channels.map((c, i) => ({ ...c, cue: cues[i] ?? false })),
@@ -16,6 +19,7 @@ function setup(cues: boolean[] = [false, false, false, false]) {
     filters: s.filters,
     crossfader: s.crossfader,
     master: s.master,
+    look,
     onChannel: vi.fn(),
     onFilter: vi.fn(),
     onCrossfader: vi.fn(),
@@ -158,6 +162,32 @@ describe("MixerPanel", () => {
           .getAttribute("aria-checked"),
       ).toBe("true");
     }
+  });
+
+  it("Simple hides the FILTER and X-F rows, the crossfader and the curve", () => {
+    setup([false, false, false, false], { view: "simple", filters: "show" });
+    expect(screen.queryByRole("radiogroup", { name: /assign/ })).toBeNull();
+    expect(screen.queryByRole("slider", { name: "Crossfader" })).toBeNull();
+    expect(screen.queryByRole("slider", { name: "Crossfader curve" })).toBeNull();
+    expect(screen.queryByText("X-F")).toBeNull();
+    expect(screen.queryByText("Filter")).toBeNull();
+    expect(screen.getByRole("region", { name: "Filter X" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Filter Y" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Channel 1 cue" })).toBeTruthy();
+  });
+
+  it("Simple with the filters hidden also hides the filter row", () => {
+    setup([false, false, false, false], { view: "simple", filters: "hide" });
+    expect(screen.queryByRole("region", { name: "Filter X" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Filter Y" })).toBeNull();
+    expect(screen.getByRole("slider", { name: "Channel 1 fader" })).toBeTruthy();
+  });
+
+  it("Advanced shows everything whatever the filters setting says", () => {
+    setup([false, false, false, false], { view: "advanced", filters: "hide" });
+    expect(screen.getByRole("region", { name: "Filter X" })).toBeTruthy();
+    expect(screen.getByRole("slider", { name: "Crossfader" })).toBeTruthy();
+    expect(screen.getAllByRole("radiogroup", { name: /assign/ })).toHaveLength(8);
   });
 
   it("names no trademarks", () => {

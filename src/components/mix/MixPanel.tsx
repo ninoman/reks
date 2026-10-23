@@ -9,7 +9,7 @@
  */
 import { memo, useMemo } from "react";
 
-import { deckSide, phaseOffset, shownDecks } from "../../lib/mixView";
+import { deckSide, mixerSize, phaseOffset, shownDecks } from "../../lib/mixView";
 import { useMix } from "../../store/mix";
 import { useKeyLabel } from "../../store/settings";
 import { DeckStrip } from "./DeckStrip";
@@ -58,6 +58,8 @@ export function MixPanel() {
   return (
     <section
       aria-label="Mix"
+      data-mixer={mixerSize(mix.look)}
+      data-decks={deckCount}
       className="max-h-(--mix-panel-max-h) shrink-0 overflow-y-auto px-3 pb-2"
     >
       <div className="flex min-h-0 items-start gap-2">
@@ -70,6 +72,7 @@ export function MixPanel() {
           filters={mix.filters}
           crossfader={mix.crossfader}
           master={mix.master}
+          look={mix.look}
           onChannel={mix.setChannel}
           onFilter={mix.setFilter}
           onCrossfader={mix.setCrossfader}

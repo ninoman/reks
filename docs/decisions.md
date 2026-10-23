@@ -630,7 +630,7 @@ Date of decisions: 2026-10-18.
   Spec and sources: [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §5;
   phase 5 tasks 20–21.
 - Simple and advanced mixer views (maintainer's request, 2026-10-23; spec
-  **proposed**): a Settings → Mixer group, also opened from a gear on the
+  **accepted**, maintainer's call, 2026-10-23): a Settings → Mixer group, also opened from a gear on the
   mixer, chooses Simple (no filter assign, crossfader or crossfader assign;
   filters optionally hidden) or Advanced (the whole model). Hidden controls
   hold values that change nothing (default filter assigns, crossfader

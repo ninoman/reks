@@ -55,7 +55,7 @@ import { togglePlayer } from "./store/player";
 import { usePlaylists } from "./store/playlists";
 import { offerCrashReport } from "./store/report";
 import { useRules } from "./store/rules";
-import { startThemeSync, startUiSync, useSettings } from "./store/settings";
+import { startMixerLookSync, startThemeSync, startUiSync, useSettings } from "./store/settings";
 import { useTags } from "./store/tags";
 
 /** Pressed alone, these change nothing on screen. */
@@ -79,6 +79,7 @@ export default function App() {
       .setColumnVisibility(Object.fromEntries(DEFAULT_HIDDEN.map((id) => [id, false])));
     let stopSync: (() => void) | null = null;
     const stopThemeSync = startThemeSync();
+    const stopMixerLookSync = startMixerLookSync();
     let live = true;
     void useSettings
       .getState()
@@ -98,6 +99,7 @@ export default function App() {
       live = false;
       stopSync?.();
       stopThemeSync();
+      stopMixerLookSync();
     };
   }, []);
 

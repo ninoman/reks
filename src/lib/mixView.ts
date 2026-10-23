@@ -3,7 +3,7 @@
  * mixer laws are in Rust, `reks-mix`).
  */
 
-import type { CueRouting, DeckView, MixState } from "./ipc";
+import type { CueRouting, DeckView, FilterUnit, MixerFilters, MixerView, MixState } from "./ipc";
 
 /**
  * Tempo fader ranges (CDJ-3000), as a fraction either side of 1. WIDE is
@@ -322,4 +322,69 @@ export function loopBlockState(
     reloopEnabled: looping || (loaded && (view?.lastLoop ?? null) !== null),
     size: { text, dimmed: !looping },
   };
+}
+
+/** The mixer's look: Simple hides the crossfader and the assign rows; `filters` only matters in Simple. */
+export interface MixerLook {
+  view: MixerView;
+  filters: MixerFilters;
+}
+
+export const DEFAULT_LOOK: MixerLook = { view: "simple", filters: "show" };
+
+/** Which rows of the mixer are on screen. */
+export interface MixerParts {
+  /** The FILTER and X-F assign rows of every strip, and the crossfader row. */
+  assigns: boolean;
+  filterRow: boolean;
+}
+
+export function mixerParts(look: MixerLook): MixerParts {
+  const advanced = look.view === "advanced";
+  return { assigns: advanced, filterRow: advanced || look.filters === "show" };
+}
+
+/** The mixer's height class (`--mixer-h` per `data-mixer` in tokens.css): 440 / 356 / 292 px. */
+export type MixerSize = "advanced" | "simple" | "simple-bare";
+
+export function mixerSize(look: MixerLook): MixerSize {
+  if (look.view === "advanced") return "advanced";
+  return look.filters === "show" ? "simple" : "simple-bare";
+}
+
+/** The channel filter assign a hidden FILTER row stands for: channels 1–2 on X, 3–4 on Y. */
+export function defaultFilterAssign(ch: number): Assign {
+  return ch < 2 ? "x" : "y";
+}
+
+/** The values the engine takes; the user's own positions stay where they are. */
+export interface MixerValues<
+  C extends { filterAssign: Assign; xfadeAssign: Assign },
+  F extends { on: boolean },
+> {
+  channels: C[];
+  filters: Record<FilterUnit, F>;
+}
+
+/**
+ * What the engine gets while controls are hidden: Simple puts the default
+ * filter assigns and THRU (crossfader off) on every channel; with the filters
+ * hidden too, both filter units are off. Advanced passes the values as they are.
+ */
+export function effectiveMix<
+  C extends { filterAssign: Assign; xfadeAssign: Assign },
+  F extends { on: boolean },
+>(values: MixerValues<C, F>, look: MixerLook): MixerValues<C, F> {
+  const parts = mixerParts(look);
+  const channels = parts.assigns
+    ? values.channels
+    : values.channels.map((c, ch) => ({
+        ...c,
+        filterAssign: defaultFilterAssign(ch),
+        xfadeAssign: "off" as const,
+      }));
+  const filters = parts.filterRow
+    ? values.filters
+    : { x: { ...values.filters.x, on: false }, y: { ...values.filters.y, on: false } };
+  return { channels, filters };
 }

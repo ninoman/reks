@@ -7,6 +7,7 @@ import { useEffect } from "react";
 
 import { keepsSpace } from "../lib/keys";
 import { mixKeyAction } from "../lib/mixKeys";
+import { mixerParts } from "../lib/mixView";
 import { useMix } from "./mix";
 import { usePanels } from "./panels";
 import { syncBar } from "./settings";
@@ -19,7 +20,11 @@ export function useMixShortcuts() {
     function onKeyDown(e: KeyboardEvent) {
       if (e.repeat || keepsSpace(e.target)) return;
       const mix = useMix.getState();
-      const action = mixKeyAction(e, usePanels.getState().mixOpen ? mix.deckCount : 1);
+      const action = mixKeyAction(
+        e,
+        usePanels.getState().mixOpen ? mix.deckCount : 1,
+        mixerParts(mix.look).assigns,
+      );
       if (action === null) return;
       e.preventDefault();
       switch (action.type) {

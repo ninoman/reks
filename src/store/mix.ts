@@ -50,9 +50,12 @@ import {
   type Assign,
   adjacentCue,
   cueFits,
+  DEFAULT_LOOK,
   DEFAULT_PAD_BEATS,
   DEFAULT_TEMPO_RANGE,
+  effectiveMix,
   loopPadControls,
+  type MixerLook,
   NUDGE,
   nextPadMode,
   type PadMode,
@@ -187,6 +190,8 @@ export interface MixStore {
   filters: Record<FilterUnit, FilterValues>;
   crossfader: { pos: number; curve: number };
   master: MasterValues;
+  /** Which mixer controls are on screen; hidden ones send `effectiveMix`, not the user's positions. */
+  look: MixerLook;
   /** The player's volume slider, 0..1, on top of the master level. */
   volume: number;
   /** Bumped per track when a deck edits its cues, so views of the track refetch them. */
@@ -261,6 +266,8 @@ export interface MixStore {
     value: FilterValues[K],
   ) => void;
   setCrossfader: (patch: Partial<{ pos: number; curve: number }>) => void;
+  /** Switches the mixer view; the engine gets the hidden controls' values at once. */
+  setLook: (look: MixerLook) => void;
   setMaster: <K extends keyof MasterValues>(param: K, value: MasterValues[K]) => void;
   setVolume: (volume: number) => void;
 }
@@ -356,13 +363,14 @@ function channelControl<K extends keyof ChannelValues>(
 /** Every mixer position, so the engine matches the UI after a start. */
 function mixerControls(s: MixStore): MixControl[] {
   const out: MixControl[] = [];
-  s.channels.forEach((c, ch) => {
+  const { channels, filters } = effectiveMix(s, s.look);
+  channels.forEach((c, ch) => {
     for (const k of Object.keys(c) as (keyof ChannelValues)[]) {
       out.push(channelControl(ch, k, c[k]));
     }
   });
   for (const unit of ["x", "y"] as const) {
-    const f = s.filters[unit];
+    const f = filters[unit];
     for (const k of Object.keys(f) as (keyof FilterValues)[]) {
       const v = f[k];
       out.push({
@@ -507,6 +515,7 @@ export const useMix = create<MixStore>((set, get) => {
     })),
     filters: { x: { ...DEFAULT_FILTER }, y: { ...DEFAULT_FILTER, lowPass: false, highPass: true } },
     crossfader: { pos: 0.5, curve: 0 },
+    look: DEFAULT_LOOK,
     master: { ...DEFAULT_MASTER },
     volume: 1,
     cueRevisions: {},
@@ -863,17 +872,27 @@ export const useMix = create<MixStore>((set, get) => {
       set((s) => ({
         channels: s.channels.map((c, i) => (i === ch ? { ...c, [param]: value } : c)),
       }));
-      get().send(channelControl(ch, param, value));
+      // The engine gets what a hidden control stands for, not the stored position.
+      const sent = effectiveMix(get(), get().look).channels[ch];
+      get().send(channelControl(ch, param, sent?.[param] ?? value));
     },
 
     setFilter(unit, param, value) {
       set((s) => ({ filters: { ...s.filters, [unit]: { ...s.filters[unit], [param]: value } } }));
+      const sent = effectiveMix(get(), get().look).filters[unit][param];
       get().send({
         type: "filter",
         unit,
         param: param as FilterParam,
-        value: typeof value === "boolean" ? bit(value) : (value as number),
+        value: typeof sent === "boolean" ? bit(sent) : sent,
       });
+    },
+
+    setLook(look) {
+      const now = get().look;
+      if (now.view === look.view && now.filters === look.filters) return;
+      set({ look });
+      for (const c of mixerControls(get())) get().send(c);
     },
 
     setCrossfader(patch) {

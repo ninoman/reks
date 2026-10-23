@@ -227,7 +227,11 @@ describe("mix store", () => {
   });
 
   it("sends knob values and switches as engine values", () => {
-    useMix.setState({ status: "running", live: running });
+    useMix.setState({
+      status: "running",
+      live: running,
+      look: { view: "advanced", filters: "show" },
+    });
     const s = useMix.getState();
     s.setChannel(2, "xfadeAssign", "y");
     s.setChannel(0, "cue", true);
@@ -242,6 +246,71 @@ describe("mix store", () => {
       { type: "nudge", deck: 1, ratio: 0.96 },
     ]);
     expect(useMix.getState().channels[2]?.xfadeAssign).toBe("y");
+  });
+
+  it("sends the hidden controls' defaults in Simple and keeps the user's positions", () => {
+    useMix.setState({ status: "running", live: running });
+    const s = useMix.getState();
+    s.setChannel(2, "xfadeAssign", "y");
+    s.setChannel(0, "filterAssign", "y");
+    s.setChannel(1, "fader", 0.4);
+    s.setFilter("x", "on", true);
+    expect(vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0])).toEqual([
+      { type: "channel", ch: 2, param: "xfadeAssign", value: 0.5 },
+      { type: "channel", ch: 0, param: "filterAssign", value: 0 },
+      { type: "channel", ch: 1, param: "fader", value: 0.4 },
+      { type: "filter", unit: "x", param: "on", value: 1 },
+    ]);
+    expect(useMix.getState().channels[2]?.xfadeAssign).toBe("y");
+    expect(useMix.getState().channels[0]?.filterAssign).toBe("y");
+  });
+
+  it("sends both filters off when they are hidden", () => {
+    useMix.setState({
+      status: "running",
+      live: running,
+      look: { view: "simple", filters: "hide" },
+    });
+    useMix.getState().setFilter("x", "on", true);
+    expect(vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0])).toEqual([
+      { type: "filter", unit: "x", param: "on", value: 0 },
+    ]);
+    expect(useMix.getState().filters.x.on).toBe(true);
+  });
+
+  it("a view switch sends the effective values and Advanced brings the positions back", () => {
+    useMix.setState({
+      status: "running",
+      live: running,
+      look: { view: "advanced", filters: "show" },
+    });
+    const s = useMix.getState();
+    s.setChannel(2, "xfadeAssign", "y");
+    s.setChannel(0, "filterAssign", "off");
+    s.setFilter("y", "on", true);
+    vi.mocked(ipc.mixControl).mockClear();
+    const sent = () => vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0]);
+    s.setLook({ view: "simple", filters: "hide" });
+    expect(sent()).toContainEqual({ type: "channel", ch: 2, param: "xfadeAssign", value: 0.5 });
+    expect(sent()).toContainEqual({ type: "channel", ch: 0, param: "filterAssign", value: 0 });
+    expect(sent()).toContainEqual({ type: "filter", unit: "y", param: "on", value: 0 });
+    vi.mocked(ipc.mixControl).mockClear();
+    s.setLook({ view: "advanced", filters: "hide" });
+    expect(sent()).toContainEqual({ type: "channel", ch: 2, param: "xfadeAssign", value: 1 });
+    expect(sent()).toContainEqual({ type: "channel", ch: 0, param: "filterAssign", value: 0.5 });
+    expect(sent()).toContainEqual({ type: "filter", unit: "y", param: "on", value: 1 });
+  });
+
+  it("starts the engine with the effective values", async () => {
+    const s = useMix.getState();
+    s.setChannel(2, "xfadeAssign", "y");
+    await s.start();
+    expect(vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0])).toContainEqual({
+      type: "channel",
+      ch: 2,
+      param: "xfadeAssign",
+      value: 0.5,
+    });
   });
 
   it("has no VCF TO XFADER (removed 2026-10-22)", () => {

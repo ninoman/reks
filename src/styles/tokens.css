@@ -491,11 +491,14 @@
   --knob-sm: 22px;
   --knob-md: 28px;
   --knob-lg: 32px;
-  --fader-len: 96px;
+  --fader-len-base: 96px;
+  --fader-len: var(--fader-len-base);
   --fader-w: 20px;
   --fader-cap: 12px;
   /* Level meter: 9 LEDs over --fader-len, labels beside them. */
   --meter-w: 10px;
+  /* The shortest meter that still shows its 9 LEDs (9 x --meter-dot). */
+  --meter-min-h: 54px;
   --meter-dot: 6px;
   --meter-label-fs: 9px;
   --meter-label-w: 14px;
@@ -532,7 +535,13 @@
   --fader-detent: 6px;
   /* Mixer (concept A, task 22): 344 x 440, narrower strips, one dB scale in the legend. */
   --mixer-w: 344px;
-  --mixer-h: 440px;
+  /* Height per view (task 25): Advanced, Simple, Simple with the filters hidden. */
+  --mixer-h-advanced: 440px;
+  --mixer-h-simple: 356px;
+  --mixer-h-simple-bare: 292px;
+  --mixer-h: var(--mixer-h-advanced);
+  /* With 4 decks the mixer stays as tall as the two stacked decks; a shorter view gives this much to its faders. */
+  --fader-bonus: 60px;
   --mixer-strip-w: 52px;
   --mixer-row-h: 26px;
   /* Above the library: app header (+ border), player bar, and the panel wrapper's bottom border. */
@@ -561,4 +570,21 @@
   --duration-fast: 100ms;
   --duration-slide-in: 240ms;
   --duration-slide-out: 160ms;
+}
+
+/*
+ * The Mix panel's view picks the mixer's height; --deck-h and --fader-len are
+ * re-derived here because a var() resolved on :root would not see it.
+ */
+[data-mixer="simple"] {
+  --mixer-h: var(--mixer-h-simple);
+  --deck-h: var(--mixer-h);
+}
+[data-mixer="simple-bare"] {
+  --mixer-h: var(--mixer-h-simple-bare);
+  --deck-h: var(--mixer-h);
+}
+[data-mixer^="simple"][data-decks="4"] {
+  --mixer-h: var(--mixer-h-advanced);
+  --fader-len: calc(var(--fader-len-base) + var(--fader-bonus));
 }
