@@ -157,6 +157,8 @@ function emptyDeck(): Deck {
       quantise: true,
       master: false,
       loopRegion: null,
+      loopIn: null,
+      lastLoop: null,
     },
     grid: false,
     since: 0,
@@ -168,6 +170,8 @@ let master: number | null = null;
 /** The master was playing at the last tick, so stopping hands it on. */
 let masterPlaying = false;
 const FINE_JUMP_MS = 10;
+/** Shortest manual loop: two 4 ms loop crossfades (`reks-mix`). */
+const MIN_LOOP_MS = 8;
 let timer: ReturnType<typeof setInterval> | null = null;
 let config: MixConfig | null = null;
 
@@ -220,7 +224,7 @@ function tick() {
     if (v.playing) {
       const before = v.positionMs;
       v.positionMs += FRAME_MS * v.speed;
-      enterAutoLoop(v, before);
+      enterAutoLoop(d, before);
       const l = v.loopRegion;
       if (l && v.positionMs >= l.endMs) {
         v.positionMs = l.startMs + ((v.positionMs - l.startMs) % (l.endMs - l.startMs));
@@ -236,7 +240,14 @@ function tick() {
     if (!v.loaded) return;
     v.locked = follows(d, i);
     v.master = i === lead;
-    if (v.locked && leadDeck !== undefined && v.playing && v.nudge === 1 && !v.loopRegion) {
+    if (
+      v.locked &&
+      leadDeck !== undefined &&
+      givesPhase(leadDeck.view) &&
+      v.playing &&
+      v.nudge === 1 &&
+      !v.loopRegion
+    ) {
       // Jump into the leader's beat phase (bar phase with bar sync).
       const span = v.syncBar ? 4 : 1;
       const own = beatAt(v.positionMs);
@@ -249,8 +260,21 @@ function tick() {
   });
 }
 
+/** As `reks-mix` `sync::Lead`: a leader looping under a beat or part of a beat gives no phase. */
+function givesPhase(v: DeckView): boolean {
+  const n = v.loopRegion?.beats;
+  if (v.loopRegion === null) return true;
+  return n != null && n >= 1 - 1 / 64 && Math.abs(n - Math.round(n)) <= 1 / 64;
+}
+
+/** A loop measured in beats when the deck has a grid. */
+function makeLoop(d: Deck, startMs: number, endMs: number): LoopView {
+  return { startMs, endMs, beats: d.grid ? (endMs - startMs) / BEAT_MS : null };
+}
+
 /** As `reks-mix` `Deck::enter_auto_loop`: an active memory loop whose start the head passed. */
-function enterAutoLoop(v: DeckView, before: number) {
+function enterAutoLoop(d: Deck, before: number) {
+  const v = d.view;
   if (v.loopRegion !== null || v.trackId === null) return;
   const hit = trackCues
     .get(v.trackId)
@@ -259,11 +283,7 @@ function enterAutoLoop(v: DeckView, before: number) {
         m.activeLoop && m.endMs !== null && m.positionMs >= before && m.positionMs < v.positionMs,
     );
   if (hit?.endMs == null) return;
-  v.loopRegion = {
-    startMs: hit.positionMs,
-    endMs: hit.endMs,
-    beats: (hit.endMs - hit.positionMs) / BEAT_MS,
-  };
+  v.loopRegion = makeLoop(d, hit.positionMs, hit.endMs);
 }
 
 function snapshot(): MixState {
@@ -291,10 +311,61 @@ function snap(d: Deck, ms: number): number {
   return msAtBeat(Math.round(beatAt(ms)));
 }
 
+/** Leaves the active loop, keeping it for RELOOP. */
+function exitLoop(v: DeckView) {
+  if (v.loopRegion) v.lastLoop = v.loopRegion;
+  v.loopRegion = null;
+}
+
 /** A jump out of the active loop ends it. */
 function leaveLoopUnless(v: DeckView, ms: number) {
   const l = v.loopRegion;
-  if (l && !(ms >= l.startMs && ms < l.endMs)) v.loopRegion = null;
+  if (l && !(ms >= l.startMs && ms < l.endMs)) exitLoop(v);
+}
+
+/** The head for IN / OUT: the nearest beat with quantise. */
+function loopPoint(d: Deck): number {
+  return Math.min(d.view.durationMs, Math.max(0, snap(d, d.view.positionMs)));
+}
+
+function loopIn(d: Deck) {
+  const v = d.view;
+  const at = loopPoint(d);
+  const l = v.loopRegion;
+  if (!l) v.loopIn = at;
+  else if (l.endMs - at >= MIN_LOOP_MS) v.loopRegion = makeLoop(d, at, l.endMs);
+}
+
+function loopOut(d: Deck) {
+  const v = d.view;
+  const at = loopPoint(d);
+  const l = v.loopRegion;
+  if (l) {
+    if (at - l.startMs >= MIN_LOOP_MS) v.loopRegion = makeLoop(d, l.startMs, at);
+    return;
+  }
+  const start = v.loopIn;
+  if (start === null || start >= v.positionMs) return;
+  const end = at > start ? at : d.grid ? Math.min(v.durationMs, start + BEAT_MS) : null;
+  if (end === null || end - start < MIN_LOOP_MS) return;
+  v.loopIn = null;
+  v.loopRegion = makeLoop(d, start, end);
+  if (!v.playing) v.positionMs = start;
+}
+
+function reloop(d: Deck) {
+  const v = d.view;
+  if (v.loopRegion) return exitLoop(v);
+  const l = v.lastLoop;
+  if (!l) return;
+  let to = l.startMs;
+  if (v.playing && v.quantise && d.grid) {
+    // Keep the beat phase, landing a beat on when that is before the start.
+    const shift = beatAt(v.positionMs) - beatAt(l.startMs);
+    to = l.startMs + (shift - Math.floor(shift)) * BEAT_MS;
+  }
+  v.loopRegion = l;
+  v.positionMs = to < l.endMs ? to : l.startMs;
 }
 
 function beatJump(d: Deck, beats: number) {
@@ -321,14 +392,19 @@ function beatLoop(d: Deck, beats: number) {
   if (startMs >= 0 && endMs <= v.durationMs) v.loopRegion = { startMs, endMs, beats };
 }
 
+/** Halve or double from the start: along the grid, or by time without one. */
 function resizeLoop(v: DeckView, double: boolean) {
   const l = v.loopRegion;
   if (!l) return;
-  const beats = double ? l.beats * 2 : l.beats / 2;
-  const endMs = l.startMs + beats * BEAT_MS;
-  if (beats >= 1 / 32 && beats <= 512 && endMs <= v.durationMs) {
-    v.loopRegion = { ...l, endMs, beats };
+  const factor = double ? 2 : 0.5;
+  const endMs = l.startMs + (l.endMs - l.startMs) * factor;
+  if (endMs > v.durationMs) return;
+  if (l.beats === null) {
+    if (endMs - l.startMs >= MIN_LOOP_MS) v.loopRegion = { ...l, endMs };
+    return;
   }
+  const beats = l.beats * factor;
+  if (beats >= 1 / 32 && beats <= 512) v.loopRegion = { ...l, endMs, beats };
 }
 
 function control(c: MixControl) {
@@ -357,7 +433,16 @@ function control(c: MixControl) {
       beatLoop(d, c.beats);
       break;
     case "loopExit":
-      v.loopRegion = null;
+      exitLoop(v);
+      break;
+    case "loopIn":
+      loopIn(d);
+      break;
+    case "loopOut":
+      loopOut(d);
+      break;
+    case "reloop":
+      reloop(d);
       break;
     case "loopResize":
       resizeLoop(v, c.double);
@@ -408,6 +493,8 @@ function control(c: MixControl) {
       leaveLoopUnless(v, at);
       v.cueMs = at;
       v.positionMs = at;
+      const end = c.endMs == null ? null : Math.min(v.durationMs, c.endMs);
+      if (end !== null && end - at >= MIN_LOOP_MS) v.lastLoop = makeLoop(d, at, end);
       break;
     }
     case "hotCue": {
