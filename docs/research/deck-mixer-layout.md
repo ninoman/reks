@@ -9,6 +9,10 @@ status proposed). The quick-loop scope needs a D21 amendment, recorded in
 - Wireframes (to scale; concept × 1/2/4 decks × 1280/1440/1920):
   <https://claude.ai/artifact/7CQDMaXzUJrWAKFzy1wZmu>. Source:
   [`wireframes/deck-mixer-layout.html`](wireframes/deck-mixer-layout.html).
+- Wireframe for #56, a 3-band + filter mixer view next to Full and Simple
+  (to scale, light and dark, open questions):
+  <https://claude.ai/artifact/5akPftFpBaHN3xjNzxSp8V>. Source:
+  [`../wireframes/mix-view-56.html`](../wireframes/mix-view-56.html).
 - Current layout: [`../ui.md`](../ui.md#mix-panel-phase-5) and phase 5 tasks
   9, 12–18.
 
