@@ -5,6 +5,8 @@ import { Meter } from "../ui/Meter";
 export interface LiveMeterProps {
   /** Channel 0..3, or the master. */
   source: number | "master";
+  /** Draw the dB labels beside the LEDs. */
+  labels?: boolean;
   "aria-label": string;
 }
 

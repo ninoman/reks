@@ -21,6 +21,7 @@ export const knobVariants = cva(
       size: {
         sm: "size-(--knob-sm)",
         md: "size-(--knob-md)",
+        lg: "size-(--knob-lg)",
       },
     },
     defaultVariants: { size: "md" },

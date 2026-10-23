@@ -572,9 +572,9 @@ Maintainer picked concept A (Console) with simple and advanced mixer views,
 [`../research/deck-mixer-layout.md`](../research/deck-mixer-layout.md)
 (§ numbers below refer to it); tracking issue
 [#39](https://github.com/ninoman/reks/issues/39); wireframes
-<https://claude.ai/artifact/7CQDMaXzUJrWAKFzy1wZmu>. Tasks 20–21 need the
-D21 amendment on manual loops accepted first. One PR per task; each updates
-`ui.md` (and `decisions.md` where noted) and is checked in the dev mock at
+<https://claude.ai/artifact/7CQDMaXzUJrWAKFzy1wZmu>. The D21 amendment on
+manual loops (tasks 20–21) was accepted 2026-10-23. One PR per task; each
+updates `ui.md` (and `decisions.md` where noted) and is checked in the dev mock at
 1280 × 800, 1440 × 900 and 1920 × 1080, light and dark. Order: 19 and 20 can
 start at once; 21 needs 20; 22 needs nothing; 23 needs 21 and 22; 24 needs
 nothing; 25 needs 22–24.
@@ -591,8 +591,7 @@ nothing; 25 needs 22–24.
       work in 1-deck mode (`mixKeyAction(e, 1)`; Space and − / + unchanged),
       except SYNC, MASTER and the crossfader, which the player deck lacks.
     Tests: `PlayerBar` chip from the engine state, `PlayerDeck` chip from
-    the mixer store, `mixKeyAction` in 1-deck mode.
-20. [ ] **Engine: manual loops and reloop** ([#41](https://github.com/ninoman/reks/issues/41)) (§5 Engine). `reks-mix`,
+P. [x] **Engine: manual loops and reloop** ([#41](https://github.com/ninoman/reks/issues/41)) (§5 Engine). `reks-mix`,
     `src-tauri/src/mix.rs`, `ipc.ts`, dev mock; no UI.
     - New controls `LoopIn { deck }`, `LoopOut { deck }`, `Reloop { deck }`;
       `CallCue` gains `end: Option<i64>` (a memory loop call arms RELOOP);
@@ -610,6 +609,16 @@ nothing; 25 needs 22–24.
     master rule; the engine's real-time test sends every new control;
     `controls_parse_from_the_ui_shapes`; `mockMix.test.ts`. UNVERIFIED on a
     CDJ.
+    Done 2026-10-23. Details beyond the spec: OUT while looping wraps the
+    head at once if the new end is behind it; RELOOP with quantise
+    lands a beat later when keeping the phase would put it before the loop
+    start, and on the start when that is past the end (loops under a beat);
+    a loop is "whole beats" within 1/64. Manual loops must be at least
+    2 × `LOOP_XFADE_MS` (8 ms), also for halving without a grid. The UI
+    does not yet send `endMs` with a memory loop call; task 21 wires it.
+    UNVERIFIED against a CDJ (hardware checks deferred): RELOOP with no
+    loop active, IN/OUT editing an active loop, and IN/OUT/RELOOP while
+    paused.
 21. [ ] **Quick-loop block on every deck** ([#42](https://github.com/ninoman/reks/issues/42)) (§5 UI, Shortcuts).
     - `mix/LoopBlock` (row and 3 × 2 grid layouts): IN, OUT, ½, size
       readout, 2×, LOOP, RELOOP, from `Button variant="control"`; new
@@ -628,7 +637,7 @@ nothing; 25 needs 22–24.
     Tests: `mixView.test.ts` (readout, size steps), `mixKeys.test.ts`,
     `DeckStrip.test.tsx` (block states: no grid, pending IN, looping,
     reloop armed), `ui.test.tsx` (`Readout`), `deckMarks.test.ts`.
-22. [ ] **Mixer re-layout** ([#43](https://github.com/ninoman/reks/issues/43)) (§4 A, §7). Layout only, no behaviour change.
+22. [x] **Mixer re-layout** ([#43](https://github.com/ninoman/reks/issues/43)) (§4 A, §7). Layout only, no behaviour change.
     - Filter X and Y in one row above a crossfader that spans the mixer
       (119 → ~234 px), curve at the crossfader's right end.
     - One dB scale in the legend column's fader row; channel meters lose

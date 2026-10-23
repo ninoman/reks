@@ -46,13 +46,15 @@ pub const FINE_JUMP_MS: u32 = 10;
 pub const LOOP_MIN_BEATS: f64 = 1.0 / 32.0;
 pub const LOOP_MAX_BEATS: f64 = 512.0;
 
-/// An active loop, in the deck's source frames.
+/// A loop, in the deck's source frames.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LoopRegion {
     pub start: i64,
     /// Where it jumps back to `start`.
     pub end: i64,
-    pub beats: f64,
+    /// Length in beats along the grid (fractional for a manual loop);
+    /// `None` without a grid.
+    pub beats: Option<f64>,
 }
 
 /// One deck as the UI sees it.
@@ -94,6 +96,10 @@ pub struct DeckState {
     pub master: bool,
     /// The active loop, if any.
     pub loop_region: Option<LoopRegion>,
+    /// A pending loop IN, waiting for OUT.
+    pub loop_in: Option<i64>,
+    /// The loop RELOOP enters: the last one left, or a memory loop called.
+    pub last_loop: Option<LoopRegion>,
 }
 
 impl Default for DeckState {
@@ -118,6 +124,8 @@ impl Default for DeckState {
             quantise: false,
             master: false,
             loop_region: None,
+            loop_in: None,
+            last_loop: None,
         }
     }
 }
@@ -349,7 +357,7 @@ impl Graph {
                 playing: d.playing(),
                 bar: d.sync_bar,
                 nudge: d.nudge,
-                looping: d.loop_beats().is_some(),
+                looping: d.looping(),
             });
             let (plan, matched) = match (&lead, d.sync, me) {
                 (Some(lead), true, Some(me)) => (
@@ -990,6 +998,7 @@ mod tests {
         g.apply(Control::CallCue {
             deck: 0,
             frame: 100_001,
+            end: None,
         });
         let st = g.state().decks[0];
         assert_eq!(
@@ -1001,6 +1010,7 @@ mod tests {
         g.apply(Control::CallCue {
             deck: 0,
             frame: 50_000,
+            end: None,
         });
         let st = g.state().decks[0];
         assert_eq!((st.position, st.cue, st.playing), (50_000, 50_000, true));
@@ -1362,7 +1372,7 @@ mod tests {
         assert_eq!(beat_jump(&mut g, 1.0), 110_400);
     }
 
-    fn region(g: &mut Graph) -> Option<(i64, i64, f64)> {
+    fn region(g: &mut Graph) -> Option<(i64, i64, Option<f64>)> {
         g.state().decks[0]
             .loop_region
             .map(|l| (l.start, l.end, l.beats))
@@ -1394,7 +1404,7 @@ mod tests {
         render_frames(&mut g, 90_000);
         assert_eq!(
             region(&mut g),
-            Some((48_000, 96_000, 2.0)),
+            Some((48_000, 96_000, Some(2.0))),
             "the reversed one is dropped"
         );
         // Exact, wrap after wrap, as a beat loop.
@@ -1414,7 +1424,7 @@ mod tests {
             frame: 40_000,
         });
         render_frames(&mut g, 10_000);
-        assert_eq!(region(&mut g), Some((48_000, 96_000, 2.0)));
+        assert_eq!(region(&mut g), Some((48_000, 96_000, Some(2.0))));
     }
 
     #[test]
@@ -1424,10 +1434,11 @@ mod tests {
         g.apply(Control::CallCue {
             deck: 0,
             frame: 48_000,
+            end: None,
         });
         g.apply(Control::Play { deck: 0 });
         render_frames(&mut g, 64);
-        assert_eq!(region(&mut g), Some((48_000, 96_000, 2.0)));
+        assert_eq!(region(&mut g), Some((48_000, 96_000, Some(2.0))));
 
         // Cleared: passing its start does nothing; set elsewhere: entered there.
         g.apply(Control::LoopExit { deck: 0 });
@@ -1448,7 +1459,7 @@ mod tests {
         render_frames(&mut g, 20_000);
         assert_eq!(region(&mut g), None);
         render_frames(&mut g, 90_000);
-        assert_eq!(region(&mut g), Some((144_000, 156_000, 0.5)));
+        assert_eq!(region(&mut g), Some((144_000, 156_000, Some(0.5))));
     }
 
     #[test]
@@ -1462,7 +1473,7 @@ mod tests {
             deck: 0,
             beats: 1.0,
         });
-        assert_eq!(region(&mut g), Some((24_000, 48_000, 1.0)));
+        assert_eq!(region(&mut g), Some((24_000, 48_000, Some(1.0))));
         // Exact, wrap after wrap, at unit speed.
         render_frames(&mut g, 100_000);
         let pos = g.state().decks[0].position;
@@ -1472,7 +1483,7 @@ mod tests {
             deck: 0,
             double: false,
         });
-        assert_eq!(region(&mut g), Some((24_000, 36_000, 0.5)));
+        assert_eq!(region(&mut g), Some((24_000, 36_000, Some(0.5))));
         render_frames(&mut g, 64);
         let pos = g.state().decks[0].position;
         assert!((24_000..36_000).contains(&pos), "{pos}");
@@ -1480,7 +1491,7 @@ mod tests {
             deck: 0,
             double: true,
         });
-        assert_eq!(region(&mut g), Some((24_000, 48_000, 1.0)));
+        assert_eq!(region(&mut g), Some((24_000, 48_000, Some(1.0))));
         // A 1/8 loop starts on the last 1/8 step.
         g.apply(Control::BeatLoop {
             deck: 0,
@@ -1494,7 +1505,10 @@ mod tests {
             deck: 0,
             beats: 4.0,
         });
-        assert_eq!(region(&mut g), Some((start + 96_000, end + 96_000, 0.125)));
+        assert_eq!(
+            region(&mut g),
+            Some((start + 96_000, end + 96_000, Some(0.125)))
+        );
         // Exit: plays on past the end.
         g.apply(Control::LoopExit { deck: 0 });
         render_frames(&mut g, 10_000);
@@ -1514,7 +1528,7 @@ mod tests {
             deck: 0,
             beats: 2.0,
         });
-        assert_eq!(region(&mut g), Some((30_000, 78_000, 2.0)));
+        assert_eq!(region(&mut g), Some((30_000, 78_000, Some(2.0))));
         // A seek inside keeps it; one outside ends it.
         g.apply(Control::Seek {
             deck: 0,
@@ -1599,6 +1613,290 @@ mod tests {
         let (a, b) = (st.decks[0].beat.unwrap(), st.decks[1].beat.unwrap());
         let off = crate::beatmap::wrap(a - b, 1.0);
         assert!(off.abs() < 1e-3, "{off} beats");
+    }
+
+    fn deck0(g: &mut Graph) -> DeckState {
+        g.state().decks[0]
+    }
+
+    fn send(g: &mut Graph, controls: &[fn(u8) -> Control]) {
+        for c in controls {
+            g.apply(c(0));
+        }
+    }
+
+    fn seek(g: &mut Graph, frame: i64) {
+        g.apply(Control::Seek { deck: 0, frame });
+    }
+
+    const IN: fn(u8) -> Control = |deck| Control::LoopIn { deck };
+    const OUT: fn(u8) -> Control = |deck| Control::LoopOut { deck };
+    const RELOOP: fn(u8) -> Control = |deck| Control::Reloop { deck };
+
+    #[test]
+    fn loop_in_and_out_loop_from_the_head_or_the_nearest_beat() {
+        // No quantise: exactly where the head was.
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 30_000);
+        send(&mut g, &[IN]);
+        assert_eq!(deck0(&mut g).loop_in, Some(30_000));
+        assert_eq!(region(&mut g), None, "pending");
+        render_frames(&mut g, 40_000);
+        send(&mut g, &[OUT]);
+        let (start, end, beats) = region(&mut g).unwrap();
+        assert_eq!((start, end), (30_000, 70_000));
+        assert!((beats.unwrap() - 40.0 / 24.0).abs() < 1e-9, "{beats:?}");
+        let st = deck0(&mut g);
+        assert_eq!((st.loop_in, st.position), (None, 30_000), "wraps at once");
+
+        // Quantised: both ends on the nearest beat.
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        g.apply(Control::Quantise { deck: 0, on: true });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 30_000); // beat 1.25
+        send(&mut g, &[IN]);
+        assert_eq!(deck0(&mut g).loop_in, Some(24_000));
+        render_frames(&mut g, 40_000); // beat 2.92
+        send(&mut g, &[OUT]);
+        assert_eq!(region(&mut g), Some((24_000, 72_000, Some(2.0))));
+        assert_eq!(deck0(&mut g).position, 70_000, "plays on to the end");
+
+        // OUT snapping onto IN: a beat after IN.
+        g.apply(Control::LoopExit { deck: 0 });
+        seek(&mut g, 100_000); // keeps the phase: 102,000, beat 4.25
+        send(&mut g, &[IN]);
+        assert_eq!(deck0(&mut g).loop_in, Some(96_000));
+        render_frames(&mut g, 3_000);
+        send(&mut g, &[OUT]);
+        assert_eq!(region(&mut g), Some((96_000, 120_000, Some(1.0))));
+
+        // No grid: quantise has no beat to snap to, so the head itself.
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, ramp_source(480_000));
+        g.apply(Control::Quantise { deck: 0, on: true });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 10_001);
+        send(&mut g, &[IN]);
+        render_frames(&mut g, 20_000);
+        send(&mut g, &[OUT]);
+        assert_eq!(region(&mut g), Some((10_001, 30_001, None)));
+        render_frames(&mut g, 50_000);
+        assert_eq!(deck0(&mut g).position, 10_001 + 50_000 % 20_000);
+    }
+
+    #[test]
+    fn in_and_out_move_an_active_loops_ends() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        seek(&mut g, 30_000);
+        g.apply(Control::BeatLoop {
+            deck: 0,
+            beats: 2.0,
+        });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 10_000);
+        send(&mut g, &[IN]);
+        let (start, end, beats) = region(&mut g).unwrap();
+        assert_eq!((start, end), (40_000, 78_000), "start moved, end kept");
+        assert!((beats.unwrap() - 38.0 / 24.0).abs() < 1e-9);
+        assert_eq!(deck0(&mut g).loop_in, None, "not a pending IN");
+        render_frames(&mut g, 20_000);
+        send(&mut g, &[OUT]);
+        assert_eq!(region(&mut g).map(|r| (r.0, r.1)), Some((40_000, 60_000)));
+        assert_eq!(deck0(&mut g).position, 40_000, "past the new end: wraps");
+
+        // Quantised, the end snaps; behind the head it wraps at once.
+        g.apply(Control::Quantise { deck: 0, on: true });
+        render_frames(&mut g, 15_000); // 55,000: beat 2.29
+        send(&mut g, &[OUT]);
+        let (start, end, beats) = region(&mut g).unwrap();
+        assert_eq!((start, end), (40_000, 48_000));
+        assert!((beats.unwrap() - 1.0 / 3.0).abs() < 1e-9);
+        assert_eq!(deck0(&mut g).position, 40_000 + 15_000 % 8_000);
+        // IN that would leave under 8 ms is ignored.
+        render_frames(&mut g, 7_900 - 7_000); // 47,900 (unquantised below)
+        g.apply(Control::Quantise { deck: 0, on: false });
+        send(&mut g, &[IN]);
+        assert_eq!(region(&mut g).map(|r| r.0), Some(40_000));
+    }
+
+    #[test]
+    fn out_under_8_ms_or_without_an_in_is_ignored() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, ramp_source(480_000));
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 1_000);
+        send(&mut g, &[OUT]);
+        assert_eq!(region(&mut g), None, "no IN");
+        send(&mut g, &[IN]);
+        render_frames(&mut g, 380); // 7.9 ms
+        send(&mut g, &[OUT]);
+        assert_eq!(region(&mut g), None);
+        assert_eq!(deck0(&mut g).loop_in, Some(1_000), "IN kept");
+        render_frames(&mut g, 20);
+        send(&mut g, &[OUT]);
+        assert_eq!(region(&mut g), Some((1_000, 1_400, None)));
+        // A head back before IN (a jump) has nothing to close.
+        g.apply(Control::LoopExit { deck: 0 });
+        seek(&mut g, 5_000);
+        send(&mut g, &[IN]);
+        seek(&mut g, 4_000);
+        send(&mut g, &[OUT]);
+        assert_eq!(region(&mut g), None);
+    }
+
+    #[test]
+    fn reloop_keeps_the_phase_while_playing_and_exits_while_looping() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        send(&mut g, &[RELOOP]);
+        assert_eq!(region(&mut g), None, "no loop yet");
+        g.apply(Control::Quantise { deck: 0, on: true });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 30_000);
+        g.apply(Control::BeatLoop {
+            deck: 0,
+            beats: 1.0,
+        });
+        render_frames(&mut g, 10_000); // 40,000
+        g.apply(Control::LoopExit { deck: 0 });
+        let kept = Some(LoopRegion {
+            start: 24_000,
+            end: 48_000,
+            beats: Some(1.0),
+        });
+        assert_eq!(deck0(&mut g).last_loop, kept);
+        render_frames(&mut g, 66_000); // 106,000: beat 4.42
+        send(&mut g, &[RELOOP]);
+        assert_eq!(region(&mut g), Some((24_000, 48_000, Some(1.0))));
+        assert_eq!(deck0(&mut g).position, 34_000, "beat 1.42");
+        // RELOOP while looping leaves it, keeping it.
+        send(&mut g, &[RELOOP]);
+        assert_eq!(region(&mut g), None);
+        assert_eq!(deck0(&mut g).last_loop, kept);
+        // A phase behind the start lands a beat later, inside the loop.
+        render_frames(&mut g, 80_000); // 114,000: beat 4.75
+        send(&mut g, &[RELOOP]);
+        assert_eq!(deck0(&mut g).position, 42_000, "beat 1.75");
+        // A seek out of the loop also keeps it.
+        seek(&mut g, 300_000);
+        assert_eq!(region(&mut g), None);
+        assert_eq!(deck0(&mut g).last_loop, kept);
+
+        // Under a beat, the phase can't land inside: the start.
+        g.apply(Control::BeatLoop {
+            deck: 0,
+            beats: 0.25,
+        });
+        let (start, _, _) = region(&mut g).unwrap();
+        send(&mut g, &[RELOOP]);
+        render_frames(&mut g, 10_000);
+        send(&mut g, &[RELOOP]);
+        assert_eq!(deck0(&mut g).position, start);
+    }
+
+    #[test]
+    fn out_and_reloop_while_paused_move_the_head_to_the_loop() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        seek(&mut g, 30_000);
+        send(&mut g, &[IN]);
+        seek(&mut g, 70_000);
+        send(&mut g, &[OUT]);
+        let st = deck0(&mut g);
+        assert_eq!(region(&mut g).map(|r| (r.0, r.1)), Some((30_000, 70_000)));
+        assert_eq!((st.position, st.playing), (30_000, false), "PLAY starts it");
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 50_000);
+        assert_eq!(deck0(&mut g).position, 40_000);
+        g.apply(Control::Pause { deck: 0 });
+        render_frames(&mut g, 2 * RAMP);
+        assert!(!deck0(&mut g).playing);
+        g.apply(Control::LoopExit { deck: 0 });
+        seek(&mut g, 200_000);
+        send(&mut g, &[RELOOP]);
+        let st = deck0(&mut g);
+        assert_eq!((st.position, st.playing), (30_000, false));
+        assert!(st.loop_region.is_some());
+    }
+
+    #[test]
+    fn calling_a_memory_loop_arms_reloop_and_loading_clears_it() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        g.apply(Control::CallCue {
+            deck: 0,
+            frame: 48_000,
+            end: Some(96_000),
+        });
+        let st = deck0(&mut g);
+        assert_eq!((st.position, st.loop_region), (48_000, None), "no loop yet");
+        let called = Some(LoopRegion {
+            start: 48_000,
+            end: 96_000,
+            beats: Some(2.0),
+        });
+        assert_eq!(st.last_loop, called);
+        seek(&mut g, 200_000);
+        send(&mut g, &[RELOOP]);
+        assert_eq!(region(&mut g), Some((48_000, 96_000, Some(2.0))));
+        assert_eq!(deck0(&mut g).position, 48_000);
+
+        send(&mut g, &[RELOOP, IN]);
+        load(&mut g, gridded(480_000));
+        let st = deck0(&mut g);
+        assert_eq!(
+            (st.loop_region, st.loop_in, st.last_loop),
+            (None, None, None)
+        );
+    }
+
+    #[test]
+    fn resize_without_a_grid_halves_and_doubles_by_time() {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, ramp_source(100_000));
+        seek(&mut g, 10_000);
+        send(&mut g, &[IN]);
+        seek(&mut g, 58_000);
+        send(&mut g, &[OUT]);
+        assert_eq!(region(&mut g), Some((10_000, 58_000, None)));
+        let resize = |g: &mut Graph, double| {
+            g.apply(Control::LoopResize { deck: 0, double });
+            region(g)
+        };
+        assert_eq!(resize(&mut g, false), Some((10_000, 34_000, None)));
+        assert_eq!(resize(&mut g, true), Some((10_000, 58_000, None)));
+        assert_eq!(
+            resize(&mut g, true),
+            Some((10_000, 58_000, None)),
+            "past the track"
+        );
+        for _ in 0..12 {
+            resize(&mut g, false);
+        }
+        // 48,000 / 2^n stops above 8 ms (384 frames): 750.
+        assert_eq!(region(&mut g), Some((10_000, 10_750, None)));
+    }
+
+    #[test]
+    fn a_master_looping_no_whole_number_of_beats_gives_no_phase() {
+        let mut g = master_and_follower(true);
+        // Master (deck 0) loops 1.5 beats by IN / OUT.
+        g.apply(Control::LoopIn { deck: 0 });
+        render_frames(&mut g, 33_962); // 36,000 source frames at 1.06
+        g.apply(Control::LoopOut { deck: 0 });
+        let l = g.state().decks[0].loop_region.unwrap();
+        assert!((l.beats.unwrap() - 1.5).abs() < 0.01, "{l:?}");
+        render_frames(&mut g, 96_000);
+        // The follower runs on at the matched tempo, not dragged into the
+        // master's wraps: 48,000 frames at 1.06 are 2.12 beats.
+        let before = g.state().decks[1].beat.unwrap();
+        render_frames(&mut g, 48_000);
+        let after = g.state().decks[1].beat.unwrap();
+        assert!((after - before - 2.12).abs() < 1e-3, "{}", after - before);
     }
 
     #[test]

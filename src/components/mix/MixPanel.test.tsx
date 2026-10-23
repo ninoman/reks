@@ -54,6 +54,8 @@ const idleDeck: DeckView = {
   quantise: false,
   master: false,
   loopRegion: null,
+  loopIn: null,
+  lastLoop: null,
   cuePreview: false,
 };
 

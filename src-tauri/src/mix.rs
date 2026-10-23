@@ -164,17 +164,23 @@ pub struct DeckView {
     pub quantise: bool,
     /// This deck is the sync master.
     pub master: bool,
-    /// The active beat loop.
+    /// The active loop.
     pub loop_region: Option<LoopView>,
+    /// A pending loop IN, waiting for OUT.
+    pub loop_in: Option<f64>,
+    /// The loop RELOOP enters: the last one left, or a memory loop called.
+    pub last_loop: Option<LoopView>,
 }
 
-/// An active beat loop (`reks_mix::LoopRegion`) in milliseconds.
+/// A loop (`reks_mix::LoopRegion`) in milliseconds.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct LoopView {
     pub start_ms: f64,
     pub end_ms: f64,
-    pub beats: f64,
+    /// Length along the grid (fractional for a manual loop); `None` without
+    /// a grid.
+    pub beats: Option<f64>,
 }
 
 /// A peak meter: `level` linear (1.0 = 0 dBFS) with a falling display;
@@ -238,11 +244,17 @@ fn deck_view(d: &DeckState, track_id: Option<TrackId>, rate: u32) -> DeckView {
         locked: d.locked,
         quantise: d.quantise,
         master: d.master,
-        loop_region: d.loop_region.map(|l| LoopView {
-            start_ms: frames_to_ms(l.start, rate),
-            end_ms: frames_to_ms(l.end, rate),
-            beats: l.beats,
-        }),
+        loop_region: d.loop_region.map(|l| loop_view(l, rate)),
+        loop_in: d.loop_in.map(|f| frames_to_ms(f, rate)),
+        last_loop: d.last_loop.map(|l| loop_view(l, rate)),
+    }
+}
+
+fn loop_view(l: reks_mix::LoopRegion, rate: u32) -> LoopView {
+    LoopView {
+        start_ms: frames_to_ms(l.start, rate),
+        end_ms: frames_to_ms(l.end, rate),
+        beats: l.beats,
     }
 }
 
@@ -743,10 +755,13 @@ pub enum MixControl {
         deck: u8,
         slot: u8,
     },
-    /// Memory cue call: cue point and playhead to `ms`, exactly.
+    /// Memory cue call: cue point and playhead to `ms`, exactly. A memory
+    /// loop's `end_ms` arms RELOOP.
     CallCue {
         deck: u8,
         ms: f64,
+        #[serde(default)]
+        end_ms: Option<f64>,
     },
     Tempo {
         deck: u8,
@@ -778,6 +793,15 @@ pub enum MixControl {
         beats: f64,
     },
     LoopExit {
+        deck: u8,
+    },
+    LoopIn {
+        deck: u8,
+    },
+    LoopOut {
+        deck: u8,
+    },
+    Reloop {
         deck: u8,
     },
     LoopResize {
@@ -826,9 +850,10 @@ impl MixControl {
                 frame: reks_core::deck::ms_to_frame(ms.max(0.0), rate),
             },
             Self::HotCue { deck, slot } => Control::HotCue { deck, slot },
-            Self::CallCue { deck, ms } => Control::CallCue {
+            Self::CallCue { deck, ms, end_ms } => Control::CallCue {
                 deck,
                 frame: reks_core::deck::ms_to_frame(ms.max(0.0), rate),
+                end: end_ms.map(|e| reks_core::deck::ms_to_frame(e.max(0.0), rate)),
             },
             Self::Tempo { deck, ratio } => Control::Tempo { deck, ratio },
             Self::Nudge { deck, ratio } => Control::Nudge { deck, ratio },
@@ -838,6 +863,9 @@ impl MixControl {
             Self::FineJump { deck, forward } => Control::FineJump { deck, forward },
             Self::BeatLoop { deck, beats } => Control::BeatLoop { deck, beats },
             Self::LoopExit { deck } => Control::LoopExit { deck },
+            Self::LoopIn { deck } => Control::LoopIn { deck },
+            Self::LoopOut { deck } => Control::LoopOut { deck },
+            Self::Reloop { deck } => Control::Reloop { deck },
             Self::LoopResize { deck, double } => Control::LoopResize { deck, double },
             Self::Quantise { deck, on } => Control::Quantise { deck, on },
             Self::Channel { ch, param, value } => Control::Channel {
@@ -927,8 +955,21 @@ mod tests {
             parse(r#"{"type":"callCue","deck":1,"ms":500}"#),
             reks_mix::Control::CallCue {
                 deck: 1,
-                frame: 24_000
+                frame: 24_000,
+                end: None
             }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"callCue","deck":1,"ms":500,"endMs":1000}"#),
+            reks_mix::Control::CallCue {
+                deck: 1,
+                frame: 24_000,
+                end: Some(48_000)
+            }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"callCue","deck":1,"ms":500,"endMs":null}"#),
+            reks_mix::Control::CallCue { end: None, .. }
         ));
         assert!(matches!(
             parse(r#"{"type":"takeMaster","deck":2}"#),
@@ -952,6 +993,18 @@ mod tests {
         assert!(matches!(
             parse(r#"{"type":"loopExit","deck":3}"#),
             reks_mix::Control::LoopExit { deck: 3 }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"loopIn","deck":0}"#),
+            reks_mix::Control::LoopIn { deck: 0 }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"loopOut","deck":1}"#),
+            reks_mix::Control::LoopOut { deck: 1 }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"reloop","deck":2}"#),
+            reks_mix::Control::Reloop { deck: 2 }
         ));
         assert!(matches!(
             parse(r#"{"type":"loopResize","deck":3,"double":false}"#),
@@ -1053,9 +1106,24 @@ mod tests {
             frames: 480_000,
             cue: 4_800,
             bpm: Some(126.0),
+            loop_in: Some(96_000),
+            last_loop: Some(reks_mix::LoopRegion {
+                start: 48_000,
+                end: 72_000,
+                beats: None,
+            }),
             ..DeckState::default()
         };
         let v = deck_view(&d, Some(7), 48_000);
+        assert_eq!(v.loop_in, Some(2_000.0));
+        assert_eq!(
+            v.last_loop,
+            Some(LoopView {
+                start_ms: 1_000.0,
+                end_ms: 1_500.0,
+                beats: None
+            })
+        );
         assert_eq!(v.track_id, Some(7));
         assert_eq!(v.position_ms, 500.0);
         assert_eq!(v.duration_ms, 10_000.0);

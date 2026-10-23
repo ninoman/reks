@@ -41,6 +41,60 @@ describe("MixerPanel", () => {
     expect(screen.queryByText("Link")).toBeNull();
   });
 
+  it("keeps every control in order: strips, master, filter row, crossfader row", () => {
+    setup();
+    const names = screen
+      .getAllByRole("slider")
+      .map((el) => el.getAttribute("aria-label"))
+      .filter((n): n is string => n !== null);
+    const channel = (n: number) => [
+      `Channel ${n} level`,
+      `Channel ${n} EQ Hi`,
+      `Channel ${n} EQ HM`,
+      `Channel ${n} EQ LM`,
+      `Channel ${n} EQ Lo`,
+      `Channel ${n} fader`,
+    ];
+    expect(names).toEqual([
+      ...[1, 2, 3, 4].flatMap(channel),
+      "Master level",
+      "Cue level",
+      "Cue and mix balance",
+      "Filter X frequency",
+      "Filter X resonance",
+      "Filter Y frequency",
+      "Filter Y resonance",
+      "Crossfader",
+      "Crossfader curve",
+    ]);
+    // The crossfader follows both filter units, and the curve its right end.
+    const x = screen.getByRole("region", { name: "Filter X" });
+    const y = screen.getByRole("region", { name: "Filter Y" });
+    const fader = screen.getByRole("slider", { name: "Crossfader" });
+    const curve = screen.getByRole("slider", { name: "Crossfader curve" });
+    const follows = (a: Node, b: Node) =>
+      a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(follows(x, y)).toBeTruthy();
+    expect(follows(y, fader)).toBeTruthy();
+    expect(follows(fader, curve)).toBeTruthy();
+  });
+
+  it("shows one dB scale and no labels on the channel meters", () => {
+    setup();
+    for (const n of [1, 2, 3, 4]) {
+      expect(screen.getByRole("meter", { name: `Channel ${n} meter` }).textContent).toBe("");
+    }
+    expect(screen.getAllByText("+10")).toHaveLength(2); // the legend's scale and the master meter
+  });
+
+  it("lights the channel number badge of a loaded deck", () => {
+    setup();
+    const badge = (n: number) =>
+      within(screen.getByRole("region", { name: `Channel ${n}` })).getByText(String(n));
+    expect(badge(1).className).toContain("bg-accent-solid");
+    expect(badge(2).className).not.toContain("bg-accent-solid");
+  });
+
   it("forwards switches as typed changes", () => {
     const p = setup();
     fireEvent.click(screen.getByRole("button", { name: "Channel 2 cue" }));

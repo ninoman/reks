@@ -4,10 +4,12 @@
  * line up with `ChannelLegend`, which carries the captions once.
  */
 import type { ChannelValues } from "../../store/mix";
+import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Caption } from "../ui/Caption";
 import { Fader } from "../ui/Fader";
 import { Knob } from "../ui/Knob";
+import { MeterScale } from "../ui/Meter";
 import { Tooltip } from "../ui/Tooltip";
 import { AssignSwitch } from "./AssignSwitch";
 import { LiveMeter } from "./LiveMeter";
@@ -41,9 +43,9 @@ export function ChannelStrip({ ch, values, active, onChange, onCue }: ChannelStr
   const n = ch + 1;
   return (
     <section aria-label={`Channel ${n}`} className="flex w-(--mixer-strip-w) flex-col items-center">
-      <Caption tone={active ? "default" : "subtle"} className="h-4">
+      <Badge variant={active ? "accent" : "muted"} size="md" className="rounded-xs font-mono">
         {n}
-      </Caption>
+      </Badge>
       {KNOBS.map(([param, caption]) => (
         <div key={param} className={row}>
           <Knob
@@ -83,7 +85,7 @@ export function ChannelStrip({ ch, values, active, onChange, onCue }: ChannelStr
           onValueChange={(v) => onChange("fader", v)}
           aria-label={`Channel ${n} fader`}
         />
-        <LiveMeter source={ch} aria-label={`Channel ${n} meter`} />
+        <LiveMeter source={ch} labels={false} aria-label={`Channel ${n} meter`} />
       </div>
       <div className={row}>
         <AssignSwitch
@@ -96,16 +98,17 @@ export function ChannelStrip({ ch, values, active, onChange, onCue }: ChannelStr
   );
 }
 
-/** The captions for every strip's rows, once, on the left. */
+/** The captions for every strip's rows and the dB scale for their meters, once, on the left. */
 export function ChannelLegend() {
   return (
-    <div aria-hidden="true" className="flex flex-col items-end pr-1">
-      <span className="h-4" />
+    <div aria-hidden="true" className="flex min-w-0 flex-1 flex-col items-end pr-1">
+      {/* The header row: the mixer's settings button sits here. */}
+      <span className="h-5" />
       {STRIP_ROWS.map((caption, i) =>
         caption === "" ? (
-          // The fader row: as tall as the fader and its margin.
+          // The fader row: the one dB scale, as tall as the fader.
           // biome-ignore lint/suspicious/noArrayIndexKey: fixed rows
-          <span key={i} className="my-1 h-(--fader-len)" />
+          <MeterScale key={i} className="my-1" />
         ) : (
           <Caption key={caption} className="flex h-(--mixer-row-h) items-center">
             {caption}
