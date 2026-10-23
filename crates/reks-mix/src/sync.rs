@@ -10,8 +10,9 @@
 //! functions; the graph calls them once per block on the audio thread.
 //!
 //! Loops: a looping follower matches tempo only, so its loop is not undone
-//! by phase jumps. A leader looping under a beat gives no phase, and one
-//! looping a length that is not whole bars gives beat phase only.
+//! by phase jumps. A leader looping under a beat, or a length that is not a
+//! whole number of beats (a manual loop), gives no phase, and one looping a
+//! length that is not whole bars gives beat phase only.
 
 use crate::beatmap::{wrap, BeatMap};
 
@@ -22,6 +23,8 @@ const MAX_BEND: f64 = 0.01;
 /// Phase error, in beats, above which the follower jumps into phase
 /// (1/32 beat: 15 ms at 128 BPM).
 pub(crate) const JUMP_BEATS: f64 = 1.0 / 32.0;
+/// How far a leader's loop may be from whole beats and still give phase.
+const WHOLE_BEATS: f64 = 1.0 / 64.0;
 
 /// The leader as a follower sees it at the start of a block.
 #[derive(Debug, Clone, Copy)]
@@ -46,13 +49,14 @@ impl Lead {
         loop_beats: Option<f64>,
     ) -> Option<Self> {
         let period = beats.period_at(position)?;
-        let phase = if playing && loop_beats.is_none_or(|n| n >= 1.0) {
+        let whole = |n: f64| n >= 1.0 - WHOLE_BEATS && (n - n.round()).abs() <= WHOLE_BEATS;
+        let phase = if playing && loop_beats.is_none_or(whole) {
             beats.beat_at(position).zip(beats.bar_at(position))
         } else {
             None
         };
         let bars = match (loop_beats, phase) {
-            (Some(n), Some((_, (_, bpb)))) => n % f64::from(bpb) == 0.0,
+            (Some(n), Some((_, (_, bpb)))) => n.round() % f64::from(bpb) == 0.0,
             _ => true,
         };
         Some(Self {
@@ -333,6 +337,17 @@ mod tests {
         assert_eq!(follow(&two, &me, RATE), Some(Plan::Speed(1.0)));
         assert!(
             Lead::new(&map, 240_000.0, 1.0, true, Some(8.0))
+                .unwrap()
+                .bars
+        );
+        // A manual loop of part of a beat gives no phase; within 1/64 of
+        // whole beats it still counts as whole.
+        for (n, phase) in [(3.87, false), (1.5, false), (4.01, true), (3.99, true)] {
+            let l = Lead::new(&map, 240_000.0, 1.0, true, Some(n)).unwrap();
+            assert_eq!(l.phase.is_some(), phase, "{n}");
+        }
+        assert!(
+            Lead::new(&map, 240_000.0, 1.0, true, Some(3.99))
                 .unwrap()
                 .bars
         );

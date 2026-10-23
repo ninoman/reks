@@ -35,22 +35,11 @@ export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
     });
   };
   return (
-    <section aria-label={name} className="flex flex-col items-center gap-1.5">
-      <div className="flex items-center gap-1.5">
-        <Caption tone="default">{name}</Caption>
-        <Button
-          variant="control"
-          size="xs"
-          aria-pressed={values.on}
-          aria-label={`${name} on`}
-          onClick={() => onChange("on", !values.on)}
-        >
-          On
-        </Button>
-      </div>
-      <div className="flex items-end gap-2">
+    <section aria-label={name} className="flex items-center gap-2">
+      <div className="flex items-end gap-1.5">
         <LabelledKnob
           caption="Freq"
+          size="lg"
           defaultValue={0.5}
           value={values.freq}
           onValueChange={(v) => onChange("freq", v)}
@@ -64,20 +53,34 @@ export function FilterUnit({ unit, values, onChange }: FilterUnitProps) {
           aria-label={`${name} resonance`}
         />
       </div>
-      <div className="flex gap-0.5">
-        {MODES.map(([p, text, spoken], i) => (
-          <Tooltip key={p} content="Shift+click to combine modes">
-            <Button
-              variant="control"
-              size="xs"
-              aria-pressed={values[p]}
-              aria-label={`${name} ${spoken}`}
-              onClick={(e) => pickMode(i, e.shiftKey)}
-            >
-              {text}
-            </Button>
-          </Tooltip>
-        ))}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-1.5">
+          <Caption tone="default">{name}</Caption>
+          <Button
+            variant="control"
+            size="xs"
+            aria-pressed={values.on}
+            aria-label={`${name} on`}
+            onClick={() => onChange("on", !values.on)}
+          >
+            On
+          </Button>
+        </div>
+        <div className="flex gap-0.5">
+          {MODES.map(([p, text, spoken], i) => (
+            <Tooltip key={p} content="Shift+click to combine modes">
+              <Button
+                variant="control"
+                size="xs"
+                aria-pressed={values[p]}
+                aria-label={`${name} ${spoken}`}
+                onClick={(e) => pickMode(i, e.shiftKey)}
+              >
+                {text}
+              </Button>
+            </Tooltip>
+          ))}
+        </div>
       </div>
     </section>
   );

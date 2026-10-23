@@ -290,8 +290,10 @@ had a start form before the output opened). `MixPanel` is the only part that rea
 `MixerPanel`, `ChannelStrip`, `FilterUnit`, `MasterSection` and `SyncPhase`
 take props. The mixer follows the hardware: four channel strips (level, HI,
 HM (HI MID), LM (LO MID), LO, filter assign X/off/Y, cue, fader, crossfader assign) with
-one caption column, the master and cue section, then filter X, the crossfader
-and filter Y. Decks 1 and 2 sit left of it, 3 and 4 right. Two decks by
+one caption column (it also holds the one dB scale for the channel meters),
+the master and cue section, then one row with filter X and Y and a crossfader
+across the mixer with its curve at the right end (task 22, 2026-10-23). The
+channel numbers are lit badges like the decks'. Decks 1 and 2 sit left of it, 3 and 4 right. Two decks by
 default, and they are decks 2 and 3, the centre channels, as with two CDJs
 on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 (two stacked fit beside the mixer); the deck itself is described under
@@ -370,8 +372,10 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   HP / BP / LP and channel CUE: a click picks one, Shift+click combines
   (tooltip on each); FILTER assign starts at X for channels 1–2, Y for 3–4.
 - Knobs draw a position mark (`knobMark`, `--color-knob-mark`: dark ink on the light cap in every theme).
-- Sizes: `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-*`, `--pad-h`,
-  `--mixer-strip-w`, `--mixer-row-h`, `--mix-panel-max-h` (the panel scrolls
+- Sizes (mixer 344 × 440, `--mixer-w` × `--mixer-h`; strips 52, rows 26, faders 96,
+  filter FREQ `--knob-lg` 32; ![Mixer, dark](img/mixer-2-decks-dark.jpg) ![Mixer, light](img/mixer-2-decks-light.jpg)):
+  `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-*`, `--pad-h`,
+  `--mixer-*`, `--mix-panel-max-h` (the panel scrolls
   inside 62% of the window height).
 
 ### Deck layout (task 16)
@@ -381,8 +385,8 @@ Modelled on rekordbox's 2Deck Horizontal. Approved wireframe:
 <https://claude.ai/artifact/1bLg3dZwjRfL4nXbYvFdzD> (revision 3).
 
 **Size.** 260 px tall in both 2- and 4-deck mode (no compact deck; 248
-until Q moved over CUE and PLAY, 2026-10-22). The mixer is 358 × 511 px, so
-two stacked decks (528 px) make 4-deck mode 17 px taller than the mixer. Width is what's left on each side: 441 px at a 1280 px
+until Q moved over CUE and PLAY, 2026-10-22). The mixer is 344 × 440 px since task 22, so
+two stacked decks (528 px) make 4-deck mode 88 px taller than the mixer until task 23 sizes the decks to it. Width is what's left on each side: 441 px at a 1280 px
 window (minimum, `--deck-min-w` 440), 521 at 1440, 761 at 1920; extra width
 goes to the header and waveforms, the pads stop at 336 px.
 

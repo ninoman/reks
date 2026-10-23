@@ -621,10 +621,10 @@ Date of decisions: 2026-10-18.
   sounded like a kill. Was: the Xone:92's 2.5 kHz / 2 kHz / 350 Hz / 250 Hz,
   mids +6 / −30 dB.
 - Manual loops, reloop and an always-visible loop block (status:
-  **proposed** 2026-10-22, awaiting the maintainer). Add loop IN / OUT
-  (also without a grid), RELOOP/EXIT with the last loop kept, ½ / 2× and a
-  loop size readout on every deck, so a loop can be set or changed in any
-  pad mode. Rationale: same as beat loops, auditioning a transition or a
+  **accepted** 2026-10-23, maintainer's call; proposed 2026-10-22). Add
+  loop IN / OUT (also without a grid), RELOOP/EXIT with the last loop
+  kept, ½ / 2× and a loop size readout on every deck, so a loop can be set
+  or changed in any pad mode. Engine: phase 5 task 20 (2026-10-23). Rationale: same as beat loops, auditioning a transition or a
   layer; every reference product keeps these on the deck (rekordbox,
   Traktor, Engine, CDJ-3000). Still out: slip, loop roll, emergency loop.
   Spec and sources: [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §5;

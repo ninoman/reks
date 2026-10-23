@@ -656,16 +656,21 @@ export interface DeckView {
   quantise: boolean;
   /** This deck is the sync master (`MixState.masterDeck`). */
   master: boolean;
-  /** The active beat loop; null when not looping. */
+  /** The active loop; null when not looping. */
   loopRegion: LoopView | null;
+  /** A pending loop IN, waiting for OUT; null when none. */
+  loopIn: number | null;
+  /** The loop RELOOP enters (the last one left, or a memory loop called); null when none. */
+  lastLoop: LoopView | null;
 }
 
-/** An active beat loop, in ms of the track. */
+/** A loop, in ms of the track. */
 export interface LoopView {
   startMs: number;
   /** Where playback jumps back to `startMs`. */
   endMs: number;
-  beats: number;
+  /** Length along the grid (fractional for a manual loop); null without a grid. */
+  beats: number | null;
 }
 
 /** A peak meter: `level` linear (1 = 0 dBFS); `clip` reached 0 dBFS since the last state. */
@@ -788,8 +793,11 @@ export type MixControl =
   | { type: "cueRelease"; deck: number }
   | { type: "seek"; deck: number; ms: number }
   | { type: "hotCue"; deck: number; slot: number }
-  /** Memory cue call: the cue point and playhead move to `ms` exactly; a playing deck plays on. */
-  | { type: "callCue"; deck: number; ms: number }
+  /**
+   * Memory cue call: the cue point and playhead move to `ms` exactly; a playing deck plays on.
+   * A memory loop's `endMs` arms RELOOP (the call itself does not loop).
+   */
+  | { type: "callCue"; deck: number; ms: number; endMs?: number | null }
   /** Speed ratio, 1 = as recorded. */
   | { type: "tempo"; deck: number; ratio: number }
   /** Pitch bend while held; 1 releases it. */
@@ -803,8 +811,15 @@ export type MixControl =
   | { type: "fineJump"; deck: number; forward: boolean }
   /** Loop of `beats` (the pads' `LOOP_PAGES`) from the playhead, from the beat with quantise. */
   | { type: "beatLoop"; deck: number; beats: number }
+  /** Leaves the loop, keeping it for `reloop`. */
   | { type: "loopExit"; deck: number }
-  /** Halve (`double: false`) or double the active loop. */
+  /** Loop IN at the head (nearest beat with quantise): moves an active loop's start, else a pending IN. */
+  | { type: "loopIn"; deck: number }
+  /** Loop OUT: moves an active loop's end, else loops from a pending IN behind the head. */
+  | { type: "loopOut"; deck: number }
+  /** RELOOP: leaves an active loop, else back into `lastLoop` (keeping the phase with quantise). */
+  | { type: "reloop"; deck: number }
+  /** Halve (`double: false`) or double the active loop; by time without a grid. */
   | { type: "loopResize"; deck: number; double: boolean }
   | { type: "quantise"; deck: number; on: boolean }
   | { type: "channel"; ch: number; param: ChannelParam; value: number }

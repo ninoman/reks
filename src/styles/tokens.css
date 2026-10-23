@@ -488,7 +488,8 @@
   /* Mixer (phase 5): knobs, faders, deck waveforms, channel strips. */
   --knob-sm: 22px;
   --knob-md: 28px;
-  --fader-len: 108px;
+  --knob-lg: 32px;
+  --fader-len: 96px;
   --fader-w: 20px;
   --fader-cap: 12px;
   /* Level meter: 9 LEDs over --fader-len, labels beside them. */
@@ -516,8 +517,11 @@
   --pad-h: 26px;
   /* Tempo fader: drags within this of 0% snap to it. */
   --fader-detent: 6px;
-  --mixer-strip-w: 58px;
-  --mixer-row-h: 28px;
+  /* Mixer (concept A, task 22): 344 x 440, narrower strips, one dB scale in the legend. */
+  --mixer-w: 344px;
+  --mixer-h: 440px;
+  --mixer-strip-w: 52px;
+  --mixer-row-h: 26px;
   --mix-panel-max-h: 62vh;
 
   /* Layers. */

@@ -62,6 +62,8 @@ const deckView = (over: Partial<DeckView> = {}): DeckView => ({
   beat: null,
   cuePreview: false,
   loopRegion: null,
+  loopIn: null,
+  lastLoop: null,
   sync: false,
   syncBar: false,
   locked: false,
