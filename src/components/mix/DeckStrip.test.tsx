@@ -25,6 +25,7 @@ const view = (over: Partial<DeckView> = {}): DeckView => ({
   syncBar: false,
   locked: false,
   quantise: true,
+  masterTempo: false,
   master: false,
   loopRegion: null,
   loopIn: null,
@@ -67,6 +68,7 @@ function setup(props: Partial<DeckStripProps> = {}) {
       "toggleSync",
       "takeMaster",
       "toggleQuantise",
+      "toggleMasterTempo",
       "hotCuePad",
       "editCues",
       "callCue",
@@ -265,6 +267,14 @@ describe("DeckStrip", () => {
     fireEvent.click(screen.getByRole("button", { name: "Deck 2 memory cues: next page" }));
     expect(screen.getByRole("button", { name: "Deck 2 memory cue at 1:30.0" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Deck 2 memory cue at 0:10.0" })).toBeNull();
+  });
+
+  it("M toggles master tempo and is lit while it is on", () => {
+    const a = setup({ view: view({ masterTempo: true }), meta: loadedMeta() });
+    const m = screen.getByRole("button", { name: "Deck 2 master tempo" });
+    expect(m.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(m);
+    expect(a.toggleMasterTempo).toHaveBeenCalled();
   });
 
   it("nudges while held", () => {

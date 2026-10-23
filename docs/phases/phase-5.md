@@ -1,7 +1,8 @@
 # Phase 5 — Mix-prep mixer (decks, beat sync, Xone:92-style mixer)
 
 Status: in progress (tasks 1–9 and 12–25 done by 2026-10-23; 10 key lock
-evaluation and 11 listening checklist open). Runs before Engine DJ export
+evaluation (master tempo works on `timestretch`, engine choice pending
+listening) and 11 listening checklist open). Runs before Engine DJ export
 (Phase 6) (D21, reordered 2026-10-20). Depends on: Phase 1
 (library, decode, imported grids) and Phase 3 (waveform columns, grid editor).
 Read `docs/decisions.md` D5, D10, D21 and `docs/research.md` §9 first.
@@ -289,6 +290,16 @@ pub enum Control {
     | vocal 1 | rubberband-r2 | | | |
 
     Listener, date, headphones/speakers: _______. Choice: pending (D21).
+
+    Master tempo on the decks (2026-10-23, maintainer report "M does not
+    work"): M was a disabled placeholder and the engine had no stretcher.
+    Now **M** toggles `Control::MasterTempo`; the deck plays through a key
+    lock head on `timestretch` Keylock (D21, proposed until the listening
+    above picks an engine). Tests: `crates/reks-mix/tests/master_tempo.rs`
+    (90 / 440 / 1,000 Hz tones at ±6%: key held within 0.5% with M, shifted
+    by the tempo without; head moves at the tempo; toggling and seeking
+    don't click), `keylock.rs` unit test, no-allocation callback test in
+    `engine.rs`, `DeckStrip.test.tsx`.
 11. **Listening checklist** below, run and logged ([#26](https://github.com/ninoman/reks/issues/26)).
 12. [x] **Deck refinements** (maintainer review of tasks 8–9, 2026-10-21):
     - Tempo ranges ±6, ±10, ±16 and WIDE (±100%), CDJ-3000; ±10 is the
@@ -452,7 +463,8 @@ pub enum Control {
       (not in text fields, dialogs or menus), Mix panel open or not.
     - Tempo: no Reset button (double-click or Delete; drags snap at 0%), BPM
       typed into the header steps the range up when needed; nudge uses the
-      CDJ jog arrows. Master tempo (**M**) stays disabled until task 10.
+      CDJ jog arrows. Master tempo (**M**) stayed disabled until task 10
+      (wired 2026-10-23, see task 10).
     - `tsconfig.app.json` type errors from task 14 fixed (`shortcut` under
       `exactOptionalPropertyTypes`; the root `tsc --noEmit` checks no files,
       so `npx tsc --noEmit -p tsconfig.app.json` is the real check).

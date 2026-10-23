@@ -13,6 +13,8 @@ export function deckActions(mix: MixStore, deck: number): DeckActions {
     takeMaster: () => mix.takeMaster(deck),
     toggleQuantise: () =>
       mix.send({ type: "quantise", deck, on: !(mix.live?.decks[deck]?.quantise ?? false) }),
+    toggleMasterTempo: () =>
+      mix.send({ type: "masterTempo", deck, on: !(mix.live?.decks[deck]?.masterTempo ?? false) }),
     hotCuePad: (slot) => mix.hotCuePad(deck, slot),
     editCues: (edit) => void mix.editCues(deck, edit),
     callCue: (ms, endMs) => mix.callCue(deck, ms, endMs),

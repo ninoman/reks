@@ -1,6 +1,6 @@
 /**
  * A deck's tempo column: the range (±6 / ±10 / ±16 / WIDE) and M (master
- * tempo, disabled until phase 5 task 10 picks a time-stretch engine), the
+ * tempo: key lock, lit when on), the
  * CDJ-style tempo fader (faster towards the bottom; snaps at 0%,
  * double-click or Delete resets) and the held nudge arrows.
  */
@@ -23,12 +23,14 @@ export interface DeckTempoProps {
   loaded: boolean;
   tempo: number;
   range: TempoRange;
+  masterTempo: boolean;
   /** Scale marks on the fader, ends included: more on a taller deck. */
   ticks: number;
   slowerKey: string | undefined;
   fasterKey: string | undefined;
   onTempo: (ratio: number) => void;
   onRange: (range: TempoRange) => void;
+  onMasterTempo: () => void;
   /** -1 slower, 1 faster, 0 released. */
   onNudge: (dir: -1 | 0 | 1) => void;
 }
@@ -42,11 +44,13 @@ export function DeckTempo({
   loaded,
   tempo,
   range,
+  masterTempo,
   ticks,
   slowerKey,
   fasterKey,
   onTempo,
   onRange,
+  onMasterTempo,
   onNudge,
 }: DeckTempoProps) {
   const n = deck + 1;
@@ -65,11 +69,13 @@ export function DeckTempo({
         </Button>
         <Button
           size="xs"
-          variant="ghost"
-          disabled
+          variant="control"
+          disabled={!loaded}
+          aria-pressed={masterTempo}
           aria-label={`Deck ${n} master tempo`}
-          title="Master tempo (key lock): not available yet"
+          hint="Master tempo (key lock)"
           className="w-(--ctl-h-xs) px-0"
+          onClick={onMasterTempo}
         >
           M
         </Button>

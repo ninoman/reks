@@ -713,6 +713,47 @@ mod tests {
         assert_eq!(n, 0, "nudge, hot cue, quantised seek, cue");
         assert!(!r.p.graph.state().decks[1].playing, "cue paused the deck");
 
+        // Master tempo: key lock on, a jump under it, a tempo change, off.
+        let tone = Arc::new(DeckSource::new(vec![900; RATE as usize * 4], RATE));
+        for c in [
+            Control::Load { deck: 3, src: tone },
+            Control::MasterTempo { deck: 3, on: true },
+            Control::Tempo {
+                deck: 3,
+                ratio: 1.06,
+            },
+            Control::Play { deck: 3 },
+        ] {
+            r.controls.push(c).unwrap();
+        }
+        let n = realtime(|| {
+            for _ in 0..4 {
+                r.p.process(&mut out_f32, 2);
+            }
+        });
+        assert_eq!(n, 0, "master tempo");
+        for c in [
+            Control::Seek {
+                deck: 3,
+                frame: 40_000,
+            },
+            Control::Tempo {
+                deck: 3,
+                ratio: 0.94,
+            },
+            Control::MasterTempo { deck: 3, on: false },
+            Control::Pause { deck: 3 },
+        ] {
+            let name = format!("{c:?}");
+            r.controls.push(c).unwrap();
+            let n = realtime(|| {
+                for _ in 0..2 {
+                    r.p.process(&mut out_f32, 2);
+                }
+            });
+            assert_eq!(n, 0, "master tempo: {name}");
+        }
+
         // Sync: deck 2 leads (it starts first), deck 1 follows with bar
         // sync (a phase jump, then bending), then a chosen leader.
         let other = Arc::new(

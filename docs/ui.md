@@ -454,7 +454,7 @@ Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light g
 | Zoomed waveform (spare height, min 60 px; the player deck 72 px) | Playhead centred, beat lines, hot cue and loop markers, sync phase meter on the top edge when synced. Zoom − / + float top right on hover or focus-within, zoom level between them. Drag to skim |
 | Overview (20 px; 14 compact) | Whole track, played part shaded, hot cue ticks in cue colour, cue point, loop bar. Keyboard seek slider |
 | Controls (see Controls row) | Q over CUE and PLAY (round) · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · `LoopBlock` (see [Quick loop](#quick-loop-task-21)) · MASTER over SYNC |
-| Tempo column (44 px) | Range button (±6 / ±10 / ±16 / W, for WIDE) and **M** (master tempo, ghost; disabled until task 10 picks an engine) · full-height fader · nudge |
+| Tempo column (44 px) | Range button (±6 / ±10 / ±16 / W, for WIDE) and **M** (master tempo: key lock, lit when on) · full-height fader · nudge |
 
 - **BPM edit**: double-click (or Enter when focused) turns the BPM into a
   number field; Enter or blur saves, Esc cancels. Tempo = typed ÷ the

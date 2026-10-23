@@ -15,6 +15,7 @@ rtrb = { workspace = true }
 rubato = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+timestretch = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

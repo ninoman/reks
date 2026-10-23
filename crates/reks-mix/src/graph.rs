@@ -92,6 +92,8 @@ pub struct DeckState {
     /// have a grid).
     pub locked: bool,
     pub quantise: bool,
+    /// Master tempo (key lock) is on.
+    pub master_tempo: bool,
     /// This deck is the sync master ([`EngineState::master_deck`]).
     pub master: bool,
     /// The active loop, if any.
@@ -122,6 +124,7 @@ impl Default for DeckState {
             sync_bar: false,
             locked: false,
             quantise: false,
+            master_tempo: false,
             master: false,
             loop_region: None,
             loop_in: None,
