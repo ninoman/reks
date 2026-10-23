@@ -105,11 +105,10 @@ impl Library {
         if let Ok(data) = std::fs::read(&thumb) {
             return Ok(data);
         }
-        let data = make_thumb(&self.artwork(id)?)
-            .ok_or(Error::InvalidField {
-                field: "artwork",
-                reason: "not a decodable image".into(),
-            })?;
+        let data = make_thumb(&self.artwork(id)?).ok_or(Error::InvalidField {
+            field: "artwork",
+            reason: "not a decodable image".into(),
+        })?;
         write_atomic(&thumb, &data)?;
         Ok(data)
     }
@@ -246,7 +245,10 @@ mod tests {
     #[test]
     fn thumb_of_an_unknown_id_is_not_found() {
         let (_dir, lib) = lib();
-        assert!(matches!(lib.artwork_thumb(99), Err(Error::ArtworkNotFound(99))));
+        assert!(matches!(
+            lib.artwork_thumb(99),
+            Err(Error::ArtworkNotFound(99))
+        ));
     }
 
     #[test]
