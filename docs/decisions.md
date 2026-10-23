@@ -955,7 +955,9 @@ Date of decisions: 2026-10-18.
   (`reks-mix` `Engine`, src-tauri `mix.rs`). The library plays on its deck 2
   (`PLAYER_DECK`, [`src/store/player.ts`](../src/store/player.ts)), one of the
   two decks the Mix panel shows by default. Double-click, Enter, Space and the
-  history view play on it; it opens the output when it is off, with the saved
+  history view play on it (with 2 or 4 decks shown, double-click and Enter
+  load onto a spare deck instead, never onto one that may be on air; added
+  2026-10-23, [`ui.md`](ui.md#mix-panel-phase-5)); it opens the output when it is off, with the saved
   output settings (`audio.*`, Settings → Playback). With the Mix
   panel off, the window shows that deck alone in the deck
   design (scrolling and overview waveform, cue, hot cues, nudge, quantise,

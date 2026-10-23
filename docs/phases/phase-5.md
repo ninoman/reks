@@ -709,6 +709,20 @@ nothing; 25 needs 22–24.
     `mix.test.ts` (engine values in Simple, stored values back in
     Advanced, after a start), `MixerPanel.test.tsx` (hidden rows per
     view), `mixKeys.test.ts` (X C V in Simple).
+26. [x] **Double-click loads onto a spare deck** (maintainer request,
+    2026-10-23). With 2 or 4 decks, double-click or Enter on a track (table,
+    history session, stick list) loads it paused onto a spare deck: an empty
+    one first, else the lowest-numbered deck that is stopped with its
+    channel fader fully closed (`spareDeck`,
+    [`src/lib/spareDeck.ts`](../../src/lib/spareDeck.ts)). With none spare
+    nothing loads and a toast says "No free deck". With 1 deck it still
+    plays on deck 2. Engine fix: PLAY sent while a load fades out a playing
+    track now starts the new track once it is in (`Deck::play_after_load`);
+    before, it came in paused, so a double-click while the player was
+    playing loaded the new track stopped. Tests: `spareDeck.test.ts`,
+    `player.test.ts` (`activateTrack`), `graph.rs`
+    (`play_after_a_load_while_playing_starts_the_new_track`,
+    `pause_after_a_queued_play_keeps_the_new_track_stopped`).
 
 ## Acceptance criteria
 

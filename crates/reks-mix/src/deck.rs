@@ -90,6 +90,9 @@ pub(crate) struct Deck {
     /// of them clicks.
     gate: Ramp,
     pending: Pending,
+    /// PLAY arrived while a load faded out the old track: the new one starts
+    /// once it is in, with this play-order clock.
+    play_after_load: Option<u64>,
     seeks: u32,
     transports: u32,
     tail: Option<Tail>,
@@ -140,6 +143,7 @@ impl Deck {
             playing: false,
             gate: Ramp::new(0.0, sample_rate),
             pending: Pending::None,
+            play_after_load: None,
             seeks: 0,
             transports: 0,
             tail: None,
@@ -232,8 +236,14 @@ impl Deck {
     /// thread. `clock` orders play starts.
     pub(crate) fn apply(&mut self, c: Control, clock: u64) -> Option<Arc<DeckSource>> {
         match c {
-            Control::Load { src, .. } => self.change(Pending::Load(Some(src))),
-            Control::Unload { .. } => self.change(Pending::Load(None)),
+            Control::Load { src, .. } => {
+                self.play_after_load = None;
+                self.change(Pending::Load(Some(src)))
+            }
+            Control::Unload { .. } => {
+                self.play_after_load = None;
+                self.change(Pending::Load(None))
+            }
             Control::Play { .. } => {
                 self.transports = self.transports.wrapping_add(1);
                 // PLAY during a cue preview keeps it playing on release.
@@ -244,6 +254,7 @@ impl Deck {
             Control::Pause { .. } => {
                 self.transports = self.transports.wrapping_add(1);
                 self.cue_preview = false;
+                self.play_after_load = None;
                 if self.audible() && matches!(self.pending, Pending::None) {
                     self.pending = Pending::Pause;
                     self.gate.target = 0.0;
@@ -361,6 +372,10 @@ impl Deck {
     }
 
     fn play(&mut self, clock: u64) {
+        if matches!(self.pending, Pending::Load(Some(_))) {
+            self.play_after_load = Some(clock);
+            return;
+        }
         if self.src.is_none() || self.position() >= self.frames() as f64 {
             return;
         }
@@ -939,9 +954,13 @@ impl Deck {
         self.wrap_loop();
         if self.gate.settled() && self.gate.value == 0.0 {
             let action = std::mem::take(&mut self.pending);
+            let loaded = matches!(action, Pending::Load(_));
             if let Some(old) = self.run(action) {
                 // At most one per frame; the caller drains it every frame.
                 *retired = Some(old);
+            }
+            if let Some(clock) = self.play_after_load.take().filter(|_| loaded) {
+                self.play(clock);
             }
         }
         out
