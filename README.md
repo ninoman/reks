@@ -5,38 +5,56 @@ alternative to rekordbox for managing your music collection and preparing USB
 sticks that play on Pioneer DJ / AlphaTheta CDJs and XDJs, and later on Denon
 Engine DJ players.
 
-## What it does (planned)
+## What it does
 
-- Keeps your own library: folder import, tags, artwork, playlists, search.
-- Imports an existing rekordbox collection via `collection.xml` (including
-  beatgrids, cues, loops, keys and playlists).
+None of the USB exports has been tested on a real player yet
+([`docs/hw-test-log.md`](docs/hw-test-log.md) is empty). Until it has, treat
+every stick as untested.
+
+- Keeps your own library: folder scan, tags, artwork, a searchable, filterable
+  track table, playlists.
+- Imports an existing rekordbox collection via `collection.xml` (beatgrids,
+  cues, loops, keys, playlists) and writes one back.
 - Exports a USB stick in the legacy rekordbox format (`export.pdb` + ANLZ
-  analysis files), targeting CDJ-2000 / NXS / NXS2 / CDJ-3000 / XDJ players
-  (not yet hardware-tested; see `docs/hw-test-log.md`).
-- Then: playlist dividers that show on the player, and play history imported
-  from played sticks, with practice sessions left out of play counts
+  files), with a dry run before anything is written
+  ([`docs/phases/phase-2.md`](docs/phases/phase-2.md)).
+- Playlist dividers on the stick, and play history read back from played
+  sticks, with practice sessions left out of play counts
   ([`docs/phases/phase-2.5.md`](docs/phases/phase-2.5.md)).
-- Converts lossless tracks to WAV, AIFF or FLAC, for older players or to save
-  space, keeping cues and playlists
-  ([`docs/phases/phase-2.6.md`](docs/phases/phase-2.6.md)).
-- Stick profiles: a saved, visible list of playlists per stick, synced with a
-  dry run; sticks written by rekordbox can be adopted
+- Stick profiles: a saved list of playlists per stick, synced with a dry run;
+  sticks written by rekordbox can be adopted
   ([`docs/stick-profiles.md`](docs/stick-profiles.md)).
-- Analyses tracks itself (BPM, beatgrid, key, waveforms) in Pioneer formats.
-- Later: the newer rekordbox "Device Library Plus" (`exportLibrary.db`) format
-  and Denon Engine DJ libraries.
-- Later still: a mix-prep tool, 2–4 beat-synced decks through a 4-channel mixer
-  with EQ kills and filters, to try transitions while building playlists
+- Converts lossless tracks to WAV, AIFF or FLAC, keeping cues and playlists
+  ([`docs/phases/phase-2.6.md`](docs/phases/phase-2.6.md)).
+- Analyses tracks itself: BPM, beatgrid, key and every Pioneer waveform type
+  ([`docs/phases/phase-3.md`](docs/phases/phase-3.md),
+  [`docs/analysis-parity.md`](docs/analysis-parity.md)).
+- Exports the newer rekordbox Device Library Plus format (`exportLibrary.db`)
+  ([`docs/phases/phase-4.md`](docs/phases/phase-4.md)).
+- Mix-prep: up to 4 beat-synced decks with hot cues, loops and scrolling
+  waveforms through a 4-channel mixer (EQ, filters, crossfader, headphone
+  cue), in a simple or an advanced mixer view
   ([`docs/phases/phase-5.md`](docs/phases/phase-5.md)).
+- Next: Denon Engine DJ export
+  ([`docs/phases/phase-6.md`](docs/phases/phase-6.md)).
 
 ## Status
 
-Pre-alpha. Phase 1 in progress: the library core (SQLite schema, folder scan,
-rekordbox XML parse/write/import, track queries) is tested, and the app shows the
-library in a searchable, filterable track table, filled by scanning a folder or
-importing a rekordbox XML, with a playlist tree to create, edit and reorder
-playlists.
-Progress: [`docs/phases/phase-1.md`](docs/phases/phase-1.md); open work on the
+Pre-alpha (October 2026). The software work for Phases 1–5 is in `main`.
+What is still open:
+
+| Phase | Open |
+| --- | --- |
+| 1 Library | Acceptance criteria and manual checklist |
+| 2 Legacy export | Hardware campaign on a CDJ-2000NXS2 and a CDJ-3000; eject and volume serial on Windows and Linux; a fixture from a played stick |
+| 2.5 / 2.6 | Hardware sessions |
+| 3 Analysis | Key tonic accuracy (12a); hardware check |
+| 4 Device Library Plus | Hardware test |
+| 5 Mixer | Key lock evaluation, listening checklist, a 3-band EQ + filter mixer view |
+| 6 Engine DJ | Not started |
+
+No players are available yet, so the software work goes ahead and anything a
+player has to confirm is marked UNVERIFIED. Open work is tracked on the
 [reks roadmap](https://github.com/users/ninoman/projects/1) board (D33).
 
 ## Documentation

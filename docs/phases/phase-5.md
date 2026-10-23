@@ -1,6 +1,7 @@
 # Phase 5 — Mix-prep mixer (decks, beat sync, Xone:92-style mixer)
 
-Status: not started; scheduled after Phase 4 and before Engine DJ export
+Status: in progress (tasks 1–9 and 12–25 done by 2026-10-23; 10 key lock
+evaluation and 11 listening checklist open). Runs before Engine DJ export
 (Phase 6) (D21, reordered 2026-10-20). Depends on: Phase 1
 (library, decode, imported grids) and Phase 3 (waveform columns, grid editor).
 Read `docs/decisions.md` D5, D10, D21 and `docs/research.md` §9 first.
