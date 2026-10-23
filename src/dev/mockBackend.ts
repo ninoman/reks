@@ -293,6 +293,8 @@ let settings: Settings = {
     filtersEnabled: true,
     infoOpen: false,
     volume: 0.8,
+    rowDensity: "default",
+    columnsVersion: 1,
   },
 };
 

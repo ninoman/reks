@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { ROW_HEIGHT } from "../components/trackTableModel";
+import { ROW_HEIGHT, ROW_HEIGHTS } from "../components/trackTableModel";
 import { SLIDE_IN_DEFAULT, SLIDE_OUT_DEFAULT } from "../lib/motion";
 
 function token(name: string): string {
@@ -18,6 +18,7 @@ const css = readFileSync(new URL("./tokens.css", import.meta.url), "utf8");
 describe("tokens.css mirrors", () => {
   it("row height", () => {
     expect(token("--row-h")).toBe(`${ROW_HEIGHT}px`);
+    expect(token("--row-h-tall")).toBe(`${ROW_HEIGHTS.default}px`);
   });
 
   it("slide timings", () => {

@@ -45,6 +45,8 @@ const settings: Settings = {
     filtersEnabled: true,
     infoOpen: false,
     volume: 1,
+    rowDensity: "default",
+    columnsVersion: 1,
   },
 };
 const roots: LibraryRoot[] = [
@@ -77,7 +79,7 @@ afterEach(() => {
 
 /** As at start-up: the saved output reaches the mix store, then the dialog opens. */
 async function openDialog() {
-  await act(async () => useSettings.getState().load([]));
+  await act(async () => useSettings.getState().load({ hidden: [], version: 1, hiddenSince: [] }));
   await act(async () => useSettings.getState().setDialogOpen(true));
   render(<SettingsDialog />);
   await screen.findByText("/Music/House");
@@ -143,7 +145,7 @@ describe("SettingsDialog", () => {
   });
 
   it("opens on the tab it is asked for and focuses its first control", async () => {
-    await act(async () => useSettings.getState().load([]));
+    await act(async () => useSettings.getState().load({ hidden: [], version: 1, hiddenSince: [] }));
     await act(async () => useSettings.getState().setDialogOpen(true, "mixer"));
     render(<SettingsDialog />);
     const panel = await screen.findByRole("tabpanel", { name: "Mixer" });

@@ -129,6 +129,34 @@ pub fn track_columns(lib: &Library, id: TrackId) -> Result<Vec<u8>, ColumnsError
     Ok(columns.to_interleaved().unwrap_or_default())
 }
 
+/// Track `id`'s columns squeezed to at most `width` columns (each the peak of
+/// its share), for a track-list thumbnail: a few KB instead of the whole
+/// payload. Same source and cost as [`track_columns`].
+pub fn track_overview(lib: &Library, id: TrackId, width: usize) -> Result<Vec<u8>, ColumnsError> {
+    Ok(downsample(&track_columns(lib, id)?, width))
+}
+
+/// Interleaved `payload` reduced to at most `width` columns by taking each
+/// band's peak over consecutive runs; shorter payloads are returned as is.
+pub fn downsample(payload: &[u8], width: usize) -> Vec<u8> {
+    let cols = payload.as_chunks::<4>().0;
+    if width == 0 || cols.len() <= width {
+        return cols.as_flattened().to_vec();
+    }
+    let mut out = Vec::with_capacity(width * 4);
+    for x in 0..width {
+        let run = &cols[x * cols.len() / width..(x + 1) * cols.len() / width];
+        let mut peak = [0u8; 4];
+        for col in run {
+            for k in 0..4 {
+                peak[k] = peak[k].max(col[k]);
+            }
+        }
+        out.extend_from_slice(&peak);
+    }
+    out
+}
+
 /// Columns of the audio file at `path` (decoded whole, mono, at its own rate;
 /// blocking). No cache.
 pub fn file_columns(path: &Path) -> Result<WaveformColumns, ColumnsError> {
@@ -175,6 +203,17 @@ mod tests {
         let mut bad = cols();
         bad.mono.pop();
         assert!(bad.to_interleaved().is_none());
+    }
+
+    #[test]
+    fn downsample_takes_run_peaks() {
+        let payload: Vec<u8> = (0..6u8).flat_map(|i| [i, 10 - i, i % 2, 1]).collect();
+        assert_eq!(
+            downsample(&payload, 3),
+            [1, 10, 1, 1, 3, 8, 1, 1, 5, 6, 1, 1]
+        );
+        assert_eq!(downsample(&payload, 10), payload);
+        assert_eq!(downsample(&payload, 0), payload);
     }
 
     #[test]

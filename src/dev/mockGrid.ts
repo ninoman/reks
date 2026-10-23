@@ -110,7 +110,24 @@ export function mockGrid(
     case "device_waveform_columns":
       columns ??= fetch(columnsUrl).then((r) => r.arrayBuffer());
       return columns.then((b) => b.slice(0));
+    case "waveform_overview":
+      columns ??= fetch(columnsUrl).then((r) => r.arrayBuffer());
+      return columns.then((b) => downsample(new Uint8Array(b), args.width as number));
     default:
       return undefined;
   }
+}
+
+/** Run peaks down to `width` columns, as reks-analysis `columns::downsample`. */
+function downsample(cols: Uint8Array, width: number): ArrayBuffer {
+  const n = cols.length / 4;
+  if (n <= width) return cols.slice().buffer;
+  const out = new Uint8Array(width * 4);
+  for (let x = 0; x < width; x++) {
+    for (let c = Math.floor((x * n) / width); c < Math.floor(((x + 1) * n) / width); c++) {
+      for (let k = 0; k < 4; k++)
+        out[4 * x + k] = Math.max(out[4 * x + k] ?? 0, cols[4 * c + k] ?? 0);
+    }
+  }
+  return out.buffer;
 }

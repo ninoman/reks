@@ -176,6 +176,28 @@ Performance rule for the track table: rows and cells are plain `div`s with
 constant class strings; per-row state is `data-*` attributes styled with
 `data-[selected]:…`. No base component, Radix or `cn()` call per cell.
 
+Track table rows come in two densities (Columns menu → Compact rows, saved
+in `UiState.rowDensity`): **default** (`--row-h-tall`, 36 px artwork, artist
+under the title) and **compact** (`--row-h`, one line). The rows' container
+sets `data-density`, which swaps `--row-h` / `--row-art` in tokens.css; the
+virtualiser takes the height from `ROW_HEIGHTS`; default rows leave out
+the Artist column (`compactOnly`). Clicking a row's artwork previews the
+track (`QuickPlayArtwork`) and a click on its waveform previews it from
+there, with a playhead, on the engine's preview deck (`PREVIEW_DECK`,
+[`preview.ts`](../src/store/preview.ts)), never a mixer deck: it plays in
+the headphone cue when the output routes one (the cue level and CUE/MASTER
+mix apply), else on the master with the mix faded out over `DUCK_MS`
+(300 ms) and back in when it pauses. The **Waveform** column draws each
+visible track's whole waveform in the decks' style from `waveform_overview`
+(columns squeezed to 400 in Rust, a few KB a row), fetched one at a time,
+newest rows first ([`overviews.ts`](../src/store/overviews.ts)): a track
+without cached columns is decoded on request.
+
+Columns that become hidden by default bump `COLUMN_DEFAULTS.version`
+([`columns.tsx`](../src/components/columns.tsx)); a saved column list older
+than that gets them hidden once (`hiddenColumns` in
+[`settings.ts`](../src/store/settings.ts)). Version 1 hid Last played.
+
 ### Split track lists
 
 Shift+click a playlist or folder in the tree to open it in a pane under the
@@ -663,7 +685,8 @@ re-queries. Pure helpers (coverage, search, create offers) are in
 [`tagModel.ts`](../src/store/tagModel.ts).
 
 - `FilterDrawer`: the library filters in a `Sheet`, same header and Escape/×
-  close as My Tags; the toolbar Filters button toggles it (hidden by default).
+  close as My Tags; the toolbar Filters button (on the right, by My Tags and
+  Track info, the drawers' side) toggles it (hidden by default).
 - `TagDrawer`: a `Sheet` on the right, over the info panel (and sharing the
   spot with `FilterDrawer`: opening one closes the other; toolbar tag
   button, "Manage tags…", the info panel's "Edit

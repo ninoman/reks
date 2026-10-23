@@ -164,3 +164,41 @@ fn cue_switches_crossfade_without_clicks() {
         .fold(0.0, f32::max);
     assert!(step < 0.01, "largest step {step}");
 }
+
+#[test]
+fn preview_plays_in_the_phones_alone_when_there_is_a_cue() {
+    let mut g = Graph::new(RATE).unwrap();
+    play(&mut g, 0, tone(100.0, 0.4));
+    play(&mut g, reks_mix::PREVIEW_DECK, tone(200.0, 0.3));
+    both(&mut g, 9_600);
+    let (m, p) = both(&mut g, 4_800);
+    // The master keeps deck 0 alone; the phones hear the preview.
+    assert!((peak(&m) - 0.4).abs() < 1e-3, "{}", peak(&m));
+    assert!((peak(&p) - 0.3).abs() < 1e-2, "{}", peak(&p));
+    assert!(g.state().preview.playing);
+}
+
+#[test]
+fn preview_without_a_cue_fades_the_mix_out_and_back() {
+    let mut g = Graph::new(RATE).unwrap();
+    let master_only = |g: &mut Graph, n: usize| {
+        let mut m = vec![0.0; n * 2];
+        g.render_with(&mut m, drop);
+        peak(&m)
+    };
+    play(&mut g, 0, tone(100.0, 0.4));
+    master_only(&mut g, 4_800);
+    play(&mut g, reks_mix::PREVIEW_DECK, tone(200.0, 0.3));
+    // Mid-fade, both are heard; after DUCK_MS only the preview.
+    let fading = master_only(&mut g, 4_800);
+    assert!(fading > 0.3, "{fading}");
+    master_only(&mut g, (RATE * reks_mix::DUCK_MS / 1000) as usize);
+    let ducked = master_only(&mut g, 4_800);
+    assert!((ducked - 0.3).abs() < 1e-2, "{ducked}");
+    g.apply(Control::Pause {
+        deck: reks_mix::PREVIEW_DECK,
+    });
+    master_only(&mut g, (RATE * reks_mix::DUCK_MS / 1000) as usize + 4_800);
+    let back = master_only(&mut g, 4_800);
+    assert!((back - 0.4).abs() < 1e-3, "{back}");
+}

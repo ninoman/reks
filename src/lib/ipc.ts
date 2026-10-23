@@ -607,8 +607,19 @@ export function waveformColumns(id: number): Promise<ArrayBuffer> {
   return invoke("waveform_columns", { id });
 }
 
+/** `waveformColumns` reduced to at most `width` columns (track-list thumbnails). */
+export function waveformOverview(id: number, width: number): Promise<ArrayBuffer> {
+  return invoke("waveform_overview", { id, width });
+}
+
 /** `mix_*`: the Phase 5 mixer (src-tauri `mix.rs`, reks-mix `Control`). */
 export const DECKS = 4;
+/**
+ * The preview deck (reks-mix `PREVIEW_DECK`): outside the mixer, it plays the
+ * track list's quick play in the headphone cue, or on the master with the mix
+ * faded out when there is no cue.
+ */
+export const PREVIEW_DECK = DECKS;
 
 export type CueRouting =
   | { type: "off" }
@@ -704,6 +715,8 @@ export interface MixState {
    */
   masterDeck: number | null;
   decks: DeckView[];
+  /** The preview deck (`PREVIEW_DECK`). */
+  preview: DeckView;
   /** Channel meters, after EQ and filter, before the fader. */
   meters: MeterView[];
   /** Master meter, before the limiter. */
@@ -914,6 +927,9 @@ export type MixerFilters = "show" | "hide";
 /** The mixer's EQ layout: 4-band with the X/Y filters, or 3-band with the channel FX. */
 export type MixerEq = "fourBand" | "threeBand";
 
+/** Track table rows: one line, or taller with bigger artwork and the artist under the title. */
+export type RowDensity = "compact" | "default";
+
 /** Library window state kept across launches. */
 export interface UiState {
   /** Hidden column ids; `null` until changed (UI defaults). */
@@ -923,6 +939,9 @@ export interface UiState {
   infoOpen: boolean;
   /** 0..1. */
   volume: number;
+  rowDensity: RowDensity;
+  /** The default column set `hiddenColumns` was saved against (`COLUMNS_VERSION`). */
+  columnsVersion: number;
 }
 
 export interface Settings {

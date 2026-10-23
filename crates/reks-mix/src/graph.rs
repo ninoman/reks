@@ -19,6 +19,15 @@ use crate::sync;
 /// Deck slots in the graph. The UI shows 2 or 4; idle decks cost nothing.
 pub const DECKS: usize = 4;
 
+/// The preview deck's number in controls: a deck outside the mixer that
+/// the track list auditions on. It plays into the headphone cue when the
+/// device has one; otherwise into the master, with the mix faded out under
+/// it for as long as it plays ([`DUCK_MS`]).
+pub const PREVIEW_DECK: u8 = DECKS as u8;
+
+/// Fade of the mix out and back in around a preview on the master.
+pub const DUCK_MS: u32 = 300;
+
 /// Slowest tempo fader setting: −100%, the bottom of the CDJ-3000's WIDE
 /// range, where the deck stands still.
 pub const TEMPO_MIN: f64 = 0.0;
@@ -137,6 +146,8 @@ impl Default for DeckState {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct EngineState {
     pub decks: [DeckState; DECKS],
+    /// The preview deck ([`PREVIEW_DECK`]).
+    pub preview: DeckState,
     /// The sync master (leader), as on a CDJ: the deck that took it with
     /// [`Control::TakeMaster`], else the first deck with a grid to play.
     /// When it stops, ends or is unloaded, the role passes to a playing
@@ -169,7 +180,12 @@ pub(crate) struct Ramp {
 
 impl Ramp {
     pub(crate) fn new(value: f32, sample_rate: u32) -> Self {
-        let frames = (sample_rate * RAMP_MS / 1000).max(1);
+        Self::over(value, sample_rate, RAMP_MS)
+    }
+
+    /// A ramp that takes `ms` from 0 to 1.
+    pub(crate) fn over(value: f32, sample_rate: u32, ms: u32) -> Self {
+        let frames = (sample_rate * ms / 1000).max(1);
         Self {
             value,
             target: value,
@@ -195,6 +211,10 @@ impl Ramp {
 #[derive(Debug)]
 pub struct Graph {
     decks: [Deck; DECKS],
+    /// [`PREVIEW_DECK`]: never synced, never master, not on a channel.
+    preview: Deck,
+    /// The preview deck's output, beside the mixer's inputs.
+    preview_block: Block,
     /// The sync master.
     master: Option<usize>,
     /// The master was playing at the last block, so stopping hands it on.
@@ -218,6 +238,8 @@ impl Graph {
             .ok_or(Error::Resampler)?;
         Ok(Self {
             decks: decks.try_into().map_err(|_| Error::Resampler)?,
+            preview: Deck::new(sample_rate).ok_or(Error::Resampler)?,
+            preview_block: [0.0; BLOCK * 2],
             master: None,
             master_playing: false,
             master_unloaded: false,
@@ -248,6 +270,10 @@ impl Graph {
             return None;
         }
         let deck = c.deck()?;
+        if deck == PREVIEW_DECK {
+            self.clock += 1;
+            return self.preview.apply(c, self.clock);
+        }
         if matches!(c, Control::Load { .. } | Control::Unload { .. })
             && self.master == Some(usize::from(deck))
         {
@@ -271,6 +297,7 @@ impl Graph {
                 master: self.master == Some(i),
                 ..self.decks[i].state()
             }),
+            preview: self.preview.state(),
             master_deck: self.master.map(|d| d as u8),
             volume: self.mixer.volume(),
             channels,
@@ -332,6 +359,8 @@ impl Graph {
     /// Sets every deck's speed for the next block: the master and unsynced
     /// decks at their own speed, followers from [`sync::follow`].
     fn plan(&mut self) {
+        let speed = self.preview.own_speed();
+        self.preview.set_speed(speed);
         self.update_master();
         let master = self.master;
         let lead = master.and_then(|i| {
@@ -419,14 +448,34 @@ impl Graph {
                     *frame = [l, r];
                 }
             }
+            for frame in self.preview_block[..n].as_chunks_mut::<2>().0 {
+                let mut retired = None;
+                let (l, r) = self.preview.next(&mut retired);
+                if let Some(old) = retired {
+                    retire(old);
+                }
+                *frame = [l, r];
+            }
             for (ch, deck) in self.decks.iter().enumerate() {
                 self.mixer.set_beat_frames(ch, deck.beat_frames());
             }
             let at = i * BLOCK * 2;
             let phones = phones.as_deref_mut().map(|p| &mut p[at..at + n]);
-            self.mixer.process(&mut self.inputs, block, phones);
+            let preview = Preview {
+                block: &self.preview_block[..n],
+                playing: self.preview.playing(),
+            };
+            self.mixer.process(&mut self.inputs, block, phones, preview);
         }
     }
+}
+
+/// The preview deck's block for the mixer.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Preview<'a> {
+    pub(crate) block: &'a [f32],
+    /// Ducks the mix while the preview is on the master.
+    pub(crate) playing: bool,
 }
 
 fn has_grid(d: &Deck) -> bool {
