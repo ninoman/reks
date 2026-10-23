@@ -312,8 +312,10 @@ Simple · Advanced, which applies to both EQ layouts.
 | X-F assign | as today | off (THRU) | stored |
 | Crossfader position, curve | as today | no effect (all THRU) | stored |
 
-- The 3-band and 4-band EQ positions are stored separately, since the
-  same knob angle means different things.
+- Positions are kept per EQ layout: the 3-band and 4-band EQ positions are
+  stored separately, since the same knob angle means different things.
+  3-band starts flat: `Eq3*` and every `Fx` at 0.5, FILTER selected,
+  PARAMETER 0.5.
 - Switching EQ layouts ramps one EQ to noon and the other to its stored values
   in the same 10 ms, so the change sounds like turning knobs, never a
   click. The engine needs no EQ mode.
@@ -327,8 +329,9 @@ Simple · Advanced, which applies to both EQ layouts.
 
 - **Settings** (maintainer's call, 2026-10-23, following the wireframe in
   #58). Settings → Mixer gets a new **EQ** setting, **4-band · 3-band**,
-  stored as `mix.mixer_eq` (`MixerEq` in `reks-core` `settings.rs`, default
-  4-band), next to the existing **Mixer view** Simple · Advanced, which
+  stored as `mix.mixer_eq` (`MixerEq { FourBand, ThreeBand }` in `reks-core`
+  `settings.rs`, default 4-band; `mixer_eq` in `Settings` and an optional
+  field in `SettingsPatch`, like `mixer_view`), next to the existing **Mixer view** Simple · Advanced, which
   applies to both. No third `MixerView` value. **Filters** Show · Hide stays
   for 4-band Simple only (disabled in 3-band and in Advanced). Knob rows in
   3-band: **HI · MID · LOW · FX**; the FX row's label shows the selected
@@ -336,7 +339,8 @@ Simple · Advanced, which applies to both EQ layouts.
   (three buttons) and PARAMETER are one row in the mixer's shared section;
   the PARAMETER label follows the effect (RESONANCE, FEEDBACK, DECAY). No
   vendor names.
-- **Crossfader.** By Mixer view, as in 4-band:
+- **Crossfader.** By Mixer view, as in 4-band: Advanced adds the X-F
+  assigns and the crossfader, Simple hides them.
   - 3-band Simple: no X-F assigns, no crossfader; every channel THRU.
   - 3-band Advanced: 3-band Simple plus the X-F assign row, the crossfader
     and its curve. No FILTER assigns and no X/Y row in either: the FX knob
