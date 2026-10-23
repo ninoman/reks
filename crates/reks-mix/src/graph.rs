@@ -690,6 +690,50 @@ mod tests {
     }
 
     #[test]
+    fn play_after_a_load_while_playing_starts_the_new_track() {
+        let mut g = Graph::new(RATE).unwrap();
+        g.apply(Control::Load {
+            deck: 0,
+            src: ramp_source(48_000),
+        });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 1_000);
+        g.apply(Control::Load {
+            deck: 0,
+            src: ramp_source(48_000),
+        });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, RAMP * 3);
+        let st = g.state().decks[0];
+        assert!(st.playing);
+        assert!(
+            st.position > 0 && st.position < (RAMP * 3) as i64,
+            "{}",
+            st.position
+        );
+    }
+
+    #[test]
+    fn pause_after_a_queued_play_keeps_the_new_track_stopped() {
+        let mut g = Graph::new(RATE).unwrap();
+        g.apply(Control::Load {
+            deck: 0,
+            src: ramp_source(48_000),
+        });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 1_000);
+        g.apply(Control::Load {
+            deck: 0,
+            src: ramp_source(48_000),
+        });
+        g.apply(Control::Play { deck: 0 });
+        g.apply(Control::Pause { deck: 0 });
+        render_frames(&mut g, RAMP * 3);
+        let st = g.state().decks[0];
+        assert_eq!((st.playing, st.position), (false, 0));
+    }
+
+    #[test]
     fn load_while_stopped_is_immediate() {
         let mut g = Graph::new(RATE).unwrap();
         let first = ramp_source(10);
