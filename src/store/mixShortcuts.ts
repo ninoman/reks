@@ -1,6 +1,6 @@
 /**
- * Window-wide mixer shortcuts (`src/lib/mixKeys.ts`) while the mixer is
- * open. Text fields, dialogs and menus keep their keys. Nudge keys bend
+ * Window-wide mixer shortcuts (`src/lib/mixKeys.ts`): the Mix panel's decks,
+ * or the player deck alone (left-hand keys) with the panel closed. Text fields, dialogs and menus keep their keys. Nudge keys bend
  * while held and CUE previews while held; both release on key up.
  */
 import { useEffect } from "react";
@@ -8,18 +8,18 @@ import { useEffect } from "react";
 import { keepsSpace } from "../lib/keys";
 import { mixKeyAction } from "../lib/mixKeys";
 import { useMix } from "./mix";
+import { usePanels } from "./panels";
 import { syncBar } from "./settings";
 
-export function useMixShortcuts(enabled: boolean) {
+export function useMixShortcuts() {
   useEffect(() => {
-    if (!enabled) return;
     /** Held nudge and cue keys: code → what to release. */
     const held = new Map<string, { type: "nudge" | "cue"; deck: number }>();
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.repeat || keepsSpace(e.target)) return;
       const mix = useMix.getState();
-      const action = mixKeyAction(e, mix.deckCount);
+      const action = mixKeyAction(e, usePanels.getState().mixOpen ? mix.deckCount : 1);
       if (action === null) return;
       e.preventDefault();
       switch (action.type) {
@@ -95,5 +95,5 @@ export function useMixShortcuts(enabled: boolean) {
       window.removeEventListener("blur", onBlur);
       onBlur();
     };
-  }, [enabled]);
+  }, []);
 }

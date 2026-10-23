@@ -289,7 +289,7 @@ function emptyDeckFrom(prev: DeckMeta | undefined): DeckMeta {
   return { ...emptyDeck(), tempoRange, padMode, padPage, lastJump, lastLoop };
 }
 
-const DEFAULT_CHANNEL: ChannelValues = {
+export const DEFAULT_CHANNEL: ChannelValues = {
   trim: 0.5,
   eqHi: 0.5,
   eqMid1: 0.5,
@@ -299,6 +299,14 @@ const DEFAULT_CHANNEL: ChannelValues = {
   filterAssign: "off",
   xfadeAssign: "off",
   cue: false,
+};
+
+export const DEFAULT_MASTER: MasterValues = {
+  level: 0.8,
+  cueLevel: 0.7,
+  cueMix: 0,
+  splitCue: false,
+  cuePostEq: false,
 };
 
 const DEFAULT_FILTER: FilterValues = {
@@ -491,7 +499,7 @@ export const useMix = create<MixStore>((set, get) => {
     })),
     filters: { x: { ...DEFAULT_FILTER }, y: { ...DEFAULT_FILTER, lowPass: false, highPass: true } },
     crossfader: { pos: 0.5, curve: 0 },
-    master: { level: 0.8, cueLevel: 0.7, cueMix: 0, splitCue: false, cuePostEq: false },
+    master: { ...DEFAULT_MASTER },
     volume: 1,
     cueRevisions: {},
 

@@ -10,6 +10,7 @@
  */
 import { useEffect } from "react";
 
+import { hiddenPlaying, hiddenPlayingLabel } from "../lib/mixHidden";
 import { outputSummary } from "../lib/mixView";
 import { useMix } from "../store/mix";
 import { usePanels } from "../store/panels";
@@ -17,6 +18,7 @@ import { chooseOutput } from "../store/settings";
 import { ErrorMessage } from "./ErrorMessage";
 import { ShortcutHelp } from "./mix/ShortcutHelp";
 import { Button } from "./ui/Button";
+import { Chip } from "./ui/Chip";
 import { Segment, SegmentedControl } from "./ui/SegmentedControl";
 import { Select } from "./ui/Select";
 import { Slider } from "./ui/Slider";
@@ -33,6 +35,18 @@ export function PlayerBar() {
   const output = useMix((s) =>
     s.status === "running" && s.live !== null ? outputSummary(s.live) : null,
   );
+
+  // A string too: "1,3" lists the decks that play out of sight.
+  const unseen = useMix((s) =>
+    s.live === null || s.status !== "running"
+      ? ""
+      : hiddenPlaying(
+          s.live.decks.map((d) => d.playing),
+          mixOpen,
+          s.deckCount,
+        ).join(","),
+  );
+  const unseenDecks = unseen === "" ? [] : unseen.split(",").map(Number);
 
   useEffect(() => {
     void useMix.getState().loadDevices();
@@ -70,6 +84,16 @@ export function PlayerBar() {
           </span>
         )}
       </span>
+      {unseenDecks.length > 0 && (
+        <Chip
+          tone="notice"
+          className="flex-none"
+          onActivate={() => setLayout("4")}
+          activateLabel={`${hiddenPlayingLabel(unseenDecks)}: show 4 decks`}
+        >
+          {hiddenPlayingLabel(unseenDecks)}
+        </Chip>
+      )}
       {mixOpen && <ShortcutHelp />}
       {output !== null ? (
         <Button size="sm" className="flex-none" onClick={() => void useMix.getState().stop()}>

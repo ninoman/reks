@@ -1,4 +1,4 @@
-/** A removable label pill (a tag on a track). `onRemove` adds the × button. */
+/** A label pill (a tag on a track, a notice). `onRemove` adds the × button. */
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 
@@ -7,7 +7,14 @@ import { CloseIcon } from "../icons";
 import { focusRing } from "./control";
 
 export const chipVariants = cva(
-  "inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-surface-strong px-2 text-xs leading-5 text-fg",
+  "inline-flex max-w-full items-center gap-1 rounded-full border bg-surface-strong px-2 text-xs leading-5 text-fg",
+  {
+    variants: {
+      // `notice`: something off screen needs a look (a deck playing unseen).
+      tone: { neutral: "border-border", notice: "border-warning" },
+    },
+    defaultVariants: { tone: "neutral" },
+  },
 );
 
 export type ChipProps = ComponentProps<"span"> &
@@ -22,6 +29,7 @@ export type ChipProps = ComponentProps<"span"> &
 
 export function Chip({
   className,
+  tone,
   onRemove,
   removeLabel,
   onActivate,
@@ -30,7 +38,7 @@ export function Chip({
   ...props
 }: ChipProps) {
   return (
-    <span className={cn(chipVariants(), className)} {...props}>
+    <span className={cn(chipVariants({ tone }), className)} {...props}>
       {onActivate === undefined ? (
         <span className="truncate">{children}</span>
       ) : (

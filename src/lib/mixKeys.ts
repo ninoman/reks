@@ -19,7 +19,9 @@
  * | loop on/off at the last loop size | Shift F / Shift L |
  * | next pad mode | Shift S / Shift J |
  *
- * Pad mode has no rekordbox key; Shift S / J is free there. Crossfader (no
+ * Pad mode has no rekordbox key; Shift S / J is free there. With one deck
+ * shown (the player, deck 2) the left-hand keys work, except those for what
+ * the player deck lacks: SYNC, MASTER and the crossfader. Crossfader (no
  * rekordbox key): X left, C centre, V right (a tenth per press). Waveform
  * zoom (− / +) works with the panel closed too: `keys.ts`.
  */
@@ -87,19 +89,24 @@ export interface KeyPress {
 /** Deck for each hand: `[left, right]`, plain and with Option. */
 const HANDS = { plain: [1, 2], outer: [0, 3] } as const;
 
+/** Actions the solo player deck has no control for. */
+const NOT_ON_PLAYER = new Set<DeckAction["type"]>(["sync", "master"]);
+
 /**
  * The action for a key press, or null. `decks` is how many decks are shown:
- * Option reaches decks 1 and 4 only when four are.
+ * Option reaches decks 1 and 4 only when four are; with one (the player
+ * deck, deck 2) only the left hand's keys work.
  */
 export function mixKeyAction(e: KeyPress, decks: number): MixKeyAction | null {
   const cmd = e.metaKey || e.ctrlKey;
   // Shift and ⌘ together are no layer (⌘ Shift 1–4 clears hot cues in rekordbox).
   if (cmd && e.shiftKey) return null;
   const layer: Layer = cmd ? "Cmd" : e.shiftKey ? "Shift" : "";
-  const step = layer === "" && !e.altKey ? CROSSFADER[e.code] : undefined;
+  const step = layer === "" && !e.altKey && decks > 1 ? CROSSFADER[e.code] : undefined;
   if (step !== undefined) return { type: "crossfader", step };
   const hit = BY_CODE.get(`${layer}+${e.code}`);
   if (hit === undefined || (e.altKey && decks < 4)) return null;
+  if (decks === 1 && (hit.side !== 0 || NOT_ON_PLAYER.has(hit.action.type))) return null;
   return { ...hit.action, deck: HANDS[e.altKey ? "outer" : "plain"][hit.side] ?? 1 };
 }
 
