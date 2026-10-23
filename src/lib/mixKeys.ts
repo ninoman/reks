@@ -107,14 +107,16 @@ const NOT_ON_PLAYER = new Set<DeckAction["type"]>(["sync", "master"]);
 /**
  * The action for a key press, or null. `decks` is how many decks are shown:
  * Option reaches decks 1 and 4 only when four are; with one (the player
- * deck, deck 2) only the left hand's keys work.
+ * deck, deck 2) only the left hand's keys work. `crossfader` is false in the
+ * Simple mixer view, which has no crossfader: X C V do nothing.
  */
-export function mixKeyAction(e: KeyPress, decks: number): MixKeyAction | null {
+export function mixKeyAction(e: KeyPress, decks: number, crossfader = true): MixKeyAction | null {
   const cmd = e.metaKey || e.ctrlKey;
   // Shift and ⌘ together are no layer (⌘ Shift 1–4 clears hot cues in rekordbox).
   if (cmd && e.shiftKey) return null;
   const layer: Layer = cmd ? "Cmd" : e.shiftKey ? "Shift" : "";
-  const step = layer === "" && !e.altKey && decks > 1 ? CROSSFADER[e.code] : undefined;
+  const step =
+    crossfader && layer === "" && !e.altKey && decks > 1 ? CROSSFADER[e.code] : undefined;
   if (step !== undefined) return { type: "crossfader", step };
   const hit = BY_CODE.get(`${layer}+${e.code}`);
   if (hit === undefined || (e.altKey && decks < 4)) return null;

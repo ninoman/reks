@@ -2,6 +2,7 @@
  * Master and headphone cue: master level and meter, cue level, cue/mix
  * balance, split cue and post-EQ cue.
  */
+import { cn } from "../../lib/cn";
 import type { MasterValues } from "../../store/mix";
 import { Button } from "../ui/Button";
 import { Caption } from "../ui/Caption";
@@ -10,14 +11,19 @@ import { LiveMeter } from "./LiveMeter";
 
 export interface MasterSectionProps {
   values: MasterValues;
+  /** The Simple mixer is shorter: tighter gaps, and the meter takes the height that is left, without its dB labels. */
+  compact: boolean;
   onChange: <K extends keyof MasterValues>(param: K, value: MasterValues[K]) => void;
 }
 
-export function MasterSection({ values, onChange }: MasterSectionProps) {
+export function MasterSection({ values, compact, onChange }: MasterSectionProps) {
   return (
     <section
       aria-label="Master"
-      className="ml-1 flex w-(--mixer-strip-w) flex-col items-center gap-1 border-l border-border-subtle pl-1"
+      className={cn(
+        "ml-1 flex w-(--mixer-strip-w) flex-col items-center border-border-subtle border-l pl-1",
+        compact ? "gap-0.5" : "gap-1",
+      )}
     >
       <Caption tone="default">Master</Caption>
       <LabelledKnob
@@ -27,8 +33,13 @@ export function MasterSection({ values, onChange }: MasterSectionProps) {
         onValueChange={(v) => onChange("level", v)}
         aria-label="Master level"
       />
-      <LiveMeter source="master" aria-label="Master meter" />
-      <Caption tone="default" className="mt-1">
+      <LiveMeter
+        source="master"
+        aria-label="Master meter"
+        labels={!compact}
+        className={cn(compact && "h-auto min-h-(--meter-min-h) flex-1")}
+      />
+      <Caption tone="default" className={compact ? undefined : "mt-1"}>
         Cue
       </Caption>
       <LabelledKnob

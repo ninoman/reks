@@ -4,6 +4,7 @@ import type { CueRouting, DeckView, MixState } from "./ipc";
 import {
   cueFits,
   deckSide,
+  effectiveMix,
   formatBeats,
   formatClock,
   formatLoopBeats,
@@ -15,6 +16,8 @@ import {
   LOOP_SIZE_MIN,
   loopBlockState,
   loopPadControls,
+  mixerParts,
+  mixerSize,
   nextPadMode,
   nextTempoRange,
   outputSummary,
@@ -302,5 +305,63 @@ describe("loopBlockState", () => {
     );
     expect(s).toMatchObject({ loopEnabled: true, resizeEnabled: true });
     expect(s.size).toEqual({ text: "1.25s", dimmed: false });
+  });
+});
+
+describe("effectiveMix", () => {
+  const values = {
+    channels: [0, 1, 2, 3].map(() => ({
+      filterAssign: "off" as const,
+      xfadeAssign: "y" as const,
+      fader: 0.3,
+    })),
+    filters: { x: { on: true, freq: 0.2 }, y: { on: true, freq: 0.8 } },
+  };
+
+  it("passes Advanced through, whatever the filters setting", () => {
+    expect(effectiveMix(values, { view: "advanced", filters: "hide" })).toEqual(values);
+  });
+
+  it("Simple: default filter assigns and THRU, filters as they are", () => {
+    const e = effectiveMix(values, { view: "simple", filters: "show" });
+    expect(e.channels.map((c) => c.filterAssign)).toEqual(["x", "x", "y", "y"]);
+    expect(e.channels.map((c) => c.xfadeAssign)).toEqual(["off", "off", "off", "off"]);
+    expect(e.channels.map((c) => c.fader)).toEqual([0.3, 0.3, 0.3, 0.3]);
+    expect(e.filters).toBe(values.filters);
+  });
+
+  it("Simple with the filters hidden: both units off, their other values kept", () => {
+    const e = effectiveMix(values, { view: "simple", filters: "hide" });
+    expect(e.filters.x).toEqual({ on: false, freq: 0.2 });
+    expect(e.filters.y).toEqual({ on: false, freq: 0.8 });
+  });
+
+  it("leaves the stored values alone", () => {
+    effectiveMix(values, { view: "simple", filters: "hide" });
+    expect(values.channels[0]?.xfadeAssign).toBe("y");
+    expect(values.filters.x.on).toBe(true);
+  });
+});
+
+describe("mixer parts and size", () => {
+  it("shows the assign rows and crossfader in Advanced only; the filter row unless hidden in Simple", () => {
+    expect(mixerParts({ view: "advanced", filters: "hide" })).toEqual({
+      assigns: true,
+      filterRow: true,
+    });
+    expect(mixerParts({ view: "simple", filters: "show" })).toEqual({
+      assigns: false,
+      filterRow: true,
+    });
+    expect(mixerParts({ view: "simple", filters: "hide" })).toEqual({
+      assigns: false,
+      filterRow: false,
+    });
+  });
+
+  it("names the height class", () => {
+    expect(mixerSize({ view: "advanced", filters: "hide" })).toBe("advanced");
+    expect(mixerSize({ view: "simple", filters: "show" })).toBe("simple");
+    expect(mixerSize({ view: "simple", filters: "hide" })).toBe("simple-bare");
   });
 });

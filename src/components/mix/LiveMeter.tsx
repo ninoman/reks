@@ -7,6 +7,7 @@ export interface LiveMeterProps {
   source: number | "master";
   /** Draw the dB labels beside the LEDs. */
   labels?: boolean;
+  className?: string;
   "aria-label": string;
 }
 

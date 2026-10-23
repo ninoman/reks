@@ -1,11 +1,15 @@
 /** The Mix panel's keyboard shortcuts, in a popover (the keys are `lib/mixKeys`, rekordbox's layout). */
 import { WAVE_ZOOM_KEY } from "../../lib/keys";
 import { crossfaderKeyHint, deckKeysHelp } from "../../lib/mixKeys";
+import { mixerParts } from "../../lib/mixView";
+import { useMix } from "../../store/mix";
 import { Button } from "../ui/Button";
 import { Kbd } from "../ui/Kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/Popover";
 
 /** The deck keys come from `deckKeysHelp`, so the list and the tooltips can't disagree. */
+const CROSSFADER_ROW: [string, string] = [crossfaderKeyHint(), "Crossfader left, centre, right"];
+
 const SHORTCUTS: [string, string][] = [
   [deckKeysHelp([{ type: "cue" }]), "Cue deck 2 / 3 (hold on the cue point to preview)"],
   [deckKeysHelp([{ type: "play" }]), "Play or pause deck 2 / 3"],
@@ -58,7 +62,7 @@ const SHORTCUTS: [string, string][] = [
   ],
   [deckKeysHelp([{ type: "padMode" }]), "Next pad mode"],
   ["⌥ + key", "Same on deck 1 / 4"],
-  [crossfaderKeyHint(), "Crossfader left, centre, right"],
+  CROSSFADER_ROW,
   [
     `${WAVE_ZOOM_KEY.out} / ${WAVE_ZOOM_KEY.in}`,
     "Zoom every deck's waveform out, in (or ⌘/Ctrl + scroll on one)",
@@ -66,6 +70,9 @@ const SHORTCUTS: [string, string][] = [
 ];
 
 export function ShortcutHelp() {
+  // The Simple mixer view has no crossfader, so its keys do nothing.
+  const crossfader = useMix((s) => mixerParts(s.look).assigns);
+  const rows = crossfader ? SHORTCUTS : SHORTCUTS.filter((row) => row !== CROSSFADER_ROW);
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -76,7 +83,7 @@ export function ShortcutHelp() {
       <PopoverContent align="end" className="p-2">
         <table className="text-xs">
           <tbody>
-            {SHORTCUTS.map(([keys, what]) => (
+            {rows.map(([keys, what]) => (
               <tr key={keys}>
                 <td className="py-0.5 pr-3">
                   <Kbd>{keys}</Kbd>

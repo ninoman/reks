@@ -3,6 +3,7 @@
  * HM / LM / LO EQ, filter assign, cue, fader, crossfader assign. Rows
  * line up with `ChannelLegend`, which carries the captions once.
  */
+import { cn } from "../../lib/cn";
 import type { ChannelValues } from "../../store/mix";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -26,6 +27,8 @@ const KNOBS: ["trim" | EqParam, string][] = [
 
 /** Row captions, in strip order (the fader row has none). */
 const STRIP_ROWS = [...KNOBS.map(([, c]) => c), "Filter", "Cue", "", "X-F"];
+/** The rows Simple hides: the filter and crossfader assign switches. */
+const ASSIGN_ROWS = new Set(["Filter", "X-F"]);
 
 const row = "flex h-(--mixer-row-h) items-center justify-center";
 
@@ -34,12 +37,14 @@ export interface ChannelStripProps {
   values: ChannelValues;
   /** The deck on this channel has a track. */
   active: boolean;
+  /** Show the filter and crossfader assign rows (Advanced). */
+  assigns: boolean;
   onChange: <K extends keyof ChannelValues>(param: K, value: ChannelValues[K]) => void;
   /** CUE pressed; `additive` is Shift+click (cue this channel on top of others). */
   onCue: (additive: boolean) => void;
 }
 
-export function ChannelStrip({ ch, values, active, onChange, onCue }: ChannelStripProps) {
+export function ChannelStrip({ ch, values, active, assigns, onChange, onCue }: ChannelStripProps) {
   const n = ch + 1;
   return (
     <section aria-label={`Channel ${n}`} className="flex w-(--mixer-strip-w) flex-col items-center">
@@ -58,13 +63,15 @@ export function ChannelStrip({ ch, values, active, onChange, onCue }: ChannelStr
           />
         </div>
       ))}
-      <div className={row}>
-        <AssignSwitch
-          label={`Channel ${n} filter assign`}
-          value={values.filterAssign}
-          onChange={(v) => onChange("filterAssign", v)}
-        />
-      </div>
+      {assigns && (
+        <div className={row}>
+          <AssignSwitch
+            label={`Channel ${n} filter assign`}
+            value={values.filterAssign}
+            onChange={(v) => onChange("filterAssign", v)}
+          />
+        </div>
+      )}
       <div className={row}>
         <Tooltip content="Shift+click to cue more than one channel">
           <Button
@@ -78,7 +85,7 @@ export function ChannelStrip({ ch, values, active, onChange, onCue }: ChannelStr
           </Button>
         </Tooltip>
       </div>
-      <div className="my-1 flex gap-1.5">
+      <div className={cn("flex gap-1.5", assigns ? "my-1" : "my-0.5")}>
         <Fader
           value={values.fader}
           defaultValue={1}
@@ -87,28 +94,30 @@ export function ChannelStrip({ ch, values, active, onChange, onCue }: ChannelStr
         />
         <LiveMeter source={ch} labels={false} aria-label={`Channel ${n} meter`} />
       </div>
-      <div className={row}>
-        <AssignSwitch
-          label={`Channel ${n} crossfader assign`}
-          value={values.xfadeAssign}
-          onChange={(v) => onChange("xfadeAssign", v)}
-        />
-      </div>
+      {assigns && (
+        <div className={row}>
+          <AssignSwitch
+            label={`Channel ${n} crossfader assign`}
+            value={values.xfadeAssign}
+            onChange={(v) => onChange("xfadeAssign", v)}
+          />
+        </div>
+      )}
     </section>
   );
 }
 
 /** The captions for every strip's rows and the dB scale for their meters, once, on the left. */
-export function ChannelLegend() {
+export function ChannelLegend({ assigns }: { assigns: boolean }) {
   return (
     <div aria-hidden="true" className="flex min-w-0 flex-1 flex-col items-end pr-1">
       {/* The header row: the mixer's settings button sits here. */}
       <span className="h-5" />
-      {STRIP_ROWS.map((caption, i) =>
+      {STRIP_ROWS.filter((caption) => assigns || !ASSIGN_ROWS.has(caption)).map((caption, i) =>
         caption === "" ? (
           // The fader row: the one dB scale, as tall as the fader.
           // biome-ignore lint/suspicious/noArrayIndexKey: fixed rows
-          <MeterScale key={i} className="my-1" />
+          <MeterScale key={i} className={assigns ? "my-1" : "my-0.5"} />
         ) : (
           <Caption key={caption} className="flex h-(--mixer-row-h) items-center">
             {caption}

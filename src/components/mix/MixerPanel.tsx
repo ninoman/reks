@@ -5,7 +5,7 @@
  */
 import type { FilterUnit as Unit } from "../../lib/ipc";
 import { crossfaderKeyHint } from "../../lib/mixKeys";
-import { pickSwitches } from "../../lib/mixView";
+import { type MixerLook, mixerParts, pickSwitches } from "../../lib/mixView";
 import type { ChannelValues, FilterValues, MasterValues } from "../../store/mix";
 import { useSettings } from "../../store/settings";
 import { GearIcon } from "../icons";
@@ -25,6 +25,7 @@ export interface MixerPanelProps {
   filters: Record<Unit, FilterValues>;
   crossfader: { pos: number; curve: number };
   master: MasterValues;
+  look: MixerLook;
   onChannel: <K extends keyof ChannelValues>(ch: number, param: K, value: ChannelValues[K]) => void;
   onFilter: <K extends keyof FilterValues>(unit: Unit, param: K, value: FilterValues[K]) => void;
   onCrossfader: (patch: Partial<{ pos: number; curve: number }>) => void;
@@ -39,6 +40,7 @@ export function MixerPanel(p: MixerPanelProps) {
       if (on !== was[i]) p.onChannel(i, "cue", on);
     });
   };
+  const parts = mixerParts(p.look);
   return (
     <section
       aria-label="Mixer"
@@ -53,7 +55,7 @@ export function MixerPanel(p: MixerPanelProps) {
         >
           <GearIcon size={14} />
         </IconButton>
-        <ChannelLegend />
+        <ChannelLegend assigns={parts.assigns} />
         {p.channels.map((values, ch) => (
           <ChannelStrip
             // biome-ignore lint/suspicious/noArrayIndexKey: channels are fixed slots
@@ -61,38 +63,43 @@ export function MixerPanel(p: MixerPanelProps) {
             ch={ch}
             values={values}
             active={p.active[ch] ?? false}
+            assigns={parts.assigns}
             onChange={(param, value) => p.onChannel(ch, param, value)}
             onCue={(additive) => cue(ch, additive)}
           />
         ))}
-        <MasterSection values={p.master} onChange={p.onMaster} />
+        <MasterSection values={p.master} compact={!parts.assigns} onChange={p.onMaster} />
       </div>
-      <div className="flex justify-between border-t border-border-subtle pt-1">
-        <FilterUnit unit="x" values={p.filters.x} onChange={(k, v) => p.onFilter("x", k, v)} />
-        <FilterUnit unit="y" values={p.filters.y} onChange={(k, v) => p.onFilter("y", k, v)} />
-      </div>
-      <div className="flex h-(--mixer-row-h) items-center gap-1">
-        <Caption aria-hidden="true">X</Caption>
-        <Tooltip content="Crossfader left, centre, right" shortcut={crossfaderKeyHint()}>
-          <Fader
-            orientation="horizontal"
-            value={p.crossfader.pos}
-            defaultValue={0.5}
-            onValueChange={(pos) => p.onCrossfader({ pos })}
-            aria-label="Crossfader"
+      {parts.filterRow && (
+        <div className="flex justify-between border-t border-border-subtle pt-1">
+          <FilterUnit unit="x" values={p.filters.x} onChange={(k, v) => p.onFilter("x", k, v)} />
+          <FilterUnit unit="y" values={p.filters.y} onChange={(k, v) => p.onFilter("y", k, v)} />
+        </div>
+      )}
+      {parts.assigns && (
+        <div className="flex h-(--mixer-row-h) items-center gap-1">
+          <Caption aria-hidden="true">X</Caption>
+          <Tooltip content="Crossfader left, centre, right" shortcut={crossfaderKeyHint()}>
+            <Fader
+              orientation="horizontal"
+              value={p.crossfader.pos}
+              defaultValue={0.5}
+              onValueChange={(pos) => p.onCrossfader({ pos })}
+              aria-label="Crossfader"
+            />
+          </Tooltip>
+          <Caption aria-hidden="true">Y</Caption>
+          <Caption aria-hidden="true" className="ml-1">
+            Curve
+          </Caption>
+          <Knob
+            size="sm"
+            value={p.crossfader.curve}
+            onValueChange={(curve) => p.onCrossfader({ curve })}
+            aria-label="Crossfader curve"
           />
-        </Tooltip>
-        <Caption aria-hidden="true">Y</Caption>
-        <Caption aria-hidden="true" className="ml-1">
-          Curve
-        </Caption>
-        <Knob
-          size="sm"
-          value={p.crossfader.curve}
-          onValueChange={(curve) => p.onCrossfader({ curve })}
-          aria-label="Crossfader curve"
-        />
-      </div>
+        </div>
+      )}
     </section>
   );
 }

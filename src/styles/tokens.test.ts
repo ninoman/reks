@@ -28,8 +28,13 @@ describe("tokens.css mirrors", () => {
   });
 
   it("sizes the decks and the panel from the mixer and the library", () => {
-    // #46 changes --mixer-h per view; the 2-deck decks must follow it.
     expect(token("--deck-h")).toBe("var(--mixer-h)");
+    expect(token("--mixer-h-advanced")).toBe("440px");
+    expect(token("--mixer-h-simple")).toBe("356px");
+    expect(token("--mixer-h-simple-bare")).toBe("292px");
+    // --deck-h is a var() on :root, so each view that sets --mixer-h sets it again.
+    expect(css).toMatch(/\[data-mixer="simple"\] \{[^}]*--deck-h: var\(--mixer-h\)/);
+    expect(css).toMatch(/\[data-mixer="simple-bare"\] \{[^}]*--deck-h: var\(--mixer-h\)/);
     expect(token("--mix-panel-max-h")).toContain("var(--library-min-h)");
     expect(token("--library-min-h")).toBe("246px");
   });
