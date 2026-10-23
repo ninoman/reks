@@ -69,7 +69,7 @@ export default function App() {
   const stickListOpen = useDeviceBrowser((s) => s.open !== null);
   const mixOpen = usePanels((s) => s.mixOpen);
   const rulesOpen = useRules((s) => s.open);
-  useMixShortcuts(mixOpen);
+  useMixShortcuts();
 
   useEffect(() => {
     dismissSplash();

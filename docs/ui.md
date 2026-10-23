@@ -144,7 +144,7 @@ menu items `--menu-item-h`.
 | `Slider` | `size`: sm, md; one value | Radix Slider |
 | `SegmentedControl` + `Segment` | `size`; `variant`: default, control (chosen segment lit), outline (chosen segment ringed in `accent`, no fill: mode tabs); one choice, can't be cleared (radiogroup); segment corners nest inside the outer radius (`--seg-r`) | Radix ToggleGroup |
 | `Tabs` + `TabsList`, `TabsTrigger`, `TabsContent` | `orientation`: horizontal, vertical (a sidebar, Settings); chosen tab in the `selected` tint; arrow keys move between tabs | Radix Tabs |
-| `Chip` | removable label pill (`onRemove`, `removeLabel`) | – |
+| `Chip` | label pill (`onRemove`, `removeLabel`; `onActivate` makes it a button); `tone`: neutral, notice | – |
 | `Toast` | bottom-centre message with an optional action (Undo); one at a time via `store/toasts` + `ToastHost` | – |
 | `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |
 | `Kbd` | `variant`: default, inverse | – |
@@ -224,7 +224,9 @@ rekordbox and Traktor (2026-10-22; it was along the bottom):
   the audio output…", "Audio output off", or the error (failed start, lost
   device; `role="alert"`, the only place errors show). **Start output** /
   **Stop output** (loading a track starts it too). With the Mix panel open,
-  **Shortcuts**. Then volume (`MixControl::Volume`, saved as
+  **Shortcuts**. A deck that plays out of sight (decks 1/4 with two shown,
+  1/3/4 with one) adds a `notice` `Chip`, "Deck 1 playing" (`lib/mixHidden`,
+  from the engine state); a click shows 4 decks. Then volume (`MixControl::Volume`, saved as
   `ui.state.volume`) and output device.
 - How the output opens is in Settings → Playback (`OutputSettings`), each
   saved: output device (`audio.device`), sample rate (`audio.sample_rate`;
@@ -238,7 +240,12 @@ rekordbox and Traktor (2026-10-22; it was along the bottom):
   `solo` (no MASTER, SYNC, phase meter or mixer keys), laid out flat (see
   **Solo** under [Deck layout](#deck-layout-task-16)), with the deck's
   waveforms, cue, pads, nudge, quantise and tempo fader. Empty, it says to
-  double-click a track or drag one onto it. With 2 or 4 decks the Mix panel
+  double-click a track or drag one onto it. When channel 2 or the master is
+  off its default (fader, EQ, trim, an assigned filter that is on, master
+  level), a `notice` chip in the deck's header names the first ("Channel 2
+  EQ not flat", "+N" for more; `store/mixDeviations`); a click opens 2
+  decks. The deck-2 (left-hand) keys work here too, except SYNC, MASTER and
+  the crossfader ([`mixKeys.ts`](../src/lib/mixKeys.ts)). With 2 or 4 decks the Mix panel
   takes its place and shows the same deck among the others; "Load to deck N"
   in the table opens it.
 - Double-click or Enter on a row, and double-click in a history session or

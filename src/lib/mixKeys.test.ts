@@ -17,6 +17,29 @@ const key = (code: string, mods: Partial<KeyPress> = {}): KeyPress => ({
   ...mods,
 });
 
+describe("mixKeyAction with one deck (the player)", () => {
+  it("plays the left-hand keys on deck 2", () => {
+    expect(mixKeyAction(key("KeyZ"), 1)).toEqual({ type: "play", deck: 1 });
+    expect(mixKeyAction(key("KeyA"), 1)).toEqual({ type: "cue", deck: 1 });
+    expect(mixKeyAction(key("Digit3"), 1)).toEqual({ type: "hotCue", slot: 2, deck: 1 });
+    expect(mixKeyAction(key("KeyF", { shiftKey: true }), 1)).toEqual({ type: "loop", deck: 1 });
+    expect(mixKeyAction(key("KeyR", { metaKey: true }), 1)).toEqual({
+      type: "jump",
+      dir: -1,
+      deck: 1,
+    });
+  });
+
+  it("ignores the right hand, Option, sync, master and the crossfader", () => {
+    expect(mixKeyAction(key("KeyN"), 1)).toBeNull();
+    expect(mixKeyAction(key("Digit8"), 1)).toBeNull();
+    expect(mixKeyAction(key("KeyA", { altKey: true }), 1)).toBeNull();
+    expect(mixKeyAction(key("KeyQ"), 1)).toBeNull();
+    expect(mixKeyAction(key("KeyQ", { shiftKey: true }), 1)).toBeNull();
+    expect(mixKeyAction(key("KeyX"), 1)).toBeNull();
+  });
+});
+
 describe("mixKeyAction", () => {
   it("maps each hand to its deck, as rekordbox's default keys", () => {
     expect(mixKeyAction(key("KeyA"), 2)).toEqual({ type: "cue", deck: 1 });

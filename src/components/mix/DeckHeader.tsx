@@ -3,6 +3,8 @@
  * hover or focus), title and artist, key (a readout, KEY under it), BPM (double-click to type one)
  * with the tempo under it, and remaining over elapsed time.
  */
+import type { ReactNode } from "react";
+
 import { cn } from "../../lib/cn";
 import { formatClock, formatTempo } from "../../lib/mixView";
 import type { DeckTrack, TrackRef } from "../../store/mix";
@@ -28,6 +30,8 @@ export interface DeckHeaderProps {
   durationMs: number;
   onBpm: (bpm: number) => void;
   onEject: () => void;
+  /** Extra content between the title and the key readout. */
+  notice?: ReactNode;
 }
 
 export function DeckHeader({
@@ -43,6 +47,7 @@ export function DeckHeader({
   durationMs,
   onBpm,
   onEject,
+  notice,
 }: DeckHeaderProps) {
   const n = deck + 1;
   const shown = track ?? loading;
@@ -82,6 +87,7 @@ export function DeckHeader({
           {shown === null ? `Deck ${n}` : (shown.artist ?? "")}
         </span>
       </div>
+      {notice}
       {/* A readout like BPM and time, not a pill: it can't be pressed. */}
       <div className="flex min-w-8 shrink-0 flex-col items-end gap-0.5 font-mono tabular-nums">
         <span

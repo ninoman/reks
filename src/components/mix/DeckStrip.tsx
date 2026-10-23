@@ -10,7 +10,7 @@
  *
  * Layout and state selection only; each row is its own component.
  */
-import { type DragEvent, useState } from "react";
+import { type DragEvent, type ReactNode, useState } from "react";
 
 import { cn } from "../../lib/cn";
 import { zoomSeconds } from "../../lib/deckScroll";
@@ -76,6 +76,8 @@ export interface DeckStripProps {
   phase: number | null;
   /** Shown alone as the player: hides the sync controls. */
   solo?: boolean;
+  /** Shown in the header after the title (the player's "mixer not at default" chip). */
+  notice?: ReactNode;
   actions: DeckActions;
 }
 
@@ -109,6 +111,7 @@ export function DeckStrip({
   keyText,
   phase,
   solo = false,
+  notice,
   actions,
 }: DeckStripProps) {
   const [dropping, setDropping] = useState(false);
@@ -116,7 +119,7 @@ export function DeckStrip({
   const grid = loaded && view?.beat != null;
   const tempo = view?.tempo ?? 1;
   // The player deck alone has no mixer keys; Space plays deck 2 in both.
-  const keyFor = (action: DeckAction) => (solo ? undefined : deckKeyHint(action, deck));
+  const keyFor = (action: DeckAction) => deckKeyHint(action, deck);
   const playKey = [keyFor({ type: "play" }), deck === 1 ? PLAYER_PLAY_KEY.label : undefined]
     .filter((k) => k !== undefined)
     .join(" / ");
@@ -253,6 +256,7 @@ export function DeckStrip({
           durationMs={loaded ? (view?.durationMs ?? 0) : 0}
           onBpm={actions.setBpm}
           onEject={actions.eject}
+          notice={notice}
         />
 
         {solo ? (

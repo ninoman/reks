@@ -579,7 +579,7 @@ updates `ui.md` (and `decisions.md` where noted) and is checked in the dev mock 
 start at once; 21 needs 20; 22 needs nothing; 23 needs 21 and 22; 24 needs
 nothing; 25 needs 22–24.
 
-19. [ ] **Hidden decks and the 1-deck player** ([#40](https://github.com/ninoman/reks/issues/40)) (§2 findings 15–17). UI and
+19. [x] **Hidden decks and the 1-deck player** ([#40](https://github.com/ninoman/reks/issues/40)) (§2 findings 15–17). UI and
     store only.
     - A deck that plays while not shown (decks 1/4 in 2-deck mode, 1/3/4 in
       1-deck mode) shows a chip in the player bar, "Deck 1 playing"; a
@@ -587,11 +587,11 @@ nothing; 25 needs 22–24.
     - 1 deck: a chip in the player deck's header when channel 2 or the
       master is not at its default ("Channel 2 EQ not flat"); a click opens
       2 decks.
-    - Maintainer to confirm in review: the deck-2 (left-hand) keys also
-      work in 1-deck mode (`useMixShortcuts` enabled with the player deck;
-      Space and − / + unchanged).
+    - Maintainer decision, 2026-10-23: the deck-2 (left-hand) keys also
+      work in 1-deck mode (`mixKeyAction(e, 1)`; Space and − / + unchanged),
+      except SYNC, MASTER and the crossfader, which the player deck lacks.
     Tests: `PlayerBar` chip from the engine state, `PlayerDeck` chip from
-    the mixer store, `mixShortcuts` in 1-deck mode if confirmed.
+    the mixer store, `mixKeyAction` in 1-deck mode.
 20. [x] **Engine: manual loops and reloop** ([#41](https://github.com/ninoman/reks/issues/41)) (§5 Engine). `reks-mix`,
     `src-tauri/src/mix.rs`, `ipc.ts`, dev mock; no UI.
     - New controls `LoopIn { deck }`, `LoopOut { deck }`, `Reloop { deck }`;

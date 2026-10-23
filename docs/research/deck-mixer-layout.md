@@ -448,8 +448,9 @@ same layout ([RBK]); none are in use today.
 | Loop ½ · 2× | Shift D · Shift G | Shift K · Shift ; | Halve · Double loop |
 
 Option moves each key to deck 1 / 4, as for the other deck keys.
-`ShortcutHelp`, `ui.md` and the tooltips all read from `mixKeys.ts`, as now. Open question: should the deck-2
-(left-hand) keys work in 1-deck mode too? Finding 17 says they don't today.
+`ShortcutHelp`, `ui.md` and the tooltips all read from `mixKeys.ts`, as now. Decided 2026-10-23: the deck-2
+(left-hand) keys work in 1-deck mode too (finding 17 described them as off),
+except SYNC, MASTER and the crossfader, which the player deck lacks.
 None of these keys conflict with library keys (checked `keys.ts`); the Space
 and − / + rules stay.
 
