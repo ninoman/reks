@@ -521,21 +521,16 @@ describe("DeckStrip quick-loop block", () => {
     expect(btn("Deck 2 loop in").disabled).toBe(false);
   });
 
-  it("pending IN: IN is lit, OUT is on once the head is past it, BEAT's dot marks it", () => {
+  it("pending IN: IN is lit, and OUT is on once the head is past it", () => {
     const a = setup({ view: view({ loopIn: 20_000 }), meta: manual() });
     expect(btn("Deck 2 loop in").getAttribute("aria-pressed")).toBe("true");
     expect(btn("Deck 2 loop out").disabled).toBe(true);
     cleanup();
-    const b = setup({ view: view({ loopIn: 4_000 }), meta: loadedMeta() });
-    expect(tab("In and out, active")).toBeTruthy();
-    fireEvent.click(tab("In and out, active"));
-    cleanup();
-    const c = setup({ view: view({ loopIn: 4_000 }), meta: manual() });
+    const b = setup({ view: view({ loopIn: 4_000 }), meta: manual() });
     expect(btn("Deck 2 loop out").disabled).toBe(false);
     fireEvent.click(btn("Deck 2 loop out"));
-    expect(c.loopOut).toHaveBeenCalledTimes(1);
+    expect(b.loopOut).toHaveBeenCalledTimes(1);
     expect(a.loopOut).not.toHaveBeenCalled();
-    expect(b.setLoopPage).toHaveBeenCalledWith("manual");
   });
 
   it("looping: the size is lit with the loop's length; RELOOP reads EXIT and leaves it", () => {
@@ -543,7 +538,6 @@ describe("DeckStrip quick-loop block", () => {
     const a = setup({ view: looping, meta: loadedMeta({ lastLoop: 8 }) });
     expect(btn("Deck 2 loop").getAttribute("aria-pressed")).toBe("true");
     expect(btn("Deck 2 loop").textContent).toBe("3.87");
-    expect(tab("In and out, active")).toBeTruthy();
     fireEvent.click(btn("Deck 2 loop"));
     expect(a.toggleLoop).toHaveBeenCalledTimes(1);
     cleanup();
@@ -551,7 +545,6 @@ describe("DeckStrip quick-loop block", () => {
     expect(btn("Deck 2 loop out").disabled).toBe(false);
     expect(btn("Deck 2 exit loop").textContent).toBe("EXIT");
     expect(btn("Deck 2 exit loop").getAttribute("aria-pressed")).toBe("true");
-    expect(tab("Beat loop, active")).toBeTruthy();
     fireEvent.click(btn("Deck 2 exit loop"));
     expect(b.reloop).toHaveBeenCalledTimes(1);
   });

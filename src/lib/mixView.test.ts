@@ -273,14 +273,11 @@ describe("loopBlockState", () => {
       false,
     ]);
     expect(s.sizeText).toBe("4");
-    expect(s.pageDot).toBe(false);
   });
 
   it("no grid: IN, OUT and RELOOP work, the size button and the next size do not", () => {
     const pending = loopBlockState(deck({ loopIn: 3_000 }), true, false, 4);
     expect(pending).toMatchObject({ inLit: true, outEnabled: true, loopEnabled: false });
-    // A waiting IN marks the hidden page's tab.
-    expect(pending.pageDot).toBe(true);
     expect(pending.resizeEnabled).toBe(false);
     expect(loopBlockState(deck({ lastLoop: loop }), true, false, 4).reloopEnabled).toBe(true);
   });
@@ -297,14 +294,12 @@ describe("loopBlockState", () => {
     expect(s).toMatchObject({ looping: false, loopEnabled: true, resizeEnabled: true });
     expect(s).toMatchObject({ reloopEnabled: false, outEnabled: false, inLit: false });
     expect(s.sizeText).toBe("1/8");
-    expect(s.pageDot).toBe(false);
   });
 
   it("looping: the size is lit and shows the loop's own length", () => {
     const s = loopBlockState(deck({ loopRegion: { ...loop, beats: 3.87 } }), true, true, 4);
     expect(s).toMatchObject({ looping: true, outEnabled: true, reloopEnabled: true, inLit: false });
     expect(s.sizeText).toBe("3.87");
-    expect(s.pageDot).toBe(true);
   });
 
   it("looping without a grid: seconds, and the loop can still be resized and left", () => {

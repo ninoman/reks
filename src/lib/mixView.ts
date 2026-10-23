@@ -308,8 +308,6 @@ export interface LoopBlockState {
   reloopEnabled: boolean;
   /** The playing loop's length, or the size the size button loops next. */
   sizeText: string;
-  /** The hidden page's tab has a dot: a loop plays or IN waits. */
-  pageDot: boolean;
 }
 
 /** `nextBeats` is `DeckMeta.lastLoop`; `grid` that the engine has one for the track. */
@@ -328,16 +326,14 @@ export function loopBlockState(
       : loop.beats === null
         ? formatLoopSeconds(loop.endMs - loop.startMs)
         : formatLoopBeats(loop.beats);
-  const inLit = loopIn !== null && !looping;
   return {
-    inLit,
+    inLit: loopIn !== null && !looping,
     outEnabled: looping || (loopIn !== null && loopIn < (view?.positionMs ?? 0)),
     resizeEnabled: loaded && (looping || grid),
     looping,
     loopEnabled: loaded && (looping || grid),
     reloopEnabled: looping || (loaded && (view?.lastLoop ?? null) !== null),
     sizeText: text,
-    pageDot: looping || inLit,
   };
 }
 

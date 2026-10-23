@@ -4,8 +4,7 @@
  * page over the two pad rows (`--deck-ctl-rows`), as wide as
  * `--loop-block-w`. BEAT: the size is the loop button (lit while any loop
  * plays), ‹ › halve and double it. IN/OUT: IN and OUT, then RELOOP, which
- * reads EXIT while looping. The hidden page's tab has a dot while a loop
- * plays or IN waits. What can't act yet is disabled, not hidden. IN, OUT and
+ * reads EXIT while looping. What can't act yet is disabled, not hidden. IN, OUT and
  * RELOOP need no grid; the size and ‹ › of the next size do.
  */
 import type { DeckAction } from "../../lib/mixKeys";
@@ -56,20 +55,16 @@ export function LoopBlock({ deck, state, loaded, page, onPage, keyFor, actions }
         disabled={!loaded}
         className="col-span-2 min-w-0"
       >
-        {PAGES.map((p) => {
-          const dot = state.pageDot && p.page !== page;
-          return (
-            <Segment
-              key={p.page}
-              value={p.page}
-              aria-label={dot ? `${p.name}, active` : p.name}
-              className="min-w-0 flex-1 justify-center gap-1 px-1 text-2xs font-semibold"
-            >
-              {p.label}
-              {dot && <span aria-hidden className="size-1 shrink-0 rounded-full bg-current" />}
-            </Segment>
-          );
-        })}
+        {PAGES.map((p) => (
+          <Segment
+            key={p.page}
+            value={p.page}
+            aria-label={p.name}
+            className="min-w-0 flex-1 justify-center px-1 text-2xs font-semibold"
+          >
+            {p.label}
+          </Segment>
+        ))}
       </SegmentedControl>
       {page === "beat" ? (
         <>

@@ -591,8 +591,7 @@ like rekordbox's since task 28 (wireframe
 variant="control"` and the `SegmentedControl` the pad mode tabs use. It is
 `--loop-block-w` wide: BEAT | IN/OUT tabs level with the pad tabs, then one
 page over the two pad rows. The page is kept per deck across loads
-(`DeckMeta.loopPage`, default BEAT). The hidden page's tab has a dot while
-a loop plays or IN waits. Right of the pads on the mixer decks, between the
+(`DeckMeta.loopPage`, default BEAT). Right of the pads on the mixer decks, between the
 waveform and the pads on the player deck.
 
 | Page | Control | Not looping | Looping (lit) |

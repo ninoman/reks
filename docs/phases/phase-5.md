@@ -761,8 +761,7 @@ nothing; 25 needs 22–24.
     2026-10-23). Wireframe: [`wireframes/loop-control.html`](../wireframes/loop-control.html),
     option B. UI only: the engine, IPC and keys don't change.
     - [x] `mixView.ts`: `LoopPage` (`"beat" | "manual"`); `loopBlockState`
-      gives `sizeText` (was `size`, the dimmed readout) and `pageDot` (the
-      hidden tab's dot: a loop plays or IN waits); `loopEnabled` enables
+      gives `sizeText` (was `size`, the dimmed readout); `loopEnabled` enables
       the size button; `looping` lights it and turns RELOOP into EXIT.
     - [x] Store: `DeckMeta.loopPage` (default `"beat"`), kept across loads
       like `padMode` (`DeckPrefs`); `setLoopPage(deck, page)`.
@@ -775,9 +774,9 @@ nothing; 25 needs 22–24.
     - [x] Same `--loop-block-w`, rows level with the pads; checked 2-deck,
       4-deck and the player deck in the dev mock.
     - [x] Docs: [`../ui.md`](../ui.md#quick-loop-task-21).
-    Tests: `mixView.test.ts` (`sizeText`, `pageDot`), `mix.test.ts`
+    Tests: `mixView.test.ts` (`sizeText`), `mix.test.ts`
     (`loopPage` survives an eject), `DeckStrip.test.tsx` (both pages, tabs,
-    size click, EXIT, dots, no grid), `ui.test.tsx` loses the `Readout`
+    size click, EXIT, no grid), `ui.test.tsx` loses the `Readout`
     case. Done 2026-10-23.
 
 ## Acceptance criteria
