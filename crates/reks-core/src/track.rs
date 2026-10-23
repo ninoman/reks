@@ -207,36 +207,36 @@ fn detail(conn: &Connection, id: TrackId) -> Result<TrackDetail> {
             ),
             [id],
             |r| {
-                // Columns 0..=20 are `ROW_COLUMNS`.
-                let artwork_id: Option<ArtworkId> = r.get(38)?;
+                // Columns 0..=21 are `ROW_COLUMNS`.
+                let artwork_id: Option<ArtworkId> = r.get(39)?;
                 let artwork = match artwork_id {
                     Some(id) => Some(ArtworkInfo {
                         id,
-                        mime: r.get(39)?,
-                        width: r.get(40)?,
-                        height: r.get(41)?,
+                        mime: r.get(40)?,
+                        width: r.get(41)?,
+                        height: r.get(42)?,
                     }),
                     None => None,
                 };
                 Ok(Track {
                     row: track_row(r)?,
-                    path: r.get(21)?,
-                    file_size: r.get(22)?,
-                    file_mtime: r.get(23)?,
-                    album_artist: r.get(24)?,
-                    composer: r.get(25)?,
-                    mix: r.get(26)?,
-                    grouping: r.get(27)?,
-                    track_no: r.get(28)?,
-                    disc_no: r.get(29)?,
-                    sample_rate: r.get(30)?,
-                    bit_depth: r.get(31)?,
-                    channels: r.get(32)?,
-                    key_source: r.get(33)?,
-                    bpm_source: r.get(34)?,
-                    rb_track_id: r.get(35)?,
-                    created_at: r.get(36)?,
-                    updated_at: r.get(37)?,
+                    path: r.get(22)?,
+                    file_size: r.get(23)?,
+                    file_mtime: r.get(24)?,
+                    album_artist: r.get(25)?,
+                    composer: r.get(26)?,
+                    mix: r.get(27)?,
+                    grouping: r.get(28)?,
+                    track_no: r.get(29)?,
+                    disc_no: r.get(30)?,
+                    sample_rate: r.get(31)?,
+                    bit_depth: r.get(32)?,
+                    channels: r.get(33)?,
+                    key_source: r.get(34)?,
+                    bpm_source: r.get(35)?,
+                    rb_track_id: r.get(36)?,
+                    created_at: r.get(37)?,
+                    updated_at: r.get(38)?,
                     artwork,
                 })
             },

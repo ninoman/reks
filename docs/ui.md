@@ -494,14 +494,14 @@ Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light g
 **Components** ([`src/components/mix/`](../src/components/mix/)). `MixPanel`
 and `PlayerDeck` stay the only store readers. `DeckStrip` (layout, drop
 target, which state shows) composes one file per part: `DeckHeader`
-(`ArtworkThumb`, `InlineNumber` for the BPM), `DeckWaveform` (both views:
+(`ui/Artwork`, `InlineNumber` for the BPM), `DeckWaveform` (both views:
 they share one animation-frame loop, so the overview is not a file of its
 own) with `DeckWaveformRow` as its overlay (zoom buttons and level,
 `SyncPhase`, the warning line), `DeckSlot` (empty / loading / analysing /
 error), `DeckTransport`, `DeckPads` (`SegmentedControl` tabs,
 Q, `PagePicker`, `Pad` / `SplitPad`), `DeckSyncButtons`, `DeckTempo`; `hold.ts`
 gives CUE and nudge their held handlers. Shared pieces: `ui/Pad.tsx`,
-`ui/InlineNumber.tsx`, `Fader` `detent`, `ArtworkThumb` + `useArtworkUrl`
+`ui/InlineNumber.tsx`, `Fader` `detent`, `ui/Artwork` + `useArtworkUrl`
 (shared with `TrackDetailPanel`), `NudgeDownIcon` / `NudgeUpIcon`. Controls
 with a key show it in their tooltip (`shortcut` from `deckKeyHint()`).
 

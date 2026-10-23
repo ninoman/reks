@@ -147,6 +147,8 @@ pub struct TrackRow {
     pub last_played: Option<String>,
     pub missing: bool,
     pub needs_analysis: bool,
+    /// The picture's id for `artwork_thumb`; `None` without embedded artwork.
+    pub artwork_id: Option<i64>,
     /// The entry's position in a playlist view (one row per entry, so a
     /// track in the playlist twice is two rows); `None` elsewhere.
     pub entry_position: Option<i64>,
@@ -226,7 +228,7 @@ pub(crate) const ROW_COLUMNS: &str =
     "t.id, t.title, t.artist, t.album, t.genre, t.label, t.remixer, \
      t.comment, t.key, t.bpm_x100, t.rating, t.color, t.duration_ms, t.year, t.kind, \
      t.bit_rate_kbps, t.date_added, t.play_count, t.missing, \
-     NOT EXISTS (SELECT 1 FROM beatgrid b WHERE b.track_id = t.id), t.last_played";
+     NOT EXISTS (SELECT 1 FROM beatgrid b WHERE b.track_id = t.id), t.last_played, t.artwork_id";
 
 impl Library {
     /// One page of tracks matching `q`, and the total match count.
@@ -268,7 +270,7 @@ impl Library {
         let mut rows = stmt
             .query_map(params_from_iter(&params), |r| {
                 let mut row = track_row(r)?;
-                row.entry_position = r.get(21)?;
+                row.entry_position = r.get(22)?;
                 Ok(row)
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -365,6 +367,7 @@ pub(crate) fn track_row(r: &Row<'_>) -> rusqlite::Result<TrackRow> {
         missing: r.get(18)?,
         needs_analysis: r.get(19)?,
         last_played: r.get(20)?,
+        artwork_id: r.get(21)?,
         entry_position: None,
         tags: Vec::new(),
     })

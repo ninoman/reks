@@ -73,7 +73,7 @@ export const noFilters: FilterState = {
   tagIds: [],
 };
 
-export const defaultSort: Sort = { column: "title", descending: false };
+export const defaultSort: Sort = { column: "dateAdded", descending: true };
 
 /** Upper BPM bound when only a minimum is set (×100). */
 export const BPM_X100_MAX = 1_000_00;

@@ -101,6 +101,8 @@ export interface TrackRow {
   lastPlayed: string | null;
   missing: boolean;
   needsAnalysis: boolean;
+  /** Picture for `artworkThumb`; null without embedded artwork. */
+  artworkId: number | null;
   /** Position of this entry in a playlist view (one row per entry); null elsewhere. */
   entryPosition: number | null;
   /** My Tags on the track, ordered by category then tag display order. */
@@ -468,6 +470,11 @@ export function libraryTrack(id: number): Promise<TrackDetail> {
 
 export function libraryUpdateTrack(id: number, patch: TrackPatch): Promise<TrackDetail> {
   return invoke("library_update_track", { id, patch });
+}
+
+/** Small JPEG of an artwork for lists (raw `ipc::Response`), cached on disk by the core. */
+export function artworkThumb(id: number): Promise<ArrayBuffer> {
+  return invoke("artwork_thumb", { id });
 }
 
 /** Artwork image bytes (raw `ipc::Response`, not JSON). */

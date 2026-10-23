@@ -31,7 +31,7 @@ describe("buildQuery", () => {
     expect(buildQuery(inputs(), 0)).toEqual({
       text: null,
       filters: [],
-      sort: { column: "title", descending: false },
+      sort: { column: "dateAdded", descending: true },
       offset: 0,
       limit: PAGE_SIZE,
     });

@@ -90,7 +90,7 @@ describe("PlaylistTree", () => {
     expect(useLibrary.getState().sort).toEqual({ column: "playlistPosition", descending: false });
     fireEvent.click(item("Gigs"));
     expect(useLibrary.getState().filters.playlistId).toBe(1);
-    expect(useLibrary.getState().sort.column).toBe("title");
+    expect(useLibrary.getState().sort.column).toBe("dateAdded");
     fireEvent.click(item("Collection"));
     expect(useLibrary.getState().filters.playlistId).toBeNull();
   });
