@@ -40,6 +40,7 @@ const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
     infoOpen: false,
     volume: 1,
     filterFields: null,
+    filterSaveTarget: "filter",
     ...ui,
   },
 });
@@ -125,6 +126,7 @@ describe("settings store", () => {
         infoOpen: true,
         volume: 1,
         filterFields: null,
+        filterSaveTarget: "filter",
       },
     });
     // A change undone before the delay saves nothing.

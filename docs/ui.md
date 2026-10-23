@@ -773,17 +773,37 @@ and loading / error-with-Retry / empty states). All but `RuleBuilder` and
 - **Quick paths** fill rows: a tag chip's label ("Filter by tag X") fills
   that tag's category row; a playlist's "Show tracks not in this playlist"
   fills a Playlist row with None of (`fillRow`). Both open the drawer.
-- **Save as smart playlist…** saves the whole drawer (`createSmart`) and
-  empties it (the rule lives in the playlist now). In the tree a smart list
+- **Saved filters** (D35; list in
+  [`filterPresets.ts`](../src/store/filterPresets.ts), the loaded one in
+  `rules.preset`): `SavedFiltersPicker` under the drawer's title names the
+  loaded one ("Saved filters" when none) and opens a list: a click loads it
+  (the drawer is replaced and filters turn on; an Undo toast brings back a
+  drawer that held something), hovering shows its `summarize` text, each has
+  Rename (in place), Duplicate, Move up / down and Delete (Undo toast
+  re-creates it in its place), rows drag to reorder, a search field from 9
+  on. States: loading, error with Retry, none yet, no match, a rule a newer
+  reks wrote (refused with a toast). A loaded one that no longer matches the
+  drawer shows **edited** and a banner with **Update** (`setRule`) and
+  **Revert**; nothing auto-saves. Clear all unloads it (its Undo loads it
+  again); renamed or deleted elsewhere, the name follows or goes (the rows
+  stay). The toolbar's ▾ next to Filters (or ↓ on the Filters button) lists
+  them too, with Show / Hide filters.
+- **Save…** (`SaveFilterDialog`): a name suggested from the rows
+  (`suggestName`: "Unplayed, 124–130 BPM", 40 characters at most, "My
+  filter" when nothing fits), selected, and **Keep it as** Saved filter /
+  Smart playlist, remembered in settings `ui.filterSaveTarget`. A saved
+  filter whose name is taken (any case) asks first, then Replace overwrites
+  that one; it stays loaded. A smart playlist saves the whole drawer
+  (`createSmart`) and empties it (the rule lives in the playlist now). In the tree a smart list
   has its own icon; with one shown, `SmartListHeader` offers a "Smart" badge,
   "Updates automatically" and **Edit rules**, which fills the drawer with its
   rule (unused default fields empty around it), shows the whole collection
   as a live preview and puts Save rules / Cancel in a banner (`setRule`).
   Dropping tracks on it, "Insert divider" and "Remove from" are refused, with
   the reason beside them. The export wizard marks smart lists and the dry
-  run notes that they are written as fixed lists. Saved filters and one
-  **Save…** come with phase 1 task 9.
-- Dev: `mockSmart.ts` evaluates rules and smart lists like the core.
+  run notes that they are written as fixed lists.
+- Dev: `mockSmart.ts` evaluates rules and smart lists like the core;
+  `mockPresets.ts` keeps saved filters like `filter_preset.rs`.
 
 ## Adding a component or variant
 

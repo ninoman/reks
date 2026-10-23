@@ -76,6 +76,7 @@ export function currentUi(): UiState {
     infoOpen: panels.infoOpen,
     volume: useMix.getState().volume,
     filterFields: useRules.getState().defaultFields,
+    filterSaveTarget: useRules.getState().saveTarget,
   };
 }
 
@@ -88,6 +89,7 @@ function applyUi(ui: UiState, defaultHidden: string[]) {
   usePanels.setState({ filterBarOpen: ui.filterBarOpen, infoOpen: ui.infoOpen });
   useMix.getState().setVolume(ui.volume);
   useRules.getState().setDefaultFields(ui.filterFields ?? null);
+  useRules.getState().setSaveTarget(ui.filterSaveTarget ?? "filter");
 }
 
 export const useSettings = create<SettingsStore>()((set, get) => {
@@ -180,7 +182,10 @@ export function startUiSync(): () => void {
     useLibrary.subscribe(check),
     usePanels.subscribe(check),
     useMix.subscribe((s, prev) => s.volume !== prev.volume && check()),
-    useRules.subscribe((s, prev) => s.defaultFields !== prev.defaultFields && check()),
+    useRules.subscribe(
+      (s, prev) =>
+        (s.defaultFields !== prev.defaultFields || s.saveTarget !== prev.saveTarget) && check(),
+    ),
   ];
   return () => {
     if (timer !== null) clearTimeout(timer);

@@ -12,17 +12,22 @@
  * removed it from this drawer (`dismissed`, until the next fresh drawer).
  *
  * Saving a smart playlist sends `createSmart` / `setRule`; the rule itself is
- * validated by reks-core.
+ * validated by reks-core. A saved filter (D35) loads into the drawer as an
+ * ordinary draft; `preset` remembers which one and its rule as saved, so the
+ * drawer can say it was edited and offer Update / Revert.
  */
 import { create } from "zustand";
 
 import {
+  type FilterPreset,
+  type FilterSaveTarget,
   type PlaylistNode,
   playlistRule,
   type RuleNode,
   type TagId,
   type TagTree,
 } from "../lib/ipc";
+import { useFilterPresets } from "./filterPresets";
 import { useLibrary } from "./library";
 import { usePanels } from "./panels";
 import { usePlaylists } from "./playlists";
@@ -69,6 +74,13 @@ export interface EditingSmart {
   before: GroupDraft;
 }
 
+/** The saved filter in the drawer; `baseline` is its rule as loaded or last saved. */
+export interface LoadedPreset {
+  id: number;
+  name: string;
+  baseline: RuleNode | null;
+}
+
 /** The row that takes focus next; `open` also opens its value picker (a row just added). */
 export interface RowFocus {
   id: string;
@@ -85,6 +97,9 @@ export interface RulesState {
   dismissed: FieldKey[];
   /** The draft of the last result that had tracks ("Undo last change"). */
   lastMatched: GroupDraft | null;
+  preset: LoadedPreset | null;
+  /** What Save… makes; settings `ui.filterSaveTarget`. */
+  saveTarget: FilterSaveTarget;
 
   clearFocus(): void;
   focusRow(id: string): void;
@@ -136,6 +151,23 @@ export interface RulesState {
   saveEdit(): Promise<boolean>;
   /** `createSmart` from the drawer's rule. Resolves `true` when saved. */
   saveAsSmart(name: string): Promise<boolean>;
+  setSaveTarget(target: FilterSaveTarget): void;
+  /**
+   * Replaces the drawer with a saved filter and turns the filters on; an
+   * Undo toast brings back what the drawer held.
+   */
+  loadPreset(preset: FilterPreset): void;
+  /** Saves the drawer as a new saved filter, or over `replace`. Resolves `true` when saved. */
+  savePreset(name: string, replace?: FilterPreset): Promise<boolean>;
+  /** Writes the drawer over the loaded saved filter. */
+  updatePreset(): Promise<boolean>;
+  /** Puts the loaded saved filter back as it was saved. */
+  revertPreset(): void;
+}
+
+/** The loaded saved filter no longer matches the drawer. */
+export function presetEdited(s: Pick<RulesState, "preset" | "root">): boolean {
+  return s.preset !== null && !same(toRule(s.root), s.preset.baseline);
 }
 
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -186,6 +218,8 @@ export const useRules = create<RulesState>()((set, get) => {
     defaultFields: null,
     dismissed: [],
     lastMatched: null,
+    preset: null,
+    saveTarget: "filter",
 
     clearFocus() {
       set({ focus: null });
@@ -276,7 +310,7 @@ export const useRules = create<RulesState>()((set, get) => {
     },
     clear() {
       const before = get().root;
-      set({ dismissed: [] });
+      set({ dismissed: [], preset: null });
       apply(freshRoot(defaults()));
       syncRule(true);
       return before;
@@ -345,19 +379,84 @@ export const useRules = create<RulesState>()((set, get) => {
       useToasts.getState().show(`Saved smart playlist “${name.trim()}”`);
       return true;
     },
+    setSaveTarget(target) {
+      set({ saveTarget: target });
+    },
+    loadPreset(p) {
+      if (p.rule === null) {
+        useToasts.getState().show(`“${p.name}” was saved by a newer reks and can't be read here`);
+        return;
+      }
+      if (get().editing !== null) get().cancelEdit(false);
+      const { root: before, preset: beforePreset } = get();
+      useLibrary.getState().setFiltersEnabled(true);
+      get().restore(fromRule(p.rule, categoryOf));
+      set({ preset: { id: p.id, name: p.name, baseline: toRule(get().root) } });
+      if (isBlank(before)) return;
+      useToasts.getState().show(`Loaded “${p.name}”`, {
+        label: "Undo",
+        run() {
+          useRules.getState().restore(before);
+          useRules.setState({ preset: beforePreset });
+        },
+      });
+    },
+    async savePreset(name, replace) {
+      const rule = toRule(get().root);
+      if (rule === null) return false;
+      const presets = useFilterPresets.getState();
+      const outcome = await presets.mutate(
+        replace === undefined
+          ? { type: "create", name: name.trim(), rule }
+          : { type: "setRule", id: replace.id, rule },
+      );
+      const id = replace?.id ?? outcome?.createdId ?? null;
+      if (outcome === null || id === null) return false;
+      const saved = replace?.name ?? name.trim();
+      set({ preset: { id, name: saved, baseline: rule } });
+      useToasts.getState().show(`Saved filter “${saved}”`);
+      return true;
+    },
+    async updatePreset() {
+      const { preset, root } = get();
+      const rule = toRule(root);
+      if (preset === null || rule === null) return false;
+      const outcome = await useFilterPresets
+        .getState()
+        .mutate({ type: "setRule", id: preset.id, rule });
+      if (outcome === null) return false;
+      set({ preset: { ...preset, baseline: rule } });
+      useToasts.getState().show(`Updated “${preset.name}”`);
+      return true;
+    },
+    revertPreset() {
+      const baseline = get().preset?.baseline ?? null;
+      if (baseline !== null) get().restore(fromRule(baseline, categoryOf));
+    },
   };
 });
 
 /** Empties the drawer (the shown playlist stays), with one Undo toast. */
 export function clearAllFilters(): void {
+  const preset = useRules.getState().preset;
   const before = useRules.getState().clear();
   useToasts.getState().show("Cleared all filters", {
     label: "Undo",
     run() {
       useRules.getState().restore(before);
+      useRules.setState({ preset });
     },
   });
 }
+
+// A loaded saved filter renamed elsewhere shows its new name; deleted, the drawer keeps its rows.
+useFilterPresets.subscribe((s) => {
+  const loaded = useRules.getState().preset;
+  if (loaded === null) return;
+  const now = s.presets.find((p) => p.id === loaded.id);
+  if (now === undefined) useRules.setState({ preset: null });
+  else if (now.name !== loaded.name) useRules.setState({ preset: { ...loaded, name: now.name } });
+});
 
 // Leaving a smart playlist's edit for another list ends it; the Collection is the edit's own view.
 usePlaylists.subscribe((s, prev) => {

@@ -119,9 +119,7 @@ describe("FilterDrawer", () => {
       "Genre (My Tags) filter",
     ]);
     expect(screen.getByRole("button", { name: "Clear all" }).hasAttribute("disabled")).toBe(true);
-    expect(
-      screen.getByRole("button", { name: "Save as smart playlist…" }).hasAttribute("disabled"),
-    ).toBe(true);
+    expect(screen.getByRole("button", { name: "Save…" }).hasAttribute("disabled")).toBe(true);
     expect(screen.queryByText(/tracks?$/)).toBeNull();
     expect(screen.getAllByRole("button", { name: "Match any of these instead" })).toHaveLength(4);
   });

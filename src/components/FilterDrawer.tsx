@@ -5,17 +5,19 @@
  * connector or Or… says "or" (`RuleBuilder`). It narrows whatever the tree
  * shows. The on/off switch lives in the toolbar next to that button, so it
  * works with the drawer hidden. Escape closes the drawer; `/` (outside a text
- * field) opens Add filter.
+ * field) opens Add filter. Under the title: the saved filters and Clear all;
+ * at the bottom one Save… (saved filter or smart playlist).
  */
 import { type ReactNode, useState } from "react";
 
 import { cn } from "../lib/cn";
 import { useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
-import { clearAllFilters, useRules } from "../store/rules";
+import { clearAllFilters, presetEdited, useRules } from "../store/rules";
 import { activeRowCount, isBlank, toRule } from "../store/ruleTree";
 import { RuleBuilder } from "./RuleBuilder";
-import { SaveSmartDialog } from "./SaveSmartDialog";
+import { SavedFiltersPicker } from "./SavedFiltersPicker";
+import { SaveFilterDialog } from "./SaveFilterDialog";
 import { Button } from "./ui/Button";
 import { ScrollArea } from "./ui/ScrollArea";
 import { SheetHeader } from "./ui/Sheet";
@@ -60,6 +62,8 @@ export function FilterDrawer() {
   const setEnabled = useLibrary((s) => s.setFiltersEnabled);
   const close = usePanels((s) => s.toggleFilterBar);
   const [saveOpen, setSaveOpen] = useState(false);
+  const preset = useRules((s) => s.preset);
+  const edited = useRules(presetEdited);
 
   const finished = toRule(root) !== null;
   const kept = activeRowCount(root);
@@ -88,11 +92,30 @@ export function FilterDrawer() {
       <div className="px-3 pt-2">
         <SheetHeader title="Filters" closeLabel="Close Filters" onClose={close} />
       </div>
-      <div className="flex items-center justify-end px-3">
+      <div className="flex items-center justify-between gap-2 px-3">
+        {editing === null ? <SavedFiltersPicker /> : <span />}
         <Button size="sm" variant="link" disabled={isBlank(root)} onClick={clearAllFilters}>
           Clear all
         </Button>
       </div>
+      {editing === null && preset !== null && edited && (
+        <Banner>
+          <span>Changed since you saved it.</span>
+          <span className="flex gap-1.5">
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={!finished}
+              onClick={() => void useRules.getState().updatePreset()}
+            >
+              Update
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => useRules.getState().revertPreset()}>
+              Revert
+            </Button>
+          </span>
+        </Banner>
+      )}
 
       {editing !== null && (
         <Banner>
@@ -138,19 +161,21 @@ export function FilterDrawer() {
       {editing === null && (
         <div className="flex items-center gap-2 border-t border-border px-3 py-2">
           <Tooltip
-            content={finished ? "Keep these filters as a playlist" : "Set a filter first"}
+            content={
+              finished ? "Keep these filters as a saved filter or a playlist" : "Set a filter first"
+            }
             side="top"
           >
             {/* A span keeps the tooltip working while the button is disabled. */}
             <span>
               <Button size="sm" disabled={!finished} onClick={() => setSaveOpen(true)}>
-                Save as smart playlist…
+                Save…
               </Button>
             </span>
           </Tooltip>
         </div>
       )}
-      <SaveSmartDialog open={saveOpen} onOpenChange={setSaveOpen} />
+      <SaveFilterDialog open={saveOpen} onOpenChange={setSaveOpen} />
     </aside>
   );
 }

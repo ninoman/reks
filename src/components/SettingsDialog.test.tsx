@@ -46,6 +46,7 @@ const settings: Settings = {
     infoOpen: false,
     volume: 1,
     filterFields: null,
+    filterSaveTarget: "filter",
   },
 };
 const roots: LibraryRoot[] = [

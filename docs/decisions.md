@@ -1170,7 +1170,9 @@ Date of decisions: 2026-10-18.
     duplicate as "<name> copy" after the original, delete, move). Tag and
     playlist ids are kept as saved, as in smart lists: a deleted one still
     loads and matches no track, and the UI shows its row unfinished. A rule
-    that does not parse lists with `rule: null`.
+    that does not parse lists with `rule: null`. UI: the Save… choice is
+    remembered in `UiState.filter_save_target`; reordering is drag, or Move
+    up / down in each one's menu for the keyboard.
   - **Last played** is "never" or "since a date". The form's relative "last
     30 / 90 / 365 days" goes, and no relative filter is added to the core.
 - Rejected: a query as chips (every edit is a popover); Notion-style

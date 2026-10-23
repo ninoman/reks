@@ -110,7 +110,8 @@ describe("RuleBuilder", () => {
     render(<FilterDrawer />);
     pickGenre();
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Escape" });
-    fireEvent.click(await screen.findByRole("button", { name: "Save as smart playlist…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save…" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Smart playlist" }));
     fireEvent.change(await screen.findByRole("textbox", { name: "Name" }), {
       target: { value: "House only" },
     });
@@ -142,7 +143,7 @@ describe("RuleBuilder", () => {
     const playlist = screen.getByRole("group", { name: "Playlist filter" });
     expect(within(playlist).getByText("not")).toBeTruthy();
     expect(screen.getByRole("group", { name: "BPM filter" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Save as smart playlist…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save…" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Save rules" }));
     await waitFor(() =>

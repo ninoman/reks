@@ -533,6 +533,37 @@ export interface TagOutcome {
   changed: number;
 }
 
+/** A saved filter (D35, `filter_preset.rs`); `rule` is `null` when it doesn't parse. */
+export interface FilterPreset {
+  id: number;
+  name: string;
+  rule: RuleNode | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A saved-filter edit. `position` is an index in the list as it is now (`null` = last). */
+export type FilterPresetOp =
+  | { type: "create"; name: string; rule: RuleNode; position?: number | null }
+  | { type: "rename"; id: number; name: string }
+  | { type: "setRule"; id: number; rule: RuleNode }
+  | { type: "duplicate"; id: number }
+  | { type: "delete"; id: number }
+  | { type: "move"; id: number; position: number };
+
+export interface FilterPresetOutcome {
+  /** The new preset, for create and duplicate. */
+  createdId: number | null;
+}
+
+export function filterPresetsGet(): Promise<FilterPreset[]> {
+  return invoke("filter_presets_get");
+}
+
+export function filterPresetsMutate(op: FilterPresetOp): Promise<FilterPresetOutcome> {
+  return invoke("filter_presets_mutate", { op });
+}
+
 export function tagsGet(): Promise<TagTree> {
   return invoke("tags_get");
 }
@@ -928,7 +959,12 @@ export interface UiState {
    * `null` until changed: BPM, Key, Genre, Rating and the first My Tags category.
    */
   filterFields: string[] | null;
+  /** What the Filters drawer's Save… makes, as last chosen. */
+  filterSaveTarget: FilterSaveTarget;
 }
+
+/** A saved filter (in the drawer) or a smart playlist (in the tree). */
+export type FilterSaveTarget = "filter" | "smart";
 
 export interface Settings {
   /** `null`: the system default. */

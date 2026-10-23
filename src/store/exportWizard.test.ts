@@ -269,6 +269,7 @@ describe("useExportWizard", () => {
         infoOpen: false,
         volume: 1,
         filterFields: null,
+        filterSaveTarget: "filter",
       },
       anlzPreference: "reksFirst",
       onelibraryKeyBuiltin: false,

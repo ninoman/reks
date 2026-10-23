@@ -1,46 +1,87 @@
 /**
  * List toolbar above the track table: search, the Filters button (shows the
- * Filters drawer; badge = rows that filter, tooltip = what they say) with the
- * on/off switch while any is set,
+ * Filters drawer; badge = rows that filter, tooltip = what they say) and its
+ * saved-filters menu (↓ on the button opens it), the on/off switch while any
+ * is set,
  * track count, background analysis progress, column chooser, and the Track
  * info button. Library-wide actions (scan, import) live in the app header.
  */
-import { useMemo } from "react";
+import { useState } from "react";
 
+import { useFilterPresets } from "../store/filterPresets";
 import { useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
-import { usePlaylists } from "../store/playlists";
 import { useRules } from "../store/rules";
-import { activeRowCount, type SummaryNames, summarize } from "../store/ruleTree";
-import { useKeyLabel } from "../store/settings";
-import { tagIndex } from "../store/tagModel";
+import { activeRowCount, summarize } from "../store/ruleTree";
 import { useTags } from "../store/tags";
 import { AnalysisIndicator } from "./AnalysisIndicator";
 import { ColumnChooser } from "./ColumnChooser";
 import { FiltersSwitch } from "./FilterDrawer";
-import { FilterIcon, InfoIcon, TagIcon } from "./icons";
+import { ChevronDownIcon, FilterIcon, InfoIcon, TagIcon } from "./icons";
 import { SearchBox } from "./SearchBox";
 import type { TrackTableModel } from "./trackTableModel";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/DropdownMenu";
 import { IconButton } from "./ui/IconButton";
 import { Separator } from "./ui/Separator";
 import { Tooltip } from "./ui/Tooltip";
+import { useSummaryNames } from "./useSummaryNames";
 
-/** Names for the Filters summary, looked up where they live. */
-function useSummaryNames(): SummaryNames {
-  const tree = useTags((s) => s.tree);
-  const nodes = usePlaylists((s) => s.nodes);
-  const keyLabel = useKeyLabel();
-  return useMemo(() => {
-    const tags = tree === null ? null : tagIndex(tree);
-    return {
-      tag: (id) => tags?.get(id)?.tag.name ?? `tag ${id}`,
-      category: (id) => tree?.categories.find((c) => c.id === id)?.name ?? "tag",
-      playlist: (id) => nodes.find((n) => n.id === id)?.name ?? `playlist ${id}`,
-      key: keyLabel,
-    };
-  }, [tree, nodes, keyLabel]);
+/** The Filters button's ▾: load a saved filter with the drawer closed (D35, S4). */
+function SavedFiltersMenu({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const presets = useFilterPresets((s) => s.presets);
+  const status = useFilterPresets((s) => s.status);
+  const loaded = useRules((s) => s.preset);
+  const { filterBarOpen, toggleFilterBar } = usePanels();
+  return (
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <IconButton size="sm" aria-label="Saved filters" className="-ml-1.5">
+          <ChevronDownIcon />
+        </IconButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {status === "loading" && (
+          <DropdownMenuItem disabled>Loading saved filters…</DropdownMenuItem>
+        )}
+        {status === "error" && (
+          <DropdownMenuItem onSelect={() => void useFilterPresets.getState().load()}>
+            Couldn't load saved filters · Retry
+          </DropdownMenuItem>
+        )}
+        {status === "ready" && presets.length === 0 && (
+          <DropdownMenuItem disabled>No saved filters yet</DropdownMenuItem>
+        )}
+        {presets.map((p) => (
+          <DropdownMenuCheckboxItem
+            key={p.id}
+            checked={loaded?.id === p.id}
+            onSelect={() => useRules.getState().loadPreset(p)}
+          >
+            {p.name}
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={toggleFilterBar}>
+          {filterBarOpen ? "Hide filters" : "Show filters"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export function LibraryToolbar({ table }: { table: TrackTableModel }) {
@@ -52,6 +93,7 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
   const summary = summarize(root, useSummaryNames());
   const filtersEnabled = useLibrary((s) => s.filtersEnabled);
   const { filterBarOpen, infoOpen, toggleFilterBar, toggleInfo } = usePanels();
+  const [savedOpen, setSavedOpen] = useState(false);
   const tagsOpen = useTags((s) => s.managerOpen);
   // The tag drawer covers the info panel: the info button brings info to the front first.
   const infoShown = infoOpen && !tagsOpen;
@@ -71,7 +113,19 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
           </>
         }
       >
-        <Button size="sm" variant="ghost" aria-pressed={filterBarOpen} onClick={toggleFilterBar}>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-pressed={filterBarOpen}
+          aria-keyshortcuts="ArrowDown"
+          onClick={toggleFilterBar}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setSavedOpen(true);
+            }
+          }}
+        >
           <FilterIcon />
           Filters
           {activeFilters > 0 && (
@@ -84,6 +138,7 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
           )}
         </Button>
       </Tooltip>
+      <SavedFiltersMenu open={savedOpen} onOpenChange={setSavedOpen} />
       {activeFilters > 0 && <FiltersSwitch />}
       <span className="whitespace-nowrap text-xs text-fg-muted tabular-nums">
         {total.toLocaleString()} tracks
