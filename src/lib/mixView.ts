@@ -15,9 +15,9 @@ export type TempoRange = (typeof TEMPO_RANGES)[number];
 /** ±10%, the CDJ default. */
 export const DEFAULT_TEMPO_RANGE: TempoRange = 0.1;
 
-const RANGE_LABEL: Record<TempoRange, string> = { 0.06: "±6", 0.1: "±10", 0.16: "±16", 1: "WIDE" };
+const RANGE_LABEL: Record<TempoRange, string> = { 0.06: "±6", 0.1: "±10", 0.16: "±16", 1: "W" };
 
-/** `±6`, `±10`, `±16`, `WIDE`. */
+/** `±6`, `±10`, `±16`, `W` (WIDE). */
 export function tempoRangeLabel(r: TempoRange): string {
   return RANGE_LABEL[r];
 }
