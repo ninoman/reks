@@ -197,12 +197,15 @@ td .del { color: var(--gone); }
 .settings .alt { border-top: 1px dashed var(--line); padding-top: 10px; }
 .settings .hint { font-size: 12px; color: var(--ink-2); }
 
-/* Revision 2: effect select + PARAMETER (legend column), 4-deck frames. */
+/* Revision 2: 4-deck frames. */
 .m-legend { position: relative; }
 .legend-new { width: calc(100% + 4px); justify-content: flex-end; padding-right: 3px; margin-right: -4px; }
 .fxsel { height: 18px; padding: 0 3px 0 4px; display: inline-flex; align-items: center; gap: 1px; border: 1px solid var(--ink-2); background: var(--box); border-radius: 3px; font: 600 8.5px var(--font-ui); text-transform: uppercase; letter-spacing: 0.02em; color: var(--ink); }
-.param { display: flex; padding-left: 2px; position: relative; }
-.param-cap { position: absolute; left: 2px; top: 25px; font-size: 8px; }
+/* Revision 4 (#59): the FX row in the shared section, under the strips. */
+.m-fx { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--line); padding: 4px 4px 0; }
+.m-fx .fx-btns { display: flex; gap: 2px; }
+.m-fx .fx-param { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.m-fx.new-block { background: var(--new-bg); box-shadow: inset 0 0 0 1px var(--new); border-radius: 3px; border-top-color: transparent; padding-bottom: 2px; }
 .callout.plain { color: var(--new); background: var(--new-bg); border-color: var(--new); }
 .mixwrap { position: absolute; }
 /* 4 decks: a mixer shorter than the 440 px stack spreads its rows instead of leaving space empty. */
@@ -218,7 +221,7 @@ td .del { color: var(--gone); }
 <header class="topbar">
   <div>
     <h1>Mix view: the 3-band mixer</h1>
-    <p class="lede">Wireframe for issue #56. The 3-band EQ layout, Simple and Advanced, next to today's 4-band Full (Advanced) and Simple views, drawn to scale from the tokens in <code>src/styles/tokens.css</code> and the rows of <code>MixerPanel</code>. Low fidelity: greys only, no vendor names. Nothing here is built. Revision 2 (2026-10-23) applies the maintainer's answers, listed in §6.</p>
+    <p class="lede">Wireframe for issue #56. The 3-band EQ layout, Simple and Advanced, next to today's 4-band Full (Advanced) and Simple views, drawn to scale from the tokens in <code>src/styles/tokens.css</code> and the rows of <code>MixerPanel</code>. Low fidelity: greys only, no vendor names. Nothing here is built. Revision 4 (2026-10-23): the maintainer's answers (§7) and the FX row from the EQ and effects spec (#59).</p>
   </div>
   <div class="seg" role="group" aria-label="Theme">
     <button type="button" data-theme-btn="auto" aria-pressed="true">Auto</button>
@@ -230,7 +233,6 @@ td .del { color: var(--gone); }
 <div class="legend">
   <span><i class="sw new"></i>new in the 3-band views</span>
   <span><i class="sw lit"></i>lit: a switch that is on, or any channel knob off-centre (every view)</span>
-  <span><i class="sw later"></i>later, pending research</span>
 </div>
 
 <section class="block" aria-labelledby="h-mixers">
@@ -247,25 +249,25 @@ td .del { color: var(--gone); }
 
 <section class="block" aria-labelledby="h-frames4">
   <h2 id="h-frames4">3 · Mix panel at 1440 × 900, 4 decks</h2>
-  <p class="lede">Two compact decks stack beside the mixer on each side (<code>--deck-h-compact</code> 216 px, 440 px a side), so the mixer stays 440 px in every view and the library keeps 8 rows (5 at 1280 × 800). A shorter view gives its faders and the master meter up to 60 px (<code>--fader-bonus</code>, #46). Whatever is still spare goes into the spacing between the rows (maintainer, 2026-10-23), so the mixer always fills the 440 px and nothing sits empty: the strip columns and the legend lay out with <code>justify-content: space-between</code>, which keeps their rows lined up because each column has the same rows. Thin rules under the rows show the wider spacing.</p>
+  <p class="lede">Two compact decks stack beside the mixer on each side (<code>--deck-h-compact</code> 216 px, 440 px a side), so the mixer stays 440 px in every view and the library keeps 8 rows (5 at 1280 × 800). A shorter view gives its faders and the master meter up to 60 px (<code>--fader-bonus</code>, #46), only as much as fits: 3-band Advanced gets the 47 px it has spare. Whatever is still spare goes into the spacing between the rows (maintainer, 2026-10-23), so the mixer always fills the 440 px and nothing sits empty: the strip columns and the legend lay out with <code>justify-content: space-between</code>, which keeps their rows lined up because each column has the same rows. Thin rules under the rows show the wider spacing.</p>
   <div class="frames" id="frames4"></div>
 </section>
 
 <section class="block" aria-labelledby="h-knob">
-  <h2 id="h-knob">4 · Knob states: channel FILTER, and every channel knob lit</h2>
-  <p class="lede">One bipolar FILTER knob per channel in the 4th knob slot (under LOW). Left of centre is low-pass, right is high-pass, centre is off with a detent (drags within a few degrees snap to it, double-click or Delete returns there, like the tempo fader). Every bipolar channel knob, in every view, 4-band included, lights the same way once it leaves centre: LEVEL, the EQ knobs and FILTER. So a channel that sounds different always shows why. Drawn at 3× of <code>--knob-md</code> (28 px).</p>
+  <h2 id="h-knob">4 · Knob states: channel FX, and every channel knob lit</h2>
+  <p class="lede">One bipolar FX knob per channel in the 4th knob slot (under LOW); its row caption names the selected effect. With FILTER, left of centre is low-pass and right is high-pass (ECHO and REVERB: left mids/lows, right highs, #59 §3). Centre is off, with a dead zone of 0.485–0.515 as a detent (a drag that crosses centre sticks there; double-click or Delete returns there). Every bipolar channel knob, in every view, 4-band included, lights the same way once it leaves centre: LEVEL, the EQ knobs and FX. So a channel that sounds different always shows why. Drawn at 3× of <code>--knob-md</code> (28 px).</p>
   <div class="sheet" style="display:flex;flex-direction:column;gap:16px">
-    <h3>FILTER</h3><div class="states" id="states"></div>
+    <h3>FX knob, FILTER selected</h3><div class="states" id="states"></div>
     <h3>EQ and LEVEL, all views</h3><div class="states" id="states-eq"></div>
   </div>
 </section>
 
 <section class="block" aria-labelledby="h-fx">
-  <h2 id="h-fx">5 · Effect select, PARAMETER and settings</h2>
+  <h2 id="h-fx">5 · FX row and settings</h2>
   <div class="two">
     <div class="sheet" style="display:flex;flex-direction:column;gap:12px">
-      <p>The legend cell of the FILTER row becomes the <b>effect select</b>, one for all four channels, and a global <b>PARAMETER</b> knob sits under it in the legend column, left of the CUE caption and the dB scale. Neither costs height or width. With FILTER selected, PARAMETER sets the resonance (a global setting is no longer needed). The select lists FILTER only; more effects are <span class="tag later">later · pending research</span>. #59 names echo and reverb as candidates that need a D21 note first.</p>
-      <div class="fit" data-fit style="border:0"><div class="scaled"><div id="fx-mixer" style="position:relative;width:max-content;padding-right:230px"></div></div></div>
+      <p>One mixer-wide row in the shared section, under the strips (above the crossfader in Advanced): the <b>FX select</b> as three buttons, FILTER · ECHO · REVERB, exactly one always lit (FILTER at start, no off state: each channel's knob at centre is off), and one <b>PARAMETER</b> knob whose caption follows the effect: RESONANCE, FEEDBACK, DECAY. The FX row caption in the strips follows it too. NOISE, CRUSH and SWEEP are not planned. Spec: #59, <code>djm-eq-fx.md</code> §3.</p>
+      <div class="fit" data-fit style="border:0"><div class="scaled"><div id="fx-rows" style="display:flex;gap:16px;width:max-content"></div></div></div>
     </div>
     <div class="sheet" style="display:flex;flex-direction:column;gap:10px">
       <h3>Settings → Mixer</h3>
@@ -285,24 +287,24 @@ td .del { color: var(--gone); }
     <table>
       <thead><tr><th>Per channel / mixer</th><th>4-band Advanced (Full)</th><th>4-band Simple</th><th>4-band Simple, filters hidden</th><th>3-band Simple <span class="tag new">new</span></th><th>3-band Advanced <span class="tag new">new</span></th></tr></thead>
       <tbody>
-        <tr><td>Knob rows</td><td>LEVEL · HI · HM · LM · LO</td><td>same</td><td>same</td><td>LEVEL · HI · <span class="add">MID</span> · <span class="add">LOW</span> · <span class="add">FILTER</span></td><td>as 3-band Simple</td></tr>
-        <tr><td>Knobs, 4 channels</td><td class="num">20 (4 trim + 16 EQ)</td><td class="num">20</td><td class="num">20</td><td class="num">20 (4 trim + 12 EQ + <span class="add">4 filter</span>) + <span class="add">PARAMETER</span></td><td class="num">same + curve</td></tr>
-        <tr><td>Effect select + PARAMETER</td><td>–</td><td>–</td><td>–</td><td><span class="add">legend column, 0 px</span></td><td><span class="add">legend column, 0 px</span></td></tr>
+        <tr><td>Knob rows</td><td>LEVEL · HI · HM · LM · LO</td><td>same</td><td>same</td><td>LEVEL · HI · <span class="add">MID</span> · <span class="add">LOW</span> · <span class="add">FX</span> (caption: the effect)</td><td>as 3-band Simple</td></tr>
+        <tr><td>Knobs, 4 channels</td><td class="num">20 (4 trim + 16 EQ)</td><td class="num">20</td><td class="num">20</td><td class="num">20 (4 trim + 12 EQ + <span class="add">4 FX</span>) + <span class="add">PARAMETER</span></td><td class="num">same + curve</td></tr>
+        <tr><td>FX row: FILTER · ECHO · REVERB + PARAMETER</td><td>–</td><td>–</td><td>–</td><td><span class="add">shared section, under the strips</span></td><td><span class="add">same, above the crossfader</span></td></tr>
         <tr><td>FILTER assign X · off · Y</td><td>shown</td><td class="del">hidden (1–2 X, 3–4 Y)</td><td class="del">hidden</td><td class="del">none; X/Y units off</td><td class="del">none; X/Y units off</td></tr>
         <tr><td>Filter row X / Y (FREQ, RES, HP·BP·LP, ON)</td><td>shown</td><td>shown</td><td class="del">hidden (both off)</td><td class="del">none</td><td class="del">none</td></tr>
         <tr><td>X-F assign</td><td>shown</td><td class="del">hidden (THRU)</td><td class="del">hidden</td><td class="del">hidden (THRU)</td><td>shown</td></tr>
         <tr><td>Crossfader + curve</td><td>shown</td><td class="del">hidden</td><td class="del">hidden</td><td class="del">hidden</td><td>shown</td></tr>
         <tr><td>Master section</td><td>full (dB labels)</td><td>compact</td><td>compact</td><td>compact</td><td>compact</td></tr>
-        <tr><td>Lit when off-centre</td><td colspan="5">LEVEL, every EQ knob and FILTER, in every view</td></tr>
-        <tr><td>Mixer height</td><td class="num">440</td><td class="num">356</td><td class="num">292</td><td class="num">292</td><td class="num" data-opt-h>~355</td></tr>
-        <tr><td>Waveform, 2 decks</td><td class="num">226</td><td class="num">142</td><td class="num">78</td><td class="num">78</td><td class="num" data-opt-w>~141</td></tr>
-        <tr><td>Library rows 1440×900 / 1280×800</td><td class="num">8 / 5</td><td class="num">12 / 8</td><td class="num">14 / 10</td><td class="num">14 / 10</td><td class="num" data-opt-r>12 / 8</td></tr>
+        <tr><td>Lit when off-centre</td><td colspan="5">LEVEL, every EQ knob and FX, in every view</td></tr>
+        <tr><td>Mixer height</td><td class="num">440</td><td class="num">356</td><td class="num">292</td><td class="num" data-h3="three"></td><td class="num" data-h3="threeA"></td></tr>
+        <tr><td>Waveform, 2 decks</td><td class="num">226</td><td class="num">142</td><td class="num">78</td><td class="num" data-w3="three"></td><td class="num" data-w3="threeA"></td></tr>
+        <tr><td>Library rows 1440×900 / 1280×800</td><td class="num">8 / 5</td><td class="num">12 / 8</td><td class="num">14 / 10</td><td class="num" data-r3="three"></td><td class="num" data-r3="threeA"></td></tr>
         <tr><td>4 decks (mixer 440)</td><td class="num">fits, no change</td><td class="num" data-e4="simple">faders +60</td><td class="num" data-e4="bare">faders +60</td><td class="num" data-e4="three">faders +60</td><td class="num" data-e4="threeA">faders +60</td></tr>
         <tr><td>X C V keys</td><td>crossfader</td><td>nothing</td><td>nothing</td><td>nothing</td><td>crossfader</td></tr>
       </tbody>
     </table>
   </div>
-  <p class="lede">Heights for the 4-band views are the tokens (<code>--mixer-h-advanced / -simple / -simple-bare</code>). 3-band Simple's rows add up to exactly 4-band Simple without filters, so it can reuse the 292 size class (<code>mixerSize</code> → <code>"simple-bare"</code>). 3-band Advanced is measured from the drawing and needs its own token. Waveform = deck height − 214; rows = ⌊(window height − 230 − mixer height) / 26⌋, both from research §6.</p>
+  <p class="lede">Heights for the 4-band views are the tokens (<code>--mixer-h-advanced / -simple / -simple-bare</code>). The 3-band heights are measured from the drawing (the FX row adds to the 292 px of the five knob rows) and each needs its own token. Waveform = deck height − 214; rows = ⌊(window height − 230 − mixer height) / 26⌋, both from research §6.</p>
 </section>
 
 <section class="block" aria-labelledby="h-q">
@@ -311,10 +313,10 @@ td .del { color: var(--gone); }
     <li><b>Label: "3-band".</b> <span>Settings → Mixer, EQ: 4-band · 3-band.</span></li>
     <li><b>Crossfader: a setting, as for 4-band.</b> <span>Mixer view Simple / Advanced applies to both EQ layouts; 3-band Advanced shows the X-F assigns, crossfader and curve (§1, §2).</span></li>
     <li><b>Shortcuts: as proposed.</b> <span>No filter keys. X C V work only in Advanced, as today. Knobs stay keyboard reachable (arrows, Page Up/Down, Delete back to centre).</span></li>
-    <li><b>Row caption: "Filter".</b></li>
+    <li><b>Row caption: "Filter".</b> <span>Now the selected effect's name: FILTER, ECHO or REVERB.</span></li>
     <li><b>Lit: every channel knob, in every view.</b> <span>LEVEL, EQ and FILTER light when off-centre, on the 4-band mixer too (§4).</span></li>
     <li><b>MID: set by the research task.</b> <span>#59 proposes one real bell at 1 kHz (not HM + LM together), −26 / +6 dB, Q 0.7, UNVERIFIED.</span></li>
-    <li><b>Resonance: a PARAMETER knob under the effect select.</b> <span>Global, in the legend column (§5). Note: #59 proposed no PARAMETER knob in v1 and a fixed Q 1.4; this answer adds it. Its centre or default is where that Q would sit.</span></li>
+    <li><b>Resonance: the PARAMETER knob.</b> <span>Global, in the FX row with the FX select FILTER · ECHO · REVERB (§5, spec #59). With FILTER it is the resonance; with ECHO feedback, with REVERB decay.</span></li>
     <li><b>Positions across layouts: start flat.</b> <span>Each layout keeps its own positions; the first switch to 3-band starts with every knob at centre.</span></li>
     <li><b>4 decks: shown, no empty space.</b> <span>§3: after the 60 px fader bonus, the spare height is spread over the row spacing.</span></li>
   </ol>
@@ -356,7 +358,7 @@ const VIEWS = {
   full:   { h: 440, eq: ["Hi", "HM", "LM", "Lo"], three: false, assigns: true,  xfAssign: true,  filterRow: true,  xfRow: true },
   simple: { h: 356, eq: ["Hi", "HM", "LM", "Lo"], three: false, assigns: false, xfAssign: false, filterRow: true,  xfRow: false },
   bare:   { h: 292, eq: ["Hi", "HM", "LM", "Lo"], three: false, assigns: false, xfAssign: false, filterRow: false, xfRow: false },
-  three:  { h: 292, eq: ["Hi", "Mid", "Low"],     three: true,  assigns: false, xfAssign: false, filterRow: false, xfRow: false },
+  three:  { h: null, eq: ["Hi", "Mid", "Low"],     three: true,  assigns: false, xfAssign: false, filterRow: false, xfRow: false },
   threeA: { h: null, eq: ["Hi", "Mid", "Low"],    three: true,  assigns: false, xfAssign: true,  filterRow: false, xfRow: true },
 };
 const ACTIVE = [false, true, true, false];
@@ -368,22 +370,25 @@ function eqValue(ch, cap) {
   return 0.5;
 }
 
-function mixer(viewKey, { faderLen = 96, h, spread = false } = {}) {
+const FX = ["Filter", "Echo", "Reverb"];
+const PARAM = { Filter: "Resonance", Echo: "Feedback", Reverb: "Decay" };
+
+function mixer(viewKey, { faderLen = 96, h, spread = false, fx = "Filter" } = {}) {
   const v = VIEWS[viewKey];
   const isNew = (cap) => v.three && ["Mid", "Low", "Filter"].includes(cap);
   const capRows = ["Level", ...v.eq, ...(v.three ? ["Filter"] : []), ...(v.assigns ? ["Filter"] : []), "Cue", "", ...(v.xfAssign ? ["X-F"] : [])];
   const my = v.assigns || v.xfAssign ? "my1" : "my05";
   const legend = capRows.map((c) => {
     if (c === "") return `<div class="scale m-fader ${my}" style="--len:${faderLen}px">${scale()}</div>`;
-    if (v.three && c === "Filter") return `<div class="m-rowcap new-row legend-new"><span class="fxsel" title="Effect select (one for all channels)">Filter ▾</span></div>`;
-    if (v.three && c === "Cue") return `<div class="m-rowcap" style="width:100%;justify-content:space-between"><span class="param">${knob(22, 0.5, { label: "parameter" })}<span class="cap param-cap">Param</span></span><span class="cap">Cue</span></div>`;
+    // The FX row's caption names the selected effect.
+    if (v.three && c === "Filter") return `<div class="m-rowcap new-row legend-new"><span class="cap strong">${fx}</span></div>`;
     return `<div class="m-rowcap${isNew(c) ? " new-row legend-new" : ""}"><span class="cap">${c}</span></div>`;
   }).join("");
   const strips = [0, 1, 2, 3].map((ch) => {
     const rows = [];
     rows.push(`<div class="m-row">${chKnob(22, 0.5, "level")}</div>`);
     v.eq.forEach((c) => rows.push(`<div class="m-row${isNew(c) ? " new-row" : ""}">${chKnob(28, eqValue(ch, c), c)}</div>`));
-    if (v.three) rows.push(`<div class="m-row new-row">${chKnob(28, CH_FILTER[ch], "filter", true)}</div>`);
+    if (v.three) rows.push(`<div class="m-row new-row">${chKnob(28, CH_FILTER[ch], "fx", true)}</div>`);
     if (v.assigns) rows.push(`<div class="m-row">${assign(ch < 2 ? 0 : 2)}</div>`);
     rows.push(`<div class="m-row"><span class="btn${ch === 1 ? " on" : ""}">Cue</span></div>`);
     rows.push(`<div class="m-fader ${my}" style="--len:${faderLen}px"><span class="fader" style="--pos:2px"><i></i></span><span class="meter">${leds()}</span></div>`);
@@ -403,12 +408,15 @@ function mixer(viewKey, { faderLen = 96, h, spread = false } = {}) {
   const fu = (u, on, mode) => `<div class="fu"><div class="fu-knobs"><span class="lk"><span class="cap">Freq</span>${knob(32, 0.5)}</span><span class="lk"><span class="cap">Res</span>${knob(22, 0.3)}</span></div>
       <div class="fu-side"><div><span class="cap strong">Filter ${u}</span>&nbsp;<span class="btn${on ? " on" : ""}">On</span></div><div>${["HP", "BP", "LP"].map((m) => `<span class="btn${m === mode ? " on" : ""}">${m}</span>`).join("")}</div></div></div>`;
   const filterRow = v.filterRow ? `<div class="m-filters">${fu("X", false, "LP")}${fu("Y", false, "HP")}</div>` : "";
+  // One mixer-wide row: the effect for all channels (one always lit) and PARAMETER, whose caption follows it.
+  const fxRow = v.three ? `<div class="m-fx new-block"><span class="cap strong">FX</span><span class="fx-btns">${FX.map((e) => `<span class="btn${e === fx ? " on" : ""}">${e}</span>`).join("")}</span>`
+    + `<span class="fx-param"><span class="cap">${PARAM[fx]}</span>${knob(28, 0.5, { label: "parameter" })}</span></div>` : "";
   const xfRow = v.xfRow ? `<div class="m-xf"><span class="cap">X</span><span class="hfader"><i></i></span><span class="cap">Y</span><span class="cap" style="margin-left:4px">Curve</span>${knob(22, 0.5)}</div>` : "";
   const height = h ?? (v.h ? `${v.h}px` : "auto");
   return `<div class="mixer${spread ? " spread" : ""}" style="--h:${height}" data-view="${viewKey}">
     <span class="gear" aria-hidden="true">⚙</span>
     <div class="m-top"><div class="m-legend"><span class="m-head"></span>${legend}</div>${strips}${master}</div>
-    ${filterRow}${xfRow}</div>`;
+    ${filterRow}${fxRow}${xfRow}</div>`;
 }
 
 // ---------- §1 columns ----------
@@ -420,9 +428,9 @@ const COLS = [
   { key: "bare", title: "4-band Simple, filters hidden", sub: "#46 · Filters: Hide",
     notes: [["del", "Filter row X / Y (both units off)"], ["same", "Only LEVEL, EQ, CUE, faders, master left"]] },
   { key: "three", title: "3-band Simple", sub: "#56 · EQ 3-band, view Simple", tag: "new",
-    notes: [["add", "EQ HI · MID · LOW (3 bands, was 4)"], ["add", "FILTER knob per channel in the 4th EQ slot: left LPF, right HPF, centre off, lit off-centre"], ["add", "Effect select + PARAMETER in the legend column, 0 px"], ["del", "Filter row X / Y, assigns, crossfader"], ["same", "5 knob rows: same height as 4-band Simple, filters hidden"]] },
+    notes: [["add", "EQ HI · MID · LOW (3 bands, was 4)"], ["add", "FX knob per channel in the 4th EQ slot (row caption = the effect): centre off, lit off-centre"], ["add", "FX row: FILTER · ECHO · REVERB (one lit) + PARAMETER"], ["del", "Filter row X / Y, assigns, crossfader"]] },
   { key: "threeA", title: "3-band Advanced", sub: "#56 · EQ 3-band, view Advanced", tag: "new",
-    notes: [["add", "X-F assign row and crossfader + curve, as 4-band Advanced"], ["same", "No FILTER assigns or X/Y row: the channel knobs replace them"], ["same", "Nearly as tall as 4-band Simple"]] },
+    notes: [["add", "X-F assign row and crossfader + curve, as 4-band Advanced"], ["same", "FX row as 3-band Simple; no FILTER assigns or X/Y row"]] },
 ];
 const statsFor = (h) => ({ w: h - 214, r1440: Math.floor((670 - h) / 26), r1280: Math.floor((570 - h) / 26) });
 function renderColumns() {
@@ -432,19 +440,21 @@ function renderColumns() {
       <div class="mix-dim">${mixer(c.key)}<span class="dim"><span data-h="${c.key}"></span></span></div>
       <div class="stats" data-stats="${c.key}"></div>
       <ul class="notes">${c.notes.map(([k, t]) => `<li class="${k}">${t}</li>`).join("")}</ul></div>`).join("");
-  // 3-band Advanced has no token yet: measure what its rows add up to (before any scaling).
-  VIEWS.threeA.h = host.querySelector('.mixer[data-view="threeA"]').offsetHeight;
+  // The 3-band views have no token yet: measure what their rows add up to (before any scaling).
+  for (const k of ["three", "threeA"]) VIEWS[k].h = host.querySelector(`.mixer[data-view="${k}"]`).offsetHeight;
   COLS.forEach((c) => {
-    const h = VIEWS[c.key].h, s = statsFor(h), approx = c.key === "threeA" ? "~" : "";
+    const h = VIEWS[c.key].h, s = statsFor(h), approx = c.key.startsWith("three") ? "~" : "";
     host.querySelector(`[data-h="${c.key}"]`).textContent = `${approx}${h} px`;
     host.querySelector(`[data-stats="${c.key}"]`).innerHTML =
-      `<span>mixer</span><b>${approx}${h} px${c.key === "three" ? " (= 292 size class)" : ""}</b>`
+      `<span>mixer</span><b>${approx}${h} px</b>`
       + `<span>waveform, 2 decks</span><b>${s.w} px</b><span>library rows</span><b>${s.r1440} @1440 · ${s.r1280} @1280</b>`;
   });
-  const s = statsFor(VIEWS.threeA.h);
-  document.querySelector("[data-opt-h]").textContent = `~${VIEWS.threeA.h}`;
-  document.querySelector("[data-opt-w]").textContent = `~${s.w}`;
-  document.querySelector("[data-opt-r]").textContent = `${s.r1440} / ${s.r1280}`;
+  for (const k of ["three", "threeA"]) {
+    const t = statsFor(VIEWS[k].h);
+    document.querySelector(`[data-h3="${k}"]`).textContent = `~${VIEWS[k].h}`;
+    document.querySelector(`[data-w3="${k}"]`).textContent = `~${t.w}`;
+    document.querySelector(`[data-r3="${k}"]`).textContent = `${t.r1440} / ${t.r1280}`;
+  }
 }
 
 // ---------- §2 / §3 frames ----------
@@ -484,15 +494,15 @@ function frame2(viewKey) {
     + `<div style="position:absolute;left:548px;top:${top}px">${mixer(viewKey)}</div>${deck(900, top, 528, h, 3)}</div>`;
 }
 function frame4(viewKey) {
-  const top = 82, bonus = viewKey === "full" ? 0 : 60;
+  const top = 82;
   return `<div class="frame">${chrome(4, 88 + 440)}${deckCompact(12, top, 528, 1)}${deckCompact(12, top + 224, 528, 2)}`
-    + `<div class="mixwrap" style="left:548px;top:${top}px">${mixer(viewKey, { faderLen: 96 + bonus, h: "auto" })}</div>`
+    + `<div class="mixwrap" style="left:548px;top:${top}px">${mixer(viewKey, { h: "auto" })}</div>`
     + `${deckCompact(900, top, 528, 3)}${deckCompact(900, top + 224, 528, 4)}</div>`;
 }
 const CARDS = [["full", "4-band Advanced (Full)"], ["simple", "4-band Simple"], ["bare", "4-band Simple, filters hidden"], ["three", "3-band Simple"], ["threeA", "3-band Advanced"]];
 function renderFrames() {
   document.getElementById("frames").innerHTML = CARDS.map(([k, t]) => {
-    const h = VIEWS[k].h, s = statsFor(h), approx = k === "threeA" ? "~" : "";
+    const h = VIEWS[k].h, s = statsFor(h), approx = k.startsWith("three") ? "~" : "";
     return `<div class="frame-card"><h3>${t}${k.startsWith("three") ? ' <span class="tag new">new</span>' : ""}</h3>
       <div class="fit" data-fit data-w="1440"><div class="scaled">${frame2(k)}</div></div>
       <div class="frame-cap"><span>mixer / deck <b>${approx}${h}</b></span><span>waveform <b>${s.w}</b></span><span>library <b>${s.r1440}</b> rows (<b>${s.r1280}</b> at 1280×800)</span></div></div>`;
@@ -502,13 +512,17 @@ function renderFrames() {
       <div class="frame-cap" data-cap4="${k}"></div></div>`).join("");
   // Measure each view's natural height, then spread the spare over the row spacing.
   document.querySelectorAll("#frames4 .mixwrap").forEach((w) => {
-    const m = w.querySelector(".mixer"), k = m.dataset.view, spare = Math.max(0, 440 - m.offsetHeight);
+    const m = w.querySelector(".mixer"), k = m.dataset.view;
+    // The faders take up to --fader-bonus (60 px), never more than the mixer has spare.
+    const bonus = k === "full" ? 0 : Math.max(0, Math.min(60, 440 - m.offsetHeight));
+    m.querySelectorAll('[style*="--len"]').forEach((e) => e.style.setProperty("--len", `${96 + bonus}px`));
+    const spare = Math.max(0, 440 - m.offsetHeight);
     const gaps = m.querySelector(".m-strip").children.length - 1, each = spare / gaps;
     if (spare > 0) { m.classList.add("spread"); m.style.setProperty("--h", "440px"); }
     const sp = spare > 4 ? `+${spare} px over ${gaps} row gaps (~${each.toFixed(1)} px each)` : "none";
-    document.querySelector(`[data-cap4="${k}"]`).innerHTML = `<span>mixer <b>440</b></span><span>faders <b>${k === "full" ? 96 : 156}</b></span><span>row spacing <b>${sp}</b></span><span>waveform <b>66</b></span><span>library <b>8</b> rows (<b>5</b> at 1280×800)</span>`;
+    document.querySelector(`[data-cap4="${k}"]`).innerHTML = `<span>mixer <b>440</b></span><span>faders <b>${96 + bonus}</b></span><span>row spacing <b>${sp}</b></span><span>waveform <b>66</b></span><span>library <b>8</b> rows (<b>5</b> at 1280×800)</span>`;
     const cell = document.querySelector(`[data-e4="${k}"]`);
-    if (cell) cell.textContent = `faders +60, rows +${spare} px`;
+    if (cell) cell.textContent = `faders +${bonus}, rows +${spare} px`;
   });
 }
 
@@ -526,7 +540,7 @@ function renderStates() {
     [0.0, "LPF, full", "Lit. Only the lows left."],
     [0.68, "HPF, a little", "Lit. Arc from centre to the right."],
     [1.0, "HPF, full", "Lit. Only the highs left."],
-    [0.515, "Inside the detent", "Snaps to centre on release; stays unlit."],
+    [0.51, "Inside the dead zone", "0.485–0.515 counts as centre: off, unlit."],
   ], true, ["LPF", "HPF"]);
   document.getElementById("states-eq").innerHTML = stateCards([
     [0.5, "Flat", "Unlit, as today."],
@@ -538,9 +552,7 @@ function renderStates() {
 
 // ---------- §5 effect select ----------
 function renderFx() {
-  document.getElementById("fx-mixer").innerHTML = mixer("three")
-    + `<div class="callout" style="left:${344 + 12}px;top:132px">← effect select, one for all channels<br>lists FILTER only; more <b>later / pending research</b></div>`
-    + `<div class="callout plain" style="left:${344 + 12}px;top:186px">← PARAMETER, global: resonance for FILTER</div>`;
+  document.getElementById("fx-rows").innerHTML = FX.map((e) => `<div style="display:flex;flex-direction:column;gap:6px"><h3>${e} selected</h3>${mixer("three", { fx: e })}</div>`).join("");
 }
 
 // ---------- fit-to-width ----------
