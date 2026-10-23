@@ -102,9 +102,7 @@ pub enum CueRouting {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Theme {
-    /// Dark, warm neutrals with an ivory accent (default, maintainer's call,
-    /// 2026-10-22).
-    #[default]
+    /// Dark, warm neutrals with an ivory accent.
     Graphite,
     /// Light: ivory canvas, rose accent.
     Paper,
@@ -112,7 +110,9 @@ pub enum Theme {
     Midnight,
     /// Dark plum, lavender accent.
     Dusk,
-    /// Black, high contrast, grey accent.
+    /// Black, high contrast, grey accent (default, maintainer's call,
+    /// 2026-10-23).
+    #[default]
     Booth,
 }
 
@@ -613,7 +613,7 @@ mod tests {
         assert_eq!(s.audio_cue, None);
         assert_eq!(s.key_notation, KeyNotation::Classical);
         assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
-        assert_eq!(s.theme, Theme::Graphite);
+        assert_eq!(s.theme, Theme::Booth);
         assert_eq!(s.sync_align, SyncAlign::Bar);
         assert_eq!(s.mixer_view, MixerView::Simple);
         assert_eq!(s.mixer_filters, MixerFilters::Show);
@@ -746,7 +746,7 @@ mod tests {
         let s = lib.settings().unwrap();
         assert_eq!(s.key_notation, KeyNotation::Classical);
         assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
-        assert_eq!(s.theme, Theme::Graphite);
+        assert_eq!(s.theme, Theme::Booth);
         assert_eq!(s.ui, UiState::default());
         assert_eq!(s.audio_device, None);
     }

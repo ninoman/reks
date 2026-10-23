@@ -816,9 +816,9 @@ Date of decisions: 2026-10-18.
   canvas (4.6:1; the warm one was 3.9:1).
 - Themes (2026-10-22, maintainer's call): the light/dark pair that followed
   the system became five themes picked in Settings (`display.theme`):
-  Graphite (default: Claude's warm dark neutrals, ivory accent), Paper (light,
+  Graphite (Claude's warm dark neutrals, ivory accent), Paper (light,
   rose), Midnight (navy, blue), Dusk (plum, lavender), Booth (black, light grey;
-  for dark rooms). Cool accents on the warm neutrals were tried and dropped.
+  for dark rooms; the default since 2026-10-23). Cool accents on the warm neutrals were tried and dropped.
   The deck follows the theme too (Paper's is light). Palettes, contrast
   checks: [`ui.md`](ui.md#ui-design-system).
 - Decision: tokens CSS-first in `src/styles/tokens.css` (`@theme`, one block
