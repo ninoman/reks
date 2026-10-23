@@ -9,7 +9,7 @@ import { formatBpm, formatDuration } from "../lib/format";
 import type { StickTrack } from "../lib/ipc";
 import { openRows, type StickRow, stickRef, useDeviceBrowser } from "../store/deviceBrowser";
 import { deviceName, useDevices } from "../store/devices";
-import { playTrack, usePlayerHas } from "../store/player";
+import { activateTrack, playTrack, usePlayerHas } from "../store/player";
 import { PlayIcon } from "./icons";
 import { KeyLabel } from "./KeyLabel";
 import { IconButton } from "./ui/IconButton";
@@ -127,7 +127,7 @@ function TrackRow({
       className="group odd:bg-row-alt data-[loaded]:font-medium data-[loaded]:text-accent"
       data-loaded={loaded || undefined}
       title={t.stickPath}
-      onDoubleClick={play}
+      onDoubleClick={() => void activateTrack(ref)}
     >
       <td className="px-1">
         <IconButton

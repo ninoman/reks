@@ -18,7 +18,9 @@ vi.mock("../lib/ipc", () => ({
 
 const ipc = await import("../lib/ipc");
 const { useMix } = await import("./mix");
-const { PLAYER_DECK, playTrack, togglePlayer } = await import("./player");
+const { PLAYER_DECK, activateTrack, playTrack, togglePlayer } = await import("./player");
+const { usePanels } = await import("./panels");
+const { useToasts } = await import("./toasts");
 
 const view = (over: Partial<DeckView>): DeckView => ({
   trackId: null,
@@ -76,6 +78,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllMocks();
   useMix.setState(initial, true);
+  usePanels.getState().setMixOpen(false);
+  useToasts.getState().dismiss();
 });
 
 describe("player", () => {
@@ -97,5 +101,55 @@ describe("player", () => {
   it("does nothing on toggle with no track", () => {
     togglePlayer();
     expect(ipc.mixControl).not.toHaveBeenCalled();
+  });
+});
+
+describe("activateTrack", () => {
+  const seven = { kind: "library", id: 7, title: "Seven", artist: null } as const;
+  const loaded = {
+    kind: "library" as const,
+    id: 1,
+    title: "One",
+    artist: null,
+    key: null,
+    artworkId: null,
+    artworkMime: "",
+  };
+
+  it("plays on the player deck without the Mix panel", async () => {
+    await activateTrack(seven);
+    expect(ipc.mixLoad).toHaveBeenCalledWith(PLAYER_DECK, 7);
+    expect(ipc.mixControl).toHaveBeenCalledWith({ type: "play", deck: PLAYER_DECK });
+  });
+
+  it("loads paused onto a spare deck while mixing", async () => {
+    usePanels.getState().setMixOpen(true);
+    const decks = initial.decks.map((d, i) => (i === 1 ? { ...d, track: loaded } : d));
+    useMix.setState({
+      status: "running",
+      live: state([view({}), view({ loaded: true, playing: true }), view({}), view({})]),
+      decks,
+    });
+    await activateTrack(seven);
+    expect(ipc.mixLoad).toHaveBeenCalledWith(2, 7);
+    expect(ipc.mixControl).not.toHaveBeenCalledWith({ type: "play", deck: 2 });
+  });
+
+  it("loads nothing and says so when no deck is spare", async () => {
+    usePanels.getState().setMixOpen(true);
+    const decks = initial.decks.map((d) => ({ ...d, track: loaded }));
+    useMix.setState({
+      status: "running",
+      live: state([
+        view({}),
+        view({ loaded: true, playing: true }),
+        view({ loaded: true }),
+        view({}),
+      ]),
+      decks,
+    });
+    await activateTrack(seven);
+    expect(ipc.mixLoad).not.toHaveBeenCalled();
+    expect(useToasts.getState().toast?.message).toMatch(/No free deck/);
   });
 });

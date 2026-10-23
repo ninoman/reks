@@ -250,7 +250,10 @@ rekordbox and Traktor (2026-10-22; it was along the bottom):
   takes its place and shows the same deck among the others; "Load to deck N"
   in the table opens it.
 - Double-click or Enter on a row, and double-click in a history session or
-  a stick list (Devices, below), load the track on deck 2 and play it (it keeps playing if it already is);
+  a stick list (Devices, below), load the track on deck 2 and play it (it keeps playing if it already is,
+  and replaces a playing track without stopping);
+  with 2 or 4 decks they load onto a spare deck instead (see Load under
+  [Mix panel](#mix-panel-phase-5));
   loading opens the output when it is off. Space plays and pauses deck 2
   wherever focus is (except in text fields, dialogs and menus). The row of
   the track on deck 2 is marked as loaded; the grid editor draws deck 2's
@@ -367,6 +370,10 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   bottom.
 - Load: the table's context menu ("Load to deck N", also in playlist views)
   or drag a track onto a deck. Loading starts the output if it is off.
+  Double-click or Enter loads paused onto a spare deck: an empty one first,
+  else the lowest-numbered deck shown that is stopped with its channel fader
+  fully closed ([`spareDeck.ts`](../src/lib/spareDeck.ts)). A deck that may
+  be on air is never replaced: with none spare, a toast says "No free deck".
 - Shortcuts while the panel is open ([`src/lib/mixKeys.ts`](../src/lib/mixKeys.ts),
   also under **Shortcuts** in the player bar): the table under
   [Deck layout](#deck-layout-task-16). Every deck control with a key shows

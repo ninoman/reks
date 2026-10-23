@@ -12,7 +12,7 @@ import { formatBpm, formatDuration } from "../lib/format";
 import type { SessionDetail, SessionEntryRow } from "../lib/ipc";
 import { useHistory } from "../store/history";
 import { libraryRef } from "../store/mix";
-import { playTrack } from "../store/player";
+import { activateTrack } from "../store/player";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ErrorMessage } from "./ErrorMessage";
 import { KeyLabel } from "./KeyLabel";
@@ -237,7 +237,7 @@ function EntryRow({
       title={matched ? undefined : `Not in the library: ${e.rawPath ?? "no path on the stick"}`}
       onDoubleClick={() => {
         if (trackId === null) return;
-        void playTrack(libraryRef({ id: trackId, title: e.title, artist: e.artist }));
+        void activateTrack(libraryRef({ id: trackId, title: e.title, artist: e.artist }));
       }}
     >
       <td className={`${TD} text-right tabular-nums text-fg-muted`}>{n}</td>
