@@ -3,7 +3,7 @@
  * mixer laws are in Rust, `reks-mix`).
  */
 
-import type { CueRouting, MixState } from "./ipc";
+import type { CueRouting, DeckView, MixState } from "./ipc";
 
 /**
  * Tempo fader ranges (CDJ-3000), as a fraction either side of 1. WIDE is
@@ -257,4 +257,69 @@ export function adjacentCue(
   let before: number | null = null;
   for (const c of cues) if (c.positionMs < positionMs - CUE_HERE_MS) before = c.positionMs;
   return before;
+}
+
+/** The sizes LOOP can take: 1/32 … 512 beats, powers of two. */
+export const LOOP_SIZE_MIN = 1 / 32;
+export const LOOP_SIZE_MAX = 512;
+
+/** `size` halved or doubled, kept within `LOOP_SIZE_MIN` … `LOOP_SIZE_MAX`. */
+export function stepLoopSize(size: number, double: boolean): number {
+  return Math.min(LOOP_SIZE_MAX, Math.max(LOOP_SIZE_MIN, double ? size * 2 : size / 2));
+}
+
+/** A loop length in beats: `64`, `1/16`, or `3.87` when it is no power of two (a manual loop). */
+export function formatLoopBeats(beats: number): string {
+  if (beats >= 1 && Number.isInteger(beats)) return String(beats);
+  const inverse = 1 / beats;
+  if (Math.abs(inverse - Math.round(inverse)) < 1e-6) return `1/${Math.round(inverse)}`;
+  return String(Number(beats.toFixed(2)));
+}
+
+/** A loop length in ms on a track without a grid: `0.25s`, `12.5s`. */
+export function formatLoopSeconds(ms: number): string {
+  const s = ms / 1000;
+  return `${Number(s.toFixed(s < 10 ? 2 : 1))}s`;
+}
+
+/** What the quick-loop block shows and allows, from the deck's engine state. */
+export interface LoopBlockState {
+  /** IN is lit while it waits for OUT. */
+  inLit: boolean;
+  outEnabled: boolean;
+  /** ½ and 2×: the active loop, or LOOP's next size (that needs a grid). */
+  resizeEnabled: boolean;
+  /** Any loop plays (beat, manual, memory or auto). */
+  looping: boolean;
+  loopEnabled: boolean;
+  reloopEnabled: boolean;
+  /** The size readout: the playing loop's length, or dimmed, the size LOOP uses next. */
+  size: { text: string; dimmed: boolean };
+}
+
+/** `nextBeats` is `DeckMeta.lastLoop`; `grid` that the engine has one for the track. */
+export function loopBlockState(
+  view: DeckView | undefined,
+  loaded: boolean,
+  grid: boolean,
+  nextBeats: number,
+): LoopBlockState {
+  const loop = loaded ? (view?.loopRegion ?? null) : null;
+  const loopIn = loaded ? (view?.loopIn ?? null) : null;
+  const looping = loop !== null;
+  const text =
+    loop === null
+      ? formatLoopBeats(nextBeats)
+      : loop.beats === null
+        ? formatLoopSeconds(loop.endMs - loop.startMs)
+        : formatLoopBeats(loop.beats);
+  return {
+    inLit: loopIn !== null && !looping,
+    outEnabled: looping || (loopIn !== null && loopIn < (view?.positionMs ?? 0)),
+    resizeEnabled: loaded && (looping || grid),
+    looping,
+    loopEnabled: loaded && (looping || grid),
+    reloopEnabled: looping || (loaded && (view?.lastLoop ?? null) !== null),
+    size: { text, dimmed: !looping },
+  };
 }

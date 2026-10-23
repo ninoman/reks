@@ -228,6 +228,8 @@
   /* Memory cues without a library colour, and the active loop's band. */
   --color-deck-memory: var(--red-500);
   --color-deck-loop: rgb(212 154 69 / 28%);
+  /* The loop IN waiting for OUT, on both waveforms. */
+  --color-deck-loop-in: var(--color-deck-cue);
   /* A memory loop playback enters by itself (active loop): its mark and bar. */
   --color-deck-auto-loop: var(--indigo-500);
   /* Level meter LEDs, on the deck colour: +10 red, +6/+3 white, 0 blue, below lime. */
@@ -497,8 +499,8 @@
   --meter-dot: 6px;
   --meter-label-fs: 9px;
   --meter-label-w: 14px;
-  /* Deck (task 16): one size in 2- and 4-deck mode; two stacked fit beside the mixer. */
-  --deck-h: 260px;
+  /* Deck (task 16): one size in 2- and 4-deck mode. 290 = 260 + the quick-loop row (24 + 6); task 23 sizes it to the mixer. */
+  --deck-h: 290px;
   --deck-header-h: 40px;
   --deck-min-w: 440px;
   --deck-wave-h: 72px;
@@ -511,6 +513,8 @@
   --deck-solo-h: calc(var(--deck-header-h) + 6px + var(--deck-views-h) + 18px);
   --deck-art: 40px;
   --deck-pads-max-w: 336px;
+  /* Quick-loop 3 x 2 block, beside the pads. */
+  --loop-block-w: 104px;
   --deck-transport: 32px;
   --deck-sync-w: 60px;
   --deck-tempo-w: 44px;

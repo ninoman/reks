@@ -18,7 +18,7 @@ import { hasType, readTracks, TRACKS_MIME } from "../../lib/dnd";
 import type { CueEdit, DeckView } from "../../lib/ipc";
 import { PLAYER_PLAY_KEY, WAVE_ZOOM_KEY } from "../../lib/keys";
 import { type DeckAction, deckKeyHint } from "../../lib/mixKeys";
-import type { PadMode, TempoRange } from "../../lib/mixView";
+import { loopBlockState, type PadMode, type TempoRange } from "../../lib/mixView";
 import type { DeckMeta, PagedPadMode } from "../../store/mix";
 import { DeckHeader } from "./DeckHeader";
 import { DeckPads } from "./DeckPads";
@@ -28,6 +28,7 @@ import { DeckTempo } from "./DeckTempo";
 import { DeckTransport } from "./DeckTransport";
 import { DeckWaveform } from "./DeckWaveform";
 import { DeckWaveformRow } from "./DeckWaveformRow";
+import { LoopBlock } from "./LoopBlock";
 import { useDeckScrub } from "./useDeckScrub";
 
 export interface DeckActions {
@@ -43,11 +44,17 @@ export interface DeckActions {
   hotCuePad: (slot: number) => void;
   /** Sets, renames or deletes a cue (stored in the library). */
   editCues: (edit: CueEdit) => void;
-  /** Cue point and playhead to `ms` (a memory cue). */
-  callCue: (ms: number) => void;
+  /** Cue point and playhead to `ms` (a memory cue); a memory loop's `endMs` arms RELOOP. */
+  callCue: (ms: number, endMs: number | null) => void;
   /** Signed beats. */
   beatJump: (beats: number) => void;
   loopPad: (beats: number) => void;
+  /** The quick-loop block (`LoopBlock`). */
+  toggleLoop: () => void;
+  loopIn: () => void;
+  loopOut: () => void;
+  reloop: () => void;
+  loopResize: (double: boolean) => void;
   setPadMode: (mode: PadMode) => void;
   setPadPage: (mode: PagedPadMode, page: number) => void;
   /** -1 slower, 1 faster, 0 released. */
@@ -157,6 +164,7 @@ export function DeckStrip({
           hotCues={meta.hotCues}
           memoryCues={meta.memoryCues}
           loop={view.loopRegion}
+          loopInMs={view.loopIn}
           zoom={zoom}
           onSeek={actions.seek}
           onZoom={actions.zoom}
@@ -213,6 +221,18 @@ export function DeckStrip({
     />
   );
 
+  // The mixer decks are too narrow for a block beside the pads (task 23 moves them): a row under the views.
+  const loopBlock = (
+    <LoopBlock
+      deck={deck}
+      layout={solo ? "grid" : "row"}
+      state={loopBlockState(view, loaded, grid, meta.lastLoop)}
+      loaded={loaded}
+      keyFor={keyFor}
+      actions={actions}
+    />
+  );
+
   function onDragOver(e: DragEvent) {
     if (!hasType(e.dataTransfer, TRACKS_MIME)) return;
     e.preventDefault();
@@ -263,11 +283,13 @@ export function DeckStrip({
           <div className="flex min-h-0 flex-1 gap-2">
             {transport}
             <div className="min-w-0 flex-1">{views}</div>
+            {loopBlock}
             <div className="flex w-(--deck-pads-max-w) shrink-0">{pads}</div>
           </div>
         ) : (
           <>
             {views}
+            {loopBlock}
             <div className="flex h-(--deck-bottom-h) shrink-0 gap-2">
               {transport}
               {pads}

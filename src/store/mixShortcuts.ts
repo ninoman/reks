@@ -39,6 +39,18 @@ export function useMixShortcuts() {
         case "loop":
           mix.toggleLoop(action.deck);
           break;
+        case "loopIn":
+          mix.loopIn(action.deck);
+          break;
+        case "loopOut":
+          mix.loopOut(action.deck);
+          break;
+        case "reloop":
+          mix.reloop(action.deck);
+          break;
+        case "loopResize":
+          mix.loopResize(action.deck, action.double);
+          break;
         case "master":
           mix.takeMaster(action.deck);
           break;

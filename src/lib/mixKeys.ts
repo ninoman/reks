@@ -17,6 +17,9 @@
  * | set memory cue at the playhead | Shift T / Shift P |
  * | beat jump back, forward by the last jump size | ⌘ R, ⌘ T / ⌘ O, ⌘ P |
  * | loop on/off at the last loop size | Shift F / Shift L |
+ * | loop IN, OUT | D, F / K, L |
+ * | reloop (or leave the loop) | G / ; |
+ * | halve, double the loop (or the next loop size) | Shift D, Shift G / Shift K, Shift ; |
  * | next pad mode | Shift S / Shift J |
  *
  * Pad mode has no rekordbox key; Shift S / J is free there. With one deck
@@ -35,6 +38,10 @@ export type DeckAction =
   | { type: "hotCue"; slot: number }
   | { type: "jump"; dir: -1 | 1 }
   | { type: "loop" }
+  | { type: "loopIn" }
+  | { type: "loopOut" }
+  | { type: "reloop" }
+  | { type: "loopResize"; double: boolean }
   | { type: "master" }
   | { type: "padMode" }
   | { type: "memoryCue" }
@@ -65,6 +72,11 @@ const DECK_KEYS: [string, string, DeckAction, Layer][] = [
   ["KeyR", "KeyO", { type: "jump", dir: -1 }, "Cmd"],
   ["KeyT", "KeyP", { type: "jump", dir: 1 }, "Cmd"],
   ["KeyF", "KeyL", { type: "loop" }, "Shift"],
+  ["KeyD", "KeyK", { type: "loopIn" }, ""],
+  ["KeyF", "KeyL", { type: "loopOut" }, ""],
+  ["KeyG", "Semicolon", { type: "reloop" }, ""],
+  ["KeyD", "KeyK", { type: "loopResize", double: false }, "Shift"],
+  ["KeyG", "Semicolon", { type: "loopResize", double: true }, "Shift"],
   ["KeyS", "KeyJ", { type: "padMode" }, "Shift"],
 ];
 
@@ -110,8 +122,8 @@ export function mixKeyAction(e: KeyPress, decks: number): MixKeyAction | null {
   return { ...hit.action, deck: HANDS[e.altKey ? "outer" : "plain"][hit.side] ?? 1 };
 }
 
-/** `KeyA` → "A", `Digit7` → "7". */
-const keyName = (code: string) => code.replace(/^(Key|Digit)/, "");
+/** `KeyA` → "A", `Digit7` → "7", `Semicolon` → ";". */
+const keyName = (code: string) => (code === "Semicolon" ? ";" : code.replace(/^(Key|Digit)/, ""));
 
 const LAYER_NAME: Record<Layer, string> = { "": "", Shift: "Shift ", Cmd: "⌘ " };
 
@@ -119,7 +131,8 @@ const LAYER_NAME: Record<Layer, string> = { "": "", Shift: "Shift ", Cmd: "⌘ "
 const sameAction = (a: DeckAction, b: DeckAction) =>
   a.type === b.type &&
   ("dir" in a ? "dir" in b && a.dir === b.dir : true) &&
-  ("slot" in a ? "slot" in b && a.slot === b.slot : true);
+  ("slot" in a ? "slot" in b && a.slot === b.slot : true) &&
+  ("double" in a ? "double" in b && a.double === b.double : true);
 
 /**
  * How the key for `action` on `deck` (0-based) reads in a hint, taken from
@@ -136,4 +149,21 @@ export function deckKeyHint(action: DeckAction, deck: number): string | undefine
 /** The crossfader keys as one hint: "X C V". */
 export function crossfaderKeyHint(): string {
   return Object.keys(CROSSFADER).map(keyName).join(" ");
+}
+
+/**
+ * The keys of `actions` for both hands, as the shortcut list reads them:
+ * "W E / U I", "Shift T / Shift P", "1–4 / 6–9" (`range`: first to last).
+ * The layer ("Shift", "⌘") is named once, before the keys.
+ */
+export function deckKeysHelp(actions: DeckAction[], range = false): string {
+  const rows = actions.map((a) => DECK_KEYS.find(([, , row]) => sameAction(row, a)));
+  const layer = rows[0]?.[3] ?? "";
+  const hand = (side: 0 | 1) => {
+    const keys = rows.map((r) => (r === undefined ? "" : keyName(r[side])));
+    const first = keys[0] ?? "";
+    const last = keys[keys.length - 1] ?? "";
+    return `${LAYER_NAME[layer]}${range ? `${first}–${last}` : keys.join(" ")}`;
+  };
+  return `${hand(0)} / ${hand(1)}`;
 }

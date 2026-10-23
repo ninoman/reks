@@ -1,23 +1,68 @@
 /** The Mix panel's keyboard shortcuts, in a popover (the keys are `lib/mixKeys`, rekordbox's layout). */
+import { WAVE_ZOOM_KEY } from "../../lib/keys";
+import { crossfaderKeyHint, deckKeysHelp } from "../../lib/mixKeys";
 import { Button } from "../ui/Button";
 import { Kbd } from "../ui/Kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/Popover";
 
+/** The deck keys come from `deckKeysHelp`, so the list and the tooltips can't disagree. */
 const SHORTCUTS: [string, string][] = [
-  ["A / H", "Cue deck 2 / 3 (hold on the cue point to preview)"],
-  ["Z / N", "Play or pause deck 2 / 3"],
-  ["Q / Y", "Sync"],
-  ["Shift Q / Shift Y", "Take master"],
-  ["W E / U I", "Nudge slower, faster (hold)"],
-  ["1–4 / 6–9", "Hot cues A–D (any pad mode)"],
-  ["R T / O P", "Previous, next memory cue"],
-  ["Shift T / Shift P", "Set a memory cue at the playhead"],
-  ["⌘ R T / ⌘ O P", "Beat jump back, forward by the last jump size"],
-  ["Shift F / Shift L", "Loop on or off at the last loop size"],
-  ["Shift S / Shift J", "Next pad mode"],
+  [deckKeysHelp([{ type: "cue" }]), "Cue deck 2 / 3 (hold on the cue point to preview)"],
+  [deckKeysHelp([{ type: "play" }]), "Play or pause deck 2 / 3"],
+  [deckKeysHelp([{ type: "sync" }]), "Sync"],
+  [deckKeysHelp([{ type: "master" }]), "Take master"],
+  [
+    deckKeysHelp([
+      { type: "nudge", dir: -1 },
+      { type: "nudge", dir: 1 },
+    ]),
+    "Nudge slower, faster (hold)",
+  ],
+  [
+    deckKeysHelp(
+      [
+        { type: "hotCue", slot: 0 },
+        { type: "hotCue", slot: 3 },
+      ],
+      true,
+    ),
+    "Hot cues A–D (any pad mode)",
+  ],
+  [
+    deckKeysHelp([
+      { type: "callCue", dir: -1 },
+      { type: "callCue", dir: 1 },
+    ]),
+    "Previous, next memory cue",
+  ],
+  [deckKeysHelp([{ type: "memoryCue" }]), "Set a memory cue at the playhead"],
+  [
+    deckKeysHelp([
+      { type: "jump", dir: -1 },
+      { type: "jump", dir: 1 },
+    ]),
+    "Beat jump back, forward by the last jump size",
+  ],
+  [deckKeysHelp([{ type: "loop" }]), "Loop on or off at the next loop size"],
+  [
+    deckKeysHelp([{ type: "loopIn" }, { type: "loopOut" }]),
+    "Loop IN, OUT (an active loop's start, end)",
+  ],
+  [deckKeysHelp([{ type: "reloop" }]), "Reloop: back into the last loop, or leave this one"],
+  [
+    deckKeysHelp([
+      { type: "loopResize", double: false },
+      { type: "loopResize", double: true },
+    ]),
+    "Halve, double the loop (or the next loop size)",
+  ],
+  [deckKeysHelp([{ type: "padMode" }]), "Next pad mode"],
   ["⌥ + key", "Same on deck 1 / 4"],
-  ["X C V", "Crossfader left, centre, right"],
-  ["− / +", "Zoom every deck's waveform out, in (or ⌘/Ctrl + scroll on one)"],
+  [crossfaderKeyHint(), "Crossfader left, centre, right"],
+  [
+    `${WAVE_ZOOM_KEY.out} / ${WAVE_ZOOM_KEY.in}`,
+    "Zoom every deck's waveform out, in (or ⌘/Ctrl + scroll on one)",
+  ],
 ];
 
 export function ShortcutHelp() {

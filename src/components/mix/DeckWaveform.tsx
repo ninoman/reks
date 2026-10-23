@@ -1,6 +1,6 @@
 /**
  * A deck's waveforms on the dark deck: the scrolling view (playhead in the
- * middle, beat lines, cue, memory cue and hot cue marks, the active loop;
+ * middle, beat lines, cue, memory cue, hot cue and pending loop IN marks, the active loop;
  * Cmd/Ctrl + scroll zooms; `overlay` sits on top of it: the zoom buttons,
  * sync phase and warnings) and the whole track overview under it (click or
  * arrow keys to seek). Both draw in the waveform style chosen in Settings →
@@ -58,6 +58,8 @@ export interface DeckWaveformProps {
   memoryCues: MemoryCueView[];
   /** The active loop, if any. */
   loop: LoopView | null;
+  /** A pending loop IN (ms), waiting for OUT. */
+  loopInMs: number | null;
   /** `DECK_ZOOM_S` index. */
   zoom: number;
   onSeek: (ms: number) => void;
@@ -79,6 +81,7 @@ export function DeckWaveform({
   hotCues,
   memoryCues,
   loop,
+  loopInMs,
   zoom,
   onSeek,
   onZoom,
@@ -126,8 +129,8 @@ export function DeckWaveform({
     [columns, style, tokens, overviewSize, durationMs],
   );
   const marks = useMemo(
-    () => (tokens === null ? [] : deckMarks(hotCues, memoryCues, cueMs, tokens.marks)),
-    [hotCues, memoryCues, cueMs, tokens],
+    () => (tokens === null ? [] : deckMarks(hotCues, memoryCues, cueMs, loopInMs, tokens.marks)),
+    [hotCues, memoryCues, cueMs, loopInMs, tokens],
   );
 
   const loopStart = activeLoop(loop)?.startMs ?? null;

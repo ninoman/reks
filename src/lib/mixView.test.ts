@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import type { CueRouting, MixState } from "./ipc";
+import type { CueRouting, DeckView, MixState } from "./ipc";
 import {
   cueFits,
   deckSide,
   formatBeats,
   formatClock,
+  formatLoopBeats,
+  formatLoopSeconds,
   formatTempo,
   JUMP_PAGES,
   LOOP_PAGES,
+  LOOP_SIZE_MAX,
+  LOOP_SIZE_MIN,
+  loopBlockState,
   loopPadControls,
   nextPadMode,
   nextTempoRange,
@@ -18,6 +23,7 @@ import {
   scrubTarget,
   shownDecks,
   snapToDetent,
+  stepLoopSize,
   tempoFader,
   tempoForBpm,
   tempoRangeLabel,
@@ -201,5 +207,100 @@ describe("tempoForBpm", () => {
     expect(tempoForBpm(Number.NaN, 128, 0.1)).toBeNull();
     expect(tempoForBpm(0, 128, 0.1)).toBeNull();
     expect(tempoForBpm(128, 0, 0.1)).toBeNull();
+  });
+});
+
+describe("loop size", () => {
+  it("halves and doubles within 1/32 … 512", () => {
+    expect(stepLoopSize(4, false)).toBe(2);
+    expect(stepLoopSize(4, true)).toBe(8);
+    expect(stepLoopSize(1, false)).toBe(1 / 2);
+    expect(stepLoopSize(LOOP_SIZE_MIN, false)).toBe(LOOP_SIZE_MIN);
+    expect(stepLoopSize(LOOP_SIZE_MAX, true)).toBe(LOOP_SIZE_MAX);
+    expect(stepLoopSize(256, true)).toBe(512);
+    expect(stepLoopSize(1 / 16, false)).toBe(1 / 32);
+  });
+
+  it("reads as beats, fractions, or two decimals for an unquantised manual loop", () => {
+    expect([512, 64, 4, 1, 1 / 2, 1 / 16, 1 / 32].map(formatLoopBeats)).toEqual([
+      "512",
+      "64",
+      "4",
+      "1",
+      "1/2",
+      "1/16",
+      "1/32",
+    ]);
+    expect(formatLoopBeats(3.8731)).toBe("3.87");
+    expect(formatLoopBeats(2.5)).toBe("2.5");
+    expect(formatLoopBeats(0.3)).toBe("0.3");
+  });
+
+  it("reads as seconds without a grid", () => {
+    expect(formatLoopSeconds(250)).toBe("0.25s");
+    expect(formatLoopSeconds(1_500)).toBe("1.5s");
+    expect(formatLoopSeconds(12_345)).toBe("12.3s");
+  });
+});
+
+describe("loopBlockState", () => {
+  const deck = (over: Partial<DeckView> = {}) =>
+    ({
+      positionMs: 5_000,
+      loopRegion: null,
+      loopIn: null,
+      lastLoop: null,
+      ...over,
+    }) as DeckView;
+  const loop = { startMs: 1_000, endMs: 2_000, beats: 4 };
+
+  it("nothing loaded: everything is off", () => {
+    const s = loopBlockState(undefined, false, false, 4);
+    expect([s.inLit, s.outEnabled, s.resizeEnabled, s.loopEnabled, s.reloopEnabled]).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    expect(s.size).toEqual({ text: "4", dimmed: true });
+  });
+
+  it("no grid: IN, OUT and RELOOP work, LOOP and the next size do not", () => {
+    const pending = loopBlockState(deck({ loopIn: 3_000 }), true, false, 4);
+    expect(pending).toMatchObject({ inLit: true, outEnabled: true, loopEnabled: false });
+    expect(pending.resizeEnabled).toBe(false);
+    expect(loopBlockState(deck({ lastLoop: loop }), true, false, 4).reloopEnabled).toBe(true);
+  });
+
+  it("a pending IN ahead of the head does not allow OUT", () => {
+    expect(loopBlockState(deck({ loopIn: 9_000 }), true, true, 4)).toMatchObject({
+      inLit: true,
+      outEnabled: false,
+    });
+  });
+
+  it("with a grid and no loop: LOOP and ½ / 2× are on, the readout shows the next size dimmed", () => {
+    const s = loopBlockState(deck(), true, true, 1 / 8);
+    expect(s).toMatchObject({ looping: false, loopEnabled: true, resizeEnabled: true });
+    expect(s).toMatchObject({ reloopEnabled: false, outEnabled: false, inLit: false });
+    expect(s.size).toEqual({ text: "1/8", dimmed: true });
+  });
+
+  it("looping: LOOP is lit, the readout shows the loop's own length", () => {
+    const s = loopBlockState(deck({ loopRegion: { ...loop, beats: 3.87 } }), true, true, 4);
+    expect(s).toMatchObject({ looping: true, outEnabled: true, reloopEnabled: true, inLit: false });
+    expect(s.size).toEqual({ text: "3.87", dimmed: false });
+  });
+
+  it("looping without a grid: seconds, and the loop can still be resized and left", () => {
+    const s = loopBlockState(
+      deck({ loopRegion: { startMs: 1_000, endMs: 2_250, beats: null } }),
+      true,
+      false,
+      4,
+    );
+    expect(s).toMatchObject({ loopEnabled: true, resizeEnabled: true });
+    expect(s.size).toEqual({ text: "1.25s", dimmed: false });
   });
 });

@@ -56,6 +56,7 @@ import {
   NUDGE,
   nextPadMode,
   type PadMode,
+  stepLoopSize,
   type TempoRange,
   tempoForBpm,
 } from "../lib/mixView";
@@ -223,12 +224,19 @@ export interface MixStore {
   loopPad: (deck: number, beats: number) => void;
   /** Loop on at the size used last, or off. */
   toggleLoop: (deck: number) => void;
+  /** Quick-loop block: IN, OUT, RELOOP as engine controls. */
+  loopIn: (deck: number) => void;
+  loopOut: (deck: number) => void;
+  reloop: (deck: number) => void;
+  /** ½ / 2×: resizes the active loop, else LOOP's next size (`DeckMeta.lastLoop`). */
+  loopResize: (deck: number, double: boolean) => void;
   /** A hot cue pad or key: jumps to a set cue, sets an empty one at the playhead. */
   hotCuePad: (deck: number, slot: number) => void;
   /** Edits the cues of the track on `deck` in the library and on the deck. */
   editCues: (deck: number, edit: CueEdit) => Promise<void>;
   /** Moves the cue point and playhead to `ms` (a memory cue). */
-  callCue: (deck: number, ms: number) => void;
+  /** A memory loop's `endMs` arms RELOOP. */
+  callCue: (deck: number, ms: number, endMs?: number | null) => void;
   /** Memory cue call ◀ (-1) / ▶ (1) from the playhead. */
   callAdjacentCue: (deck: number, dir: -1 | 1) => void;
   setPadMode: (deck: number, mode: PadMode) => void;
@@ -751,6 +759,26 @@ export const useMix = create<MixStore>((set, get) => {
       );
     },
 
+    loopIn(deck) {
+      get().send({ type: "loopIn", deck });
+    },
+
+    loopOut(deck) {
+      get().send({ type: "loopOut", deck });
+    },
+
+    reloop(deck) {
+      get().send({ type: "reloop", deck });
+    },
+
+    loopResize(deck, double) {
+      if (deckView(deck)?.loopRegion != null) {
+        get().send({ type: "loopResize", deck, double });
+      } else {
+        patchDeck(deck, { lastLoop: stepLoopSize(prefs(deck).lastLoop, double) });
+      }
+    },
+
     hotCuePad(deck, slot) {
       const meta = get().decks[deck];
       if (meta?.track == null || deckView(deck)?.loaded !== true) return;
@@ -780,8 +808,8 @@ export const useMix = create<MixStore>((set, get) => {
       }
     },
 
-    callCue(deck, ms) {
-      get().send({ type: "callCue", deck, ms });
+    callCue(deck, ms, endMs = null) {
+      get().send({ type: "callCue", deck, ms, endMs });
     },
 
     callAdjacentCue(deck, dir) {
@@ -789,7 +817,8 @@ export const useMix = create<MixStore>((set, get) => {
       const meta = get().decks[deck];
       if (v?.loaded !== true || meta === undefined) return;
       const ms = adjacentCue(meta.memoryCues, v.positionMs, dir);
-      if (ms !== null) get().callCue(deck, ms);
+      if (ms !== null)
+        get().callCue(deck, ms, meta.memoryCues.find((c) => c.positionMs === ms)?.endMs ?? null);
     },
 
     setPadMode(deck, mode) {
