@@ -2,14 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { RuleNode } from "../lib/ipc";
 import {
-  activeFilterCount,
-  buildFilters,
   buildQuery,
-  daysAgo,
   defaultSort,
   entryPosition,
   itemAt,
-  noFilters,
   PAGE_SIZE,
   type QueryInputs,
   rowAt,
@@ -19,7 +15,7 @@ import {
 
 const inputs = (patch: Partial<QueryInputs> = {}): QueryInputs => ({
   text: "",
-  filters: noFilters,
+  playlistId: null,
   filtersEnabled: true,
   rule: null,
   sort: defaultSort,
@@ -37,7 +33,7 @@ describe("buildQuery", () => {
     });
   });
 
-  it("sends the rule with tag ids, next to the filters, and only while filters are on", () => {
+  it("sends the rule with the shown playlist, and the rule only while filters are on", () => {
     const rule: RuleNode = {
       type: "group",
       match: "all",
@@ -47,17 +43,12 @@ describe("buildQuery", () => {
         { type: "filter", not: true, filter: { type: "playlist", id: 2 } },
       ],
     };
-    const on = buildQuery(
-      inputs({ rule, filters: { ...noFilters, genre: "House", tagIds: [3] } }),
-      0,
-    );
+    const on = buildQuery(inputs({ rule, playlistId: 7 }), 0);
     expect(on.rule).toEqual(rule);
-    expect(on.filters).toEqual([
-      { type: "genre", genre: "House" },
-      { type: "tagAny", ids: [3] },
-    ]);
-    const off = buildQuery(inputs({ rule, filtersEnabled: false }), 0);
+    expect(on.filters).toEqual([{ type: "playlist", id: 7 }]);
+    const off = buildQuery(inputs({ rule, playlistId: 7, filtersEnabled: false }), 0);
     expect("rule" in off).toBe(false);
+    expect(off.filters).toEqual([{ type: "playlist", id: 7 }]);
     expect("rule" in buildQuery(inputs(), 0)).toBe(false);
   });
 
@@ -72,95 +63,9 @@ describe("buildQuery", () => {
     expect(q.limit).toBe(PAGE_SIZE);
   });
 
-  it("filters switched off are kept but not sent, except the playlist", () => {
-    const filters = { ...noFilters, genre: "House", ratingMin: 4, playlistId: 7 };
-    expect(buildQuery(inputs({ filters }), 0).filters).toHaveLength(3);
-    expect(buildQuery(inputs({ filters, filtersEnabled: false }), 0).filters).toEqual([
-      { type: "playlist", id: 7 },
-    ]);
-  });
-
-  it("sends the tag filter, and keeps it set aside while filters are off", () => {
-    const filters = { ...noFilters, tagIds: [2], playlistId: 7 };
-    expect(buildQuery(inputs({ filters }), 0).filters).toEqual([
-      { type: "playlist", id: 7 },
-      { type: "tagAny", ids: [2] },
-    ]);
-    expect(buildQuery(inputs({ filters, filtersEnabled: false }), 0).filters).toEqual([
-      { type: "playlist", id: 7 },
-    ]);
-  });
-
   it("passes the sort through", () => {
     const sort = { column: "bpm", descending: true } as const;
     expect(buildQuery(inputs({ sort }), 0).sort).toEqual(sort);
-  });
-});
-
-describe("buildFilters", () => {
-  it("maps every sidebar filter", () => {
-    expect(
-      buildFilters({
-        genre: "House",
-        keys: ["Am", "F#m"],
-        bpmMin: 120,
-        bpmMax: 128.5,
-        color: "red",
-        ratingMin: 3,
-        playlistId: 11,
-        missing: false,
-        playsMin: null,
-        playsMax: null,
-        lastPlayed: null,
-        tagIds: [4, 9],
-      }),
-    ).toEqual([
-      { type: "genre", genre: "House" },
-      { type: "keyIn", keys: ["Am", "F#m"] },
-      { type: "bpmRange", min: 12000, max: 12850 },
-      { type: "color", color: "red" },
-      { type: "ratingMin", rating: 3 },
-      { type: "playlist", id: 11 },
-      { type: "missing", missing: false },
-      { type: "tagAny", ids: [4, 9] },
-    ]);
-  });
-
-  it("emits tagAny only with tags chosen, and counts it as one filter", () => {
-    expect(buildFilters({ ...noFilters, tagIds: [] })).toEqual([]);
-    expect(buildFilters({ ...noFilters, tagIds: [3] })).toEqual([{ type: "tagAny", ids: [3] }]);
-    expect(activeFilterCount({ ...noFilters, tagIds: [3, 4], genre: "House" })).toBe(2);
-  });
-
-  it("leaves out unset filters", () => {
-    expect(buildFilters(noFilters)).toEqual([]);
-    expect(buildFilters({ ...noFilters, ratingMin: 0, keys: [] })).toEqual([]);
-  });
-
-  it("open-ended BPM ranges", () => {
-    expect(buildFilters({ ...noFilters, bpmMin: 124 })).toEqual([
-      { type: "bpmRange", min: 12400, max: 100000 },
-    ]);
-    expect(buildFilters({ ...noFilters, bpmMax: 90 })).toEqual([
-      { type: "bpmRange", min: 0, max: 9000 },
-    ]);
-  });
-
-  it("play filters", () => {
-    const now = new Date(2026, 9, 20);
-    expect(buildFilters({ ...noFilters, playsMin: 2 }, now)).toEqual([
-      { type: "playCountRange", min: 2, max: 1_000_000 },
-    ]);
-    expect(buildFilters({ ...noFilters, playsMax: 0 }, now)).toEqual([
-      { type: "playCountRange", min: 0, max: 0 },
-    ]);
-    expect(buildFilters({ ...noFilters, lastPlayed: "never" }, now)).toEqual([
-      { type: "neverPlayed" },
-    ]);
-    expect(buildFilters({ ...noFilters, lastPlayed: 30 }, now)).toEqual([
-      { type: "playedSince", date: "2026-09-20" },
-    ]);
-    expect(daysAgo(365, now)).toBe("2025-10-20");
   });
 });
 

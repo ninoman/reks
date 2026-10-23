@@ -486,6 +486,11 @@
   --toolbar-h: 40px;
   --sidebar-w: 240px;
   --sheet-w: 300px;
+  /* Filters drawer query (D35): the rail rows hang off, its dots, the field label column. */
+  --query-rail-w: 22px;
+  --query-dot: 7px;
+  --query-label-w: 94px;
+  --query-row-h: 32px;
   --player-bar-h: 40px;
 
   /* Mixer (phase 5): knobs, faders, deck waveforms, channel strips. */

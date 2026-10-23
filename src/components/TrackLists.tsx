@@ -31,7 +31,7 @@ export function TrackLists({ columns }: { columns: ColumnSpec[] }) {
   const filtersOpen = usePanels((s) => s.filterBarOpen);
   const tagsOpen = useTags((s) => s.managerOpen);
   const nodes = usePlaylists((s) => s.nodes);
-  const mainId = useLibrary((s) => s.filters.playlistId);
+  const mainId = useLibrary((s) => s.playlistId);
   const nameOf = (id: number | null) => nodes.find((n) => n.id === id)?.name ?? "Collection";
 
   return (

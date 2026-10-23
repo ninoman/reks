@@ -32,10 +32,7 @@ export const usePanes = create<PanesState>()((set, get) => ({
   panes: [],
 
   open(playlistId, isFolder) {
-    const shown = [
-      useLibrary.getState().filters.playlistId,
-      ...get().panes.map((p) => p.playlistId),
-    ];
+    const shown = [useLibrary.getState().playlistId, ...get().panes.map((p) => p.playlistId)];
     if (shown.includes(playlistId)) return;
     const store = createLibraryStore();
     store.getState().showPlaylist(playlistId, isFolder);

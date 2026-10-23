@@ -13,6 +13,7 @@ import {
   menuContentVariants,
   menuIndicatorClass,
   menuItemVariants,
+  menuLabelClass,
   menuSeparatorClass,
 } from "./menu";
 
@@ -24,15 +25,7 @@ export const ContextMenuGroup = Menu.Group;
 
 /** Heading of a `ContextMenuGroup`. */
 export function ContextMenuLabel({ className, ...props }: ComponentProps<typeof Menu.Label>) {
-  return (
-    <Menu.Label
-      className={cn(
-        "px-2 pt-1.5 pb-0.5 text-2xs font-semibold tracking-caption text-fg-subtle uppercase",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <Menu.Label className={cn(menuLabelClass, className)} {...props} />;
 }
 
 export function ContextMenuContent({ className, ...props }: ComponentProps<typeof Menu.Content>) {

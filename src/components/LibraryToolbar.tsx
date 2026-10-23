@@ -1,13 +1,19 @@
 /**
  * List toolbar above the track table: search, the Filters button (shows the
- * filter bar; badge = filters set) with the on/off switch while any is set,
+ * Filters drawer; badge = rows that filter, tooltip = what they say) with the
+ * on/off switch while any is set,
  * track count, background analysis progress, column chooser, and the Track
  * info button. Library-wide actions (scan, import) live in the app header.
  */
+import { useMemo } from "react";
 
-import { activeFilterCount, useLibrary } from "../store/library";
+import { useLibrary } from "../store/library";
 import { usePanels } from "../store/panels";
-import { ruleLeafCount } from "../store/ruleTree";
+import { usePlaylists } from "../store/playlists";
+import { useRules } from "../store/rules";
+import { activeRowCount, type SummaryNames, summarize } from "../store/ruleTree";
+import { useKeyLabel } from "../store/settings";
+import { tagIndex } from "../store/tagModel";
 import { useTags } from "../store/tags";
 import { AnalysisIndicator } from "./AnalysisIndicator";
 import { ColumnChooser } from "./ColumnChooser";
@@ -21,11 +27,29 @@ import { IconButton } from "./ui/IconButton";
 import { Separator } from "./ui/Separator";
 import { Tooltip } from "./ui/Tooltip";
 
+/** Names for the Filters summary, looked up where they live. */
+function useSummaryNames(): SummaryNames {
+  const tree = useTags((s) => s.tree);
+  const nodes = usePlaylists((s) => s.nodes);
+  const keyLabel = useKeyLabel();
+  return useMemo(() => {
+    const tags = tree === null ? null : tagIndex(tree);
+    return {
+      tag: (id) => tags?.get(id)?.tag.name ?? `tag ${id}`,
+      category: (id) => tree?.categories.find((c) => c.id === id)?.name ?? "tag",
+      playlist: (id) => nodes.find((n) => n.id === id)?.name ?? `playlist ${id}`,
+      key: keyLabel,
+    };
+  }, [tree, nodes, keyLabel]);
+}
+
 export function LibraryToolbar({ table }: { table: TrackTableModel }) {
   const total = useLibrary((s) => s.total);
   const selected = useLibrary((s) => s.selection.selected.size);
   const setText = useLibrary((s) => s.setText);
-  const activeFilters = useLibrary((s) => activeFilterCount(s.filters) + ruleLeafCount(s.rule));
+  const root = useRules((s) => s.root);
+  const activeFilters = activeRowCount(root);
+  const summary = summarize(root, useSummaryNames());
   const filtersEnabled = useLibrary((s) => s.filtersEnabled);
   const { filterBarOpen, infoOpen, toggleFilterBar, toggleInfo } = usePanels();
   const tagsOpen = useTags((s) => s.managerOpen);
@@ -39,7 +63,14 @@ export function LibraryToolbar({ table }: { table: TrackTableModel }) {
   return (
     <div className="flex h-(--toolbar-h) shrink-0 items-center gap-2 border-b border-border px-2.5">
       <SearchBox onSearch={setText} />
-      <Tooltip content={filterBarOpen ? "Hide filters" : "Show filters"}>
+      <Tooltip
+        content={
+          <>
+            {filterBarOpen ? "Hide filters" : "Show filters"}
+            {summary !== null && <span className="block max-w-72 truncate">{summary}</span>}
+          </>
+        }
+      >
         <Button size="sm" variant="ghost" aria-pressed={filterBarOpen} onClick={toggleFilterBar}>
           <FilterIcon />
           Filters

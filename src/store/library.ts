@@ -1,5 +1,6 @@
 /**
- * Library table state (Zustand): search text, sidebar filters, sort, column
+ * Library table state (Zustand): search text, the shown playlist, the Filters
+ * drawer's rule (built in `rules.ts`), sort, column
  * visibility, the loaded pages of the current result, and the selection.
  * Rows are fetched a page at a time as the table scrolls; the WebView never
  * holds the whole library.
@@ -14,8 +15,6 @@ import { create, type StoreApi, type UseBoundStore } from "zustand";
 import {
   type DividerRow,
   type Facets,
-  type Filter,
-  type Key,
   libraryFacets,
   libraryQuery,
   type RuleNode,
@@ -34,45 +33,6 @@ import {
 /** Rows per `library_query` call. */
 export const PAGE_SIZE = 200;
 
-/** Sidebar filter values; `null` / empty = not filtering. */
-export interface FilterState {
-  genre: string | null;
-  keys: Key[];
-  /** BPM as shown (e.g. 128), not × 100. */
-  bpmMin: number | null;
-  bpmMax: number | null;
-  color: string | null;
-  /** 0 = any. */
-  ratingMin: number;
-  playlistId: number | null;
-  missing: boolean | null;
-  /** Play count range (D23: baseline plus counted sessions). */
-  playsMin: number | null;
-  playsMax: number | null;
-  /** "never", or played within this many days. */
-  lastPlayed: LastPlayedFilter | null;
-  /** My Tags: tracks with at least one of these. */
-  tagIds: TagId[];
-}
-
-/** The "Last played" filter's choices. */
-export type LastPlayedFilter = "never" | 30 | 90 | 365;
-
-export const noFilters: FilterState = {
-  genre: null,
-  keys: [],
-  bpmMin: null,
-  bpmMax: null,
-  color: null,
-  ratingMin: 0,
-  playlistId: null,
-  missing: null,
-  playsMin: null,
-  playsMax: null,
-  lastPlayed: null,
-  tagIds: [],
-};
-
 export const defaultSort: Sort = { column: "dateAdded", descending: true };
 
 /** Upper BPM bound when only a minimum is set (×100). */
@@ -81,10 +41,11 @@ export const BPM_X100_MAX = 1_000_00;
 /** The parts of the store a query is built from. */
 export interface QueryInputs {
   text: string;
-  filters: FilterState;
-  /** Off: the sidebar filters are kept but not applied (the playlist still is). */
+  /** The playlist or folder chosen in the tree; `null`: the whole collection. */
+  playlistId: number | null;
+  /** Off: the Filters drawer's rule is kept but not applied (the playlist still is). */
   filtersEnabled: boolean;
-  /** The rule builder's finished rows, ANDed with the filters; `null` = none. */
+  /** The Filters drawer's rule (`rules.ts`); `null` = nothing filters. */
   rule: RuleNode | null;
   sort: Sort;
 }
@@ -92,54 +53,12 @@ export interface QueryInputs {
 /** Upper play count bound when only a minimum is set. */
 export const PLAYS_MAX = 1_000_000;
 
-/** Local calendar date `days` days before `now`, as `YYYY-MM-DD`. */
-export function daysAgo(days: number, now: Date = new Date()): string {
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-/** Sidebar state → the `Filter` list `library_query` takes. */
-export function buildFilters(f: FilterState, now: Date = new Date()): Filter[] {
-  const out: Filter[] = [];
-  if (f.genre !== null) out.push({ type: "genre", genre: f.genre });
-  if (f.keys.length > 0) out.push({ type: "keyIn", keys: [...f.keys] });
-  if (f.bpmMin !== null || f.bpmMax !== null) {
-    out.push({
-      type: "bpmRange",
-      min: f.bpmMin === null ? 0 : Math.round(f.bpmMin * 100),
-      max: f.bpmMax === null ? BPM_X100_MAX : Math.round(f.bpmMax * 100),
-    });
-  }
-  if (f.color !== null) out.push({ type: "color", color: f.color });
-  if (f.ratingMin > 0) out.push({ type: "ratingMin", rating: f.ratingMin });
-  if (f.playlistId !== null) out.push({ type: "playlist", id: f.playlistId });
-  if (f.missing !== null) out.push({ type: "missing", missing: f.missing });
-  if (f.playsMin !== null || f.playsMax !== null) {
-    out.push({ type: "playCountRange", min: f.playsMin ?? 0, max: f.playsMax ?? PLAYS_MAX });
-  }
-  if (f.lastPlayed === "never") out.push({ type: "neverPlayed" });
-  else if (f.lastPlayed !== null)
-    out.push({ type: "playedSince", date: daysAgo(f.lastPlayed, now) });
-  if (f.tagIds.length > 0) out.push({ type: "tagAny", ids: [...f.tagIds] });
-  return out;
-}
-
-/** Filters set in the sidebar panel (the shown playlist doesn't count). */
-export function activeFilterCount(f: FilterState): number {
-  return buildFilters({ ...f, playlistId: null }).length;
-}
-
 /** The `TrackQuery` for page `page` of the current inputs. */
 export function buildQuery(inputs: QueryInputs, page: number): TrackQuery {
   const text = inputs.text.trim();
   return {
     text: text === "" ? null : text,
-    filters: buildFilters(
-      inputs.filtersEnabled
-        ? inputs.filters
-        : { ...noFilters, playlistId: inputs.filters.playlistId },
-    ),
+    filters: inputs.playlistId === null ? [] : [{ type: "playlist", id: inputs.playlistId }],
     ...(inputs.filtersEnabled && inputs.rule !== null ? { rule: inputs.rule } : {}),
     sort: { ...inputs.sort },
     offset: page * PAGE_SIZE,
@@ -166,16 +85,15 @@ export interface LibraryState extends QueryInputs {
   inFlight: ReadonlySet<number>;
   selection: Selection;
   facets: Facets | null;
+  /** `library_facets` failed (the pickers offer Retry); the table keeps working. */
+  facetsError: string | null;
   error: string | null;
 
   setText(text: string): void;
-  setFilters(patch: Partial<FilterState>): void;
-  /** Applies the filters or sets them aside without losing their values. */
+  /** Applies the drawer's rule or sets it aside without losing it. */
   setFiltersEnabled(enabled: boolean): void;
-  /** Sets the rule builder's rule (`null`: none) and re-queries. */
+  /** Sets the drawer's rule (`null`: none) and re-queries. */
   setRule(rule: RuleNode | null): void;
-  /** Clears the sidebar filters; the shown playlist (the tree's selection) stays. */
-  clearFilters(): void;
   /**
    * Shows a playlist (sorted by position), a folder (everything below it) or,
    * with `null`, the whole collection.
@@ -241,7 +159,7 @@ export function createLibraryStore(): LibraryStore {
 
     return {
       text: "",
-      filters: noFilters,
+      playlistId: null,
       filtersEnabled: true,
       rule: null,
       sort: defaultSort,
@@ -256,14 +174,11 @@ export function createLibraryStore(): LibraryStore {
       inFlight: new Set(),
       selection: emptySelection,
       facets: null,
+      facetsError: null,
       error: null,
 
       setText(text) {
         set({ text });
-        get().refresh();
-      },
-      setFilters(patch) {
-        set((s) => ({ filters: { ...s.filters, ...patch } }));
         get().refresh();
       },
       setFiltersEnabled(filtersEnabled) {
@@ -275,16 +190,12 @@ export function createLibraryStore(): LibraryStore {
         set({ rule });
         get().refresh();
       },
-      clearFilters() {
-        set((s) => ({ filters: { ...noFilters, playlistId: s.filters.playlistId } }));
-        get().refresh();
-      },
       showPlaylist(id, isFolder) {
         set((s) => {
           let sort = s.sort;
           if (id !== null && !isFolder) sort = { column: "playlistPosition", descending: false };
           else if (sort.column === "playlistPosition") sort = defaultSort;
-          return { filters: { ...s.filters, playlistId: id }, sort };
+          return { playlistId: id, sort };
         });
         get().refresh();
       },
@@ -348,9 +259,9 @@ export function createLibraryStore(): LibraryStore {
       },
       async loadFacets() {
         try {
-          set({ facets: await libraryFacets() });
+          set({ facets: await libraryFacets(), facetsError: null });
         } catch (e) {
-          set({ error: String(e) });
+          set({ facetsError: String(e) });
         }
       },
     };

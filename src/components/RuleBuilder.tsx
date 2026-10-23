@@ -1,150 +1,116 @@
 /**
- * The advanced filter, under the filter bar: a tree of "match all / any /
- * none of these" groups and conditions, ANDed with the bar. Edits apply as
- * you make them (no Apply button); a live line says what the conditions mean
- * and how many tracks match. Unfinished rows are left out until finished.
- * With a smart playlist's rules loaded, it saves back to that playlist.
+ * The Filters drawer's query (D35): the root level's rows and groups and
+ * "+ Add filter". Reads the stores and hands `RuleLevel` the draft, the
+ * pickers' choices and the actions; edits apply as they are made (no Apply
+ * button), and the table is the feedback (no count or summary here).
  */
 import { useMemo, useState } from "react";
 
-import { cn } from "../lib/cn";
+import type { KeyInfo } from "../lib/ipc";
 import { useLibrary } from "../store/library";
 import { usePlaylists } from "../store/playlists";
 import { useRules } from "../store/rules";
-import { isBlank, rowCount, type SummaryNames, summarize, toRule } from "../store/ruleTree";
+import { defaultKeys, hiddenRows, shownKeys } from "../store/ruleTree";
 import { useKeyLabel } from "../store/settings";
-import { tagIndex } from "../store/tagModel";
 import { useTags } from "../store/tags";
+import { FieldChooser } from "./FieldChooser";
 import { PlusIcon } from "./icons";
-import { RuleGroup } from "./RuleGroup";
-import { SaveSmartDialog } from "./SaveSmartDialog";
+import { RuleLevel } from "./RuleGroup";
+import type { RuleChoices } from "./RuleValueEditor";
 import { Button } from "./ui/Button";
-import { Tooltip } from "./ui/Tooltip";
+import type { OptionsStatus } from "./ValuePicker";
 
-/** Names for the summary line, looked up where they live. */
-function useSummaryNames(): SummaryNames {
-  const tree = useTags((s) => s.tree);
-  const nodes = usePlaylists((s) => s.nodes);
+const NO_KEYS: readonly KeyInfo[] = [];
+const NONE: readonly string[] = [];
+
+/** The pickers' options and their loading / error states, from the stores. */
+function useRuleChoices(): RuleChoices {
+  const facets = useLibrary((s) => s.facets);
+  const facetsError = useLibrary((s) => s.facetsError);
+  const playlists = usePlaylists((s) => s.nodes);
+  const tags = useTags((s) => s.tree);
+  const tagsState = useTags((s) => s.status);
+  const tagsError = useTags((s) => s.error);
   const keyLabel = useKeyLabel();
-  return useMemo(() => {
-    const tags = tree === null ? null : tagIndex(tree);
-    return {
-      tag: (id) => tags?.get(id)?.tag.name ?? `tag ${id}`,
-      playlist: (id) => nodes.find((n) => n.id === id)?.name ?? `playlist ${id}`,
-      key: keyLabel,
-    };
-  }, [tree, nodes, keyLabel]);
+
+  const facetsStatus: OptionsStatus =
+    facets !== null
+      ? { state: "ready" }
+      : facetsError !== null
+        ? {
+            state: "error",
+            error: facetsError,
+            retry: () => void useLibrary.getState().loadFacets(),
+          }
+        : { state: "loading" };
+  const tagsStatus: OptionsStatus =
+    tags !== null
+      ? { state: "ready" }
+      : tagsState === "error"
+        ? { state: "error", error: tagsError ?? "", retry: () => void useTags.getState().load() }
+        : { state: "loading" };
+  return {
+    genres: facets?.genres ?? NONE,
+    colours: facets?.colours ?? NONE,
+    keys: facets?.keys ?? NO_KEYS,
+    facets: facetsStatus,
+    playlists,
+    tags,
+    tagsStatus,
+    keyLabel,
+  };
 }
 
 export function RuleBuilder() {
   const root = useRules((s) => s.root);
-  const editing = useRules((s) => s.editing);
-  const focusId = useRules((s) => s.focusId);
+  const focus = useRules((s) => s.focus);
+  const defaultFields = useRules((s) => s.defaultFields);
+  const tree = useTags((s) => s.tree);
   const actions = useRules.getState();
-  const facets = useLibrary((s) => s.facets);
-  const nodes = usePlaylists((s) => s.nodes);
-  const enabled = useLibrary((s) => s.filtersEnabled);
-  const total = useLibrary((s) => s.total);
-  const loading = useLibrary((s) => s.pagesGeneration !== s.generation);
-  const names = useSummaryNames();
-  const [saveOpen, setSaveOpen] = useState(false);
+  const choices = useRuleChoices();
+  const [addOpen, setAddOpen] = useState(false);
 
-  const summary = summarize(root, names);
-  const finished = toRule(root) !== null;
-  const rows = rowCount(root);
+  const defaults = useMemo(
+    () => defaultKeys(defaultFields, tree?.categories.map((c) => c.id) ?? null),
+    [defaultFields, tree],
+  );
+  const hidden = useMemo(() => hiddenRows(root), [root]);
+  const empty = root.rules.every((i) => hidden.has(i.id));
 
   return (
-    <section
-      id="rule-builder"
-      aria-label="Advanced filter"
-      className="flex shrink-0 flex-col gap-2 border-b border-border bg-bg-subtle px-2.5 py-2"
-    >
-      {editing !== null && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md bg-surface px-2 py-1 text-sm">
-          <span className="min-w-0 flex-1">
-            Editing the rules of <strong className="font-semibold">{editing.name}</strong>. The
-            table shows your whole library as a preview.
-          </span>
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={!finished}
-            onClick={() => void actions.saveEdit()}
-          >
-            Save rules
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => actions.cancelEdit()}>
-            Cancel
-          </Button>
-        </div>
-      )}
-
-      <p className="m-0 text-sm text-fg-muted" aria-live="polite" data-testid="rule-summary">
-        {summary === null ? (
-          "Add a condition to narrow the list. Finished conditions apply at once."
+    <section aria-label="Filter rows" className="flex flex-col gap-1">
+      <div data-query>
+        {empty ? (
+          <p className="m-0 py-1 text-sm text-fg-muted">No filters here. Add one below.</p>
         ) : (
-          <>
-            <span className="text-fg">{summary}</span>
-            {" → "}
-            <span className={cn("tabular-nums", loading && "opacity-60")}>
-              {total.toLocaleString()} {total === 1 ? "track" : "tracks"}
-            </span>
-            {!enabled && " (filters are set aside)"}
-          </>
-        )}
-      </p>
-
-      <div className={cn(!enabled && "opacity-45")}>
-        {root.rules.length === 0 ? (
-          <div className="flex items-center gap-2 text-sm text-fg-muted">
-            No conditions yet.
-            <Button size="xs" variant="outline" onClick={() => actions.addRow(root.id)}>
-              <PlusIcon />
-              Add condition
-            </Button>
-          </div>
-        ) : (
-          <RuleGroup
+          <RuleLevel
             group={root}
             root={root}
-            choices={{
-              genres: facets?.genres ?? [],
-              colours: facets?.colours ?? [],
-              playlists: nodes,
-            }}
+            hidden={hidden}
+            defaults={defaults}
+            choices={choices}
             actions={actions}
-            focusId={focusId}
-            onFocused={actions.clearFocus}
-            nested={false}
-            totalRows={rows}
+            focus={focus}
           />
         )}
       </div>
-
-      {editing === null && (
-        <div className="flex items-center gap-2">
-          <Tooltip
-            content={finished ? "Keep these conditions as a playlist" : "Finish a condition first"}
-            side="top"
-          >
-            {/* A span keeps the tooltip working while the button is disabled. */}
-            <span>
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={!finished}
-                onClick={() => setSaveOpen(true)}
-              >
-                Save as smart playlist…
-              </Button>
-            </span>
-          </Tooltip>
-          <Button size="sm" variant="link" disabled={isBlank(root)} onClick={() => actions.clear()}>
-            Clear conditions
-          </Button>
-        </div>
-      )}
-      <SaveSmartDialog open={saveOpen} onOpenChange={setSaveOpen} />
+      <div className="pl-(--query-rail-w)">
+        <FieldChooser
+          trigger={
+            <Button size="sm" variant="ghost" className="text-fg-muted">
+              <PlusIcon />
+              Add filter
+            </Button>
+          }
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          shown={shownKeys(root, root)}
+          categories={tree?.categories ?? null}
+          tagsStatus={choices.tagsStatus}
+          onPick={(key) => actions.addField(root.id, key)}
+          onResetDefaults={actions.resetDefaults}
+        />
+      </div>
     </section>
   );
 }

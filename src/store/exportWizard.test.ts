@@ -268,6 +268,7 @@ describe("useExportWizard", () => {
         filtersEnabled: true,
         infoOpen: false,
         volume: 1,
+        filterFields: null,
       },
       anlzPreference: "reksFirst",
       onelibraryKeyBuiltin: false,

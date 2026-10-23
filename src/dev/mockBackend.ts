@@ -293,6 +293,7 @@ let settings: Settings = {
     filtersEnabled: true,
     infoOpen: false,
     volume: 0.8,
+    filterFields: null,
   },
 };
 
