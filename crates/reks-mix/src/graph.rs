@@ -416,6 +416,9 @@ impl Graph {
                     *frame = [l, r];
                 }
             }
+            for (ch, deck) in self.decks.iter().enumerate() {
+                self.mixer.set_beat_frames(ch, deck.beat_frames());
+            }
             let at = i * BLOCK * 2;
             let phones = phones.as_deref_mut().map(|p| &mut p[at..at + n]);
             self.mixer.process(&mut self.inputs, block, phones);

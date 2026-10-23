@@ -3,8 +3,13 @@
 //! never allocates, locks or does I/O; buffers are sized in `new`.
 //! Formulas, sources and tolerances: `docs/mixer-dsp.md`.
 
+pub(crate) mod bell;
 pub mod biquad;
+pub mod channel_echo;
+pub mod channel_filter;
+pub mod channel_reverb;
 pub mod eq;
+pub mod eq3;
 pub mod filter;
 pub mod level;
 pub mod limiter;

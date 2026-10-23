@@ -5,6 +5,7 @@
 //! mixer is Phase 5 (D21, `docs/phases/phase-5.md`).
 
 pub mod beatmap;
+mod channel_fx;
 pub mod control;
 mod cue;
 mod deck;
@@ -22,7 +23,9 @@ pub mod taper;
 mod varispeed;
 
 pub use beatmap::{BeatMap, GridAnchor};
-pub use control::{ChannelParam, Control, CueRouting, FilterParam, FilterUnit, MasterParam};
+pub use control::{
+    ChannelParam, Control, CueRouting, FilterParam, FilterUnit, FxKind, MasterParam,
+};
 pub use engine::{
     device_options, output_devices, DeviceOptions, Engine, EngineConfig, StreamInfo, COMMON_RATES,
     PREFERRED_RATE,

@@ -539,6 +539,9 @@
   --mixer-h-advanced: 440px;
   --mixer-h-simple: 356px;
   --mixer-h-simple-bare: 292px;
+  /* 3-band (#56): the five knob rows and the FX row; Advanced adds the X-F assigns and crossfader. */
+  --mixer-h-three: 333px;
+  --mixer-h-three-advanced: 393px;
   --mixer-h: var(--mixer-h-advanced);
   /* With 4 decks the mixer stays as tall as the two stacked decks; a shorter view gives this much to its faders. */
   --fader-bonus: 60px;
@@ -584,7 +587,24 @@
   --mixer-h: var(--mixer-h-simple-bare);
   --deck-h: var(--mixer-h);
 }
-[data-mixer^="simple"][data-decks="4"] {
+[data-mixer="three"] {
+  --mixer-h: var(--mixer-h-three);
+  --deck-h: var(--mixer-h);
+}
+[data-mixer="three-advanced"] {
+  --mixer-h: var(--mixer-h-three-advanced);
+  --deck-h: var(--mixer-h);
+}
+/* With 4 decks every view is 440 px: the faders take up to --fader-bonus, the rows spread over the rest. */
+[data-mixer^="simple"][data-decks="4"],
+[data-mixer="three"][data-decks="4"] {
   --mixer-h: var(--mixer-h-advanced);
   --fader-len: calc(var(--fader-len-base) + var(--fader-bonus));
+}
+[data-mixer="three-advanced"][data-decks="4"] {
+  --mixer-h: var(--mixer-h-advanced);
+  --fader-len: calc(
+    var(--fader-len-base) +
+    min(var(--fader-bonus), var(--mixer-h-advanced) - var(--mixer-h-three-advanced))
+  );
 }

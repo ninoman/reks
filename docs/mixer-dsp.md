@@ -24,6 +24,8 @@ the neutral position (noon for EQ and trim, closed for faders).
 | HI / LO shelf | amplitude: boost `10^(6·(2v−1)/20)` above noon; cut `(2v)³` below (kill at 0) | range R§9.1; cut shape ours |
 | HI MID / LO MID | dB, linear each side: −27 at 0, 0 at noon, +10 at 1 | range R§9.1; shape ours |
 | LEVEL trim | dB, linear: −10 … +10 | 20 dB range R§9.1; ±10 split **UNVERIFIED** |
+| 3-band HI / MID / LOW | dB, linear each side: −26 at 0, 0 at noon, +6 at 1 | range R§9.5; shape ours |
+| Channel FX knob | `d = 2v − 1`, dead zone ±0.03, `t = (|d| − 0.03)/0.97`, side = sign | ours (`fx_send`) |
 
 Parameters ramp linearly to new values over `SMOOTH_MS` = 10 ms (the plan asks
 for at least 5 ms), so moving a knob through noon or to a kill does not step.
@@ -102,13 +104,55 @@ Tests (`dsp::filter` tests):
 | maximum resonance, LP/HP/BP, 30 Hz–20 kHz in 1/3 octaves and while FREQ sweeps end to end | finite, below 200 on full-scale noise, rings down; at 44.1, 48, 96 kHz |
 | mode switch plus ON → off on a 50 Hz tone | no sample step above 0.01 |
 
+## 3-band EQ and channel FX (task 26)
+
+The 3-band layout's blocks (`docs/research/djm-eq-fx.md`, R§9.5). Both
+layouts' blocks sit in every strip; the UI sends the hidden layout's knobs
+at noon / centre, where each block is bypassed and returns its input bit
+for bit, so the engine has no EQ mode.
+
+- `dsp::eq3::ThreeBandEq`: LOW shelf 250 Hz → MID bell 1 kHz (Q 0.7) →
+  HI shelf 3 kHz, −26 / +6 dB, no kill. The shelves are Simper SVF
+  shelves (`g = tan(π·fc/fs)/√A` low, `·√A` high), flat to the floor with
+  no dip; the bell is the 4-band mids' `dsp::bell::Bell` at another Q.
+  Corners and Q **UNVERIFIED**.
+- `channel_fx::ChannelFx`: the FILTER / ECHO / REVERB blocks of a channel.
+  The selected one (`Control::ChannelFx`) gets the channel's knob
+  (`ChannelParam::Fx`), the others centre, so switching is a knob move and
+  tails ring out. PARAMETER (`Control::FxParameter`) goes to all three.
+- `dsp::channel_filter`: a low-pass then a high-pass SVF, each wide open
+  while the knob is on the other side; cutoff exponential 20 kHz → 50 Hz
+  (left) and 20 Hz → 10 kHz (right); resonance `resonance_q(PARAMETER)`
+  faded in over the first fifth of travel; wet faded in over the first 5%.
+  Ends **UNVERIFIED**.
+- `dsp::channel_echo`, `dsp::channel_reverb`: sends into a feedback delay
+  (3/4 beat of the channel's deck, `Deck::beat_frames`, fed every block)
+  and a Freeverb tank; dry stays at unity. A block is skipped and cleared
+  once its knob is centred and its tail is quiet (below 1e-6): reverb
+  output for 100 ms; echo, its whole 2 s line, since a gap between repeats
+  is longer than 100 ms. The reverb's comb damping is rate-scaled
+  (`0.3^(44100/fs)`) and each side's tank is fed its own channel, so the
+  wet level does not move with the rate or the stereo image. Figures
+  **UNVERIFIED**; details in the spec §3.
+
+| Check | Tolerance |
+|---|---|
+| 3-band at noon, FX centred (also after a move back) | bit for bit |
+| LOW / HI full cut | −26 ±1 dB at 20 Hz / 16 kHz; never below −27 dB |
+| MID full cut | −26 ±0.5 dB at 1 kHz; above −7 dB at 250 Hz and 4 kHz |
+| full boost | +6 ±0.5 dB, never above +6.5 |
+| FILTER at the table's positions | cutoff ±1%, Q ±0.01 (`taper` tests) |
+| FILTER full travel | 1 kHz / 100 Hz below −40 dB |
+| FILTER swept at −12 dBFS, 50 Hz and 5 kHz | no step above 0.01 beyond the tone's own (×1.45 for resonance) |
+| FILTER 0 → 1 → 0.5 in single jumps | bounded: peak ≤ 2.2× input. A 17-octave sweep in 10 ms lets the closed low-pass release its bass as a ~10 ms +6 dB swell at 50 Hz (steps to 0.012); the spec asked for 0.01 |
+
 ## Signal flow (task 6)
 
 The graph renders 32-frame blocks: each deck fills its channel's block, the
 mixer runs the strips and the master bus.
 
 ```
-deck → trim → EQ → FILTER assign (dry / X / Y) → [channel meter] → fader → XFADE assign (X / direct / Y) ─┐
+deck → trim → EQ → 3-band EQ → channel FX → FILTER assign (dry / X / Y) → [channel meter] → fader → XFADE assign (X / direct / Y) ─┐
                                                                                                   sum ←┘
 sum → master level × preview volume → [master meter] → safety limiter → output
 ```

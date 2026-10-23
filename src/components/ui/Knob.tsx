@@ -2,12 +2,15 @@
  * A rotary knob for one 0..1 value (role="slider"; Radix has no knob). Drag
  * up or down (Shift: fine), arrow keys step 1% (Shift: 0.2%), Page Up/Down
  * 10%, Home/End the ends; double-click or Delete returns to `defaultValue`.
- * `bipolar` draws the arc from the centre (EQ, trim).
+ * `bipolar` draws the arc from the centre (EQ, trim). `lit` lights it like a
+ * switch that is on (a channel knob off centre); `detent` holds drags within
+ * `DETENT_ZONE` of that value on it (keys step past it).
  */
 import { cva, type VariantProps } from "class-variance-authority";
 import { type ComponentProps, type KeyboardEvent, type PointerEvent, useRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { snapToDetent } from "../../lib/mixView";
 import { disabledState, focusRing } from "./control";
 
 export const knobVariants = cva(
@@ -30,6 +33,8 @@ export const knobVariants = cva(
 
 /** Travel of the pointer, in px, for the whole range. */
 const DRAG_PX = 160;
+/** A drag within this much of the travel from `detent` sticks there. */
+export const DETENT_ZONE = 0.03;
 /** Sweep of the knob: 270°, from 7:30 to 4:30. */
 const SWEEP = 270;
 
@@ -70,6 +75,15 @@ export function knobKeyValue(
   }
 }
 
+/**
+ * The value a drag moves to: `dy` px up from the press at `from`, five times
+ * finer with `fine`; within `DETENT_ZONE` of `detent` it sticks there.
+ */
+export function knobDragValue(from: number, dy: number, fine: boolean, detent?: number): number {
+  const next = clamp(from + dy / (DRAG_PX * (fine ? 5 : 1)));
+  return detent === undefined ? next : snapToDetent(next, detent, DETENT_ZONE);
+}
+
 /** A point on the knob's circle at `v` (0..1), in a 0..32 box. */
 function point(v: number, r: number): [number, number] {
   const a = ((-135 + v * SWEEP - 90) * Math.PI) / 180;
@@ -98,6 +112,10 @@ export type KnobProps = Omit<ComponentProps<"div">, "onChange" | "defaultValue">
     /** Where double-click and Delete return to. */
     defaultValue?: number;
     bipolar?: boolean;
+    /** Lit like a switch that is on. */
+    lit?: boolean;
+    /** A value that drags stick to, within `DETENT_ZONE`. */
+    detent?: number;
     disabled?: boolean;
     "aria-label": string;
     /** Spoken value, e.g. "+3 dB"; defaults to a percentage. */
@@ -111,6 +129,8 @@ export function Knob({
   onValueChange,
   defaultValue = 0,
   bipolar = false,
+  lit = false,
+  detent,
   disabled = false,
   valueText,
   ...props
@@ -139,8 +159,7 @@ export function Knob({
   function onPointerMove(e: PointerEvent<HTMLDivElement>) {
     const d = drag.current;
     if (d === null) return;
-    const px = DRAG_PX * (e.shiftKey ? 5 : 1);
-    set(clamp(d.value + (d.y - e.clientY) / px));
+    set(knobDragValue(d.value, d.y - e.clientY, e.shiftKey, detent));
   }
 
   function onPointerUp() {
@@ -158,7 +177,8 @@ export function Knob({
       aria-valuenow={Math.round(v * 100)}
       aria-valuetext={valueText}
       aria-disabled={disabled || undefined}
-      className={cn(knobVariants({ size }), className)}
+      data-lit={lit || undefined}
+      className={cn(knobVariants({ size }), lit && "shadow-lit", className)}
       onKeyDown={onKeyDown}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -179,8 +199,8 @@ export function Knob({
           <path
             d={arc(Math.min(start, v), Math.max(start, v), 14)}
             fill="none"
-            strokeWidth="2.5"
-            className="stroke-fg-muted"
+            strokeWidth={lit ? 3 : 2.5}
+            className={lit ? "stroke-lit" : "stroke-fg-muted"}
             strokeLinecap="round"
           />
         )}
@@ -188,10 +208,15 @@ export function Knob({
           cx="16"
           cy="16"
           r="10.5"
-          className="fill-knob stroke-border-strong"
+          className={lit ? "fill-lit stroke-lit" : "fill-knob stroke-border-strong"}
           strokeWidth="1"
         />
-        <line {...mark} strokeWidth="2" strokeLinecap="round" className="stroke-knob-mark" />
+        <line
+          {...mark}
+          strokeWidth="2"
+          strokeLinecap="round"
+          className={lit ? "stroke-lit-fg" : "stroke-knob-mark"}
+        />
       </svg>
     </div>
   );

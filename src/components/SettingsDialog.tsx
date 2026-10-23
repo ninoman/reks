@@ -14,6 +14,7 @@ import { cn } from "../lib/cn";
 import type {
   DeckWaveform,
   KeyNotation,
+  MixerEq,
   MixerFilters,
   MixerView,
   SyncAlign,
@@ -76,6 +77,11 @@ const THEME_CHOICES: { id: Theme; label: string; canvas: string; accent: string 
 const SYNC_ALIGNS: { id: SyncAlign; label: string }[] = [
   { id: "bar", label: "Bar" },
   { id: "beat", label: "Beat" },
+];
+
+const MIXER_EQS: { id: MixerEq; label: string; hint: string }[] = [
+  { id: "fourBand", label: "4-band", hint: "filters X and Y" },
+  { id: "threeBand", label: "3-band", hint: "FX per channel" },
 ];
 
 const MIXER_VIEWS: { id: MixerView; label: string; hint: string }[] = [
@@ -200,8 +206,13 @@ function SettingsBody({
               <SyncAlignChoice align={settings.syncAlign} />
             </Panel>
             <Panel value="mixer">
+              <MixerEqChoice eq={settings.mixerEq} />
               <MixerViewChoice view={settings.mixerView} />
-              <MixerFiltersChoice filters={settings.mixerFilters} view={settings.mixerView} />
+              <MixerFiltersChoice
+                filters={settings.mixerFilters}
+                eq={settings.mixerEq}
+                view={settings.mixerView}
+              />
             </Panel>
           </>
         )}
@@ -380,13 +391,39 @@ function SyncAlignChoice({ align }: { align: SyncAlign }) {
   );
 }
 
+function MixerEqChoice({ eq }: { eq: MixerEq }) {
+  return (
+    <div className={item}>
+      <h5 className={itemTitle}>EQ</h5>
+      <p className={hint}>
+        4-band has HI, HM, LM and LO and the two filters; 3-band has HI, MID and LOW and an FX knob
+        on every channel (filter, echo or reverb). Each keeps its own knob positions. 4-band is the
+        default.
+      </p>
+      <SegmentedControl
+        className="mt-2.5"
+        aria-label="EQ"
+        value={eq}
+        onValueChange={(v) => void useSettings.getState().update({ mixerEq: v as MixerEq })}
+      >
+        {MIXER_EQS.map((m) => (
+          <Segment key={m.id} value={m.id}>
+            {m.label}
+            <span className="font-normal text-fg-subtle">{m.hint}</span>
+          </Segment>
+        ))}
+      </SegmentedControl>
+    </div>
+  );
+}
+
 function MixerViewChoice({ view }: { view: MixerView }) {
   return (
     <div className={item}>
       <h5 className={itemTitle}>Mixer view</h5>
       <p className={hint}>
-        Simple hides the crossfader and the assign switches; Advanced shows every control. The sound
-        follows what you see. Simple is the default.
+        Simple hides the crossfader and the assign switches; Advanced shows every control. For both
+        EQ layouts. The sound follows what you see. Simple is the default.
       </p>
       <SegmentedControl
         className="mt-2.5"
@@ -405,20 +442,31 @@ function MixerViewChoice({ view }: { view: MixerView }) {
   );
 }
 
-function MixerFiltersChoice({ filters, view }: { filters: MixerFilters; view: MixerView }) {
+function MixerFiltersChoice({
+  filters,
+  eq,
+  view,
+}: {
+  filters: MixerFilters;
+  eq: MixerEq;
+  view: MixerView;
+}) {
+  const threeBand = eq === "threeBand";
   const advanced = view === "advanced";
   return (
     <div className={item}>
       <h5 className={itemTitle}>Filters</h5>
       <p className={hint}>
-        {advanced
-          ? "The Advanced view always shows both filters."
-          : "Whether the Simple view shows the two filters. Hidden filters are off. Show is the default."}
+        {threeBand
+          ? "The 3-band EQ has no filters X and Y: each channel's FX knob is its filter."
+          : advanced
+            ? "The Advanced view always shows both filters."
+            : "Whether the Simple view shows the two filters. Hidden filters are off. Show is the default."}
       </p>
       <SegmentedControl
         className="mt-2.5"
         aria-label="Filters"
-        disabled={advanced}
+        disabled={threeBand || advanced}
         value={filters}
         onValueChange={(v) =>
           void useSettings.getState().update({ mixerFilters: v as MixerFilters })

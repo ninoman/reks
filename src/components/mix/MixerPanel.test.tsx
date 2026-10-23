@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { FxKind } from "../../lib/ipc";
 import type { MixerLook } from "../../lib/mixView";
 import { useMix } from "../../store/mix";
 import { useSettings } from "../../store/settings";
@@ -9,20 +10,26 @@ import { MixerPanel, type MixerPanelProps } from "./MixerPanel";
 
 afterEach(cleanup);
 
-const ADVANCED: MixerLook = { view: "advanced", filters: "show" };
+const ADVANCED: MixerLook = { eq: "fourBand", view: "advanced", filters: "show" };
 
-function setup(cues: boolean[] = [false, false, false, false], look: MixerLook = ADVANCED) {
+function setup(
+  cues: boolean[] = [false, false, false, false],
+  look: MixerLook = ADVANCED,
+  fxKind: FxKind = "filter",
+) {
   const s = useMix.getState();
   const props: MixerPanelProps = {
     channels: s.channels.map((c, i) => ({ ...c, cue: cues[i] ?? false })),
     active: [true, false, false, false],
     filters: s.filters,
     crossfader: s.crossfader,
+    fx: { ...s.fx, kind: fxKind },
     master: s.master,
     look,
     onChannel: vi.fn(),
     onFilter: vi.fn(),
     onCrossfader: vi.fn(),
+    onFx: vi.fn(),
     onMaster: vi.fn(),
   };
   render(<MixerPanel {...props} />);
@@ -165,7 +172,7 @@ describe("MixerPanel", () => {
   });
 
   it("Simple hides the FILTER and X-F rows, the crossfader and the curve", () => {
-    setup([false, false, false, false], { view: "simple", filters: "show" });
+    setup([false, false, false, false], { eq: "fourBand", view: "simple", filters: "show" });
     expect(screen.queryByRole("radiogroup", { name: /assign/ })).toBeNull();
     expect(screen.queryByRole("slider", { name: "Crossfader" })).toBeNull();
     expect(screen.queryByRole("slider", { name: "Crossfader curve" })).toBeNull();
@@ -177,17 +184,135 @@ describe("MixerPanel", () => {
   });
 
   it("Simple with the filters hidden also hides the filter row", () => {
-    setup([false, false, false, false], { view: "simple", filters: "hide" });
+    setup([false, false, false, false], { eq: "fourBand", view: "simple", filters: "hide" });
     expect(screen.queryByRole("region", { name: "Filter X" })).toBeNull();
     expect(screen.queryByRole("region", { name: "Filter Y" })).toBeNull();
     expect(screen.getByRole("slider", { name: "Channel 1 fader" })).toBeTruthy();
   });
 
   it("Advanced shows everything whatever the filters setting says", () => {
-    setup([false, false, false, false], { view: "advanced", filters: "hide" });
+    setup([false, false, false, false], { eq: "fourBand", view: "advanced", filters: "hide" });
     expect(screen.getByRole("region", { name: "Filter X" })).toBeTruthy();
     expect(screen.getByRole("slider", { name: "Crossfader" })).toBeTruthy();
     expect(screen.getAllByRole("radiogroup", { name: /assign/ })).toHaveLength(8);
+  });
+
+  it("4-band has no FX row and no FX knobs", () => {
+    setup();
+    expect(screen.queryByRole("region", { name: "FX" })).toBeNull();
+    expect(screen.queryByRole("slider", { name: "Channel 1 FX" })).toBeNull();
+  });
+
+  describe("3-band", () => {
+    const SIMPLE3: MixerLook = { eq: "threeBand", view: "simple", filters: "show" };
+    const ADVANCED3: MixerLook = { eq: "threeBand", view: "advanced", filters: "show" };
+
+    it("strips have LEVEL, HI, MID, LOW and FX knobs, in that order", () => {
+      setup(undefined, SIMPLE3);
+      for (const n of [1, 2, 3, 4]) {
+        const strip = screen.getByRole("region", { name: `Channel ${n}` });
+        const names = within(strip)
+          .getAllByRole("slider")
+          .map((el) => el.getAttribute("aria-label"));
+        expect(names).toEqual([
+          `Channel ${n} level`,
+          `Channel ${n} EQ Hi`,
+          `Channel ${n} EQ Mid`,
+          `Channel ${n} EQ Low`,
+          `Channel ${n} FX`,
+          `Channel ${n} fader`,
+        ]);
+      }
+    });
+
+    it("sends the 3-band knobs as their own params", () => {
+      const p = setup(undefined, SIMPLE3);
+      fireEvent.keyDown(screen.getByRole("slider", { name: "Channel 2 EQ Mid" }), { key: "Home" });
+      expect(p.onChannel).toHaveBeenCalledWith(1, "eq3Mid", 0);
+      fireEvent.keyDown(screen.getByRole("slider", { name: "Channel 3 FX" }), { key: "End" });
+      expect(p.onChannel).toHaveBeenCalledWith(2, "fx", 1);
+    });
+
+    it("has no X/Y filter row, no assigns and no crossfader in Simple", () => {
+      setup(undefined, SIMPLE3);
+      expect(screen.queryByRole("region", { name: "Filter X" })).toBeNull();
+      expect(screen.queryByRole("region", { name: "Filter Y" })).toBeNull();
+      expect(screen.queryByRole("radiogroup", { name: /assign/ })).toBeNull();
+      expect(screen.queryByRole("slider", { name: "Crossfader" })).toBeNull();
+      expect(screen.getByRole("region", { name: "FX" })).toBeTruthy();
+    });
+
+    it("Advanced adds the X-F assigns and the crossfader, still no FILTER assigns", () => {
+      setup(undefined, ADVANCED3);
+      expect(screen.getAllByRole("radiogroup", { name: /crossfader assign/ })).toHaveLength(4);
+      expect(screen.queryByRole("radiogroup", { name: /filter assign/ })).toBeNull();
+      expect(screen.queryByRole("region", { name: "Filter X" })).toBeNull();
+      const fx = screen.getByRole("region", { name: "FX" });
+      const fader = screen.getByRole("slider", { name: "Crossfader" });
+      // The FX row sits above the crossfader.
+      expect(fx.compareDocumentPosition(fader) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("FX select lights exactly one effect and picks another", () => {
+      const p = setup(undefined, SIMPLE3, "echo");
+      const fx = screen.getByRole("region", { name: "FX" });
+      const pressed = within(fx)
+        .getAllByRole("button")
+        .map((b) => [b.textContent, b.getAttribute("aria-pressed")]);
+      expect(pressed).toEqual([
+        ["Filter", "false"],
+        ["Echo", "true"],
+        ["Reverb", "false"],
+      ]);
+      fireEvent.click(within(fx).getByRole("button", { name: "Reverb" }));
+      expect(p.onFx).toHaveBeenCalledWith({ kind: "reverb" });
+    });
+
+    it("PARAMETER's caption and the FX row's caption follow the effect", () => {
+      for (const [kind, param, name] of [
+        ["filter", "Resonance", "Filter"],
+        ["echo", "Feedback", "Echo"],
+        ["reverb", "Decay", "Reverb"],
+      ] as const) {
+        const p = setup(undefined, SIMPLE3, kind);
+        const fx = screen.getByRole("region", { name: "FX" });
+        expect(within(fx).getByText(param)).toBeTruthy();
+        const knob = screen.getByRole("slider", { name: `FX ${param.toLowerCase()}` });
+        fireEvent.keyDown(knob, { key: "End" });
+        expect(p.onFx).toHaveBeenCalledWith({ parameter: 1 });
+        // The legend's FX row caption, besides the select button.
+        expect(screen.getAllByText(name)).toHaveLength(2);
+        cleanup();
+      }
+    });
+
+    it("lights a channel knob off centre, the FX knob outside its dead zone", () => {
+      const s = useMix.getState();
+      const channels = s.channels.map((c, i) =>
+        i === 0 ? { ...c, eq3Lo: 0.2, fx: 0.51 } : i === 1 ? { ...c, fx: 0.8 } : c,
+      );
+      render(
+        <MixerPanel
+          channels={channels}
+          active={[false, false, false, false]}
+          filters={s.filters}
+          crossfader={s.crossfader}
+          fx={s.fx}
+          master={s.master}
+          look={SIMPLE3}
+          onChannel={vi.fn()}
+          onFilter={vi.fn()}
+          onCrossfader={vi.fn()}
+          onFx={vi.fn()}
+          onMaster={vi.fn()}
+        />,
+      );
+      const lit = (name: string) => screen.getByRole("slider", { name }).hasAttribute("data-lit");
+      expect(lit("Channel 1 EQ Low")).toBe(true);
+      expect(lit("Channel 1 EQ Hi")).toBe(false);
+      expect(lit("Channel 1 FX")).toBe(false);
+      expect(lit("Channel 2 FX")).toBe(true);
+    });
   });
 
   it("names no trademarks", () => {

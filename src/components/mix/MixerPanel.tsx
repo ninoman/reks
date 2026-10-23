@@ -1,12 +1,13 @@
 /**
  * The mixer as laid out on the hardware: four channel strips and the master
- * section, then one row with filter X and Y, and the crossfader across the
- * mixer with its curve at the right end.
+ * section, then one row with filter X and Y (4-band) or the FX select and
+ * PARAMETER (3-band), and the crossfader across the mixer with its curve at
+ * the right end. Spare height (4 decks) spreads the strips' rows.
  */
 import type { FilterUnit as Unit } from "../../lib/ipc";
 import { crossfaderKeyHint } from "../../lib/mixKeys";
 import { type MixerLook, mixerParts, pickSwitches } from "../../lib/mixView";
-import type { ChannelValues, FilterValues, MasterValues } from "../../store/mix";
+import type { ChannelValues, FilterValues, FxValues, MasterValues } from "../../store/mix";
 import { useSettings } from "../../store/settings";
 import { GearIcon } from "../icons";
 import { Caption } from "../ui/Caption";
@@ -16,6 +17,7 @@ import { Knob } from "../ui/Knob";
 import { Tooltip } from "../ui/Tooltip";
 import { ChannelLegend, ChannelStrip } from "./ChannelStrip";
 import { FilterUnit } from "./FilterUnit";
+import { FxSection } from "./FxSection";
 import { MasterSection } from "./MasterSection";
 
 export interface MixerPanelProps {
@@ -24,11 +26,13 @@ export interface MixerPanelProps {
   active: boolean[];
   filters: Record<Unit, FilterValues>;
   crossfader: { pos: number; curve: number };
+  fx: FxValues;
   master: MasterValues;
   look: MixerLook;
   onChannel: <K extends keyof ChannelValues>(ch: number, param: K, value: ChannelValues[K]) => void;
   onFilter: <K extends keyof FilterValues>(unit: Unit, param: K, value: FilterValues[K]) => void;
   onCrossfader: (patch: Partial<{ pos: number; curve: number }>) => void;
+  onFx: (patch: Partial<FxValues>) => void;
   onMaster: <K extends keyof MasterValues>(param: K, value: MasterValues[K]) => void;
 }
 
@@ -46,7 +50,7 @@ export function MixerPanel(p: MixerPanelProps) {
       aria-label="Mixer"
       className="relative flex h-(--mixer-h) w-(--mixer-w) shrink-0 flex-col gap-1 rounded-md border border-border bg-surface p-2"
     >
-      <div className="flex">
+      <div className="flex min-h-0 flex-1">
         <IconButton
           size="xs"
           className="absolute top-1 left-1"
@@ -55,7 +59,7 @@ export function MixerPanel(p: MixerPanelProps) {
         >
           <GearIcon size={14} />
         </IconButton>
-        <ChannelLegend assigns={parts.assigns} />
+        <ChannelLegend parts={parts} fx={p.fx.kind} />
         {p.channels.map((values, ch) => (
           <ChannelStrip
             // biome-ignore lint/suspicious/noArrayIndexKey: channels are fixed slots
@@ -63,12 +67,12 @@ export function MixerPanel(p: MixerPanelProps) {
             ch={ch}
             values={values}
             active={p.active[ch] ?? false}
-            assigns={parts.assigns}
+            parts={parts}
             onChange={(param, value) => p.onChannel(ch, param, value)}
             onCue={(additive) => cue(ch, additive)}
           />
         ))}
-        <MasterSection values={p.master} compact={!parts.assigns} onChange={p.onMaster} />
+        <MasterSection values={p.master} compact={!parts.filterAssigns} onChange={p.onMaster} />
       </div>
       {parts.filterRow && (
         <div className="flex justify-between border-t border-border-subtle pt-1">
@@ -76,7 +80,8 @@ export function MixerPanel(p: MixerPanelProps) {
           <FilterUnit unit="y" values={p.filters.y} onChange={(k, v) => p.onFilter("y", k, v)} />
         </div>
       )}
-      {parts.assigns && (
+      {parts.threeBand && <FxSection values={p.fx} onChange={p.onFx} />}
+      {parts.crossfader && (
         <div className="flex h-(--mixer-row-h) items-center gap-1">
           <Caption aria-hidden="true">X</Caption>
           <Tooltip content="Crossfader left, centre, right" shortcut={crossfaderKeyHint()}>

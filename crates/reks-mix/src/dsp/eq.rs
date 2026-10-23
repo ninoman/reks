@@ -11,9 +11,9 @@
 //! All four knobs are smoothed ([`super::smooth`]); both shelf filters run
 //! all the time so moving through noon never restarts a filter.
 
+use super::bell::Bell;
 use super::biquad::Biquad;
 use super::smooth::Smoother;
-use super::svf::{SvfCoeffs, SvfState};
 use crate::taper;
 
 /// HI shelf turning point (Xone:96, R§9.1).
@@ -84,43 +84,6 @@ impl Shelf {
     }
 }
 
-/// A mid bell: SVF with `y = x + m1·band` (Simper's bell form).
-#[derive(Debug, Clone, Copy)]
-struct Bell {
-    fc: f64,
-    coeffs: SvfCoeffs,
-    m1: f64,
-    state: [SvfState; 2],
-}
-
-impl Bell {
-    fn new(fc: f64, sample_rate: f64) -> Self {
-        let mut bell = Self {
-            fc,
-            coeffs: SvfCoeffs::new(fc, 1.0, sample_rate),
-            m1: 0.0,
-            state: [SvfState::default(); 2],
-        };
-        bell.set_db(0.0, sample_rate);
-        bell
-    }
-
-    /// Exact `db` at the centre: k = 1/(Q·A), m1 = k·(A² − 1), A = 10^(dB/40).
-    fn set_db(&mut self, db: f64, sample_rate: f64) {
-        let a = 10f64.powf(db / 40.0);
-        let q = if db >= 0.0 { MID_Q_BOOST } else { MID_Q_CUT };
-        let k = 1.0 / (q * a);
-        self.coeffs = SvfCoeffs::new(self.fc, k, sample_rate);
-        self.m1 = k * (a * a - 1.0);
-    }
-
-    #[inline]
-    fn tick(&mut self, ch: usize, x: f64) -> f64 {
-        let out = self.state[ch & 1].tick(&self.coeffs, x);
-        x + self.m1 * out.band
-    }
-}
-
 /// A stereo channel EQ.
 #[derive(Debug, Clone)]
 pub struct ChannelEq {
@@ -143,8 +106,8 @@ impl ChannelEq {
                 kill: Biquad::lowpass(HI_HZ, KILL_Q, fs),
                 boost: Biquad::lowpass(HI_HZ, BOOST_Q, fs),
             },
-            mid1: Bell::new(MID1_HZ, fs),
-            mid2: Bell::new(MID2_HZ, fs),
+            mid1: Bell::new(MID1_HZ, MID_Q_BOOST, MID_Q_CUT, fs),
+            mid2: Bell::new(MID2_HZ, MID_Q_BOOST, MID_Q_CUT, fs),
             lo: Shelf {
                 kill: Biquad::highpass(LO_HZ, KILL_Q, fs),
                 boost: Biquad::highpass(LO_HZ, BOOST_Q, fs),

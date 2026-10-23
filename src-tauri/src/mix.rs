@@ -687,6 +687,10 @@ pub enum ChannelParamArg {
     EqMid1,
     EqMid2,
     EqLo,
+    Eq3Hi,
+    Eq3Mid,
+    Eq3Lo,
+    Fx,
     Fader,
     FilterAssign,
     XfadeAssign,
@@ -710,6 +714,15 @@ pub enum FilterParamArg {
 pub enum FilterUnitArg {
     X,
     Y,
+}
+
+/// A channel FX effect (`reks_mix::FxKind`).
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FxKindArg {
+    Filter,
+    Echo,
+    Reverb,
 }
 
 /// A master section control (`reks_mix::MasterParam`).
@@ -822,6 +835,14 @@ pub enum MixControl {
         param: FilterParamArg,
         value: f32,
     },
+    /// The effect the channel FX knobs drive.
+    ChannelFx {
+        kind: FxKindArg,
+    },
+    /// The channel FX PARAMETER knob.
+    FxParameter {
+        value: f32,
+    },
     Crossfader {
         pos: f32,
         curve: f32,
@@ -876,6 +897,10 @@ impl MixControl {
                     ChannelParamArg::EqMid1 => C::EqMid1,
                     ChannelParamArg::EqMid2 => C::EqMid2,
                     ChannelParamArg::EqLo => C::EqLo,
+                    ChannelParamArg::Eq3Hi => C::Eq3Hi,
+                    ChannelParamArg::Eq3Mid => C::Eq3Mid,
+                    ChannelParamArg::Eq3Lo => C::Eq3Lo,
+                    ChannelParamArg::Fx => C::Fx,
                     ChannelParamArg::Fader => C::Fader,
                     ChannelParamArg::FilterAssign => C::FilterAssign,
                     ChannelParamArg::XfadeAssign => C::XfadeAssign,
@@ -898,6 +923,14 @@ impl MixControl {
                 },
                 value,
             },
+            Self::ChannelFx { kind } => Control::ChannelFx {
+                kind: match kind {
+                    FxKindArg::Filter => reks_mix::FxKind::Filter,
+                    FxKindArg::Echo => reks_mix::FxKind::Echo,
+                    FxKindArg::Reverb => reks_mix::FxKind::Reverb,
+                },
+            },
+            Self::FxParameter { value } => Control::FxParameter { value },
             Self::Crossfader { pos, curve } => Control::Crossfader { pos, curve },
             Self::Master { param, value } => Control::Master {
                 param: match param {
@@ -1028,6 +1061,31 @@ mod tests {
                 param: reks_mix::FilterParam::HighPass,
                 ..
             }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"channel","ch":1,"param":"eq3Mid","value":0.25}"#),
+            reks_mix::Control::Channel {
+                ch: 1,
+                param: reks_mix::ChannelParam::Eq3Mid,
+                ..
+            }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"channel","ch":0,"param":"fx","value":0}"#),
+            reks_mix::Control::Channel {
+                param: reks_mix::ChannelParam::Fx,
+                ..
+            }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"channelFx","kind":"reverb"}"#),
+            reks_mix::Control::ChannelFx {
+                kind: reks_mix::FxKind::Reverb
+            }
+        ));
+        assert!(matches!(
+            parse(r#"{"type":"fxParameter","value":0.75}"#),
+            reks_mix::Control::FxParameter { value } if value == 0.75
         ));
         assert!(matches!(
             parse(r#"{"type":"master","param":"cuePostEq","value":1}"#),

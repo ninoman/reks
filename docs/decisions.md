@@ -638,7 +638,8 @@ Date of decisions: 2026-10-18.
   Advanced. UI only; the DSP model above is unchanged. Spec:
   [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §6;
   phase 5 tasks 24–25.
-- 3-band EQ layout (issue #56; status: **proposed**, 2026-10-23): an EQ
+- 3-band EQ layout (issue #56; status: **accepted** 2026-10-23, maintainer's
+  go-ahead to implement; phase 5 task 26): an EQ
   setting, 4-band · 3-band, beside Mixer view Simple · Advanced (which
   applies to both). 3-band has a 3-band EQ (−26 / +6 dB) and, per channel,
   an FX knob with a mixer-wide effect select (FILTER, ECHO, REVERB) and

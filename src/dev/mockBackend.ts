@@ -279,6 +279,7 @@ let settings: Settings = {
   deckWaveform: "rgb",
   theme: "graphite",
   syncAlign: "bar",
+  mixerEq: "fourBand",
   mixerView: "simple",
   mixerFilters: "show",
   cacheDir: "/Users/dj/Library/Caches/reks",

@@ -35,6 +35,10 @@ describe("tokens.css mirrors", () => {
     // --deck-h is a var() on :root, so each view that sets --mixer-h sets it again.
     expect(css).toMatch(/\[data-mixer="simple"\] \{[^}]*--deck-h: var\(--mixer-h\)/);
     expect(css).toMatch(/\[data-mixer="simple-bare"\] \{[^}]*--deck-h: var\(--mixer-h\)/);
+    expect(token("--mixer-h-three")).toBe("333px");
+    expect(token("--mixer-h-three-advanced")).toBe("393px");
+    expect(css).toMatch(/\[data-mixer="three"\] \{[^}]*--deck-h: var\(--mixer-h\)/);
+    expect(css).toMatch(/\[data-mixer="three-advanced"\] \{[^}]*--deck-h: var\(--mixer-h\)/);
     expect(token("--mix-panel-max-h")).toContain("var(--library-min-h)");
     expect(token("--library-min-h")).toBe("246px");
   });

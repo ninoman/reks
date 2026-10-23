@@ -230,7 +230,7 @@ describe("mix store", () => {
     useMix.setState({
       status: "running",
       live: running,
-      look: { view: "advanced", filters: "show" },
+      look: { eq: "fourBand", view: "advanced", filters: "show" },
     });
     const s = useMix.getState();
     s.setChannel(2, "xfadeAssign", "y");
@@ -269,7 +269,7 @@ describe("mix store", () => {
     useMix.setState({
       status: "running",
       live: running,
-      look: { view: "simple", filters: "hide" },
+      look: { eq: "fourBand", view: "simple", filters: "hide" },
     });
     useMix.getState().setFilter("x", "on", true);
     expect(vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0])).toEqual([
@@ -282,7 +282,7 @@ describe("mix store", () => {
     useMix.setState({
       status: "running",
       live: running,
-      look: { view: "advanced", filters: "show" },
+      look: { eq: "fourBand", view: "advanced", filters: "show" },
     });
     const s = useMix.getState();
     s.setChannel(2, "xfadeAssign", "y");
@@ -290,15 +290,62 @@ describe("mix store", () => {
     s.setFilter("y", "on", true);
     vi.mocked(ipc.mixControl).mockClear();
     const sent = () => vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0]);
-    s.setLook({ view: "simple", filters: "hide" });
+    s.setLook({ eq: "fourBand", view: "simple", filters: "hide" });
     expect(sent()).toContainEqual({ type: "channel", ch: 2, param: "xfadeAssign", value: 0.5 });
     expect(sent()).toContainEqual({ type: "channel", ch: 0, param: "filterAssign", value: 0 });
     expect(sent()).toContainEqual({ type: "filter", unit: "y", param: "on", value: 0 });
     vi.mocked(ipc.mixControl).mockClear();
-    s.setLook({ view: "advanced", filters: "hide" });
+    s.setLook({ eq: "fourBand", view: "advanced", filters: "hide" });
     expect(sent()).toContainEqual({ type: "channel", ch: 2, param: "xfadeAssign", value: 1 });
     expect(sent()).toContainEqual({ type: "channel", ch: 0, param: "filterAssign", value: 0.5 });
     expect(sent()).toContainEqual({ type: "filter", unit: "y", param: "on", value: 1 });
+  });
+
+  it("an EQ layout switch flattens one EQ and sends the other's own positions", () => {
+    useMix.setState({ status: "running", live: running });
+    const s = useMix.getState();
+    s.setChannel(1, "eqLo", 0.2);
+    s.setChannel(1, "eq3Lo", 0.7);
+    s.setChannel(1, "fx", 0.9);
+    s.setFilter("x", "on", true);
+    const sent = () => vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0]);
+    // 4-band: the 3-band knobs are stored but sent at noon.
+    expect(sent()).toContainEqual({ type: "channel", ch: 1, param: "eqLo", value: 0.2 });
+    expect(sent()).toContainEqual({ type: "channel", ch: 1, param: "eq3Lo", value: 0.5 });
+    expect(sent()).toContainEqual({ type: "channel", ch: 1, param: "fx", value: 0.5 });
+    vi.mocked(ipc.mixControl).mockClear();
+    s.setLook({ eq: "threeBand", view: "simple", filters: "show" });
+    expect(sent()).toContainEqual({ type: "channel", ch: 1, param: "eqLo", value: 0.5 });
+    expect(sent()).toContainEqual({ type: "channel", ch: 1, param: "eq3Lo", value: 0.7 });
+    expect(sent()).toContainEqual({ type: "channel", ch: 1, param: "fx", value: 0.9 });
+    expect(sent()).toContainEqual({ type: "filter", unit: "x", param: "on", value: 0 });
+    expect(sent()).toContainEqual({ type: "channelFx", kind: "filter" });
+    expect(sent()).toContainEqual({ type: "fxParameter", value: 0.5 });
+    vi.mocked(ipc.mixControl).mockClear();
+    s.setLook({ eq: "fourBand", view: "simple", filters: "show" });
+    expect(sent()).toContainEqual({ type: "channel", ch: 1, param: "eqLo", value: 0.2 });
+    expect(sent()).toContainEqual({ type: "channel", ch: 1, param: "fx", value: 0.5 });
+    expect(sent()).toContainEqual({ type: "filter", unit: "x", param: "on", value: 1 });
+    expect(useMix.getState().channels[1]).toMatchObject({ eqLo: 0.2, eq3Lo: 0.7, fx: 0.9 });
+  });
+
+  it("3-band starts flat, with FILTER selected and PARAMETER at noon", () => {
+    const s = useMix.getState();
+    for (const c of s.channels)
+      expect(c).toMatchObject({ eq3Hi: 0.5, eq3Mid: 0.5, eq3Lo: 0.5, fx: 0.5 });
+    expect(s.fx).toEqual({ kind: "filter", parameter: 0.5 });
+  });
+
+  it("sends the FX select and PARAMETER", () => {
+    useMix.setState({ status: "running", live: running });
+    const s = useMix.getState();
+    s.setFx({ kind: "echo" });
+    s.setFx({ parameter: 0.8 });
+    expect(vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0])).toEqual([
+      { type: "channelFx", kind: "echo" },
+      { type: "fxParameter", value: 0.8 },
+    ]);
+    expect(useMix.getState().fx).toEqual({ kind: "echo", parameter: 0.8 });
   });
 
   it("starts the engine with the effective values", async () => {

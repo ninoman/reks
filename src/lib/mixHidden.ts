@@ -5,6 +5,7 @@
  * mixer is hidden.
  */
 import type { ChannelValues, FilterValues, MasterValues } from "../store/mix";
+import { FX_DEAD_ZONE, offCentre } from "./mixView";
 
 /** Decks on screen: the player deck alone, deck 2 and 3 with two, all four. */
 function shown(deck: number, mixOpen: boolean, deckCount: 2 | 4): boolean {
@@ -27,12 +28,13 @@ export function hiddenPlayingLabel(decks: readonly number[]): string {
   return `${decks.length === 1 ? "Deck" : "Decks"} ${nums} playing`;
 }
 
-const EQ_KEYS = ["eqHi", "eqMid1", "eqMid2", "eqLo"] as const;
+const EQ_KEYS = ["eqHi", "eqMid1", "eqMid2", "eqLo", "eq3Hi", "eq3Mid", "eq3Lo"] as const;
 
 /**
  * Why the sound of the player deck (channel 2) differs from a flat mixer,
  * most audible first; empty when every setting that reaches it is at its
- * default. `reference` holds the defaults.
+ * default. `channel` and `filters` are what the engine gets (`effectiveMix`);
+ * `reference` holds the defaults.
  */
 export function mixerDeviations(
   channel: ChannelValues,
@@ -48,6 +50,7 @@ export function mixerDeviations(
   if (channel.filterAssign !== "off" && filters[channel.filterAssign].on) {
     out.push("Channel 2 filter on");
   }
+  if (offCentre(channel.fx, FX_DEAD_ZONE)) out.push("Channel 2 FX on");
   if (master.level !== reference.master.level) out.push("Master level changed");
   return out;
 }

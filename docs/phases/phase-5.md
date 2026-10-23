@@ -704,6 +704,28 @@ nothing; 25 needs 22–24.
     `mix.test.ts` (engine values in Simple, stored values back in
     Advanced, after a start), `MixerPanel.test.tsx` (hidden rows per
     view), `mixKeys.test.ts` (X C V in Simple).
+26. [x] **3-band EQ and channel FX layout** ([#56](https://github.com/ninoman/reks/issues/56)).
+    Spec: [`research/djm-eq-fx.md`](../research/djm-eq-fx.md); wireframe:
+    [`wireframes/mix-view-56.html`](../wireframes/mix-view-56.html).
+    - [x] `reks-core` `settings.rs`: `mix.mixer_eq` (`MixerEq`: fourBand,
+      threeBand; default fourBand) in `Settings` and `SettingsPatch`.
+    - [x] `reks-mix`: `dsp::eq3::ThreeBandEq`, `dsp::channel_filter`,
+      `channel_fx::ChannelFx` in every strip after the 4-band EQ;
+      `ChannelParam::{Eq3Hi, Eq3Mid, Eq3Lo, Fx}`, `Control::ChannelFx`,
+      `Control::FxParameter`; `Deck::beat_frames` fed to the strips every
+      block; `dsp::bell` shared with the 4-band mids. `src-tauri` IPC.
+    - [x] `dsp::channel_echo`, `dsp::channel_reverb` wired into `ChannelFx`.
+    - [x] UI: EQ setting (Settings → Mixer, gear); 3-band rows HI · MID ·
+      LOW · FX with centre detent; FX select + PARAMETER row; per-layout
+      positions in `effectiveMix`; heights; X C V as in Simple.
+    - [x] Checked in the dev mock (1440×900, 3-band Simple and Advanced,
+      2 and 4 decks; 2026-10-23).
+    - [ ] Listening check on the maintainer's laptop (filter ends, echo
+      time and feedback, reverb decay and level are UNVERIFIED figures).
+    Tests: `dsp::eq3`, `dsp::channel_filter`, `dsp::channel_echo`,
+    `dsp::channel_reverb`, `taper` (eq3, fx_send, channel filter table),
+    `settings.rs` round trip, `mix.rs` IPC parse, `mixView.test.ts`,
+    `MixerPanel.test.tsx`.
 
 ## Acceptance criteria
 

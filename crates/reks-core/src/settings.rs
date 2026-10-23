@@ -5,7 +5,7 @@
 //! means the default (an unreadable one is logged), so a bad row never stops
 //! the app. Keys: [`AUDIO_DEVICE`], [`AUDIO_SAMPLE_RATE`],
 //! [`AUDIO_BUFFER_FRAMES`], [`AUDIO_CUE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`THEME`],
-//! [`SYNC_ALIGN`], [`MIXER_VIEW`], [`MIXER_FILTERS`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`].
+//! [`SYNC_ALIGN`], [`MIXER_VIEW`], [`MIXER_FILTERS`], [`MIXER_EQ`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`].
 
 use std::path::{Path, PathBuf};
 
@@ -39,6 +39,8 @@ pub const SYNC_ALIGN: &str = "mix.sync_align";
 pub const MIXER_VIEW: &str = "mix.mixer_view";
 /// [`MixerFilters`]: whether the simple mixer view shows the filters.
 pub const MIXER_FILTERS: &str = "mix.mixer_filters";
+/// [`MixerEq`]: the mixer's EQ layout.
+pub const MIXER_EQ: &str = "mix.mixer_eq";
 /// The cache dir the user chose; absent = the app's default.
 pub const CACHE_DIR: &str = "storage.cache_dir";
 /// [`UiState`].
@@ -155,6 +157,20 @@ pub enum MixerFilters {
     Hide,
 }
 
+/// The mixer's EQ layout (issue #56, `docs/research/djm-eq-fx.md` §5); either
+/// works with both [`MixerView`]s. The engine runs both EQs in series and
+/// gets the hidden one at noon.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MixerEq {
+    /// HI · HI MID · LO MID · LO and the X/Y filter units (default).
+    #[default]
+    FourBand,
+    /// HI · MID · LOW and a per-channel FX knob with a mixer-wide effect
+    /// select and PARAMETER, no X/Y filter units.
+    ThreeBand,
+}
+
 /// Everything the Settings dialog and app start-up read.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -170,6 +186,7 @@ pub struct Settings {
     pub sync_align: SyncAlign,
     pub mixer_view: MixerView,
     pub mixer_filters: MixerFilters,
+    pub mixer_eq: MixerEq,
     /// The cache dir in use; changed only by [`Library::move_cache_dir`].
     pub cache_dir: PathBuf,
     pub ui: UiState,
@@ -224,6 +241,7 @@ pub struct SettingsPatch {
     pub sync_align: Option<SyncAlign>,
     pub mixer_view: Option<MixerView>,
     pub mixer_filters: Option<MixerFilters>,
+    pub mixer_eq: Option<MixerEq>,
     pub ui: Option<UiState>,
     pub anlz_preference: Option<AnlzPreference>,
 }
@@ -262,6 +280,7 @@ impl Library {
             sync_align: get(&conn, SYNC_ALIGN)?.unwrap_or_default(),
             mixer_view: get(&conn, MIXER_VIEW)?.unwrap_or_default(),
             mixer_filters: get(&conn, MIXER_FILTERS)?.unwrap_or_default(),
+            mixer_eq: get(&conn, MIXER_EQ)?.unwrap_or_default(),
             cache_dir: self.cache_dir(),
             ui: get(&conn, UI_STATE)?.unwrap_or_default(),
             anlz_preference: get(&conn, ANLZ_PREFERENCE)?.unwrap_or_default(),
@@ -303,6 +322,9 @@ impl Library {
             }
             if let Some(f) = patch.mixer_filters {
                 put(&tx, MIXER_FILTERS, Some(&f))?;
+            }
+            if let Some(e) = patch.mixer_eq {
+                put(&tx, MIXER_EQ, Some(&e))?;
             }
             if let Some(mut ui) = patch.ui {
                 ui.volume = clamp_volume(ui.volume);
@@ -617,6 +639,7 @@ mod tests {
         assert_eq!(s.sync_align, SyncAlign::Bar);
         assert_eq!(s.mixer_view, MixerView::Simple);
         assert_eq!(s.mixer_filters, MixerFilters::Show);
+        assert_eq!(s.mixer_eq, MixerEq::FourBand);
         assert_eq!(s.cache_dir, dir.path().join("cache"));
         assert_eq!(s.ui, UiState::default());
         assert_eq!(s.anlz_preference, AnlzPreference::RekordboxFirst);
@@ -646,6 +669,7 @@ mod tests {
             sync_align: Some(SyncAlign::Beat),
             mixer_view: Some(MixerView::Advanced),
             mixer_filters: Some(MixerFilters::Hide),
+            mixer_eq: Some(MixerEq::ThreeBand),
             ui: Some(ui.clone()),
             anlz_preference: Some(AnlzPreference::ReksFirst),
         })
@@ -672,6 +696,7 @@ mod tests {
         assert_eq!(s.sync_align, SyncAlign::Beat);
         assert_eq!(s.mixer_view, MixerView::Advanced);
         assert_eq!(s.mixer_filters, MixerFilters::Hide);
+        assert_eq!(s.mixer_eq, MixerEq::ThreeBand);
         assert_eq!(s.ui, ui);
         assert_eq!(s.anlz_preference, AnlzPreference::ReksFirst);
         assert_eq!(lib.settings().unwrap(), s);
@@ -711,6 +736,8 @@ mod tests {
             serde_json::from_str(r#"{"mixerView":"advanced","mixerFilters":"hide"}"#).unwrap();
         assert_eq!(p.mixer_view, Some(MixerView::Advanced));
         assert_eq!(p.mixer_filters, Some(MixerFilters::Hide));
+        let p: SettingsPatch = serde_json::from_str(r#"{"mixerEq":"threeBand"}"#).unwrap();
+        assert_eq!(p.mixer_eq, Some(MixerEq::ThreeBand));
         let p: SettingsPatch =
             serde_json::from_str(r#"{"audioSampleRate":null,"audioBufferFrames":512}"#).unwrap();
         assert_eq!(p.audio_sample_rate, Some(None));

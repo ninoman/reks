@@ -163,7 +163,7 @@ menu items `--menu-item-h`.
 | `Progress` | `size`: sm, md; native `<progress>` | native |
 | `Swatch` | `color` (track colour name) or `style`; `size`: xs, sm, md | – |
 | `Caption` | `tone`: muted, subtle, default; small upper-case label | – |
-| `Knob` | `size`: sm, md; `bipolar` (arc from the centre), `defaultValue` (double-click / Delete); drag up/down, arrows, Page Up/Down, Home/End | own (`role="slider"`; Radix has no knob) |
+| `Knob` | `size`: sm, md; `bipolar` (arc from the centre), `defaultValue` (double-click / Delete), `lit` (brighter arc and glow), `detent` (a drag crossing it sticks within ±0.03, `knobDragValue`); drag up/down, arrows, Page Up/Down, Home/End | own (`role="slider"`; Radix has no knob) |
 | `Fader` | `orientation`: vertical, horizontal; `defaultValue` (double-click the cap or Delete); `detent` (a tick that drags snap to within `--fader-detent`; keys step past it); `ticks` (evenly spaced scale marks, ends included: ends and detent bold, the rest thin and short) | Radix Slider |
 | `Pad` + `SplitPad` | deck pads: `tone`: default, set (outlined in `color`, a data colour, else `deck-hotcue`; no fill, `fg` text), empty (dashed), lit; `marked` (heavy outline); `SplitPad`: back / forward halves under one label | – |
 | `InlineNumber` | text that becomes a number field on double-click or Enter; Enter / blur commit, Esc cancels, non-numbers are dropped | native |
@@ -355,6 +355,19 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   start; Advanced sends the user's positions again. X C V do nothing in
   Simple and the Shortcuts list leaves them out (`mixKeyAction(e, decks,
   crossfader)`). Spec: [research §6](research/deck-mixer-layout.md).
+- EQ layout (task 26, Settings → Mixer **EQ**, `mix.mixer_eq`: **4-band**
+  default, 3-band), for both Mixer views. 3-band rows are LEVEL · HI · MID
+  · LOW · FX: the FX row's caption is the selected effect, and the FX knob
+  has a centre detent and lights outside its dead zone (0.485–0.515). The
+  `FxSection` row in the shared section holds the effect select (Filter ·
+  Echo · Reverb, one always lit) and PARAMETER, captioned Resonance /
+  Feedback / Decay. No X/Y filter row or FILTER assigns; Advanced adds
+  the X-F assigns and crossfader. Each layout keeps its own EQ positions;
+  `effectiveMix` sends the hidden layout's EQ at noon (and FX centred in
+  4-band). Filters is disabled outside 4-band Simple. Channel knobs light
+  off centre in every layout. Spec:
+  [djm-eq-fx.md](research/djm-eq-fx.md) §4–5; wireframe
+  [mix-view-56.html](wireframes/mix-view-56.html).
 - Waveform style (Settings → Decks, `display.deck_waveform`), applied to both
   views live, on the player deck too: **RGB** (default since D30; mono height,
   colour mixed from `waveform-rgb-low/mid/high` by band level), **3-band**
@@ -389,11 +402,13 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   (tooltip on each); FILTER assign starts at X for channels 1–2, Y for 3–4.
 - Knobs draw a position mark (`knobMark`, `--color-knob-mark`: dark ink on the light cap in every theme).
 - Mixer height per view (task 25): Advanced 440, Simple 356, Simple with
-  the filters hidden 292 (`--mixer-h-advanced` / `-simple` / `-simple-bare`).
+  the filters hidden 292 (`--mixer-h-advanced` / `-simple` / `-simple-bare`);
+  3-band Simple 333, 3-band Advanced 393 (`--mixer-h-three` /
+  `-three-advanced`). Spare height spreads the rows.
   The Mix panel's `data-mixer` picks one (`mixerSize`) and re-declares
   `--deck-h`, which a `var()` on `:root` would not follow. With 4 decks the
   mixer stays 440 and its faders (`--fader-len`) and the master meter take
-  the difference, 60 px at most (`--fader-bonus`). In Simple the master
+  the difference, 60 px at most (`--fader-bonus`; 47 in 3-band Advanced). In Simple the master
   meter has no dB labels and fills the row.
 - Sizes (mixer 344 × 440, `--mixer-w` × `--mixer-h`; strips 52, rows 26, faders 96,
   filter FREQ `--knob-lg` 32; ![Mixer, dark](img/mixer-2-decks-dark.jpg) ![Mixer, light](img/mixer-2-decks-light.jpg)):

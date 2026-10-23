@@ -237,7 +237,8 @@ export function syncBar(): boolean {
  */
 export function startMixerLookSync(): () => void {
   const apply = (s: Settings | null) => {
-    if (s !== null) useMix.getState().setLook({ view: s.mixerView, filters: s.mixerFilters });
+    if (s !== null)
+      useMix.getState().setLook({ eq: s.mixerEq, view: s.mixerView, filters: s.mixerFilters });
   };
   apply(useSettings.getState().settings);
   return useSettings.subscribe((state, prev) => {
