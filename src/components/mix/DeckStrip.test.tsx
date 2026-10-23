@@ -553,3 +553,42 @@ describe("DeckStrip quick-loop block", () => {
     expect(btn("Deck 2 loop out").disabled).toBe(false);
   });
 });
+
+describe("DeckStrip sizes", () => {
+  const deck = () => screen.getByRole("region", { name: "Deck 2" });
+  const block = () => screen.getByRole("group", { name: "Deck 2 quick loop" });
+  const pads = () => screen.getByRole("radiogroup", { name: "Deck 2 pad mode" });
+
+  it("2 decks: as tall as the mixer, the quick-loop row under the views", () => {
+    setup({ view: view(), meta: loadedMeta() });
+    expect(deck().className).toContain("h-(--deck-h)");
+    expect(deck().className).not.toContain("--deck-h-compact");
+    expect(block().className).toContain("h-6");
+    // A column child, not a sibling of the pads.
+    expect(block().parentElement).toBe(deck().querySelector("header")?.parentElement);
+  });
+
+  it("4 decks: 216 px with a short header and overview, the quick-loop grid beside the pads", () => {
+    setup({ view: view(), meta: loadedMeta(), compact: true });
+    expect(deck().className).toContain("h-(--deck-h-compact)");
+    expect(deck().className).toContain("--deck-header-h:var(--deck-header-h-compact)");
+    expect(deck().className).toContain("--deck-overview-h:var(--deck-overview-h-compact)");
+    expect(block().className).toContain("w-(--loop-block-w)");
+    // The same bottom row as the pads.
+    const row = block().parentElement;
+    expect(row?.className).toContain("h-(--deck-bottom-h-compact)");
+    expect(row?.contains(pads())).toBe(true);
+  });
+
+  it("4 decks keep every control: Q, CUE, PLAY, MASTER and SYNC", () => {
+    setup({ view: view(), meta: loadedMeta(), compact: true });
+    for (const name of [
+      "Deck 2 quantise",
+      "Deck 2 cue",
+      "Play deck 2",
+      "Deck 2 master",
+      "Deck 2 sync",
+    ])
+      expect(screen.getByRole("button", { name })).toBeTruthy();
+  });
+});

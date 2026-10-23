@@ -1,8 +1,10 @@
 /**
  * One deck, laid out like rekordbox's 2Deck Horizontal: header, zoomed
  * waveform, overview, then CUE / PLAY, the pads and MASTER / SYNC, with the
- * tempo column down the right edge. One size in 2- and 4-deck mode, the same
- * in every state: what can't act yet is disabled, not hidden. Drop a track
+ * tempo column down the right edge. In 2-deck mode the deck is as tall as the
+ * mixer and the waveform takes the spare height, with the quick-loop row under
+ * the overview; `compact` (4 decks) is 216 px tall with a quick-loop grid
+ * beside the pads. The same in every state: what can't act yet is disabled, not hidden. Drop a track
  * from the table to load it. `solo` is the library's player deck on its own,
  * full window width: CUE / PLAY left of the waveforms and the pads right of
  * them, so the deck is one row shorter; no MASTER or SYNC (nothing to sync
@@ -83,6 +85,8 @@ export interface DeckStripProps {
   phase: number | null;
   /** Shown alone as the player: hides the sync controls. */
   solo?: boolean;
+  /** 4-deck mode: a shorter deck, the quick-loop grid beside the pads. */
+  compact?: boolean;
   /** Shown in the header after the title (the player's "mixer not at default" chip). */
   notice?: ReactNode;
   actions: DeckActions;
@@ -118,6 +122,7 @@ export function DeckStrip({
   keyText,
   phase,
   solo = false,
+  compact = false,
   notice,
   actions,
 }: DeckStripProps) {
@@ -141,7 +146,7 @@ export function DeckStrip({
   });
   const slot = slotState(meta, loaded);
 
-  const views =
+  const viewsBody =
     slot !== null || view === undefined ? (
       <DeckSlot
         deck={deck}
@@ -151,7 +156,7 @@ export function DeckStrip({
         onEject={actions.eject}
       />
     ) : (
-      <div {...scrub} className="cursor-ew-resize touch-none">
+      <div {...scrub} className="flex min-h-0 flex-1 cursor-ew-resize touch-none flex-col">
         <DeckWaveform
           deck={deck}
           columns={meta.columns}
@@ -192,6 +197,7 @@ export function DeckStrip({
       cueKey={keyFor({ type: "cue" })}
       playKey={playKey === "" ? undefined : playKey}
       grid={grid}
+      compact={compact}
       quantise={loaded && (view?.quantise ?? false)}
       onCue={actions.cue}
       onTogglePlay={actions.togglePlay}
@@ -221,16 +227,38 @@ export function DeckStrip({
     />
   );
 
-  // The mixer decks are too narrow for a block beside the pads (task 23 moves them): a row under the views.
+  const sync = (
+    <DeckSyncButtons
+      deck={deck}
+      ready={grid}
+      compact={compact}
+      master={view?.master ?? false}
+      sync={view?.sync ?? false}
+      masterKey={keyFor({ type: "master" })}
+      syncKey={keyFor({ type: "sync" })}
+      onMaster={actions.takeMaster}
+      onSync={actions.toggleSync}
+    />
+  );
+
+  // Under the overview where the deck has height to spare; beside the pads where it doesn't.
   const loopBlock = (
     <LoopBlock
       deck={deck}
-      layout={solo ? "grid" : "row"}
+      layout={solo || compact ? "grid" : "row"}
       state={loopBlockState(view, loaded, grid, meta.lastLoop)}
       loaded={loaded}
       keyFor={keyFor}
       actions={actions}
     />
+  );
+
+  const views = (
+    <div
+      className={cn("flex min-h-0 flex-col", solo ? "h-(--deck-views-h) min-w-0 flex-1" : "flex-1")}
+    >
+      {viewsBody}
+    </div>
   );
 
   function onDragOver(e: DragEvent) {
@@ -257,10 +285,12 @@ export function DeckStrip({
       onDrop={onDrop}
       className={cn(
         "flex min-w-(--deck-min-w) shrink-0 gap-2 rounded-md border border-border bg-surface p-2 data-[dropping]:border-dashed data-[dropping]:border-accent",
-        solo ? "h-(--deck-solo-h)" : "h-(--deck-h)",
+        solo ? "h-(--deck-solo-h)" : compact ? "h-(--deck-h-compact)" : "h-(--deck-h)",
+        compact &&
+          "[--deck-header-h:var(--deck-header-h-compact)] [--deck-overview-h:var(--deck-overview-h-compact)]",
       )}
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+      <div className={cn("flex min-w-0 flex-1 flex-col", compact ? "gap-1" : "gap-1.5")}>
         <DeckHeader
           deck={deck}
           loaded={loaded}
@@ -282,27 +312,36 @@ export function DeckStrip({
         {solo ? (
           <div className="flex min-h-0 flex-1 gap-2">
             {transport}
-            <div className="min-w-0 flex-1">{views}</div>
+            {views}
             {loopBlock}
             <div className="flex w-(--deck-pads-max-w) shrink-0">{pads}</div>
           </div>
         ) : (
           <>
             {views}
-            {loopBlock}
-            <div className="flex h-(--deck-bottom-h) shrink-0 gap-2">
-              {transport}
-              {pads}
-              <DeckSyncButtons
-                deck={deck}
-                ready={grid}
-                master={view?.master ?? false}
-                sync={view?.sync ?? false}
-                masterKey={keyFor({ type: "master" })}
-                syncKey={keyFor({ type: "sync" })}
-                onMaster={actions.takeMaster}
-                onSync={actions.toggleSync}
-              />
+            {!compact && loopBlock}
+            <div
+              className={cn(
+                "flex shrink-0",
+                compact ? "h-(--deck-bottom-h-compact) gap-1" : "h-(--deck-bottom-h) gap-2",
+              )}
+            >
+              {compact ? (
+                <>
+                  <div className="grid w-(--deck-cluster-w) shrink-0 grid-cols-2 content-end gap-1">
+                    {transport}
+                    {sync}
+                  </div>
+                  {pads}
+                  {loopBlock}
+                </>
+              ) : (
+                <>
+                  {transport}
+                  {pads}
+                  {sync}
+                </>
+              )}
             </div>
           </>
         )}
@@ -313,8 +352,8 @@ export function DeckStrip({
         loaded={loaded}
         tempo={tempo}
         range={meta.tempoRange}
-        // The mixer decks' fader is about twice as long as the player deck's.
-        ticks={solo ? 7 : 13}
+        // The 2-deck fader is about twice as long as the player deck's; the 4-deck one is about as long.
+        ticks={solo || compact ? 7 : 13}
         slowerKey={keyFor({ type: "nudge", dir: -1 })}
         fasterKey={keyFor({ type: "nudge", dir: 1 })}
         onTempo={actions.setTempo}

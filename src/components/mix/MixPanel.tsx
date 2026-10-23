@@ -49,6 +49,7 @@ export function MixPanel() {
         zoom={mix.waveZoom}
         keyText={key === null ? null : keyLabel(key)}
         phase={phase}
+        compact={deckCount === 4}
         actions={deckActions(mix, deck)}
       />
     );

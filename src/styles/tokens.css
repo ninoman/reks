@@ -499,16 +499,23 @@
   --meter-dot: 6px;
   --meter-label-fs: 9px;
   --meter-label-w: 14px;
-  /* Deck (task 16): one size in 2- and 4-deck mode. 290 = 260 + the quick-loop row (24 + 6); task 23 sizes it to the mixer. */
-  --deck-h: 290px;
+  /* Deck (concept A, task 23): 2 decks are as tall as the mixer; 4 decks stack two to the mixer's height. */
+  --deck-h: var(--mixer-h);
+  --deck-h-compact: 216px;
   --deck-header-h: 40px;
+  --deck-header-h-compact: 30px;
   --deck-min-w: 440px;
+  /* The player deck alone keeps a fixed waveform; the mixer decks' takes the spare height down to the minimum. */
   --deck-wave-h: 72px;
+  --deck-wave-min-h: 60px;
   --deck-overview-h: 20px;
-  /* Both views and the gap between them: what the empty / loading / error slot fills. */
+  --deck-overview-h-compact: 14px;
+  /* Both views and the gap between them, in the player deck. */
   --deck-views-h: calc(var(--deck-wave-h) + var(--deck-overview-h) + 6px);
   /* Q over CUE and PLAY: 20 + 32 + 32 and two 4px gaps. */
   --deck-bottom-h: 92px;
+  /* Compact bottom row: pad mode tabs (20), two 26 pad rows and their gaps. */
+  --deck-bottom-h-compact: 80px;
   /* The player deck alone: header over one row (CUE / PLAY · views · pads); padding and border included. */
   --deck-solo-h: calc(var(--deck-header-h) + 6px + var(--deck-views-h) + 18px);
   --deck-art: 40px;
@@ -517,6 +524,8 @@
   --loop-block-w: 104px;
   --deck-transport: 32px;
   --deck-sync-w: 60px;
+  /* Compact deck: CUE / PLAY, Q / SYNC and MASTER in one two-column cluster as wide as MASTER / SYNC. */
+  --deck-cluster-w: var(--deck-sync-w);
   --deck-tempo-w: 44px;
   --pad-h: 26px;
   /* Tempo fader: drags within this of 0% snap to it. */
@@ -526,7 +535,11 @@
   --mixer-h: 440px;
   --mixer-strip-w: 52px;
   --mixer-row-h: 26px;
-  --mix-panel-max-h: 62vh;
+  /* Above the library: app header (+ border), player bar, and the panel wrapper's bottom border. */
+  --app-chrome-h: calc(var(--toolbar-h) + var(--player-bar-h) + 2px);
+  /* Library toolbar and filters (116) + column header + 4 rows. */
+  --library-min-h: 246px;
+  --mix-panel-max-h: calc(100vh - var(--app-chrome-h) - var(--library-min-h));
 
   /* Layers. */
   --z-sticky: 1;

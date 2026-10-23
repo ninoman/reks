@@ -27,6 +27,13 @@ describe("tokens.css mirrors", () => {
     expect(token("--ease-snap")).toBe(SLIDE_OUT_DEFAULT.easing);
   });
 
+  it("sizes the decks and the panel from the mixer and the library", () => {
+    // #46 changes --mixer-h per view; the 2-deck decks must follow it.
+    expect(token("--deck-h")).toBe("var(--mixer-h)");
+    expect(token("--mix-panel-max-h")).toContain("var(--library-min-h)");
+    expect(token("--library-min-h")).toBe("246px");
+  });
+
   it("keeps raw colours out of the semantic layer", () => {
     const theme = css.slice(css.indexOf("@theme static {"));
     const hex = theme.match(/#[0-9a-f]{3,8}\b/gi) ?? [];

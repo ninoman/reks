@@ -25,7 +25,7 @@ export interface DeckSlotProps {
 }
 
 const box =
-  "flex h-(--deck-views-h) shrink-0 flex-col items-center justify-center gap-1.5 rounded-xs border border-dashed border-border-strong px-3 text-center text-xs text-fg-muted";
+  "flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-xs border border-dashed border-border-strong px-3 text-center text-xs text-fg-muted";
 
 export function DeckSlot({ deck, state, solo, onRetry, onEject }: DeckSlotProps) {
   const n = deck + 1;

@@ -151,4 +151,19 @@ describe("MixPanel", () => {
     fireEvent.click(screen.getByRole("radio", { name: "1 deck" }));
     expect(usePanels.getState().mixOpen).toBe(false);
   });
+
+  it("sizes the decks to the mixer: full-height decks at 2, compact at 4, and the panel capped for the library", async () => {
+    mixStart.mockResolvedValue(state());
+    renderMix();
+    const panel = screen.getByRole("region", { name: "Mix" });
+    expect(panel.className).toContain("max-h-(--mix-panel-max-h)");
+    expect(screen.getByRole("region", { name: "Deck 2" }).className).toContain("h-(--deck-h)");
+    expect(screen.getByRole("region", { name: "Deck 2" }).className).not.toContain("compact");
+
+    fireEvent.click(screen.getByRole("radio", { name: "4 decks" }));
+    for (const n of [1, 2, 3, 4])
+      expect(screen.getByRole("region", { name: `Deck ${n}` }).className).toContain(
+        "h-(--deck-h-compact)",
+      );
+  });
 });
