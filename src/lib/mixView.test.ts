@@ -13,6 +13,7 @@ import {
   formatLoopSeconds,
   formatTempo,
   fxName,
+  fxParameterCaption,
   fxParameterName,
   JUMP_PAGES,
   LOOP_PAGES,
@@ -465,6 +466,7 @@ describe("channel FX labels and knob light", () => {
   it("names each effect and what PARAMETER sets for it", () => {
     expect(FX_KINDS.map(fxName)).toEqual(["Filter", "Echo", "Reverb"]);
     expect(FX_KINDS.map(fxParameterName)).toEqual(["Resonance", "Feedback", "Decay"]);
+    expect(FX_KINDS.map(fxParameterCaption)).toEqual(["Reso", "Fdbk", "Decay"]);
   });
 
   it("lights a knob off centre; the FX knob only outside its dead zone", () => {

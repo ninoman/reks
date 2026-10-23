@@ -396,20 +396,26 @@ export function offCentre(value: number, zone = 0): boolean {
 /** The effects of the FX select, in button order. */
 export const FX_KINDS: readonly FxKind[] = ["filter", "echo", "reverb"];
 
-const FX_LABEL: Record<FxKind, { name: string; parameter: string }> = {
-  filter: { name: "Filter", parameter: "Resonance" },
-  echo: { name: "Echo", parameter: "Feedback" },
-  reverb: { name: "Reverb", parameter: "Decay" },
+/** `caption` is the short form that fits the mixer legend's PARAMETER row. */
+const FX_LABEL: Record<FxKind, { name: string; parameter: string; caption: string }> = {
+  filter: { name: "Filter", parameter: "Resonance", caption: "Reso" },
+  echo: { name: "Echo", parameter: "Feedback", caption: "Fdbk" },
+  reverb: { name: "Reverb", parameter: "Decay", caption: "Decay" },
 };
 
-/** The effect's name: the FX select button and the FX knob row's caption. */
+/** The effect's name: the FX select's caption and its menu. */
 export function fxName(kind: FxKind): string {
   return FX_LABEL[kind].name;
 }
 
-/** What PARAMETER sets for the effect, its caption. */
+/** What PARAMETER sets for the effect: its spoken name and the FX menu's hint. */
 export function fxParameterName(kind: FxKind): string {
   return FX_LABEL[kind].parameter;
+}
+
+/** PARAMETER's caption in the legend, short. */
+export function fxParameterCaption(kind: FxKind): string {
+  return FX_LABEL[kind].caption;
 }
 
 /** The 4-band EQ knobs, at noon in 3-band. */

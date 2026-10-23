@@ -390,17 +390,21 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   crossfader)`). Spec: [research §6](research/deck-mixer-layout.md).
 - EQ layout (task 27, Settings → Mixer **EQ**, `mix.mixer_eq`: **4-band**
   default, 3-band), for both Mixer views. 3-band rows are LEVEL · HI · MID
-  · LOW · FX: the FX row's caption is the selected effect, and the FX knob
-  has a centre detent and lights outside its dead zone (0.485–0.515). The
-  `FxSection` row in the shared section holds the effect select (Filter ·
-  Echo · Reverb, one always lit) and PARAMETER, captioned Resonance /
-  Feedback / Decay. No X/Y filter row or FILTER assigns; Advanced adds
+  · LOW · FX, and the FX knob has a centre detent and lights outside its
+  dead zone (0.485–0.515). The FX row's caption is the FX select
+  (`FxControls`, a `CaptionSelect` menu: Filter · Echo · Reverb, each with
+  its parameter as a hint), and PARAMETER sits in the legend row under it
+  (`--mixer-param-row-h`; the strips leave it empty), a small knob
+  captioned Reso / Fdbk / Decay: the full names do not fit the 62 px
+  legend and stay in the menu and the knob's label. No X/Y filter row or
+  FILTER assigns; Advanced adds
   the X-F assigns and crossfader. Each layout keeps its own EQ positions;
   `effectiveMix` sends the hidden layout's EQ at noon (and FX centred in
   4-band). Filters is disabled outside 4-band Simple. Channel knobs light
   off centre in every layout. Spec:
-  [djm-eq-fx.md](research/djm-eq-fx.md) §4–5; wireframe
-  [mix-view-56.html](wireframes/mix-view-56.html).
+  [djm-eq-fx.md](research/djm-eq-fx.md) §4–5; wireframes
+  [mix-view-56.html](wireframes/mix-view-56.html) and, for the FX select in
+  the legend, [fx-select-knob.html](wireframes/fx-select-knob.html) (A).
 - Waveform style (Settings → Decks, `display.deck_waveform`), applied to both
   views live, on the player deck too: **RGB** (default since D30; mono height,
   colour mixed from `waveform-rgb-low/mid/high` by band level), **3-band**

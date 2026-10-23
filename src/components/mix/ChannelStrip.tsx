@@ -2,11 +2,13 @@
  * One mixer channel, top to bottom as on the hardware: level (trim), the EQ
  * (4-band HI / HM / LM / LO, or 3-band HI / MID / LOW and the FX knob),
  * filter assign, cue, fader, crossfader assign. Rows line up with
- * `ChannelLegend`, which carries the captions once. A knob off centre is lit.
+ * `ChannelLegend`, which carries the captions once, and in 3-band the FX
+ * select and PARAMETER. A knob off centre is lit.
  */
+import { Fragment } from "react";
+
 import { cn } from "../../lib/cn";
-import type { FxKind } from "../../lib/ipc";
-import { FX_DEAD_ZONE, fxName, type MixerParts, offCentre } from "../../lib/mixView";
+import { FX_DEAD_ZONE, type MixerParts, offCentre } from "../../lib/mixView";
 import type { ChannelValues } from "../../store/mix";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -16,6 +18,7 @@ import { Knob } from "../ui/Knob";
 import { MeterScale } from "../ui/Meter";
 import { Tooltip } from "../ui/Tooltip";
 import { AssignSwitch } from "./AssignSwitch";
+import { type FxControlProps, FxParameter, FxSelect } from "./FxControls";
 import { LiveMeter } from "./LiveMeter";
 
 type KnobParam =
@@ -29,7 +32,7 @@ type KnobParam =
   | "eq3Lo"
   | "fx";
 
-/** `[param, caption]` per knob row; the FX row's caption is the selected effect. */
+/** `[param, caption]` per knob row; the FX row's caption is the FX select. */
 const FOUR_BAND: [KnobParam, string][] = [
   ["trim", "Level"],
   ["eqHi", "Hi"],
@@ -56,6 +59,8 @@ function ariaName(param: KnobParam, caption: string): string {
 }
 
 const row = "flex h-(--mixer-row-h) items-center justify-center";
+/** The legend's PARAMETER row under FX; the strips leave it empty. */
+const paramRow = "flex h-(--mixer-param-row-h) items-center";
 
 export interface ChannelStripProps {
   ch: number;
@@ -81,18 +86,21 @@ export function ChannelStrip({ ch, values, active, parts, onChange, onCue }: Cha
       {knobRows(parts).map(([param, caption]) => {
         const fx = param === "fx";
         return (
-          <div key={param} className={row}>
-            <Knob
-              size={param === "trim" ? "sm" : "md"}
-              bipolar
-              defaultValue={0.5}
-              {...(fx && { detent: 0.5 })}
-              lit={offCentre(values[param], fx ? FX_DEAD_ZONE : 0)}
-              value={values[param]}
-              onValueChange={(v) => onChange(param, v)}
-              aria-label={`Channel ${n} ${ariaName(param, caption)}`}
-            />
-          </div>
+          <Fragment key={param}>
+            <div className={row}>
+              <Knob
+                size={param === "trim" ? "sm" : "md"}
+                bipolar
+                defaultValue={0.5}
+                {...(fx && { detent: 0.5 })}
+                lit={offCentre(values[param], fx ? FX_DEAD_ZONE : 0)}
+                value={values[param]}
+                onValueChange={(v) => onChange(param, v)}
+                aria-label={`Channel ${n} ${ariaName(param, caption)}`}
+              />
+            </div>
+            {fx && <div className={paramRow} />}
+          </Fragment>
         );
       })}
       {parts.filterAssigns && (
@@ -139,36 +147,44 @@ export function ChannelStrip({ ch, values, active, parts, onChange, onCue }: Cha
   );
 }
 
-/** Row captions, in strip order; "" is the fader row. */
-function legendRows(parts: MixerParts, fx: FxKind): string[] {
-  const knobs = knobRows(parts).map(([param, c]) => (param === "fx" ? fxName(fx) : c));
-  return [
-    ...knobs,
-    ...(parts.filterAssigns ? ["Filter"] : []),
-    "Cue",
-    "",
-    ...(parts.crossfader ? ["X-F"] : []),
-  ];
+/** A legend caption, as tall as a strip row. */
+function RowCaption({ children }: { children: string }) {
+  return (
+    <Caption aria-hidden="true" className="flex h-(--mixer-row-h) items-center">
+      {children}
+    </Caption>
+  );
 }
 
-/** The captions for every strip's rows and the dB scale for their meters, once, on the left. */
-export function ChannelLegend({ parts, fx }: { parts: MixerParts; fx: FxKind }) {
-  const scaleGap = parts.crossfader ? "my-1" : "my-0.5";
+/**
+ * The captions for every strip's rows and the dB scale for their meters,
+ * once, on the left; in 3-band the FX row's caption is the FX select, with
+ * PARAMETER in the row under it.
+ */
+export function ChannelLegend({ parts, fx }: { parts: MixerParts; fx: FxControlProps }) {
   return (
-    <div aria-hidden="true" className="flex min-w-0 flex-1 flex-col items-end justify-between pr-1">
+    <div className="flex min-w-0 flex-1 flex-col items-end justify-between pr-1">
       {/* The header row: the mixer's settings button sits here. */}
       <span className="h-5" />
-      {legendRows(parts, fx).map((caption, i) =>
-        caption === "" ? (
-          // The fader row: the one dB scale, as tall as the fader.
-          // biome-ignore lint/suspicious/noArrayIndexKey: fixed rows
-          <MeterScale key={i} className={scaleGap} />
+      {knobRows(parts).map(([param, caption]) =>
+        param === "fx" ? (
+          <Fragment key={param}>
+            <div className="flex h-(--mixer-row-h) items-center">
+              <FxSelect {...fx} />
+            </div>
+            <div className={paramRow}>
+              <FxParameter {...fx} />
+            </div>
+          </Fragment>
         ) : (
-          <Caption key={caption} className="flex h-(--mixer-row-h) items-center">
-            {caption}
-          </Caption>
+          <RowCaption key={param}>{caption}</RowCaption>
         ),
       )}
+      {parts.filterAssigns && <RowCaption>Filter</RowCaption>}
+      <RowCaption>Cue</RowCaption>
+      {/* The fader row: the one dB scale, as tall as the fader. */}
+      <MeterScale className={parts.crossfader ? "my-1" : "my-0.5"} />
+      {parts.crossfader && <RowCaption>X-F</RowCaption>}
     </div>
   );
 }

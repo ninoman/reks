@@ -1,8 +1,8 @@
 /**
  * The mixer as laid out on the hardware: four channel strips and the master
- * section, then one row with filter X and Y (4-band) or the FX select and
- * PARAMETER (3-band), and the crossfader across the mixer with its curve at
- * the right end. Spare height (4 decks) spreads the strips' rows.
+ * section (3-band: the FX select and PARAMETER in the legend), then filter X
+ * and Y (4-band), and the crossfader across the mixer with its curve at the
+ * right end. Spare height (4 decks) spreads the strips' rows.
  */
 import type { FilterUnit as Unit } from "../../lib/ipc";
 import { crossfaderKeyHint } from "../../lib/mixKeys";
@@ -17,7 +17,6 @@ import { Knob } from "../ui/Knob";
 import { Tooltip } from "../ui/Tooltip";
 import { ChannelLegend, ChannelStrip } from "./ChannelStrip";
 import { FilterUnit } from "./FilterUnit";
-import { FxSection } from "./FxSection";
 import { MasterSection } from "./MasterSection";
 
 export interface MixerPanelProps {
@@ -59,7 +58,7 @@ export function MixerPanel(p: MixerPanelProps) {
         >
           <GearIcon size={14} />
         </IconButton>
-        <ChannelLegend parts={parts} fx={p.fx.kind} />
+        <ChannelLegend parts={parts} fx={{ values: p.fx, onChange: p.onFx }} />
         {p.channels.map((values, ch) => (
           <ChannelStrip
             // biome-ignore lint/suspicious/noArrayIndexKey: channels are fixed slots
@@ -90,7 +89,6 @@ export function MixerPanel(p: MixerPanelProps) {
           />
         </div>
       )}
-      {parts.threeBand && <FxSection values={p.fx} onChange={p.onFx} />}
       {parts.crossfader && (
         <div className="flex h-(--mixer-row-h) items-center gap-1">
           <Caption aria-hidden="true">X</Caption>

@@ -539,7 +539,7 @@
   --mixer-h-advanced: 440px;
   --mixer-h-simple: 356px;
   --mixer-h-simple-bare: 292px;
-  /* 3-band (#56): the five knob rows and the FX row; Advanced adds the X-F assigns and crossfader. */
+  /* 3-band (#56): the five knob rows and PARAMETER under FX; Advanced adds the X-F assigns and crossfader. */
   --mixer-h-three: 333px;
   --mixer-h-three-advanced: 393px;
   --mixer-h: var(--mixer-h-advanced);
@@ -547,6 +547,8 @@
   --fader-bonus: 60px;
   --mixer-strip-w: 52px;
   --mixer-row-h: 26px;
+  /* 3-band: PARAMETER under the FX select, its caption over a small knob. */
+  --mixer-param-row-h: 36px;
   /* Above the library: app header (+ border), player bar, and the panel wrapper's bottom border. */
   --app-chrome-h: calc(var(--toolbar-h) + var(--player-bar-h) + 2px);
   /* Library toolbar and filters (116) + column header + 4 rows. */

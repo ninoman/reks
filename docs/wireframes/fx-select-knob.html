@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FX Select Mockups</title>
+<meta name="description" content="Mockups for the 3-band mixer: the FX row's caption becomes the FX select, with PARAMETER next to it; three placements next to today's layout.">
+<style>
+/*
+ * Mockups for the 3-band mixer's FX row. Sizes from src/styles/tokens.css
+ * (mixer 344 wide, strips 52, rows 26, knobs 22/28), colours from Graphite.
+ * Drawn 1:1 then scaled up so the small type is readable.
+ */
+:root {
+  --bg: #1f1e1d; --surface: #30302e; --surface-strong: #3d3d3a; --deck: #141413;
+  --fg: #dedbd2; --fg-muted: #a8a69d; --fg-subtle: #7c7a73;
+  --border: #3f3e3b; --border-subtle: #2d2c2a; --border-strong: #4d4c47;
+  --knob: #e8e5d9; --knob-mark: #1f1e1d; --lit: #e8e5d9; --lit-fg: #141413;
+  --hover: rgb(250 249 245 / 6%);
+  --led-red: #d0463c; --led-white: #9b9a94; --led-blue: #3a4f9c; --led-lime: #6f7d2c;
+  --new: #a3a6ff; --new-bg: rgb(163 166 255 / 14%);
+  --strip-w: 52px; --row-h: 26px; --knob-sm: 22px; --knob-md: 28px;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --scale: 1.5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--font); }
+main { max-width: 1240px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 22px; margin: 0 0 6px; }
+.lede { color: var(--fg-muted); margin: 0 0 28px; max-width: 72ch; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(560px, 1fr)); gap: 28px; }
+.card { background: #262624; border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+.card h2 { font-size: 15px; margin: 0 0 2px; display: flex; gap: 8px; align-items: baseline; }
+.card h2 .tag { font-size: 11px; font-weight: 600; color: var(--new); background: var(--new-bg); padding: 1px 7px; border-radius: 99px; }
+.card p.sub { margin: 0 0 14px; color: var(--fg-muted); font-size: 13px; }
+.stage { overflow: hidden; display: flex; justify-content: center; padding: 6px 0 10px; }
+.zoom { transform: scale(var(--scale)); transform-origin: top center; }
+.notes { margin: 12px 0 0; padding-left: 18px; font-size: 13px; color: var(--fg-muted); }
+.notes b { color: var(--fg); font-weight: 600; }
+.notes li { margin: 2px 0; }
+
+/* The mixer, at real size. */
+.mixer { width: 344px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 4px; position: relative; }
+.body { display: grid; grid-template-columns: 1fr repeat(4, var(--strip-w)) 60px; }
+.narrow .body { grid-template-columns: 1fr repeat(4, 48px) 60px; }
+.cell { display: flex; align-items: center; justify-content: center; min-width: 0; }
+.legend { justify-content: flex-end; padding-right: 4px; }
+.master { border-left: 1px solid var(--border-subtle); margin-left: 4px; padding-left: 4px; flex-direction: column; gap: 3px; }
+.cap { font-size: 10px; line-height: 1; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-muted); white-space: nowrap; }
+.cap.def { color: var(--fg); }
+.gear { position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; border-radius: 4px; color: var(--fg-muted); display: grid; place-items: center; font-size: 12px; }
+.badge { font: 600 10px/1 ui-monospace, Menlo, monospace; padding: 3px 6px; border-radius: 2px; background: var(--surface-strong); color: var(--fg-muted); }
+.badge.on { background: var(--lit); color: var(--lit-fg); }
+.btn { font: 500 11px/1 var(--font); color: var(--fg); background: var(--surface-strong); border: 1px solid var(--border-strong); border-radius: 4px; height: 20px; padding: 0 6px; display: inline-flex; align-items: center; cursor: pointer; white-space: nowrap; }
+.btn[aria-pressed="true"] { background: var(--lit); color: var(--lit-fg); border-color: var(--lit); box-shadow: 0 0 6px rgb(232 229 217 / 35%); }
+.fader-pair { display: flex; gap: 6px; padding: 4px 0; }
+.fader { width: 20px; height: 96px; position: relative; display: flex; justify-content: center; }
+.fader::before { content: ""; width: 3px; height: 100%; background: var(--deck); border-radius: 2px; }
+.fader .capf { position: absolute; top: 0; width: 20px; height: 12px; border-radius: 3px; background: var(--knob); }
+.meter { width: 10px; background: var(--deck); border-radius: 3px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 3px 0; }
+.meter i { width: 6px; height: 6px; border-radius: 50%; background: var(--led-lime); opacity: .55; }
+.meter i:nth-child(1) { background: var(--led-red); } .meter i:nth-child(2), .meter i:nth-child(3) { background: var(--led-white); } .meter i:nth-child(4) { background: var(--led-blue); }
+.scale { font-size: 8px; color: var(--fg-muted); text-align: right; display: flex; flex-direction: column; justify-content: space-between; height: 96px; padding: 4px 0; line-height: 1; }
+.bar { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--border-subtle); padding: 4px 4px 0; }
+.bar .grp { display: flex; gap: 2px; }
+.bar .right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+
+/* Knob: arc ring, light cap, dark mark. */
+.knob { cursor: ns-resize; display: block; touch-action: none; }
+.knob .ring { fill: none; stroke: var(--border-strong); stroke-width: 2.5; stroke-linecap: round; }
+.knob .val { fill: none; stroke: var(--fg-muted); stroke-width: 2.5; stroke-linecap: round; }
+.knob.lit .val { stroke: var(--knob); }
+.knob .cap { fill: var(--knob); }
+.knob .mark { stroke: var(--knob-mark); stroke-width: 2; stroke-linecap: round; }
+.knob:focus-visible { outline: 1.5px solid var(--fg); outline-offset: 1px; border-radius: 50%; }
+
+/* The new piece: a caption that is a select. Reads as a label, hints it opens. */
+.fxsel { position: relative; }
+.fxsel > button { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 3px 0 4px; border-radius: 3px; cursor: pointer;
+  font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--fg); border: 1px solid var(--border-strong); background: rgb(0 0 0 / 12%); }
+.fxsel > button:hover { background: var(--hover); border-color: var(--fg-subtle); }
+.fxsel > button:focus-visible { outline: 1.5px solid var(--fg); outline-offset: 1px; }
+.fxsel > button svg { width: 8px; height: 8px; color: var(--fg-muted); flex: none; }
+.fxsel[data-open="true"] > button { background: var(--surface-strong); border-color: var(--fg-subtle); }
+.menu { position: absolute; z-index: 5; top: calc(100% + 3px); right: 0; min-width: 132px; background: #2d2c2a; border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px; box-shadow: 0 8px 24px rgb(0 0 0 / 45%); display: none; }
+.fxsel.left .menu { right: auto; left: 0; }
+.fxsel[data-open="true"] .menu { display: block; }
+.menu [role="option"] { display: grid; grid-template-columns: 12px 1fr auto; align-items: center; gap: 6px; padding: 5px 7px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+.menu [role="option"]:hover, .menu [role="option"].active { background: var(--hover); }
+.menu [role="option"] .chk { color: var(--fg); font-size: 10px; visibility: hidden; }
+.menu [role="option"][aria-selected="true"] .chk { visibility: visible; }
+.menu [role="option"] .par { color: var(--fg-subtle); font-size: 10px; }
+.menu kbd { font: 10px ui-monospace, Menlo, monospace; color: var(--fg-subtle); }
+
+/* Highlights what moved, for the review only. */
+.hl { position: relative; }
+.hl::after { content: ""; position: absolute; inset: -2px; border: 1px dashed var(--new); border-radius: 4px; pointer-events: none; }
+.gone { opacity: .35; text-decoration: line-through; }
+.param { display: flex; align-items: center; gap: 4px; }
+.param.col { flex-direction: column; gap: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>FX select in the knob legend</h1>
+  <p class="lede">3-band mixer. The FX row's caption (today a plain <em>REVERB</em>) becomes the FX select, and PARAMETER moves next to it, so the bottom FX bar goes away. Everything is live: open the select, pick an effect, drag a knob up/down (double-click resets). Dashed outlines mark what changed. Drawn at real size, shown at 1.5×.</p>
+  <div class="grid" id="grid"></div>
+</main>
+
+<script>
+const FX = { filter: ["Filter", "Resonance"], echo: ["Echo", "Feedback"], reverb: ["Reverb", "Decay"] };
+const KINDS = Object.keys(FX);
+const CHEVRON = '<svg viewBox="0 0 8 8" aria-hidden="true"><path d="M1.5 3 4 5.5 6.5 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+// One knob: -135°..135°, value 0..1; bipolar draws the arc from noon.
+function knob(size, value, { bipolar = false, label = "" } = {}) {
+  const s = size === "sm" ? 22 : 28, r = s / 2 - 2, c = s / 2;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "knob"); svg.setAttribute("width", s); svg.setAttribute("height", s);
+  svg.setAttribute("role", "slider"); svg.setAttribute("tabindex", "0"); svg.setAttribute("aria-label", label);
+  const pt = (v, rr) => { const a = (-135 + 270 * v - 90) * Math.PI / 180; return [c + rr * Math.cos(a), c + rr * Math.sin(a)]; };
+  const arc = (a, b) => { const [x1, y1] = pt(a, r), [x2, y2] = pt(b, r); return `M${x1} ${y1} A${r} ${r} 0 ${(b - a) * 270 > 180 ? 1 : 0} 1 ${x2} ${y2}`; };
+  svg.innerHTML = `<path class="ring" d="${arc(0, 1)}"/><path class="val"/><circle class="cap" cx="${c}" cy="${c}" r="${r - 3}"/><line class="mark"/>`;
+  const draw = (v) => {
+    const from = bipolar ? Math.min(v, .5) : 0, to = bipolar ? Math.max(v, .5) : v;
+    svg.querySelector(".val").setAttribute("d", to - from > .005 ? arc(from, to) : "");
+    const [x1, y1] = pt(v, r - 9 > 1 ? r - 9 : 2), [x2, y2] = pt(v, r - 4);
+    const m = svg.querySelector(".mark"); m.setAttribute("x1", x1); m.setAttribute("y1", y1); m.setAttribute("x2", x2); m.setAttribute("y2", y2);
+    svg.classList.toggle("lit", bipolar && Math.abs(v - .5) > .02);
+    svg.setAttribute("aria-valuenow", Math.round(v * 100));
+  };
+  let v = value, start = 0, y0 = 0;
+  draw(v);
+  svg.addEventListener("pointerdown", (e) => { svg.setPointerCapture(e.pointerId); start = v; y0 = e.clientY; });
+  svg.addEventListener("pointermove", (e) => { if (!svg.hasPointerCapture(e.pointerId)) return; v = Math.min(1, Math.max(0, start + (y0 - e.clientY) / 120)); draw(v); });
+  svg.addEventListener("dblclick", () => { v = bipolar ? .5 : value; draw(v); });
+  svg.addEventListener("keydown", (e) => { const d = { ArrowUp: .05, ArrowRight: .05, ArrowDown: -.05, ArrowLeft: -.05 }[e.key]; if (d) { e.preventDefault(); v = Math.min(1, Math.max(0, v + d)); draw(v); } });
+  return svg;
+}
+
+function el(tag, cls, html) { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; }
+function cap(text, def) { return el("span", "cap" + (def ? " def" : ""), text); }
+
+// The FX select: a caption-styled button with a listbox; arrows / Enter / Esc work.
+function fxSelect(state, { align = "right", onPick }) {
+  const wrap = el("div", "fxsel" + (align === "left" ? " left" : ""));
+  const btn = el("button"); btn.setAttribute("aria-haspopup", "listbox"); btn.setAttribute("aria-label", "FX effect");
+  const menu = el("div", "menu"); menu.setAttribute("role", "listbox");
+  const render = () => {
+    btn.innerHTML = `<span>${FX[state.kind][0]}</span>${CHEVRON}`;
+    menu.innerHTML = "";
+    KINDS.forEach((k, i) => {
+      const o = el("div", "", `<span class="chk">✓</span><span>${FX[k][0]}</span><span class="par">${FX[k][1]}</span>`);
+      o.setAttribute("role", "option"); o.setAttribute("aria-selected", k === state.kind);
+      o.addEventListener("click", () => pick(k));
+      menu.append(o);
+    });
+  };
+  let active = 0;
+  const open = (on) => { wrap.dataset.open = on; btn.setAttribute("aria-expanded", on); if (on) { active = KINDS.indexOf(state.kind); mark(); } };
+  const mark = () => [...menu.children].forEach((o, i) => o.classList.toggle("active", i === active));
+  const pick = (k) => { state.kind = k; open(false); render(); onPick(); btn.focus(); };
+  btn.addEventListener("click", () => open(wrap.dataset.open !== "true"));
+  btn.addEventListener("keydown", (e) => {
+    const isOpen = wrap.dataset.open === "true";
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (!isOpen) return open(true); active = (active + (e.key === "ArrowDown" ? 1 : 2)) % 3; mark(); }
+    else if ((e.key === "Enter" || e.key === " ") && isOpen) { e.preventDefault(); pick(KINDS[active]); }
+    else if (e.key === "Escape") open(false);
+  });
+  document.addEventListener("click", (e) => { if (!wrap.contains(e.target)) open(false); });
+  render();
+  wrap.append(btn, menu);
+  return wrap;
+}
+
+/*
+ * Builds one 3-band Simple mixer. `v` picks the variant:
+ *   today  - caption REVERB, bottom bar with Filter/Echo/Reverb + PARAMETER
+ *   a      - select in the legend, PARAMETER in its own legend row under it
+ *   b      - select in the legend, PARAMETER at the end of the same row (master column)
+ *   c      - strips 48 wide, PARAMETER knob left of the select in the legend
+ */
+function mixer(v) {
+  const state = { kind: "reverb" };
+  const m = el("div", "mixer" + (v === "c" ? " narrow" : ""));
+  m.append(el("div", "gear", "⚙"));
+  const body = el("div", "body");
+  const rows = ["head", "level", "hi", "mid", "low", "fx", ...(v === "a" ? ["param"] : []), "cue", "fader"];
+  body.style.gridTemplateRows = rows.map((r) => r === "head" ? "20px" : r === "fader" ? "auto" : r === "param" ? "30px" : "var(--row-h)").join(" ");
+  const place = (node, row, col, span = 1) => { node.style.gridRow = `${rows.indexOf(row) + 1} / span ${span}`; node.style.gridColumn = col; body.append(node); return node; };
+  const cell = (cls = "") => el("div", "cell " + cls);
+  const paramCaption = () => FX[state.kind][1];
+  const refreshers = [];
+
+  // Legend.
+  const legend = { level: "Level", hi: "Hi", mid: "Mid", low: "Low", cue: "Cue" };
+  for (const [r, t] of Object.entries(legend)) place(cell("legend"), r, 1).append(cap(t));
+  const fxLegend = place(cell("legend"), "fx", 1);
+  if (v === "today") {
+    const c = cap(FX[state.kind][0]); fxLegend.append(c);
+    refreshers.push(() => { c.textContent = FX[state.kind][0]; });
+  } else {
+    const onPick = () => refreshers.forEach((f) => f());
+    const sel = fxSelect(state, { onPick, align: v === "c" ? "left" : "right" });
+    if (v === "c") {
+      const k = knob("sm", .5, { label: "FX parameter" });
+      refreshers.push(() => { k.setAttribute("aria-label", `FX ${paramCaption().toLowerCase()}`); });
+      fxLegend.style.gap = "3px";
+      const pk = el("span", "hl"), ps = el("span", "hl");
+      pk.append(k); ps.append(sel); fxLegend.append(pk, ps);
+      fxLegend.style.paddingRight = "2px";
+    } else {
+      const h = el("span", "hl"); h.append(sel); fxLegend.append(h);
+    }
+  }
+  if (v === "a") {
+    const pc = place(cell("legend"), "param", 1);
+    const p = el("span", "param hl"); const c = cap(paramCaption());
+    p.append(c, knob("sm", .5, { label: "FX parameter" })); pc.append(p);
+    refreshers.push(() => { c.textContent = paramCaption(); });
+  }
+  const scale = el("div", "scale", "<span>+10</span><span>+6</span><span>+3</span><span>0</span><span>-3</span><span>-6</span><span>-10</span><span>-15</span><span>-20</span>");
+  place(cell("legend"), "fader", 1).append(scale);
+
+  // Strips.
+  for (let ch = 0; ch < 4; ch++) {
+    const col = ch + 2;
+    place(cell(), "head", col).append(el("span", "badge" + (ch < 2 ? " on" : ""), ch + 1));
+    place(cell(), "level", col).append(knob("sm", .5, { bipolar: true, label: `Channel ${ch + 1} level` }));
+    for (const r of ["hi", "mid", "low", "fx"]) place(cell(), r, col).append(knob("md", r === "fx" && ch === 0 ? .72 : .5, { bipolar: true, label: `Channel ${ch + 1} ${r}` }));
+    const b = el("button", "btn", "Cue"); b.setAttribute("aria-pressed", ch === 0); b.onclick = () => b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") !== "true");
+    place(cell(), "cue", col).append(b);
+    const fp = el("div", "fader-pair", '<div class="fader"><div class="capf"></div></div>');
+    const mt = el("div", "meter"); for (let i = 0; i < 9; i++) mt.append(el("i"));
+    fp.append(mt);
+    place(cell(), "fader", col).append(fp);
+  }
+
+  // Master column.
+  place(cell("master"), "head", 6).append(cap("Master", true));
+  place(cell("master"), "level", 6).append(knob("sm", .8, { label: "Master level" }));
+  const meterRows = v === "b" ? 2 : 3;
+  const mm = el("div", "meter"); mm.style.height = `${meterRows * 26 - 10}px`; for (let i = 0; i < 9; i++) mm.append(el("i"));
+  place(cell("master"), "hi", 6, meterRows).append(mm);
+  let cueFrom = "fx";
+  if (v === "b") {
+    const pc = place(cell("master"), "low", 6, 2); pc.style.justifyContent = "flex-end"; pc.style.paddingBottom = "0";
+    const p = el("div", "param col hl"); const c = cap(paramCaption());
+    p.append(c, knob("md", .5, { label: "FX parameter" })); pc.append(p);
+    refreshers.push(() => { c.textContent = paramCaption(); });
+    cueFrom = "cue";
+  }
+  const cueCol = place(cell("master"), cueFrom, 6, rows.length - rows.indexOf(cueFrom));
+  cueCol.style.justifyContent = "flex-start"; cueCol.style.gap = "4px"; cueCol.style.paddingTop = "4px";
+  cueCol.append(cap("Cue", true), cap("Level"), knob("sm", .7, { label: "Cue level" }), cap("Cue/Mix"), knob("sm", .5, { bipolar: true, label: "Cue/mix" }));
+  const split = el("button", "btn", "Split"), post = el("button", "btn", "Post EQ");
+  cueCol.append(split, post);
+
+  m.append(body);
+
+  // Today's bottom bar: FX select buttons and PARAMETER.
+  if (v === "today") {
+    const bar = el("div", "bar");
+    bar.append(cap("FX", true));
+    const grp = el("div", "grp");
+    const btns = KINDS.map((k) => { const b = el("button", "btn", FX[k][0]); b.onclick = () => { state.kind = k; refreshers.forEach((f) => f()); }; grp.append(b); return [k, b]; });
+    const right = el("div", "right"); const c = cap(paramCaption());
+    right.append(c, knob("md", .5, { label: "FX parameter" }));
+    bar.append(grp, right);
+    m.append(bar);
+    refreshers.push(() => { c.textContent = paramCaption(); btns.forEach(([k, b]) => b.setAttribute("aria-pressed", k === state.kind)); });
+  }
+  refreshers.forEach((f) => f());
+  return m;
+}
+
+const CARDS = [
+  { v: "today", title: "Today", sub: "The FX row's caption only names the effect; picking it and PARAMETER live in a bar under the faders.",
+    notes: ["Select and PARAMETER are a whole mixer-height away from the knobs they drive.", "The bar costs a ~30 px row."] },
+  { v: "a", tag: "Recommended", title: "A · Select in the legend, PARAMETER under it",
+    sub: "The caption is the select. PARAMETER gets its own short legend row right below, captioned for the effect (Decay / Feedback / Resonance).",
+    notes: ["<b>+</b> Reads top to bottom like the hardware: effect, then its parameter, next to the FX knobs.", "<b>+</b> No strip or meter shrinks; the new 30 px row is paid for by dropping the bottom bar (mixer height about the same).", "<b>−</b> The strips have an empty slot on the PARAMETER row.", "<b>Built</b> (2026-10-23) with the caption over the knob and short captions (Reso / Fdbk / Decay): the 62 px legend has no room for a caption beside it."] },
+  { v: "b", tag: "Option", title: "B · Select in the legend, PARAMETER at the row's end",
+    sub: "The FX row runs Select ▸ four FX knobs ▸ PARAMETER in the master column, like a DJM's Color FX section.",
+    notes: ["<b>+</b> One row, no extra height; symmetric with the select.", "<b>−</b> The master meter loses two rows (half the height) and the cue block moves down.", "<b>−</b> PARAMETER is far from the select it belongs to on a 344 px mixer."] },
+  { v: "c", tag: "Option", title: "C · Knob and select side by side",
+    sub: "Strips narrow 52 → 48 px to widen the legend to ~76 px; the PARAMETER knob (small) sits left of the select on the FX row.",
+    notes: ["<b>+</b> Tightest grouping; no extra row, meters unchanged.", "<b>−</b> No room for a PARAMETER caption: its name moves to the select's menu and the knob's tooltip.", "<b>−</b> Narrower strips everywhere (the 4-band view too) for one row's sake."] },
+];
+
+const grid = document.getElementById("grid");
+for (const c of CARDS) {
+  const card = el("section", "card");
+  card.append(el("h2", "", `${c.title}${c.tag ? ` <span class="tag">${c.tag}</span>` : ""}`), el("p", "sub", c.sub));
+  const stage = el("div", "stage"), zoom = el("div", "zoom");
+  zoom.append(mixer(c.v)); stage.append(zoom); card.append(stage);
+  const ul = el("ul", "notes"); c.notes.forEach((n) => ul.append(el("li", "", n))); card.append(ul);
+  grid.append(card);
+  // The scaled mixer keeps its layout box; size the stage to the scaled height.
+  requestAnimationFrame(() => { stage.style.height = `${zoom.firstChild.offsetHeight * 1.5 + 16}px`; });
+}
+</script>
+</body>
+</html>

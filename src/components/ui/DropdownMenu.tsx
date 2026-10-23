@@ -64,3 +64,20 @@ export function DropdownMenuSeparator({
 }: ComponentProps<typeof Menu.Separator>) {
   return <Menu.Separator className={cn(menuSeparatorClass, className)} {...props} />;
 }
+
+export const DropdownMenuRadioGroup = Menu.RadioGroup;
+
+export function DropdownMenuRadioItem({
+  className,
+  children,
+  ...props
+}: ComponentProps<typeof Menu.RadioItem>) {
+  return (
+    <Menu.RadioItem className={cn(menuItemVariants({ inset: true }), className)} {...props}>
+      <Menu.ItemIndicator className={menuIndicatorClass}>
+        <CheckIcon />
+      </Menu.ItemIndicator>
+      {children}
+    </Menu.RadioItem>
+  );
+}
