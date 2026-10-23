@@ -54,7 +54,7 @@ repo root). Tauri deletes the intermediate `reks.app` afterwards; to keep it, ru
 `target/universal-apple-darwin/release/`. To bundle for the host OS's other formats, run
 `npm run tauri build`.
 
-Set `REKS_FEEDBACK_URL` before building to turn on in-app reports ([feedback.md](feedback.md)).
+Every build sends in-app reports to the live relay; the URL comes from `.cargo/config.toml` ([feedback.md](feedback.md)).
 
 ## Unsigned builds
 

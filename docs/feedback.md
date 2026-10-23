@@ -77,12 +77,14 @@ app ──POST /report──▶ feedback relay (Cloudflare Worker) ──GraphQL
    ```
 4. In the `reks` repo settings, add the Actions **variable**
    `REKS_FEEDBACK_URL` set to `https://<worker>.workers.dev/report`. Release
-   builds pick it up (`release.yml`). For a local build, export it before
-   `npm run tauri build`.
+   builds pick it up (`release.yml`). Local builds get the same URL from
+   [`.cargo/config.toml`](../.cargo/config.toml); update both if the relay moves.
 
 Local test: run `npx wrangler dev` with `GITHUB_TOKEN` in `.dev.vars`
 (point `PROJECT_NUMBER` at a scratch board if you like). Then run the app with
-`REKS_FEEDBACK_URL=http://localhost:8787/report npm run tauri dev`.
+`REKS_FEEDBACK_URL=http://localhost:8787/report npm run tauri dev` (a set
+variable overrides `.cargo/config.toml`). Without it, dev builds send to the
+real board.
 
 ## Triage
 

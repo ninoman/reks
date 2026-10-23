@@ -1114,8 +1114,9 @@ Date of decisions: 2026-10-18.
   the same log. Nothing leaves the machine until the user presses Send. There is
   no telemetry and no automatic crash upload.
 - The relay URL is built in from `REKS_FEEDBACK_URL` (a repository
-  variable in the release workflow). A build without it can only save the
-  report to a file. Sending uses `reqwest` with rustls on `ring` and the OS
+  variable in the release workflow) and, for local and dev builds, from
+  `.cargo/config.toml` `[env]`, so every build can send. A build without it
+  can only save the report to a file. Sending uses `reqwest` with rustls on `ring` and the OS
   certificate store, since aws-lc and webpki-roots bring licences outside
   `deny.toml`.
 - Rejected: pre-filled GitHub issues (some beta testers have no GitHub

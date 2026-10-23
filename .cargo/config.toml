@@ -1,0 +1,4 @@
+# Built into every build so in-app reports can be sent (D34). The URL is
+# public anyway; a REKS_FEEDBACK_URL already set in the environment wins.
+[env]
+REKS_FEEDBACK_URL = "https://reks-feedback-relay.ninoman.workers.dev/report"
