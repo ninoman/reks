@@ -6,8 +6,11 @@ import type { FilterUnit as Unit } from "../../lib/ipc";
 import { crossfaderKeyHint } from "../../lib/mixKeys";
 import { pickSwitches } from "../../lib/mixView";
 import type { ChannelValues, FilterValues, MasterValues } from "../../store/mix";
+import { useSettings } from "../../store/settings";
+import { GearIcon } from "../icons";
 import { Caption } from "../ui/Caption";
 import { Fader } from "../ui/Fader";
+import { IconButton } from "../ui/IconButton";
 import { Tooltip } from "../ui/Tooltip";
 import { ChannelLegend, ChannelStrip } from "./ChannelStrip";
 import { FilterUnit } from "./FilterUnit";
@@ -38,9 +41,17 @@ export function MixerPanel(p: MixerPanelProps) {
   return (
     <section
       aria-label="Mixer"
-      className="flex shrink-0 flex-col gap-2 rounded-md border border-border bg-surface p-2"
+      className="relative flex shrink-0 flex-col gap-2 rounded-md border border-border bg-surface p-2"
     >
       <div className="flex">
+        <IconButton
+          size="xs"
+          className="absolute top-1 left-1"
+          aria-label="Mixer settings"
+          onClick={() => useSettings.getState().setDialogOpen(true, "mixer")}
+        >
+          <GearIcon size={14} />
+        </IconButton>
         <ChannelLegend />
         {p.channels.map((values, ch) => (
           <ChannelStrip

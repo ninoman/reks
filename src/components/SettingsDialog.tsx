@@ -3,17 +3,24 @@
  * (library folders, cache folder), Playback (output device, sample rate,
  * buffer, headphone cue: `OutputSettings`), Display (theme, key notation),
  * Decks (the waveform style of the player deck and the Mix view, what SYNC
- * aligns). Values live in Rust (`useSettings`); the library window's own
+ * aligns), Mixer (which mixer controls the Mix view shows). Values live in Rust (`useSettings`); the library window's own
  * state (columns, panels, volume) is saved without asking.
  */
 import { open } from "@tauri-apps/plugin-dialog";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useRef, useState } from "react";
 
 import { cn } from "../lib/cn";
 
-import type { DeckWaveform, KeyNotation, SyncAlign, Theme } from "../lib/ipc";
+import type {
+  DeckWaveform,
+  KeyNotation,
+  MixerFilters,
+  MixerView,
+  SyncAlign,
+  Theme,
+} from "../lib/ipc";
 import { useScan } from "../store/scan";
-import { useSettings } from "../store/settings";
+import { type SettingsTab, useSettings } from "../store/settings";
 import { ErrorMessage } from "./ErrorMessage";
 import { OutputSettings } from "./OutputSettings";
 import { Button } from "./ui/Button";
@@ -71,6 +78,16 @@ const SYNC_ALIGNS: { id: SyncAlign; label: string }[] = [
   { id: "beat", label: "Beat" },
 ];
 
+const MIXER_VIEWS: { id: MixerView; label: string; hint: string }[] = [
+  { id: "simple", label: "Simple", hint: "no crossfader or assigns" },
+  { id: "advanced", label: "Advanced", hint: "everything" },
+];
+
+const MIXER_FILTERS: { id: MixerFilters; label: string }[] = [
+  { id: "show", label: "Show" },
+  { id: "hide", label: "Hide" },
+];
+
 const WAVEFORMS: { id: DeckWaveform; label: string; hint: string }[] = [
   { id: "rgb", label: "RGB", hint: "colour by band" },
   { id: "threeBand", label: "3-band", hint: "lows, mids, highs" },
@@ -85,6 +102,8 @@ export function SettingsDialog() {
 
 function SettingsWindow() {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const startTab = useSettings.getState().dialogTab;
   const close = () => useSettings.getState().setDialogOpen(false);
   return (
     <Dialog
@@ -98,13 +117,20 @@ function SettingsWindow() {
         className="h-[520px]"
         onOpenAutoFocus={(e) => {
           e.preventDefault();
-          closeRef.current?.focus();
+          // Opened on a tab (not the first): its first control, else Close.
+          const first =
+            startTab === "library"
+              ? null
+              : bodyRef.current?.querySelector<HTMLElement>(
+                  '[role="tabpanel"]:not([hidden]) :is(button, [role="radio"]):not(:disabled)',
+                );
+          (first ?? closeRef.current)?.focus();
         }}
       >
         <DialogHeader className="border-b border-border pt-5 pb-4">
           <DialogTitle className="text-lg">Settings</DialogTitle>
         </DialogHeader>
-        <SettingsBody />
+        <SettingsBody startTab={startTab} bodyRef={bodyRef} />
         <DialogFooter className="border-t border-border pt-4">
           <Button variant="primary" ref={closeRef} onClick={close}>
             Close
@@ -115,19 +141,26 @@ function SettingsWindow() {
   );
 }
 
-type Tab = "library" | "playback" | "display" | "decks";
+type Tab = SettingsTab;
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "library", label: "Library" },
   { id: "playback", label: "Playback" },
   { id: "display", label: "Display" },
   { id: "decks", label: "Decks" },
+  { id: "mixer", label: "Mixer" },
 ];
 
-function SettingsBody() {
+function SettingsBody({
+  startTab,
+  bodyRef,
+}: {
+  startTab: Tab;
+  bodyRef: RefObject<HTMLDivElement | null>;
+}) {
   const settings = useSettings((s) => s.settings);
   const error = useSettings((s) => s.error);
-  const [tab, setTab] = useState<Tab>("library");
+  const [tab, setTab] = useState<Tab>(startTab);
   return (
     <Tabs
       orientation="vertical"
@@ -147,7 +180,7 @@ function SettingsBody() {
           </TabsTrigger>
         ))}
       </TabsList>
-      <DialogBody className="flex-1 py-4">
+      <DialogBody ref={bodyRef} className="flex-1 py-4">
         {error !== null && <ErrorMessage as="p" className="m-0" message={error} />}
         <Panel value="library">
           <LibraryFolders />
@@ -165,6 +198,10 @@ function SettingsBody() {
             <Panel value="decks">
               <DeckWaveformChoice waveform={settings.deckWaveform} />
               <SyncAlignChoice align={settings.syncAlign} />
+            </Panel>
+            <Panel value="mixer">
+              <MixerViewChoice view={settings.mixerView} />
+              <MixerFiltersChoice filters={settings.mixerFilters} view={settings.mixerView} />
             </Panel>
           </>
         )}
@@ -336,6 +373,60 @@ function SyncAlignChoice({ align }: { align: SyncAlign }) {
         {SYNC_ALIGNS.map((a) => (
           <Segment key={a.id} value={a.id}>
             {a.label}
+          </Segment>
+        ))}
+      </SegmentedControl>
+    </div>
+  );
+}
+
+function MixerViewChoice({ view }: { view: MixerView }) {
+  return (
+    <div className={item}>
+      <h5 className={itemTitle}>Mixer view</h5>
+      <p className={hint}>
+        Simple hides the crossfader and the assign switches; Advanced shows every control. The sound
+        follows what you see. Simple is the default.
+      </p>
+      <SegmentedControl
+        className="mt-2.5"
+        aria-label="Mixer view"
+        value={view}
+        onValueChange={(v) => void useSettings.getState().update({ mixerView: v as MixerView })}
+      >
+        {MIXER_VIEWS.map((m) => (
+          <Segment key={m.id} value={m.id}>
+            {m.label}
+            <span className="font-normal text-fg-subtle">{m.hint}</span>
+          </Segment>
+        ))}
+      </SegmentedControl>
+    </div>
+  );
+}
+
+function MixerFiltersChoice({ filters, view }: { filters: MixerFilters; view: MixerView }) {
+  const advanced = view === "advanced";
+  return (
+    <div className={item}>
+      <h5 className={itemTitle}>Filters</h5>
+      <p className={hint}>
+        {advanced
+          ? "The Advanced view always shows both filters."
+          : "Whether the Simple view shows the two filters. Hidden filters are off. Show is the default."}
+      </p>
+      <SegmentedControl
+        className="mt-2.5"
+        aria-label="Filters"
+        disabled={advanced}
+        value={filters}
+        onValueChange={(v) =>
+          void useSettings.getState().update({ mixerFilters: v as MixerFilters })
+        }
+      >
+        {MIXER_FILTERS.map((f) => (
+          <Segment key={f.id} value={f.id}>
+            {f.label}
           </Segment>
         ))}
       </SegmentedControl>

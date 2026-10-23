@@ -867,6 +867,12 @@ export type Theme = "graphite" | "paper" | "midnight" | "dusk" | "booth";
 /** What SYNC lines up with the master: the beat, or the bar (downbeats too). */
 export type SyncAlign = "beat" | "bar";
 
+/** Which mixer controls the Mix view shows; the engine is the same in both. */
+export type MixerView = "simple" | "advanced";
+
+/** Whether the simple mixer view shows the filter units (Advanced shows everything). */
+export type MixerFilters = "show" | "hide";
+
 /** Library window state kept across launches. */
 export interface UiState {
   /** Hidden column ids; `null` until changed (UI defaults). */
@@ -891,6 +897,8 @@ export interface Settings {
   deckWaveform: DeckWaveform;
   theme: Theme;
   syncAlign: SyncAlign;
+  mixerView: MixerView;
+  mixerFilters: MixerFilters;
   /** The cache dir in use. */
   cacheDir: string;
   ui: UiState;
@@ -910,6 +918,8 @@ export interface SettingsPatch {
   deckWaveform?: DeckWaveform;
   theme?: Theme;
   syncAlign?: SyncAlign;
+  mixerView?: MixerView;
+  mixerFilters?: MixerFilters;
   ui?: UiState;
   anlzPreference?: AnlzPreference;
 }

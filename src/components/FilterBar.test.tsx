@@ -21,6 +21,8 @@ function notation(keyNotation: "classical" | "camelot" | "openKey") {
       deckWaveform: "threeBand",
       theme: "graphite",
       syncAlign: "bar",
+      mixerView: "simple",
+      mixerFilters: "show",
       cacheDir: "/cache",
       anlzPreference: "rekordboxFirst",
       onelibraryKeyBuiltin: false,
