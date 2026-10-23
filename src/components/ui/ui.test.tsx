@@ -20,9 +20,9 @@ afterEach(cleanup);
 
 const SIZES: ControlSize[] = ["xs", "sm", "md", "lg"];
 
-/** The height utility on an element (`h-(--ctl-h-sm)` etc.). */
+/** The height utility on an element (`h-(--ctl-h-sm)` etc.); `min-h-` (controls that may wrap) counts as `h-`. */
 function heightClass(el: Element): string | undefined {
-  return [...el.classList].find((c) => c.startsWith("h-"));
+  return [...el.classList].find((c) => /^(min-)?h-/.test(c))?.replace(/^min-/, "");
 }
 
 describe("control size scale", () => {

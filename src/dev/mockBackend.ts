@@ -277,7 +277,7 @@ let settings: Settings = {
   audioCue: null,
   keyNotation: "classical",
   deckWaveform: "rgb",
-  theme: "graphite",
+  theme: "booth",
   syncAlign: "bar",
   mixerView: "simple",
   mixerFilters: "show",

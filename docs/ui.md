@@ -9,11 +9,11 @@ Settings → Display (`display.theme`); history in
 
 | Theme | Look | Accent |
 |---|---|---|
-| Graphite (default) | dark, Claude's warm neutrals | ivory |
+| Graphite | dark, Claude's warm neutrals | ivory |
 | Paper | light, the same warm neutrals | rose |
 | Midnight | dark navy | blue |
 | Dusk | dark plum | lavender |
-| Booth | black, most contrast (dark rooms) | light grey |
+| Booth (default) | black, most contrast (dark rooms) | light grey |
 
 No accent is orange, amber, red or green: those already mean something here
 (warning/rating and the cue point, danger and memory cues, success and hot

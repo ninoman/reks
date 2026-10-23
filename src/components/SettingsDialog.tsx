@@ -286,8 +286,7 @@ function ThemeChoice({ theme }: { theme: Theme }) {
     <div className={item}>
       <h5 className={itemTitle}>Theme</h5>
       <p className={hint}>
-        Paper is light; Booth is black with the most contrast, for dark rooms. Graphite is the
-        default.
+        Paper is light; Booth is black with the most contrast, for dark rooms, and is the default.
       </p>
       <SegmentedControl
         className="mt-2.5"

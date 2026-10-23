@@ -876,7 +876,7 @@ export type KeyNotation = "classical" | "camelot" | "openKey";
 /** How the decks draw their waveforms; all come from the same analysis columns. */
 export type DeckWaveform = "threeBand" | "rgb" | "blue";
 
-/** The app's colour theme (`data-theme` on <html>, tokens.css). Graphite is the default. */
+/** The app's colour theme (`data-theme` on <html>, tokens.css). Booth is the default. */
 export type Theme = "graphite" | "paper" | "midnight" | "dusk" | "booth";
 
 /** What SYNC lines up with the master: the beat, or the bar (downbeats too). */

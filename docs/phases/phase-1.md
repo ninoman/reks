@@ -445,8 +445,8 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
 - One `setting` row per key, value JSON: `audio.device` (name, absent = system default;
   Phase 5 adds `audio.sample_rate`, `audio.buffer_frames`, `audio.cue`),
   `display.key_notation` (`classical` default, `camelot`, `openKey`), `display.deck_waveform`
-  (Phase 5: `rgb` default since D30, `threeBand`, `blue`), `display.theme` (`graphite`
-  default, `paper`, `midnight`, `dusk`, `booth`; see [ui.md](../ui.md)), `storage.cache_dir`
+  (Phase 5: `rgb` default since D30, `threeBand`, `blue`), `display.theme` (`booth`
+  default, `graphite`, `paper`, `midnight`, `dusk`; see [ui.md](../ui.md)), `storage.cache_dir`
   (absent = `app_cache_dir`), `ui.state` (hidden columns, filter bar shown, filters on, track
   info open, volume). A missing or unreadable value is its default (unreadable ones are logged).
   `settings_get` / `settings_set(patch)` (the UI stores `audioDevice` when the device changes).
