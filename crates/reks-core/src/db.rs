@@ -26,6 +26,7 @@ const MIGRATION_LIST: &[M<'static>] = &[
     M::up(include_str!("../migrations/0009_my_tags.sql")),
     M::up(include_str!("../migrations/0010_smart_playlists.sql")),
     M::up(include_str!("../migrations/0011_cue_active_loop.sql")),
+    M::up(include_str!("../migrations/0012_filter_presets.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 
@@ -205,6 +206,7 @@ mod tests {
             ("table", "superseded_file"),
             ("table", "play_session"),
             ("table", "play_session_entry"),
+            ("table", "filter_preset"),
             ("index", "track_artist_idx"),
             ("index", "track_bpm_idx"),
             ("index", "track_key_idx"),
@@ -214,6 +216,7 @@ mod tests {
             ("index", "export_manifest_track_idx"),
             ("index", "superseded_file_track_idx"),
             ("index", "play_session_entry_track_idx"),
+            ("index", "filter_preset_name_idx"),
             ("trigger", "track_fts_ai"),
             ("trigger", "track_fts_ad"),
             ("trigger", "track_fts_au"),
@@ -467,6 +470,35 @@ mod tests {
         assert_eq!(row, ("Set".to_owned(), None, None));
         assert_eq!(count(&c, "playlist_track"), 1);
         assert_eq!(count(&c, "track_tag"), 1);
+    }
+
+    #[test]
+    fn migration_12_adds_filter_presets_and_keeps_playlists() {
+        let mut c = conn_at(11);
+        c.execute(
+            "INSERT INTO playlist (id, name, sort_order, created_at, updated_at, smart_rule)
+             VALUES (1, 'Smart', 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z',
+                     '{\"type\":\"group\",\"match\":\"all\"}')",
+            [],
+        )
+        .unwrap();
+        MIGRATIONS.to_latest(&mut c).unwrap();
+        assert_eq!(count(&c, "playlist"), 1);
+        assert_eq!(count(&c, "filter_preset"), 0);
+        let insert = |name: &str, position: i64| {
+            c.execute(
+                "INSERT INTO filter_preset (name, position, rule, created_at, updated_at)
+                 VALUES (?1, ?2, '{}', 'x', 'x')",
+                (name, position),
+            )
+        };
+        insert("Peak techno", 0).unwrap();
+        assert!(
+            insert("PEAK TECHNO", 1).is_err(),
+            "names are unique, any case"
+        );
+        insert("Warm-up", 1).unwrap();
+        assert_eq!(count(&c, "filter_preset"), 2);
     }
 
     #[test]

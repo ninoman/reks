@@ -588,6 +588,7 @@ there, the `player_*` commands, polling and transport bar are gone.
 ### Tauri commands (`src-tauri`)
 
 `library_query`, `library_facets`, `library_track`, `library_update_track`, `playlists_get`, `tags_get`, `tags_mutate`,
+`filter_presets_get`, `filter_presets_mutate`,
 `playlists_mutate`, `playlist_rule`, `scan_start` (progress via `Channel<ScanEvent>`), `scan_cancel`,
 `rbxml_preview(path, remap)`, `rbxml_import_start` (progress via Channel), `rbxml_import_cancel`, `rbxml_export`,
 `player_load(id, play)`, `player_play/pause/seek/volume/devices/set_device`,
@@ -677,12 +678,13 @@ Added 2026-10-23. Wireframe:
 [`wireframes/filters-drawer.html`](../wireframes/filters-drawer.html). One PR
 per task; 6 and 7 can run in parallel, 8 needs 7, 9 needs 6 and 7.
 
-6. [ ] **Core saved filters**: next free migration (`filter_preset`: name,
+6. [x] **Core saved filters**: migration 0012 (`filter_preset`: name,
    position, rule JSON `RuleNode`, timestamps), `reks-core::filter_preset`
-   (list, create, rename, update, duplicate, delete, reorder; names unique
-   case-insensitively), the same reference handling as smart lists (a
-   deleted tag or playlist leaves the row unfinished), commands, round-trip
-   tests.
+   (list, create, rename, setRule, duplicate, delete, move; names unique
+   case-insensitively, `Error::FilterPresetNameTaken`), the same reference
+   handling as smart lists (ids kept as saved; a deleted tag or playlist
+   leaves the row unfinished), `filter_presets_get` / `filter_presets_mutate`
+   commands, round-trip tests.
 7. [ ] **UI one query**: the drawer edits one `GroupDraft`; `FilterState`
    and the Advanced button go. Default fields from a setting (BPM, Key,
    Genre, Rating, first tag category), one row per tag category (any / all

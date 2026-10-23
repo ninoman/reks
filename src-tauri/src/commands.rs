@@ -9,9 +9,10 @@ use reks_core::rbxml::{
     self, ImportEvent, ImportOptions, ImportPreview, ImportReport, PrefixRemap,
 };
 use reks_core::{
-    ArtworkId, CancelToken, Facets, Library, LibraryRoot, PlaylistId, PlaylistOp, PlaylistOutcome,
-    PlaylistTree, RuleNode, ScanEvent, ScanReport, Settings, SettingsPatch, TagOp, TagOutcome,
-    TagTree, TrackDetail, TrackId, TrackPage, TrackPatch, TrackQuery,
+    ArtworkId, CancelToken, Facets, FilterPreset, FilterPresetOp, FilterPresetOutcome, Library,
+    LibraryRoot, PlaylistId, PlaylistOp, PlaylistOutcome, PlaylistTree, RuleNode, ScanEvent,
+    ScanReport, Settings, SettingsPatch, TagOp, TagOutcome, TagTree, TrackDetail, TrackId,
+    TrackPage, TrackPatch, TrackQuery,
 };
 use reks_export_onelibrary::{OneLibraryWriter, RbVersion};
 use reks_export_rb::device::{self, DeviceInfo};
@@ -120,6 +121,21 @@ pub async fn tags_get(state: State<'_, AppState>) -> CmdResult<TagTree> {
 #[tauri::command]
 pub async fn tags_mutate(state: State<'_, AppState>, op: TagOp) -> CmdResult<TagOutcome> {
     blocking(&state, move |lib| lib.tag_mutate(op)).await
+}
+
+/// Saved filters (D35), in display order.
+#[tauri::command]
+pub async fn filter_presets_get(state: State<'_, AppState>) -> CmdResult<Vec<FilterPreset>> {
+    blocking(&state, |lib| lib.filter_presets()).await
+}
+
+/// Applies one saved-filter edit.
+#[tauri::command]
+pub async fn filter_presets_mutate(
+    state: State<'_, AppState>,
+    op: FilterPresetOp,
+) -> CmdResult<FilterPresetOutcome> {
+    blocking(&state, move |lib| lib.filter_preset_mutate(op)).await
 }
 
 /// Artwork image bytes, sent raw (an `ArrayBuffer` in the UI).
