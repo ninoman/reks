@@ -1,8 +1,8 @@
-# Three-band EQ and channel filter view (research, 2026-10-23)
+# Three-band EQ and channel FX view (research, 2026-10-23)
 
 Status: **proposal**, no code yet. Spec for the engine side of issue #56: a
-mixer view with a 3-band EQ (HI / MID / LOW) and a one-knob filter per
-channel in the fourth knob slot, modelled on the DJM-900NXS2 / DJM-A9.
+mixer view with a 3-band EQ (HI / MID / LOW) and a per-channel FX knob in
+the fourth knob slot, with an effect selector and a PARAMETER knob, modelled on the DJM-900NXS2 / DJM-A9.
 Layout and wireframe: [`deck-mixer-layout.md`](deck-mixer-layout.md) §9.
 Sources with dates: [`../research.md`](../research.md) §9.5. Nothing here is
 checked on a real DJM; every figure we chose rather than read in a manual
@@ -103,7 +103,7 @@ Comparison with the 4-band EQ we ship (both at full cut / full boost):
   side; NaN → noon.
 - `control.rs`: `ChannelParam::Eq3Hi`, `Eq3Mid`, `Eq3Lo` (0.5 = flat), and
   the same in IPC `MixControl` and the dev mock.
-- `strip.rs`: trim → 4-band EQ → **3-band EQ → channel filter** → FILTER
+- `strip.rs`: trim → 4-band EQ → **3-band EQ → channel FX** → FILTER
   assign → meter → fader. The post-EQ cue tap stays after the filters.
 
 Tests (`dsp::eq3`, sine measurement at 44.1, 48 and 96 kHz, like `dsp::eq`):
@@ -144,81 +144,154 @@ send unit, out of scope here.
 
 ### Recommendation
 
-- **v1: FILTER only.** No effect selector, no PARAMETER knob, no CENTER LOCK
-  switch (the knob's centre detent does that job, below). It is the only
-  effect DJs use in nearly every transition, it costs two SVFs per
-  channel, and it can be made exactly transparent at centre.
-- **Later, only on a maintainer decision:** DUB ECHO and SPACE, with a
-  global selector and a global PARAMETER (feedback). They need delay
-  memory allocated in `new()`, and tails that keep ringing after the knob
-  returns to centre (the DJM's behaviour). They lean towards performance,
-  which D21 keeps out of scope, so they need a D21 note first. NOISE,
-  CRUSH and SWEEP: not planned.
+Maintainer's call, 2026-10-23: the view gets an effect selector and a
+PARAMETER knob, as on the DJM.
 
-### Channel filter law
+- **v1: FILTER, ECHO, REVERB** (the DJM's FILTER, DUB ECHO and SPACE, under
+  neutral names). FILTER is the transition tool, an echo-out and a reverb
+  tail are the two other common exits, and all three are cheap.
+- **Not planned:** NOISE, CRUSH, SWEEP (little use while preparing a set),
+  CENTER LOCK as a switch (the knob's centre detent does that job, §5),
+  BEAT FX.
 
-New block `dsp/channel_filter.rs`, `ChannelFilter`: **two** trapezoidal
-SVFs in series, a low-pass then a high-pass, both running with cutoffs
-that are continuous functions of the smoothed knob position. One SVF that
-flips from LP to HP at centre would carry its state across the flip and
-click; two SVFs that are each wide open on the other side never jump.
+Controls:
 
-With `v` the smoothed knob (one `Smoother`, `SMOOTH_MS`), `d = 2v − 1`:
+| Control | Scope | Values | Start | Engine |
+|---|---|---|---|---|
+| FX select | mixer, one for all channels | FILTER · ECHO · REVERB, one always lit (no off: centre is off) | FILTER | `Control::ChannelFx { kind: FxKind }` |
+| PARAMETER | mixer, one knob | 0..1; FILTER resonance, ECHO feedback, REVERB decay | 0.5 | `Control::FxParameter { value }`, smoothed |
+| FX knob | per channel, the 4th knob | 0..1, centre 0.5 off, dead zone 0.485–0.515 | 0.5 | `ChannelParam::Fx` |
+
+Engine shape:
+
+- Each strip holds all three blocks (`dsp/channel_filter.rs`,
+  `dsp/channel_echo.rs`, `dsp/channel_reverb.rs`), all memory allocated in
+  `new()` for the stream's rate. The selected block gets the channel's
+  knob; the others get 0.5.
+- Switching the effect is therefore a knob move: the old effect closes
+  and the new one opens over `SMOOTH_MS`. Echo and reverb tails keep
+  ringing after their send closes, as on the DJM.
+- A block runs while its knob is off centre or its tail is audible; once
+  its knob is settled in the dead zone and its output has stayed below
+  1e-6 for 100 ms, it is skipped and its state cleared. So a centred
+  channel is bit for bit again once the tail has died.
+- All three sit after the 3-band EQ and before the channel fader, as COLOR
+  FX does on the DJM, so closing the fader also cuts a tail.
+- Common law, pure in `taper.rs`: `d = 2v − 1`, `DZ = 0.03`,
+  `t = clamp((|d| − DZ) / (1 − DZ), 0, 1)`, side = sign of `d`.
+
+### FILTER
+
+Two trapezoidal SVFs in series, a low-pass then a high-pass, both running
+with cutoffs that are continuous functions of the smoothed knob position.
+One SVF that flips from LP to HP at centre would carry its state across
+the flip and click; two SVFs that are each wide open on the other side
+never jump.
 
 ```
-DZ = 0.03                                  dead zone (knob 0.485–0.515)
-t  = clamp((|d| − DZ) / (1 − DZ), 0, 1)     travel past the dead zone
 LP cutoff = d < 0 ? 20 kHz · (LP_END / 20 kHz)^t : 20 kHz   (LP_END = 50 Hz)
 HP cutoff = d > 0 ? 20 Hz  · (HP_END / 20 Hz)^t  : 20 Hz    (HP_END = 10 kHz)
-Q of the moving filter = 0.707 + (Q_RES − 0.707) · min(t / 0.2, 1)   (Q_RES = 1.4)
+Q_RES = taper::resonance_q(PARAMETER)        0.707 … 10, 1.37 at noon
+Q of the moving filter = 0.707 + (Q_RES − 0.707) · min(t / 0.2, 1)
 Q of the open filter   = 0.707
 wet = min(t / 0.05, 1)                      y = x + wet · (filtered − x)
 ```
+
+With PARAMETER at noon:
 
 | Knob | 0 | 0.1 | 0.2 | 0.3 | 0.4 | 0.47 | 0.485–0.515 | 0.53 | 0.6 | 0.7 | 0.8 | 0.9 | 1 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Mode | LP | LP | LP | LP | LP | LP | off | HP | HP | HP | HP | HP | HP |
 | Cutoff (Hz) | 50 | 172 | 592 | 2 035 | 7 000 | 16 600 | – | 24 | 59 | 214 | 771 | 2 777 | 10 000 |
-| Q | 1.4 | 1.4 | 1.4 | 1.4 | 1.31 | 0.81 | – | 0.81 | 1.31 | 1.4 | 1.4 | 1.4 | 1.4 |
+| Q | 1.37 | 1.37 | 1.37 | 1.37 | 1.29 | 0.81 | – | 0.81 | 1.29 | 1.37 | 1.37 | 1.37 | 1.37 |
 | wet | 1 | 1 | 1 | 1 | 1 | 0.62 | 0 | 0.62 | 1 | 1 | 1 | 1 | 1 |
 
-- **Direction**: left low-pass, right high-pass, as on every DJM manual
+- **Direction**: left low-pass, right high-pass, as in every DJM manual
   (some third-party guides have it backwards). The same sides as our X/Y
   FREQ knobs, where LP closes to the left.
 - **Cutoff taper**: exponential, equal octaves per travel (8.6 octaves LP,
   9 octaves HP over 97% of the travel). Ends 50 Hz and 10 kHz:
   **UNVERIFIED** (no DJM figure), chosen so full travel leaves a sub
   rumble or a thin top, not silence. Constants, for tuning by ear.
-- **Resonance**: fixed, Q 1.4 (+3.5 dB peak), faded in over the first fifth
-  of the travel so the edge of the dead zone is flat. The DJM's PARAMETER is
-  a global resonance knob, and its own forum has owners calling the
-  resonance near 2–3 o'clock "way too high". Q 1.4 is between our X/Y
-  filter's MILD (0.707) and its noon (1.37). **UNVERIFIED**. Slope 12
-  dB/oct (2-pole), **UNVERIFIED** as on the X/Y units.
-- **Centre**: `wet` is 0 inside the dead zone, so the output is exactly `x`.
-  When the smoothed knob is settled inside the dead zone the block skips
-  both SVFs and clears their state (both are wide open at that point, so a
-  restart from zero is inaudible).
-- **Not the X/Y `Filter`**: the strip's `filters[2]` are copies of the shared
-  X and Y units, set alike on every channel by `filter_mut`. The channel
-  filter is per channel and has its own law, so it is a separate block. It
-  reuses `SvfState` / `SvfCoeffs` only.
-- `control.rs`: `ChannelParam::ChannelFilter` (0.5 = off), IPC
-  `MixControl` and the dev mock alike. `taper.rs`: the law above as a pure
-  `channel_filter(v) -> { lp_hz, hp_hz, q_lp, q_hp, wet }`, tested on its own.
+- **Resonance**: PARAMETER with the X/Y RESONANCE law, so the two filters
+  feel alike; faded in over the first fifth of the travel so the edge of
+  the dead zone is flat. Owners call the DJM's resonance near 2–3 o'clock
+  "way too high" (R§9.5); our v² law keeps the first half of the knob
+  under +3 dB. Slope 12 dB/oct (2-pole), **UNVERIFIED** as on the X/Y units.
+- **Not the X/Y `Filter`**: the strip's `filters[2]` are copies of the
+  shared X and Y units, set alike on every channel by `filter_mut`. The
+  channel filter has its own law, so it is a separate block that reuses
+  `SvfState` / `SvfCoeffs` only.
 
-Tests (`dsp::channel_filter`, at 44.1, 48 and 96 kHz):
+### ECHO
 
-| Check | Tolerance |
-|---|---|
-| knob 0.485, 0.5, 0.515 | bit for bit |
-| `channel_filter` at the table's positions | cutoff ±0.5%, Q ±0.01, wet exact |
-| knob 0: 1 kHz tone | below −40 dB |
-| knob 1: 100 Hz tone | below −40 dB |
-| knob 0.3 (LP 2 035 Hz) and 0.7 (HP 214 Hz): response at the cutoff | +2.9 ±0.3 dB (Q 1.4) |
-| knob 0 → 1 → 0.5 in single steps, and swept, on 50 Hz and 5 kHz tones | no sample step above 0.01 |
-| full-scale noise, knob swept end to end for 10 s | finite, peak below 4 |
-| silence | exact zeros, no NaN or subnormals |
+The DJM's DUB ECHO: "echo on mids" to the left, "on highs" to the right,
+PARAMETER = feedback. A send into a feedback delay; the dry signal stays at
+unity.
+
+```
+send   = t                                   echo input = send · band(x)
+band   = left: SVF band-pass 1 kHz, Q 0.7 (unity peak, k·band)
+         right: SVF high-pass 2.5 kHz, Q 0.707
+time   = 3/4 beat of the channel's deck at its current tempo,
+         clamped 50 ms – 2 s; 375 ms (3/4 beat at 120 BPM) with no grid
+fb     = 0.3 + 0.6 · PARAMETER               0.3 … 0.9, 0.6 at noon (−4.4 dB a repeat)
+loop   = delay → 1-pole LP 6 kHz → 1-pole HP 150 Hz → · fb → back in
+y      = x + delay output
+```
+
+- The two band filters both run and are crossfaded by side, so the send
+  never switches filter state.
+- Delay time: `Strip::set_beat_frames(f64)` from the graph each block (the
+  deck that feeds the channel); the read head follows a one-pole glide
+  (100 ms) with linear interpolation, so a tempo change bends the repeats
+  slightly instead of clicking. Buffer: 2 s at the stream rate, stereo.
+- Stable by construction: loop gain ≤ fb ≤ 0.9 at every frequency (both
+  loop filters ≤ 0 dB), no clipper; the master limiter catches peaks.
+- **UNVERIFIED**: the time (the manuals give none; a dotted eighth is the
+  usual dub delay), band filters, loop filters and feedback range.
+
+### REVERB
+
+The DJM's SPACE: reverb on "mids and lows" to the left, "mids and highs"
+to the right, PARAMETER = feedback, i.e. decay time.
+
+```
+send   = t                                   reverb input = send · band(x)
+band   = left: SVF low-pass 2 kHz, Q 0.707; right: SVF high-pass 500 Hz, Q 0.707
+tank   = Freeverb: 8 parallel damped feedback combs + 4 series all-passes
+         per side, right side's delays 23 samples longer
+         combs 1116 1188 1277 1356 1422 1491 1557 1617, all-passes 556 441 341 225
+         (samples at 44.1 kHz, scaled by fs / 44 100), all-pass gain 0.5,
+         damping 0.3, input gain 0.015
+room   = 0.70 + 0.25 · PARAMETER             comb feedback; RT60 ≈ 0.6 / 1.1 / 4.2 s at 0 / 0.5 / 1 (from the mean comb length, before damping)
+y      = x + WET · tank output               WET set so §tests' level holds
+```
+
+- Freeverb is Jezar's public-domain design (2000, R§9.5); our own code.
+  Room ≤ 0.95 keeps every comb's loop gain below 1.
+- **UNVERIFIED**: everything except the structure (the manuals give no
+  figures).
+
+### Tests
+
+At 44.1, 48 and 96 kHz unless stated; the allocation guard runs every
+control below.
+
+| Block | Check | Tolerance |
+|---|---|---|
+| all | knob 0.485, 0.5, 0.515 from start; and once a tail has died | bit for bit |
+| all | knob 0 → 1 → 0.5 in single steps, swept, and effect switched while off centre, on 50 Hz and 5 kHz tones | no sample step above 0.01 (filter); echo and reverb: dry path the same, tails finite |
+| all | full-scale noise, knob and PARAMETER swept for 60 s | finite, peak below 8 |
+| all | silence after a full-scale burst and the tail | exact zeros, no NaN or subnormals |
+| filter | `taper::channel_filter` at the table's positions | cutoff ±0.5%, Q ±0.01, wet exact |
+| filter | knob 0: 1 kHz tone; knob 1: 100 Hz tone | below −40 dB |
+| filter | knob 0.3 and 0.7 at the cutoff, PARAMETER 0 / 0.5 | −3.0 / +2.7 ±0.3 dB |
+| echo | impulse, knob 1, 120 BPM grid | first repeat at 375 ms ±1 sample; repeat ratio = fb × the loop filters' gain at the tone ±0.01 (3 kHz burst) |
+| echo | knob back to 0.5 after a burst | repeats continue; dry untouched |
+| echo | tempo 120 → 128 BPM while ringing | read time reaches 352 ms within 0.5 s; no step above 0.01 |
+| reverb | RT60 from an impulse at PARAMETER 0, 0.5, 1 | ±25% of 0.6 / 1.1 / 4.2 s |
+| reverb | pink noise, knob 1 (right), PARAMETER 0.5 | wet RMS −6 ±1 dB under the dry |
 
 ## 4. Layout switching
 
@@ -229,7 +302,8 @@ the user's positions, hidden controls send neutral values.
 |---|---|---|
 | `EqHi`, `EqMid1`, `EqMid2`, `EqLo` | stored 4-band positions | 0.5 |
 | `Eq3Hi`, `Eq3Mid`, `Eq3Lo` | 0.5 | stored 3-band positions |
-| `ChannelFilter` | 0.5 | stored position |
+| `Fx` (per channel) | 0.5 | stored position |
+| FX select, PARAMETER | unchanged (no effect while every `Fx` is 0.5) | stored |
 | X and Y filter units | as today | off |
 | FILTER assign | as today | defaults (1–2 X, 3–4 Y) |
 | X-F assign | as today | off (THRU) |
@@ -241,27 +315,32 @@ the user's positions, hidden controls send neutral values.
   click. The engine needs no EQ mode.
 - Engine start state: everything at 0.5, so a single deck still plays
   through bit for bit (the existing graph test covers it once
-  `ThreeBandEq` and `ChannelFilter` are in the strip).
+  `ThreeBandEq` and the FX blocks are in the strip).
+- Leaving the view while an echo or reverb rings: its knob goes to 0.5, so
+  the tail rings out as it would on the DJM.
 
 ## 5. Open questions from the issue
 
 - **UI label.** A third `MixerView` value, not a separate EQ setting: the
   fourth knob replaces the X/Y row and the assigns, so "3-band" combined
   with Advanced would not make sense. Settings → Mixer, Mixer view:
-  **Simple · Advanced · 3-band**, with the hint "Three-band EQ and a filter
-  knob on each channel". Stored as `three_band`. Knob rows **HI · MID · LOW
-  · FILTER**; FILTER is lit when off centre. The Filters show/hide setting
+  **Simple · Advanced · 3-band**, with the hint "Three-band EQ and an
+  effect knob on each channel". Stored as `three_band`. Knob rows **HI · MID
+  · LOW · FX**; the FX row's label shows the selected effect (FILTER, ECHO,
+  REVERB) and a knob is lit when off centre. FX select (three buttons) and
+  PARAMETER are one row in the mixer's shared section; the PARAMETER label
+  follows the effect (RESONANCE, FEEDBACK, DECAY). The wireframe (#58)
+  drew the selector as "later" and needs that row added. The Filters show/hide setting
   is disabled in 3-band, as in Advanced. No vendor names.
 - **Crossfader.** Not in v1. The view is Simple's layout with a different
   EQ, every channel is THRU, so a crossfader would do nothing. If wanted
   later: a separate Crossfader show/hide setting that adds the X-F
   assigns and crossfader to Simple and 3-band alike. There is no DSP
   coupling.
-- **Filter resonance.** Fixed (Q 1.4, above), no setting. A global setting
-  is cheap to add later (`Q_RES` is one constant) if the fixed value
-  proves wrong by ear.
-- **Shortcuts.** There are no filter shortcuts today (`mixKeys.ts` has decks
-  and the crossfader only), so nothing changes. X C V do nothing in 3-band,
+- **Filter resonance.** The global PARAMETER knob while FILTER is
+  selected, with the X/Y RESONANCE law (§3). No setting.
+- **Shortcuts.** There are no filter or FX shortcuts today (`mixKeys.ts` has
+  decks and the crossfader only), and v1 adds none. X C V do nothing in 3-band,
   as in Simple; the Shortcuts popover leaves them out. The knob itself
   takes the shared knob keys (arrows) and double-click to centre.
 - **Knob UI.** Centre detent: a drag that crosses 0.5 sticks there for

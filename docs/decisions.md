@@ -638,6 +638,13 @@ Date of decisions: 2026-10-18.
   Advanced. UI only; the DSP model above is unchanged. Spec:
   [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §6;
   phase 5 tasks 24–25.
+- 3-band view (issue #56; status: **proposed**, 2026-10-23): a third mixer
+  view with a 3-band EQ (−26 / +6 dB) and, per channel, an FX knob with a
+  mixer-wide effect select (FILTER, ECHO, REVERB) and PARAMETER knob, as on
+  DJM mixers. Echo and reverb join the model on the maintainer's call
+  (2026-10-23) as transition tools for auditioning exits; tempo-synced
+  BEAT FX stay out. New blocks only; the Xone model above is unchanged.
+  Spec: [`research/djm-eq-fx.md`](research/djm-eq-fx.md).
 - Filter LFOs: dropped 2026-10-20 (maintainer's call). The Xone:92 has one
   per filter (R§9.1); reks models the filters without them. Adding them back
   needs a new decision.

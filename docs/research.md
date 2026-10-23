@@ -676,7 +676,7 @@ on waveform or knob sizes was found.
 
 ### 9.5 DJM 3-band EQ and Sound Color FX (2026-10-23)
 
-For the 3-band view (issue #56). Spec: [`research/djm-eq-fx.md`](research/djm-eq-fx.md).
+For the 3-band view (issue #56): EQ, FX knob, effect select and PARAMETER. Spec: [`research/djm-eq-fx.md`](research/djm-eq-fx.md).
 Not checked on a real DJM.
 
 - Channel EQ, all three bands −26 / +6 dB, with an EQ CURVE switch
@@ -707,6 +707,10 @@ Not checked on a real DJM.
 - Open reference for a 3-band DJ EQ: Mixxx splits at 246 Hz and 2.5 kHz by
   default, as shelves plus a band (Mixxx 2.5 manual, "Equalizers",
   https://manual.mixxx.org/2.5/en/chapters/preferences/equalizers).
+- Reverb: Freeverb, Jezar at Dreampoint, 2000, released into the public
+  domain; structure and tunings as published in J. O. Smith, *Physical
+  Audio Signal Processing*, "Freeverb" (CCRMA, online edition,
+  https://ccrma.stanford.edu/~jos/pasp/Freeverb.html, read 2026-10-23).
 - Shelf design: A. Simper, "Linear Trapezoidal Integrated SVF" (Cytomic,
   2013, https://cytomic.com/technical-papers), the same paper as our SVF.
 
