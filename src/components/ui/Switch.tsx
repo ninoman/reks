@@ -20,7 +20,8 @@ export const switchVariants = cva(
 );
 
 const thumbVariants = cva(
-  "block rounded-full bg-knob transition-transform duration-(--duration-fast)",
+  // On, the thumb takes the filled track's text colour: a light thumb vanishes on Booth's light accent.
+  "block rounded-full bg-knob transition-transform duration-(--duration-fast) data-[state=checked]:bg-accent-fg",
   {
     variants: {
       size: {

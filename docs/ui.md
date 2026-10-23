@@ -87,7 +87,7 @@ glance.
 - A new theme: a primitive palette, a `:root[data-theme]` block setting every
   colour the others set, `--color-theme-*` for the picker, the id in
   `THEMES` (`lib/theme.ts`), `Theme` (`ipc.ts`, reks-core `settings.rs`) and
-  the picker list in `SettingsDialog.tsx`.
+  the picker list in `settings/DisplaySettings.tsx`.
 - Control radius: `--radius-md: 8px;` (sizes `md`/`lg` read it via `--ctl-r-*`).
 - Height of `md` controls: `--ctl-h-md: 28px;`.
 - Row height: `--row-h: 26px;` and `ROW_HEIGHT` in `trackTableModel.ts`
@@ -139,11 +139,12 @@ menu items `--menu-item-h`.
 | `Input` | `variant`: default, search; `size` | native |
 | `Textarea` | `size`: sm, md | native |
 | `Select` | `size`; native `<select>` with our chevron | native |
-| `Switch` | `size`: sm, md | Radix Switch |
+| `Switch` | `size`: sm, md; when on, the thumb takes `accent-fg` so it shows on a light accent | Radix Switch |
 | `LampButton` | `pressed`; small round text-less toggle (the filter ON lamp), accent when lit; `aria-label` required | none |
 | `Checkbox` | `size`: sm, md; `indeterminate` (mixed); native, wrap in a `<label>` (Biome knows it as an input) | native |
 | `Slider` | `size`: sm, md; one value | Radix Slider |
 | `SegmentedControl` + `Segment` | `size`; `variant`: default, control (chosen segment lit), outline (chosen segment ringed in `accent`, no fill: mode tabs); one choice, can't be cleared (radiogroup); segment corners nest inside the outer radius (`--seg-r`) | Radix ToggleGroup |
+| `ChoiceTiles` + `ChoiceTile` | `columns`: 2, 3; tile `label`, `hint` (its accessible description), `preview` (a picture on the `deck` panel), `isDefault` (a Default badge); the chosen tile ringed in `accent` and ticked; one choice, can't be cleared (radiogroup) | Radix ToggleGroup |
 | `Tabs` + `TabsList`, `TabsTrigger`, `TabsContent` | `orientation`: horizontal, vertical (a sidebar, Settings); chosen tab in the `selected` tint; arrow keys move between tabs | Radix Tabs |
 | `Chip` | label pill (`onRemove`, `removeLabel`; `onActivate` makes it a button); `tone`: neutral, notice | – |
 | `Toast` | bottom-centre message with an optional action (Undo); one at a time via `store/toasts` + `ToastHost` | – |
@@ -168,6 +169,11 @@ menu items `--menu-item-h`.
 | `Fader` | `orientation`: vertical, horizontal; `defaultValue` (double-click the cap or Delete); `detent` (a tick that drags snap to within `--fader-detent`; keys step past it); `ticks` (evenly spaced scale marks, ends included: ends and detent bold, the rest thin and short) | Radix Slider |
 | `Pad` + `SplitPad` | deck pads: `tone`: default, set (outlined in `color`, a data colour, else `deck-hotcue`; no fill, `fg` text), empty (dashed), lit; `marked` (heavy outline); `SplitPad`: back / forward halves under one label | – |
 | `InlineNumber` | text that becomes a number field on double-click or Enter; Enter / blur commit, Esc cancels, non-numbers are dropped | native |
+
+Settings choices are `ChoiceTiles`: each option carries its own hint, so a
+setting's own hint stays one short line, and an on/off setting is a `Switch`
+whose hint says why when it is disabled. `SegmentedControl` is for short
+in-place choices (pad modes, mixer switches, dialog options).
 
 Menus, popovers, dialogs and tooltips portal to `<body>`; tests query
 `screen` / `document`, not the render container.
@@ -348,8 +354,9 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 - Mixer settings (Settings → Mixer, opened by the gear "Mixer settings" in
   the mixer's top-left corner; `setDialogOpen(true, "mixer")` opens on that
   tab and focuses its first control): Mixer view `mix.mixer_view` (**Simple**
-  default, Advanced) and Filters `mix.mixer_filters` (**Show** default,
-  Hide; disabled in Advanced). **Simple** hides the FILTER and X-F assign
+  default, Advanced) and the switch "Show filters in the Simple view"
+  `mix.mixer_filters` (**Show** default, Hide; disabled, showing what is in
+  effect, in Advanced and 3-band). **Simple** hides the FILTER and X-F assign
   rows, the crossfader and the curve; **Filters: Hide** also hides the
   filter row. Hidden controls keep the user's positions in the store, but
   the engine gets `effectiveMix(values, look)` (`lib/mixView.ts`): channels

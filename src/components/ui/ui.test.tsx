@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { deckKeyHint } from "../../lib/mixKeys";
 import { Button } from "./Button";
 import { Checkbox } from "./Checkbox";
+import { ChoiceTile, ChoiceTiles } from "./ChoiceTiles";
 import type { ControlSize } from "./control";
 import { Dialog, DialogContent, DialogTitle } from "./Dialog";
 import { IconButton } from "./IconButton";
@@ -136,6 +137,29 @@ describe("SegmentedControl", () => {
     fireEvent.click(screen.getByRole("radio", { name: "B" }));
     expect(onChange).toHaveBeenLastCalledWith("b");
     fireEvent.click(screen.getByRole("radio", { name: "A" }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ChoiceTiles", () => {
+  it("is a radio group of tiles named by their label and described by their hint", () => {
+    const onChange = vi.fn();
+    render(
+      <ChoiceTiles value="a" onValueChange={onChange} aria-label="tiles">
+        <ChoiceTile value="a" label="Alpha" hint="The first" isDefault preview={<span />} />
+        <ChoiceTile value="b" label="Beta" hint="The second" />
+      </ChoiceTiles>,
+    );
+    expect(screen.getByRole("radiogroup", { name: "tiles" })).toBeTruthy();
+    const alpha = screen.getByRole("radio", { name: "Alpha" });
+    expect(alpha.getAttribute("aria-checked")).toBe("true");
+    expect(alpha.textContent).toContain("Default");
+    const beta = screen.getByRole("radio", { name: "Beta" });
+    const hint = document.getElementById(beta.getAttribute("aria-describedby") ?? "");
+    expect(hint?.textContent).toBe("The second");
+    fireEvent.click(beta);
+    expect(onChange).toHaveBeenLastCalledWith("b");
+    fireEvent.click(alpha);
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 });

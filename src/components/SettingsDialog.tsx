@@ -3,27 +3,23 @@
  * (library folders, cache folder), Playback (output device, sample rate,
  * buffer, headphone cue: `OutputSettings`), Display (theme, key notation),
  * Decks (the waveform style of the player deck and the Mix view, what SYNC
- * aligns), Mixer (which mixer controls the Mix view shows). Values live in Rust (`useSettings`); the library window's own
- * state (columns, panels, volume) is saved without asking.
+ * aligns), Mixer (the EQ layout and which mixer controls the Mix view shows).
+ * Display, Decks and Mixer live in `settings/`, their choices as picture
+ * tiles (`ChoiceTiles`). Values live in Rust (`useSettings`); the library
+ * window's own state (columns, panels, volume) is saved without asking.
  */
 import { open } from "@tauri-apps/plugin-dialog";
 import { type ReactNode, type RefObject, useRef, useState } from "react";
 
 import { cn } from "../lib/cn";
-
-import type {
-  DeckWaveform,
-  KeyNotation,
-  MixerEq,
-  MixerFilters,
-  MixerView,
-  SyncAlign,
-  Theme,
-} from "../lib/ipc";
 import { useScan } from "../store/scan";
 import { type SettingsTab, useSettings } from "../store/settings";
 import { ErrorMessage } from "./ErrorMessage";
 import { OutputSettings } from "./OutputSettings";
+import { DeckSettings } from "./settings/DeckSettings";
+import { DisplaySettings } from "./settings/DisplaySettings";
+import { MixerSettings } from "./settings/MixerSettings";
+import { settingItemClass as item } from "./settings/SettingItem";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import {
@@ -34,11 +30,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/Dialog";
-import { Segment, SegmentedControl } from "./ui/SegmentedControl";
-import { Swatch } from "./ui/Swatch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/Tabs";
 
-const item = "px-4 py-3.5";
 const itemTitle = "m-0 text-sm font-semibold";
 const hint = "mt-0.5 mb-0 text-xs text-fg-muted";
 const path = "font-mono text-xs [overflow-wrap:anywhere] select-text";
@@ -48,57 +41,6 @@ const row = "mt-3 flex items-center gap-2";
 function scanDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
-
-const NOTATIONS: { id: KeyNotation; label: string; example: string }[] = [
-  { id: "classical", label: "Classical", example: "Am, F#, Db" },
-  { id: "camelot", label: "Camelot", example: "8A, 2B, 3B" },
-  { id: "openKey", label: "Open Key", example: "1m, 7d, 8d" },
-];
-
-/** Each theme with its canvas and accent colours (tokens.css `--color-theme-*`). */
-const THEME_CHOICES: { id: Theme; label: string; canvas: string; accent: string }[] = [
-  {
-    id: "graphite",
-    label: "Graphite",
-    canvas: "bg-theme-graphite",
-    accent: "bg-theme-graphite-accent",
-  },
-  { id: "paper", label: "Paper", canvas: "bg-theme-paper", accent: "bg-theme-paper-accent" },
-  {
-    id: "midnight",
-    label: "Midnight",
-    canvas: "bg-theme-midnight",
-    accent: "bg-theme-midnight-accent",
-  },
-  { id: "dusk", label: "Dusk", canvas: "bg-theme-dusk", accent: "bg-theme-dusk-accent" },
-  { id: "booth", label: "Booth", canvas: "bg-theme-booth", accent: "bg-theme-booth-accent" },
-];
-
-const SYNC_ALIGNS: { id: SyncAlign; label: string }[] = [
-  { id: "bar", label: "Bar" },
-  { id: "beat", label: "Beat" },
-];
-
-const MIXER_EQS: { id: MixerEq; label: string; hint: string }[] = [
-  { id: "fourBand", label: "4-band", hint: "filters X and Y" },
-  { id: "threeBand", label: "3-band", hint: "FX per channel" },
-];
-
-const MIXER_VIEWS: { id: MixerView; label: string; hint: string }[] = [
-  { id: "simple", label: "Simple", hint: "no crossfader or assigns" },
-  { id: "advanced", label: "Advanced", hint: "everything" },
-];
-
-const MIXER_FILTERS: { id: MixerFilters; label: string }[] = [
-  { id: "show", label: "Show" },
-  { id: "hide", label: "Hide" },
-];
-
-const WAVEFORMS: { id: DeckWaveform; label: string; hint: string }[] = [
-  { id: "rgb", label: "RGB", hint: "colour by band" },
-  { id: "threeBand", label: "3-band", hint: "lows, mids, highs" },
-  { id: "blue", label: "Blue", hint: "classic" },
-];
 
 export function SettingsDialog() {
   const isOpen = useSettings((s) => s.dialogOpen);
@@ -120,7 +62,8 @@ function SettingsWindow() {
     >
       <DialogContent
         size="lg"
-        className="h-[520px]"
+        // Fits the tallest tab (Mixer's tiles) without scrolling; shorter windows scroll.
+        className="h-[648px]"
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           // Opened on a tab (not the first): its first control, else Close.
@@ -198,20 +141,16 @@ function SettingsBody({
               <OutputSettings itemClassName={item} />
             </Panel>
             <Panel value="display">
-              <ThemeChoice theme={settings.theme} />
-              <KeyNotationChoice notation={settings.keyNotation} />
+              <DisplaySettings theme={settings.theme} notation={settings.keyNotation} />
             </Panel>
             <Panel value="decks">
-              <DeckWaveformChoice waveform={settings.deckWaveform} />
-              <SyncAlignChoice align={settings.syncAlign} />
+              <DeckSettings waveform={settings.deckWaveform} align={settings.syncAlign} />
             </Panel>
             <Panel value="mixer">
-              <MixerEqChoice eq={settings.mixerEq} />
-              <MixerViewChoice view={settings.mixerView} />
-              <MixerFiltersChoice
-                filters={settings.mixerFilters}
+              <MixerSettings
                 eq={settings.mixerEq}
                 view={settings.mixerView}
+                filters={settings.mixerFilters}
               />
             </Panel>
           </>
@@ -288,195 +227,6 @@ function LibraryFolders() {
           {scanning ? "Scanning…" : "Rescan all"}
         </Button>
       </div>
-    </div>
-  );
-}
-
-function ThemeChoice({ theme }: { theme: Theme }) {
-  return (
-    <div className={item}>
-      <h5 className={itemTitle}>Theme</h5>
-      <p className={hint}>
-        Paper is light; Booth is black with the most contrast, for dark rooms, and is the default.
-      </p>
-      <SegmentedControl
-        className="mt-2.5"
-        aria-label="Theme"
-        value={theme}
-        onValueChange={(v) => void useSettings.getState().update({ theme: v as Theme })}
-      >
-        {THEME_CHOICES.map((t) => (
-          <Segment key={t.id} value={t.id}>
-            <span className="inline-flex overflow-hidden rounded-[2px] ring-1 ring-border-strong">
-              <Swatch size="sm" className={cn(t.canvas, "rounded-none")} />
-              <Swatch size="sm" className={cn(t.accent, "rounded-none")} />
-            </span>
-            {t.label}
-          </Segment>
-        ))}
-      </SegmentedControl>
-    </div>
-  );
-}
-
-function KeyNotationChoice({ notation }: { notation: KeyNotation }) {
-  return (
-    <div className={item}>
-      <h5 className={itemTitle}>Key notation</h5>
-      <p className={hint}>How keys are shown. Key edits accept any notation.</p>
-      <SegmentedControl
-        className="mt-2.5"
-        aria-label="Key notation"
-        value={notation}
-        onValueChange={(v) => void useSettings.getState().update({ keyNotation: v as KeyNotation })}
-      >
-        {NOTATIONS.map((n) => (
-          <Segment key={n.id} value={n.id}>
-            {n.label}
-            <span className="font-normal text-fg-subtle">{n.example}</span>
-          </Segment>
-        ))}
-      </SegmentedControl>
-    </div>
-  );
-}
-
-function DeckWaveformChoice({ waveform }: { waveform: DeckWaveform }) {
-  return (
-    <div className={item}>
-      <h5 className={itemTitle}>Waveform</h5>
-      <p className={hint}>
-        How the player deck and the Mix view draw waveforms and overviews. RGB is the default.
-      </p>
-      <SegmentedControl
-        className="mt-2.5"
-        aria-label="Deck waveform"
-        value={waveform}
-        onValueChange={(v) =>
-          void useSettings.getState().update({ deckWaveform: v as DeckWaveform })
-        }
-      >
-        {WAVEFORMS.map((w) => (
-          <Segment key={w.id} value={w.id}>
-            {w.label}
-            <span className="font-normal text-fg-subtle">{w.hint}</span>
-          </Segment>
-        ))}
-      </SegmentedControl>
-    </div>
-  );
-}
-
-function SyncAlignChoice({ align }: { align: SyncAlign }) {
-  return (
-    <div className={item}>
-      <h5 className={itemTitle}>Sync aligns</h5>
-      <p className={hint}>
-        Bar: SYNC lines up the downbeats with the master as well as the beat. Bar is the default.
-      </p>
-      <SegmentedControl
-        className="mt-2.5"
-        aria-label="Sync aligns"
-        value={align}
-        onValueChange={(v) => void useSettings.getState().update({ syncAlign: v as SyncAlign })}
-      >
-        {SYNC_ALIGNS.map((a) => (
-          <Segment key={a.id} value={a.id}>
-            {a.label}
-          </Segment>
-        ))}
-      </SegmentedControl>
-    </div>
-  );
-}
-
-function MixerEqChoice({ eq }: { eq: MixerEq }) {
-  return (
-    <div className={item}>
-      <h5 className={itemTitle}>EQ</h5>
-      <p className={hint}>
-        4-band has HI, HM, LM and LO and the two filters; 3-band has HI, MID and LOW and an FX knob
-        on every channel (filter, echo or reverb). Each keeps its own knob positions. 4-band is the
-        default.
-      </p>
-      <SegmentedControl
-        className="mt-2.5"
-        aria-label="EQ"
-        value={eq}
-        onValueChange={(v) => void useSettings.getState().update({ mixerEq: v as MixerEq })}
-      >
-        {MIXER_EQS.map((m) => (
-          <Segment key={m.id} value={m.id}>
-            {m.label}
-            <span className="font-normal text-fg-subtle">{m.hint}</span>
-          </Segment>
-        ))}
-      </SegmentedControl>
-    </div>
-  );
-}
-
-function MixerViewChoice({ view }: { view: MixerView }) {
-  return (
-    <div className={item}>
-      <h5 className={itemTitle}>Mixer view</h5>
-      <p className={hint}>
-        Simple hides the crossfader and the assign switches; Advanced shows every control. For both
-        EQ layouts. The sound follows what you see. Simple is the default.
-      </p>
-      <SegmentedControl
-        className="mt-2.5"
-        aria-label="Mixer view"
-        value={view}
-        onValueChange={(v) => void useSettings.getState().update({ mixerView: v as MixerView })}
-      >
-        {MIXER_VIEWS.map((m) => (
-          <Segment key={m.id} value={m.id}>
-            {m.label}
-            <span className="font-normal text-fg-subtle">{m.hint}</span>
-          </Segment>
-        ))}
-      </SegmentedControl>
-    </div>
-  );
-}
-
-function MixerFiltersChoice({
-  filters,
-  eq,
-  view,
-}: {
-  filters: MixerFilters;
-  eq: MixerEq;
-  view: MixerView;
-}) {
-  const threeBand = eq === "threeBand";
-  const advanced = view === "advanced";
-  return (
-    <div className={item}>
-      <h5 className={itemTitle}>Filters</h5>
-      <p className={hint}>
-        {threeBand
-          ? "The 3-band EQ has no filters X and Y: each channel's FX knob is its filter."
-          : advanced
-            ? "The Advanced view always shows both filters."
-            : "Whether the Simple view shows the two filters. Hidden filters are off. Show is the default."}
-      </p>
-      <SegmentedControl
-        className="mt-2.5"
-        aria-label="Filters"
-        disabled={threeBand || advanced}
-        value={filters}
-        onValueChange={(v) =>
-          void useSettings.getState().update({ mixerFilters: v as MixerFilters })
-        }
-      >
-        {MIXER_FILTERS.map((f) => (
-          <Segment key={f.id} value={f.id}>
-            {f.label}
-          </Segment>
-        ))}
-      </SegmentedControl>
     </div>
   );
 }

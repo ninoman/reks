@@ -117,15 +117,15 @@ describe("SettingsDialog", () => {
     showTab("Mixer");
     const view = screen.getByRole("radiogroup", { name: "Mixer view" });
     expect(view.querySelector('[aria-checked="true"]')?.textContent).toContain("Simple");
-    const filters = screen.getByRole("radiogroup", { name: "Filters" });
-    expect(filters.querySelector('[aria-checked="true"]')?.textContent).toBe("Show");
-    fireEvent.click(screen.getByRole("radio", { name: "Hide" }));
+    const filters = screen.getByRole("switch", { name: "Show filters in the Simple view" });
+    expect(filters.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(filters);
     await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ mixerFilters: "hide" }));
-    fireEvent.click(screen.getByRole("radio", { name: /Advanced/ }));
+    fireEvent.click(screen.getByRole("radio", { name: "Advanced" }));
     await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ mixerView: "advanced" }));
-    for (const name of ["Show", "Hide"]) {
-      expect(screen.getByRole("radio", { name }).hasAttribute("disabled")).toBe(true);
-    }
+    // Advanced always shows the filters: on, and not the user's to change.
+    await waitFor(() => expect(filters.hasAttribute("disabled")).toBe(true));
+    expect(filters.getAttribute("aria-checked")).toBe("true");
   });
 
   it("stores the EQ layout; Filters is disabled in 3-band, also in Simple", async () => {
@@ -134,12 +134,14 @@ describe("SettingsDialog", () => {
     showTab("Mixer");
     const eq = screen.getByRole("radiogroup", { name: "EQ" });
     expect(eq.querySelector('[aria-checked="true"]')?.textContent).toContain("4-band");
-    expect(screen.getByRole("radio", { name: "Show" }).hasAttribute("disabled")).toBe(false);
-    fireEvent.click(screen.getByRole("radio", { name: /3-band/ }));
+    const filters = screen.getByRole("switch", { name: "Show filters in the Simple view" });
+    expect(filters.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(screen.getByRole("radio", { name: "3-band" }));
     await waitFor(() => expect(ipc.settingsSet).toHaveBeenCalledWith({ mixerEq: "threeBand" }));
-    await waitFor(() =>
-      expect(screen.getByRole("radio", { name: "Show" }).hasAttribute("disabled")).toBe(true),
-    );
+    // 3-band has no filters X and Y: off, with the reason under the switch.
+    await waitFor(() => expect(filters.hasAttribute("disabled")).toBe(true));
+    expect(filters.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText(/each channel's FX knob is its filter/)).toBeTruthy();
   });
 
   it("opens on the tab it is asked for and focuses its first control", async () => {
