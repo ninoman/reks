@@ -71,11 +71,13 @@ export function MixPanel() {
           active={active}
           filters={mix.filters}
           crossfader={mix.crossfader}
+          fx={mix.fx}
           master={mix.master}
           look={mix.look}
           onChannel={mix.setChannel}
           onFilter={mix.setFilter}
           onCrossfader={mix.setCrossfader}
+          onFx={mix.setFx}
           onMaster={mix.setMaster}
         />
         <div className="flex min-w-0 flex-1 flex-col gap-2">

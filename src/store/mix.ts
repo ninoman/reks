@@ -26,6 +26,7 @@ import {
   deviceWaveformColumns,
   type FilterParam,
   type FilterUnit,
+  type FxKind,
   type HotCueView,
   type Key,
   libraryTrack,
@@ -147,10 +148,16 @@ type DeckPrefs = Pick<DeckMeta, "tempoRange" | "padMode" | "padPage" | "lastJump
 
 export interface ChannelValues {
   trim: number;
+  /** The 4-band EQ; the 3-band EQ below keeps its own positions (`effectiveMix` sends one at noon). */
   eqHi: number;
   eqMid1: number;
   eqMid2: number;
   eqLo: number;
+  eq3Hi: number;
+  eq3Mid: number;
+  eq3Lo: number;
+  /** The FX knob (3-band): 0.5 off. */
+  fx: number;
   fader: number;
   filterAssign: Assign;
   xfadeAssign: Assign;
@@ -164,6 +171,12 @@ export interface FilterValues {
   bandPass: boolean;
   lowPass: boolean;
   on: boolean;
+}
+
+/** FX select and PARAMETER: one for the mixer (3-band). */
+export interface FxValues {
+  kind: FxKind;
+  parameter: number;
 }
 
 export interface MasterValues {
@@ -189,6 +202,7 @@ export interface MixStore {
   channels: ChannelValues[];
   filters: Record<FilterUnit, FilterValues>;
   crossfader: { pos: number; curve: number };
+  fx: FxValues;
   master: MasterValues;
   /** Which mixer controls are on screen; hidden ones send `effectiveMix`, not the user's positions. */
   look: MixerLook;
@@ -266,7 +280,8 @@ export interface MixStore {
     value: FilterValues[K],
   ) => void;
   setCrossfader: (patch: Partial<{ pos: number; curve: number }>) => void;
-  /** Switches the mixer view; the engine gets the hidden controls' values at once. */
+  setFx: (patch: Partial<FxValues>) => void;
+  /** Switches the mixer's EQ layout or view; the engine gets the hidden controls' values at once. */
   setLook: (look: MixerLook) => void;
   setMaster: <K extends keyof MasterValues>(param: K, value: MasterValues[K]) => void;
   setVolume: (volume: number) => void;
@@ -310,6 +325,10 @@ export const DEFAULT_CHANNEL: ChannelValues = {
   eqMid1: 0.5,
   eqMid2: 0.5,
   eqLo: 0.5,
+  eq3Hi: 0.5,
+  eq3Mid: 0.5,
+  eq3Lo: 0.5,
+  fx: 0.5,
   fader: 1,
   filterAssign: "off",
   xfadeAssign: "off",
@@ -323,6 +342,9 @@ export const DEFAULT_MASTER: MasterValues = {
   splitCue: false,
   cuePostEq: false,
 };
+
+/** 3-band starts with FILTER selected and PARAMETER at noon. */
+export const DEFAULT_FX: FxValues = { kind: "filter", parameter: 0.5 };
 
 const DEFAULT_FILTER: FilterValues = {
   freq: 0.5,
@@ -382,6 +404,8 @@ function mixerControls(s: MixStore): MixControl[] {
     }
   }
   out.push({ type: "crossfader", ...s.crossfader });
+  out.push({ type: "channelFx", kind: s.fx.kind });
+  out.push({ type: "fxParameter", value: s.fx.parameter });
   for (const k of Object.keys(s.master) as (keyof MasterValues)[]) {
     const v = s.master[k];
     out.push({
@@ -515,6 +539,7 @@ export const useMix = create<MixStore>((set, get) => {
     })),
     filters: { x: { ...DEFAULT_FILTER }, y: { ...DEFAULT_FILTER, lowPass: false, highPass: true } },
     crossfader: { pos: 0.5, curve: 0 },
+    fx: DEFAULT_FX,
     look: DEFAULT_LOOK,
     master: { ...DEFAULT_MASTER },
     volume: 1,
@@ -890,7 +915,7 @@ export const useMix = create<MixStore>((set, get) => {
 
     setLook(look) {
       const now = get().look;
-      if (now.view === look.view && now.filters === look.filters) return;
+      if (now.eq === look.eq && now.view === look.view && now.filters === look.filters) return;
       set({ look });
       for (const c of mixerControls(get())) get().send(c);
     },
@@ -899,6 +924,13 @@ export const useMix = create<MixStore>((set, get) => {
       const crossfader = { ...get().crossfader, ...patch };
       set({ crossfader });
       get().send({ type: "crossfader", ...crossfader });
+    },
+
+    setFx(patch) {
+      const fx = { ...get().fx, ...patch };
+      set({ fx });
+      if (patch.kind !== undefined) get().send({ type: "channelFx", kind: fx.kind });
+      if (patch.parameter !== undefined) get().send({ type: "fxParameter", value: fx.parameter });
     },
 
     setMaster(param, value) {

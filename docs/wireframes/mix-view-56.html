@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mix View Layouts</title>
+<meta name="description" content="Wireframe for reks issue #56: the 3-band mixer, Simple and Advanced, next to today's 4-band views, to scale.">
+<style>
+/*
+ * Wireframe for ninoman/reks#56. Every mixer is drawn from the real sizes in
+ * src/styles/tokens.css and the rows of MixerPanel / ChannelStrip /
+ * FilterUnit / MasterSection; low-fidelity greys only.
+ */
+:root {
+  --paper: #f4f4f7; --sheet: #ffffff; --ink: #1c1c24; --ink-2: #5d5d6c; --ink-3: #8a8a99; --line: #c7c7d2;
+  --box: #ffffff; --box-2: #e9e9ef; --wave: #2b2b35; --wave-ink: #d4d4de;
+  --new: #4247c9; --new-bg: #e6e7fa; --gone: #b4383d; --gone-bg: #f8e4e5;
+  --lit: #1c1c24; --lit-ink: #ffffff; --glow: rgb(66 71 201 / 45%); --later: #9a6a00; --later-bg: #fbf1d9;
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  /* Tokens copied from src/styles/tokens.css (2026-10-23). */
+  --mixer-w: 344px; --mixer-strip-w: 52px; --mixer-row-h: 26px;
+  --knob-sm: 22px; --knob-md: 28px; --knob-lg: 32px;
+  --fader-len: 96px; --fader-w: 20px; --fader-cap: 12px; --meter-w: 10px; --meter-dot: 6px;
+  --ctl-h-xs: 20px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #131318; --sheet: #1a1a21; --ink: #e8e8ef; --ink-2: #a3a3b3; --ink-3: #737384; --line: #3b3b48;
+  --box: #1f1f27; --box-2: #2b2b35; --wave: #0b0b0f; --wave-ink: #b9b9c9;
+  --new: #a3a6ff; --new-bg: #2a2b57; --gone: #ff8a8f; --gone-bg: #4a2326;
+  --lit: #e8e8ef; --lit-ink: #131318; --glow: rgb(163 166 255 / 45%); --later: #f1c45c; --later-bg: #3d3216;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #131318; --sheet: #1a1a21; --ink: #e8e8ef; --ink-2: #a3a3b3; --ink-3: #737384; --line: #3b3b48;
+  --box: #1f1f27; --box-2: #2b2b35; --wave: #0b0b0f; --wave-ink: #b9b9c9;
+  --new: #a3a6ff; --new-bg: #2a2b57; --gone: #ff8a8f; --gone-bg: #4a2326;
+  --lit: #e8e8ef; --lit-ink: #131318; --glow: rgb(163 166 255 / 45%); --later: #f1c45c; --later-bg: #3d3216;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1520px; margin: 0 auto; padding: 24px 16px 64px; display: flex; flex-direction: column; gap: 28px; }
+h1 { font-size: 26px; line-height: 1.2; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 18px; margin: 0 0 4px; text-wrap: balance; }
+h3 { font-size: 12px; margin: 0; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-2); }
+p { margin: 0; max-width: 80ch; }
+.lede { color: var(--ink-2); }
+code { font-family: var(--font-mono); font-size: 0.9em; }
+a { color: var(--new); }
+section.block { display: flex; flex-direction: column; gap: 12px; }
+.topbar { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--sheet); }
+.seg button { font: 500 13px var(--font-ui); color: var(--ink); background: transparent; border: 0; padding: 5px 11px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--lit); color: var(--lit-ink); }
+.seg button:focus-visible { outline: 2px solid var(--new); outline-offset: -2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: var(--ink-2); align-items: center; }
+.sw { display: inline-block; width: 18px; height: 12px; border: 1px solid var(--line); vertical-align: -2px; margin-right: 6px; border-radius: 2px; }
+.sw.new { background: var(--new-bg); border-color: var(--new); }
+.sw.later { background: var(--later-bg); border: 1.5px dashed var(--later); }
+.sw.opt { border: 1.5px dashed var(--ink-2); }
+.sw.lit { background: var(--lit); border-color: var(--lit); box-shadow: 0 0 0 3px var(--glow); }
+.sheet { background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.fit { overflow: hidden; }
+.fit > .scaled { transform-origin: 0 0; }
+
+/* ---- Mixers side by side (1:1) ---- */
+.row-mixers { display: flex; gap: 28px; align-items: flex-start; width: max-content; }
+.col { display: flex; flex-direction: column; gap: 10px; width: calc(var(--mixer-w) + 34px); }
+.col-head { display: flex; flex-direction: column; gap: 2px; min-height: 52px; }
+.col-head b { font-size: 15px; }
+.col-head span { font-size: 12px; color: var(--ink-2); }
+.tag { display: inline-block; font: 600 10px var(--font-ui); letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; vertical-align: 1px; margin-left: 4px; }
+.tag.new { background: var(--new-bg); color: var(--new); }
+.tag.opt { border: 1px dashed var(--ink-2); color: var(--ink-2); }
+.tag.later { background: var(--later-bg); color: var(--later); }
+.mix-dim { display: flex; gap: 6px; align-items: stretch; }
+.dim { width: 28px; position: relative; flex-shrink: 0; }
+.dim::before { content: ""; position: absolute; left: 6px; top: 0; bottom: 0; border-left: 1px solid var(--ink-2); }
+.dim::after { content: ""; position: absolute; left: 2px; right: 18px; top: 0; bottom: 0; border-top: 1px solid var(--ink-2); border-bottom: 1px solid var(--ink-2); }
+.dim span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%) rotate(-90deg); transform-origin: 0 0; white-space: nowrap; font: 600 11px var(--font-mono); color: var(--ink); translate: 0 18px; }
+.notes { margin: 0; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.45; display: flex; flex-direction: column; gap: 3px; }
+.notes li { padding-left: 16px; position: relative; }
+.notes li::before { position: absolute; left: 0; font-weight: 700; font-family: var(--font-mono); }
+.notes li.add::before { content: "+"; color: var(--new); }
+.notes li.del::before { content: "−"; color: var(--gone); }
+.notes li.same::before { content: "="; color: var(--ink-3); }
+.notes li.q::before { content: "?"; color: var(--later); }
+.stats { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; font-size: 12px; color: var(--ink-2); }
+.stats b { color: var(--ink); font-family: var(--font-mono); font-weight: 600; }
+
+/* ---- The mixer, as MixerPanel lays it out ---- */
+.mixer { position: relative; width: var(--mixer-w); height: var(--h); flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; padding: 8px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--box); font-family: var(--font-ui); color: var(--ink); }
+.mixer.optional { border: 1.5px dashed var(--ink-2); }
+.m-top { display: flex; }
+.m-legend { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; padding-right: 4px; }
+.m-head { height: 20px; flex-shrink: 0; }
+.cap { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; }
+.cap.strong { color: var(--ink); font-weight: 600; }
+.m-rowcap { height: var(--mixer-row-h); display: flex; align-items: center; }
+.m-strip { width: var(--mixer-strip-w); display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+.m-badge { height: 20px; min-width: 18px; padding: 0 5px; display: flex; align-items: center; justify-content: center; border-radius: 3px; font: 600 11px var(--font-mono); border: 1px solid var(--line); color: var(--ink-2); }
+.m-badge.on { background: var(--lit); color: var(--lit-ink); border-color: var(--lit); }
+.m-row { height: var(--mixer-row-h); width: 100%; display: flex; align-items: center; justify-content: center; }
+.new-row { background: var(--new-bg); box-shadow: inset 0 0 0 1px var(--new); border-radius: 3px; }
+.m-fader { display: flex; gap: 6px; }
+.m-fader.my1 { margin: 4px 0; } .m-fader.my05 { margin: 2px 0; }
+.fader { width: var(--fader-w); height: var(--len); position: relative; }
+.fader::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; translate: -1px 0; background: var(--line); border-radius: 1px; }
+.fader i { position: absolute; left: 0; right: 0; height: var(--fader-cap); top: var(--pos); background: var(--box-2); border: 1px solid var(--ink-2); border-radius: 2px; }
+.hfader { flex: 1; height: var(--fader-w); position: relative; }
+.hfader::before { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 2px; translate: 0 -1px; background: var(--line); }
+.hfader i { position: absolute; top: 0; bottom: 0; width: var(--fader-cap); left: calc(50% - 6px); background: var(--box-2); border: 1px solid var(--ink-2); border-radius: 2px; }
+.meter { width: var(--meter-w); height: var(--len); display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 1px 0; }
+.meter.grow { height: auto; flex: 1; min-height: 54px; }
+.meter i { width: var(--meter-dot); height: var(--meter-dot); border-radius: 50%; background: var(--box-2); border: 1px solid var(--line); }
+.scale { height: var(--len); display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; font: 8px/1 var(--font-mono); color: var(--ink-3); }
+.btn { height: var(--ctl-h-xs); padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 3px; font: 600 9px var(--font-ui); text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-2); background: var(--box); white-space: nowrap; }
+.btn.on { background: var(--lit); color: var(--lit-ink); border-color: var(--lit); }
+.assign { display: inline-flex; height: var(--ctl-h-xs); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.assign b { width: 14px; display: flex; align-items: center; justify-content: center; font: 600 8px var(--font-mono); color: var(--ink-2); border-right: 1px solid var(--line); }
+.assign b:last-child { border-right: 0; }
+.assign b.on { background: var(--lit); color: var(--lit-ink); }
+.knob { display: block; flex-shrink: 0; overflow: visible; }
+.knob .track { fill: none; stroke: var(--line); stroke-width: 2; }
+.knob .arc { fill: none; stroke: var(--ink-2); stroke-width: 2.5; stroke-linecap: round; }
+.knob .cap { fill: var(--box-2); stroke: var(--ink-2); stroke-width: 1; }
+.knob .mark { stroke: var(--ink); stroke-width: 2; stroke-linecap: round; }
+.knob .detent { stroke: var(--ink-3); stroke-width: 1.5; }
+.knob.lit .arc { stroke: var(--new); stroke-width: 3; }
+.knob.lit .cap { fill: var(--lit); stroke: var(--lit); }
+.knob.lit .mark { stroke: var(--lit-ink); }
+.knob.lit { filter: drop-shadow(0 0 3px var(--glow)); }
+.lk { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.m-master { margin-left: 4px; padding-left: 4px; border-left: 1px solid var(--line); width: var(--mixer-strip-w); display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+.m-master.compact { gap: 2px; }
+.m-filters { display: flex; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 4px; }
+.fu { display: flex; align-items: center; gap: 8px; }
+.fu-knobs { display: flex; align-items: flex-end; gap: 6px; }
+.fu-side { display: flex; flex-direction: column; gap: 4px; }
+.fu-side > div { display: flex; align-items: center; gap: 2px; }
+.m-xf { height: var(--mixer-row-h); display: flex; align-items: center; gap: 4px; }
+.gear { position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--ink-2); }
+.fxsel { height: 18px; padding: 0 3px 0 5px; display: inline-flex; align-items: center; gap: 2px; border: 1.5px dashed var(--later); background: var(--later-bg); border-radius: 3px; font: 600 9px var(--font-ui); text-transform: uppercase; letter-spacing: 0.05em; color: var(--later); }
+.callout { position: absolute; font-size: 10.5px; line-height: 1.3; color: var(--later); background: var(--later-bg); border: 1px dashed var(--later); border-radius: 4px; padding: 3px 6px; white-space: nowrap; }
+
+/* ---- App frames (1440 × 900, scaled) ---- */
+.frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 640px), 1fr)); gap: 24px; }
+.frame-card { display: flex; flex-direction: column; gap: 8px; }
+.frame-card .fit { border: 1px solid var(--line); border-radius: 6px; background: var(--paper); }
+.frame-card.optional .fit { border-style: dashed; border-color: var(--ink-2); }
+.frame { position: relative; width: 1440px; height: 900px; background: var(--paper); font-family: var(--font-ui); }
+.fb { position: absolute; border: 1px solid var(--line); background: var(--box); border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--ink-2); overflow: hidden; text-align: center; }
+.fb.wave { background: var(--wave); color: var(--wave-ink); border-color: var(--wave); font: 600 18px var(--font-mono); }
+.fb.wave.tall { box-shadow: inset 0 0 0 3px var(--new); }
+.fb.plain { background: transparent; border: 0; }
+.fb.lib { flex-direction: column; justify-content: flex-start; align-items: stretch; background: var(--sheet); }
+.fb.lib i { display: block; height: 26px; border-bottom: 1px solid var(--line); }
+.fb.lib i:nth-child(even) { background: var(--box-2); }
+.fb.rowsnum { background: transparent; border: 0; font: 700 34px var(--font-mono); color: var(--ink); justify-content: flex-end; padding-right: 24px; }
+.frame-cap { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); }
+.frame-cap b { color: var(--ink); font-family: var(--font-mono); }
+
+/* ---- Filter knob states ---- */
+.states { display: flex; flex-wrap: wrap; gap: 20px 28px; align-items: flex-start; }
+.state { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 120px; text-align: center; }
+.state .big { width: 84px; height: 84px; display: flex; align-items: center; justify-content: center; }
+.state small { font-size: 12px; color: var(--ink-2); line-height: 1.35; }
+.state b { font-size: 13px; }
+.lpfhpf { display: flex; justify-content: space-between; width: 84px; font: 600 9px var(--font-mono); color: var(--ink-3); margin-top: -10px; }
+
+/* ---- Tables, lists ---- */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; font-size: 13px; min-width: 860px; width: 100%; }
+th, td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); font-weight: 600; }
+td:first-child { color: var(--ink-2); white-space: nowrap; }
+td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+td .add { color: var(--new); font-weight: 600; }
+td .del { color: var(--gone); }
+.qs { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; max-width: 96ch; }
+.qs li b { display: block; }
+.qs li span { color: var(--ink-2); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 24px; align-items: start; }
+.settings { width: 100%; max-width: 520px; border: 1px solid var(--line); border-radius: 8px; background: var(--box); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; font-size: 13px; }
+.settings .srow { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: center; }
+.settings .lbl { color: var(--ink-2); }
+.settings .seg { font-size: 12px; justify-self: start; }
+.settings .seg span { padding: 4px 9px; border-right: 1px solid var(--line); }
+.settings .seg span:last-child { border-right: 0; }
+.settings .seg span.on { background: var(--lit); color: var(--lit-ink); }
+.settings .seg span.new { box-shadow: inset 0 0 0 1.5px var(--new); color: var(--new); }
+.settings .seg span.on.new { color: var(--lit-ink); }
+.settings .seg.dis { opacity: 0.45; }
+.settings .alt { border-top: 1px dashed var(--line); padding-top: 10px; }
+.settings .hint { font-size: 12px; color: var(--ink-2); }
+
+/* Revision 2: 4-deck frames. */
+.m-legend { position: relative; }
+.legend-new { width: calc(100% + 4px); justify-content: flex-end; padding-right: 3px; margin-right: -4px; }
+.fxsel { height: 18px; padding: 0 3px 0 4px; display: inline-flex; align-items: center; gap: 1px; border: 1px solid var(--ink-2); background: var(--box); border-radius: 3px; font: 600 8.5px var(--font-ui); text-transform: uppercase; letter-spacing: 0.02em; color: var(--ink); }
+/* Revision 4 (#59): the FX row in the shared section, under the strips. */
+.m-fx { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--line); padding: 4px 4px 0; }
+.m-fx .fx-btns { display: flex; gap: 2px; }
+.m-fx .fx-param { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.m-fx.new-block { background: var(--new-bg); box-shadow: inset 0 0 0 1px var(--new); border-radius: 3px; border-top-color: transparent; padding-bottom: 2px; }
+.callout.plain { color: var(--new); background: var(--new-bg); border-color: var(--new); }
+.mixwrap { position: absolute; }
+/* 4 decks: a mixer shorter than the 440 px stack spreads its rows instead of leaving space empty. */
+.mixer.spread .m-top { flex: 1; }
+.mixer.spread .m-legend, .mixer.spread .m-strip { justify-content: space-between; }
+.mixer.spread .m-row, .mixer.spread .m-rowcap { box-shadow: inset 0 -1px 0 var(--new); }
+.mixer.spread .new-row { box-shadow: inset 0 0 0 1px var(--new); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="topbar">
+  <div>
+    <h1>Mix view: the 3-band mixer</h1>
+    <p class="lede">Wireframe for issue #56. The 3-band EQ layout, Simple and Advanced, next to today's 4-band Full (Advanced) and Simple views, drawn to scale from the tokens in <code>src/styles/tokens.css</code> and the rows of <code>MixerPanel</code>. Low fidelity: greys only, no vendor names. Nothing here is built. Revision 4 (2026-10-23): the maintainer's answers (§7) and the FX row from the EQ and effects spec (#59).</p>
+  </div>
+  <div class="seg" role="group" aria-label="Theme">
+    <button type="button" data-theme-btn="auto" aria-pressed="true">Auto</button>
+    <button type="button" data-theme-btn="light" aria-pressed="false">Light</button>
+    <button type="button" data-theme-btn="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<div class="legend">
+  <span><i class="sw new"></i>new in the 3-band views</span>
+  <span><i class="sw lit"></i>lit: a switch that is on, or any channel knob off-centre (every view)</span>
+</div>
+
+<section class="block" aria-labelledby="h-mixers">
+  <h2 id="h-mixers">1 · The mixers side by side, to scale <span class="tag opt" id="scale-note">1:1</span></h2>
+  <p class="lede">Tops aligned, so the heights compare directly. Channels 2 and 3 have tracks (lit badges), as in the 2-deck default. The same example positions are set in every view: channel 2's LOW is cut and channel 3's MID is dipped, so those knobs are lit. In the 3-band views channel 2's FILTER is turned towards low-pass and channel 3's towards high-pass; 1 and 4 sit at centre (off, unlit).</p>
+  <div class="sheet fit" data-fit><div class="scaled"><div class="row-mixers" id="mixers"></div></div></div>
+</section>
+
+<section class="block" aria-labelledby="h-frames">
+  <h2 id="h-frames">2 · Mix panel at 1440 × 900, 2 decks</h2>
+  <p class="lede">The whole window, same scale for every state. Decks take the mixer's height (<code>--deck-h: var(--mixer-h)</code>, #44), so a shorter mixer gives the space back to the library; the waveform takes what is left in the deck. Row counts are whole 26 px library rows.</p>
+  <div class="frames" id="frames"></div>
+</section>
+
+<section class="block" aria-labelledby="h-frames4">
+  <h2 id="h-frames4">3 · Mix panel at 1440 × 900, 4 decks</h2>
+  <p class="lede">Two compact decks stack beside the mixer on each side (<code>--deck-h-compact</code> 216 px, 440 px a side), so the mixer stays 440 px in every view and the library keeps 8 rows (5 at 1280 × 800). A shorter view gives its faders and the master meter up to 60 px (<code>--fader-bonus</code>, #46), only as much as fits: 3-band Advanced gets the 47 px it has spare. Whatever is still spare goes into the spacing between the rows (maintainer, 2026-10-23), so the mixer always fills the 440 px and nothing sits empty: the strip columns and the legend lay out with <code>justify-content: space-between</code>, which keeps their rows lined up because each column has the same rows. Thin rules under the rows show the wider spacing.</p>
+  <div class="frames" id="frames4"></div>
+</section>
+
+<section class="block" aria-labelledby="h-knob">
+  <h2 id="h-knob">4 · Knob states: channel FX, and every channel knob lit</h2>
+  <p class="lede">One bipolar FX knob per channel in the 4th knob slot (under LOW); its row caption names the selected effect. With FILTER, left of centre is low-pass and right is high-pass (ECHO and REVERB: left mids/lows, right highs, #59 §3). Centre is off, with a dead zone of 0.485–0.515 as a detent (a drag that crosses centre sticks there; double-click or Delete returns there). Every bipolar channel knob, in every view, 4-band included, lights the same way once it leaves centre: LEVEL, the EQ knobs and FX. So a channel that sounds different always shows why. Drawn at 3× of <code>--knob-md</code> (28 px).</p>
+  <div class="sheet" style="display:flex;flex-direction:column;gap:16px">
+    <h3>FX knob, FILTER selected</h3><div class="states" id="states"></div>
+    <h3>EQ and LEVEL, all views</h3><div class="states" id="states-eq"></div>
+  </div>
+</section>
+
+<section class="block" aria-labelledby="h-fx">
+  <h2 id="h-fx">5 · FX row and settings</h2>
+  <div class="two">
+    <div class="sheet" style="display:flex;flex-direction:column;gap:12px">
+      <p>One mixer-wide row in the shared section, under the strips (above the crossfader in Advanced): the <b>FX select</b> as three buttons, FILTER · ECHO · REVERB, exactly one always lit (FILTER at start, no off state: each channel's knob at centre is off), and one <b>PARAMETER</b> knob whose caption follows the effect: RESONANCE, FEEDBACK, DECAY. The FX row caption in the strips follows it too. NOISE, CRUSH and SWEEP are not planned. Spec: #59, <code>djm-eq-fx.md</code> §3.</p>
+      <div class="fit" data-fit style="border:0"><div class="scaled"><div id="fx-rows" style="display:flex;gap:16px;width:max-content"></div></div></div>
+    </div>
+    <div class="sheet" style="display:flex;flex-direction:column;gap:10px">
+      <h3>Settings → Mixer</h3>
+      <div class="settings" aria-label="Settings sketch">
+        <div class="srow"><span class="lbl">EQ</span><span class="seg"><span>4-band</span><span class="on new">3-band</span></span></div>
+        <div class="srow"><span class="lbl">Mixer view</span><span class="seg"><span class="on">Simple</span><span>Advanced</span></span></div>
+        <div class="srow"><span class="lbl">Filters</span><span class="seg dis"><span class="on">Show</span><span>Hide</span></span></div>
+        <div class="hint"><b>EQ</b> is new and picks the layout. <b>Mixer view</b> works for both, as today: Advanced adds the X-F assigns and the crossfader (and, with 4-band, the FILTER assigns). <b>Filters</b> applies to 4-band Simple only, so it is disabled here, as it is in Advanced. Each EQ layout keeps its own knob positions; the first switch to 3-band starts flat.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" aria-labelledby="h-diff">
+  <h2 id="h-diff">6 · What changes between the states</h2>
+  <div class="tablewrap sheet">
+    <table>
+      <thead><tr><th>Per channel / mixer</th><th>4-band Advanced (Full)</th><th>4-band Simple</th><th>4-band Simple, filters hidden</th><th>3-band Simple <span class="tag new">new</span></th><th>3-band Advanced <span class="tag new">new</span></th></tr></thead>
+      <tbody>
+        <tr><td>Knob rows</td><td>LEVEL · HI · HM · LM · LO</td><td>same</td><td>same</td><td>LEVEL · HI · <span class="add">MID</span> · <span class="add">LOW</span> · <span class="add">FX</span> (caption: the effect)</td><td>as 3-band Simple</td></tr>
+        <tr><td>Knobs, 4 channels</td><td class="num">20 (4 trim + 16 EQ)</td><td class="num">20</td><td class="num">20</td><td class="num">20 (4 trim + 12 EQ + <span class="add">4 FX</span>) + <span class="add">PARAMETER</span></td><td class="num">same + curve</td></tr>
+        <tr><td>FX row: FILTER · ECHO · REVERB + PARAMETER</td><td>–</td><td>–</td><td>–</td><td><span class="add">shared section, under the strips</span></td><td><span class="add">same, above the crossfader</span></td></tr>
+        <tr><td>FILTER assign X · off · Y</td><td>shown</td><td class="del">hidden (1–2 X, 3–4 Y)</td><td class="del">hidden</td><td class="del">none; X/Y units off</td><td class="del">none; X/Y units off</td></tr>
+        <tr><td>Filter row X / Y (FREQ, RES, HP·BP·LP, ON)</td><td>shown</td><td>shown</td><td class="del">hidden (both off)</td><td class="del">none</td><td class="del">none</td></tr>
+        <tr><td>X-F assign</td><td>shown</td><td class="del">hidden (THRU)</td><td class="del">hidden</td><td class="del">hidden (THRU)</td><td>shown</td></tr>
+        <tr><td>Crossfader + curve</td><td>shown</td><td class="del">hidden</td><td class="del">hidden</td><td class="del">hidden</td><td>shown</td></tr>
+        <tr><td>Master section</td><td>full (dB labels)</td><td>compact</td><td>compact</td><td>compact</td><td>compact</td></tr>
+        <tr><td>Lit when off-centre</td><td colspan="5">LEVEL, every EQ knob and FX, in every view</td></tr>
+        <tr><td>Mixer height</td><td class="num">440</td><td class="num">356</td><td class="num">292</td><td class="num" data-h3="three"></td><td class="num" data-h3="threeA"></td></tr>
+        <tr><td>Waveform, 2 decks</td><td class="num">226</td><td class="num">142</td><td class="num">78</td><td class="num" data-w3="three"></td><td class="num" data-w3="threeA"></td></tr>
+        <tr><td>Library rows 1440×900 / 1280×800</td><td class="num">8 / 5</td><td class="num">12 / 8</td><td class="num">14 / 10</td><td class="num" data-r3="three"></td><td class="num" data-r3="threeA"></td></tr>
+        <tr><td>4 decks (mixer 440)</td><td class="num">fits, no change</td><td class="num" data-e4="simple">faders +60</td><td class="num" data-e4="bare">faders +60</td><td class="num" data-e4="three">faders +60</td><td class="num" data-e4="threeA">faders +60</td></tr>
+        <tr><td>X C V keys</td><td>crossfader</td><td>nothing</td><td>nothing</td><td>nothing</td><td>crossfader</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="lede">Heights for the 4-band views are the tokens (<code>--mixer-h-advanced / -simple / -simple-bare</code>). The 3-band heights are measured from the drawing (the FX row adds to the 292 px of the five knob rows) and each needs its own token. Waveform = deck height − 214; rows = ⌊(window height − 230 − mixer height) / 26⌋, both from research §6.</p>
+</section>
+
+<section class="block" aria-labelledby="h-q">
+  <h2 id="h-q">7 · Answers to the open UI questions (maintainer, 2026-10-23)</h2>
+  <ol class="qs">
+    <li><b>Label: "3-band".</b> <span>Settings → Mixer, EQ: 4-band · 3-band.</span></li>
+    <li><b>Crossfader: a setting, as for 4-band.</b> <span>Mixer view Simple / Advanced applies to both EQ layouts; 3-band Advanced shows the X-F assigns, crossfader and curve (§1, §2).</span></li>
+    <li><b>Shortcuts: as proposed.</b> <span>No filter keys. X C V work only in Advanced, as today. Knobs stay keyboard reachable (arrows, Page Up/Down, Delete back to centre).</span></li>
+    <li><b>Row caption: "Filter".</b> <span>Now the selected effect's name: FILTER, ECHO or REVERB.</span></li>
+    <li><b>Lit: every channel knob, in every view.</b> <span>LEVEL, EQ and FILTER light when off-centre, on the 4-band mixer too (§4).</span></li>
+    <li><b>MID: set by the research task.</b> <span>#59 proposes one real bell at 1 kHz (not HM + LM together), −26 / +6 dB, Q 0.7, UNVERIFIED.</span></li>
+    <li><b>Resonance: the PARAMETER knob.</b> <span>Global, in the FX row with the FX select FILTER · ECHO · REVERB (§5, spec #59). With FILTER it is the resonance; with ECHO feedback, with REVERB decay.</span></li>
+    <li><b>Positions across layouts: start flat.</b> <span>Each layout keeps its own positions; the first switch to 3-band starts with every knob at centre.</span></li>
+    <li><b>4 decks: shown, no empty space.</b> <span>§3: after the 60 px fader bonus, the spare height is spread over the row spacing.</span></li>
+  </ol>
+</section>
+
+</div>
+
+<script>
+// ---------- tiny SVG helpers ----------
+const SWEEP = 270;
+const pt = (v, r) => { const a = (-135 + v * SWEEP) * Math.PI / 180; return [16 + r * Math.sin(a), 16 - r * Math.cos(a)]; };
+function arc(v0, v1, r) {
+  if (Math.abs(v1 - v0) < 0.005) return "";
+  const [a, b] = v0 < v1 ? [v0, v1] : [v1, v0];
+  const [x0, y0] = pt(a, r), [x1, y1] = pt(b, r);
+  const large = (b - a) * SWEEP > 180 ? 1 : 0;
+  return `<path class="arc" d="M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}"/>`;
+}
+// Bipolar channel knobs light whenever they leave centre (answer 5).
+const offCentre = (v) => Math.abs(v - 0.5) > 0.02;
+function knob(px, v, { bipolar = false, lit = false, detent = false, label = "" } = {}) {
+  const [tx0, ty0] = pt(0, 14), [tx1, ty1] = pt(1, 14);
+  const [mx0, my0] = pt(v, 3), [mx1, my1] = pt(v, 12.5);
+  return `<svg class="knob${lit ? " lit" : ""}" width="${px}" height="${px}" viewBox="0 0 32 32" role="img" aria-label="${label}">`
+    + `<path class="track" d="M${tx0} ${ty0} A14 14 0 1 1 ${tx1} ${ty1}"/>`
+    + (detent ? `<line class="detent" x1="16" y1="0" x2="16" y2="3"/>` : "")
+    + arc(bipolar ? 0.5 : 0, v, 14)
+    + `<circle class="cap" cx="16" cy="16" r="10.5"/>`
+    + `<line class="mark" x1="${mx0.toFixed(2)}" y1="${my0.toFixed(2)}" x2="${mx1.toFixed(2)}" y2="${my1.toFixed(2)}"/></svg>`;
+}
+const chKnob = (px, v, label, detent = false) => knob(px, v, { bipolar: true, detent, lit: offCentre(v), label });
+const leds = () => "<i></i>".repeat(9);
+const scale = () => ["+10", "+6", "+3", "0", "−3", "−6", "−10", "−15", "−20"].map((s) => `<span>${s}</span>`).join("");
+const assign = (on) => `<span class="assign">${["X", "·", "Y"].map((t, i) => `<b class="${i === on ? "on" : ""}">${t}</b>`).join("")}</span>`;
+
+// ---------- the mixer, per view ----------
+// full / simple / bare: 4-band (today). three / threeA: 3-band Simple / Advanced.
+const VIEWS = {
+  full:   { h: 440, eq: ["Hi", "HM", "LM", "Lo"], three: false, assigns: true,  xfAssign: true,  filterRow: true,  xfRow: true },
+  simple: { h: 356, eq: ["Hi", "HM", "LM", "Lo"], three: false, assigns: false, xfAssign: false, filterRow: true,  xfRow: false },
+  bare:   { h: 292, eq: ["Hi", "HM", "LM", "Lo"], three: false, assigns: false, xfAssign: false, filterRow: false, xfRow: false },
+  three:  { h: null, eq: ["Hi", "Mid", "Low"],     three: true,  assigns: false, xfAssign: false, filterRow: false, xfRow: false },
+  threeA: { h: null, eq: ["Hi", "Mid", "Low"],    three: true,  assigns: false, xfAssign: true,  filterRow: false, xfRow: true },
+};
+const ACTIVE = [false, true, true, false];
+const CH_FILTER = [0.5, 0.32, 0.74, 0.5];
+// Example positions, the same in every view: ch 2 bass cut, ch 3 mid dip.
+function eqValue(ch, cap) {
+  if (ch === 1 && (cap === "Lo" || cap === "Low")) return 0.15;
+  if (ch === 2 && (cap === "LM" || cap === "Mid")) return 0.38;
+  return 0.5;
+}
+
+const FX = ["Filter", "Echo", "Reverb"];
+const PARAM = { Filter: "Resonance", Echo: "Feedback", Reverb: "Decay" };
+
+function mixer(viewKey, { faderLen = 96, h, spread = false, fx = "Filter" } = {}) {
+  const v = VIEWS[viewKey];
+  const isNew = (cap) => v.three && ["Mid", "Low", "Filter"].includes(cap);
+  const capRows = ["Level", ...v.eq, ...(v.three ? ["Filter"] : []), ...(v.assigns ? ["Filter"] : []), "Cue", "", ...(v.xfAssign ? ["X-F"] : [])];
+  const my = v.assigns || v.xfAssign ? "my1" : "my05";
+  const legend = capRows.map((c) => {
+    if (c === "") return `<div class="scale m-fader ${my}" style="--len:${faderLen}px">${scale()}</div>`;
+    // The FX row's caption names the selected effect.
+    if (v.three && c === "Filter") return `<div class="m-rowcap new-row legend-new"><span class="cap strong">${fx}</span></div>`;
+    return `<div class="m-rowcap${isNew(c) ? " new-row legend-new" : ""}"><span class="cap">${c}</span></div>`;
+  }).join("");
+  const strips = [0, 1, 2, 3].map((ch) => {
+    const rows = [];
+    rows.push(`<div class="m-row">${chKnob(22, 0.5, "level")}</div>`);
+    v.eq.forEach((c) => rows.push(`<div class="m-row${isNew(c) ? " new-row" : ""}">${chKnob(28, eqValue(ch, c), c)}</div>`));
+    if (v.three) rows.push(`<div class="m-row new-row">${chKnob(28, CH_FILTER[ch], "fx", true)}</div>`);
+    if (v.assigns) rows.push(`<div class="m-row">${assign(ch < 2 ? 0 : 2)}</div>`);
+    rows.push(`<div class="m-row"><span class="btn${ch === 1 ? " on" : ""}">Cue</span></div>`);
+    rows.push(`<div class="m-fader ${my}" style="--len:${faderLen}px"><span class="fader" style="--pos:2px"><i></i></span><span class="meter">${leds()}</span></div>`);
+    if (v.xfAssign) rows.push(`<div class="m-row">${assign(ch < 2 ? 0 : 2)}</div>`);
+    return `<div class="m-strip"><span class="m-badge${ACTIVE[ch] ? " on" : ""}">${ch + 1}</span>${rows.join("")}</div>`;
+  }).join("");
+  // As MixerPanel: the master is compact whenever the FILTER assign row is gone.
+  const compact = !v.assigns;
+  const master = `<div class="m-master${compact ? " compact" : ""}">
+      <span class="cap strong">Master</span>
+      <span class="lk"><span class="cap">Level</span>${knob(28, 0.8)}</span>
+      <span class="meter${compact ? " grow" : ""}" style="--len:${faderLen}px">${leds()}</span>
+      <span class="cap strong"${compact ? "" : ' style="margin-top:4px"'}>Cue</span>
+      <span class="lk"><span class="cap">Level</span>${knob(28, 0.7)}</span>
+      <span class="lk"><span class="cap">Cue/Mix</span>${knob(28, 0.5, { bipolar: true })}</span>
+      <span class="btn">Split</span><span class="btn">Post EQ</span></div>`;
+  const fu = (u, on, mode) => `<div class="fu"><div class="fu-knobs"><span class="lk"><span class="cap">Freq</span>${knob(32, 0.5)}</span><span class="lk"><span class="cap">Res</span>${knob(22, 0.3)}</span></div>
+      <div class="fu-side"><div><span class="cap strong">Filter ${u}</span>&nbsp;<span class="btn${on ? " on" : ""}">On</span></div><div>${["HP", "BP", "LP"].map((m) => `<span class="btn${m === mode ? " on" : ""}">${m}</span>`).join("")}</div></div></div>`;
+  const filterRow = v.filterRow ? `<div class="m-filters">${fu("X", false, "LP")}${fu("Y", false, "HP")}</div>` : "";
+  // One mixer-wide row: the effect for all channels (one always lit) and PARAMETER, whose caption follows it.
+  const fxRow = v.three ? `<div class="m-fx new-block"><span class="cap strong">FX</span><span class="fx-btns">${FX.map((e) => `<span class="btn${e === fx ? " on" : ""}">${e}</span>`).join("")}</span>`
+    + `<span class="fx-param"><span class="cap">${PARAM[fx]}</span>${knob(28, 0.5, { label: "parameter" })}</span></div>` : "";
+  const xfRow = v.xfRow ? `<div class="m-xf"><span class="cap">X</span><span class="hfader"><i></i></span><span class="cap">Y</span><span class="cap" style="margin-left:4px">Curve</span>${knob(22, 0.5)}</div>` : "";
+  const height = h ?? (v.h ? `${v.h}px` : "auto");
+  return `<div class="mixer${spread ? " spread" : ""}" style="--h:${height}" data-view="${viewKey}">
+    <span class="gear" aria-hidden="true">⚙</span>
+    <div class="m-top"><div class="m-legend"><span class="m-head"></span>${legend}</div>${strips}${master}</div>
+    ${filterRow}${fxRow}${xfRow}</div>`;
+}
+
+// ---------- §1 columns ----------
+const COLS = [
+  { key: "full", title: "4-band Advanced (Full)", sub: "today · EQ 4-band, view Advanced",
+    notes: [["same", "LEVEL + 4-band EQ (HI · HM · LM · LO): 5 knob rows"], ["same", "FILTER assign row, CUE, fader 96, X-F assign row"], ["same", "Filter row X / Y and crossfader + curve"], ["add", "Knobs light when off-centre (answer 5)"]] },
+  { key: "simple", title: "4-band Simple", sub: "#46 · filters shown (default)",
+    notes: [["del", "FILTER assigns (engine: 1–2 → X, 3–4 → Y)"], ["del", "X-F assigns (THRU), crossfader, curve"], ["same", "Filter row X / Y stays; master compact"]] },
+  { key: "bare", title: "4-band Simple, filters hidden", sub: "#46 · Filters: Hide",
+    notes: [["del", "Filter row X / Y (both units off)"], ["same", "Only LEVEL, EQ, CUE, faders, master left"]] },
+  { key: "three", title: "3-band Simple", sub: "#56 · EQ 3-band, view Simple", tag: "new",
+    notes: [["add", "EQ HI · MID · LOW (3 bands, was 4)"], ["add", "FX knob per channel in the 4th EQ slot (row caption = the effect): centre off, lit off-centre"], ["add", "FX row: FILTER · ECHO · REVERB (one lit) + PARAMETER"], ["del", "Filter row X / Y, assigns, crossfader"]] },
+  { key: "threeA", title: "3-band Advanced", sub: "#56 · EQ 3-band, view Advanced", tag: "new",
+    notes: [["add", "X-F assign row and crossfader + curve, as 4-band Advanced"], ["same", "FX row as 3-band Simple; no FILTER assigns or X/Y row"]] },
+];
+const statsFor = (h) => ({ w: h - 214, r1440: Math.floor((670 - h) / 26), r1280: Math.floor((570 - h) / 26) });
+function renderColumns() {
+  const host = document.getElementById("mixers");
+  host.innerHTML = COLS.map((c) => `<div class="col">
+      <div class="col-head"><b>${c.title}${c.tag ? ' <span class="tag new">new</span>' : ""}</b><span>${c.sub}</span></div>
+      <div class="mix-dim">${mixer(c.key)}<span class="dim"><span data-h="${c.key}"></span></span></div>
+      <div class="stats" data-stats="${c.key}"></div>
+      <ul class="notes">${c.notes.map(([k, t]) => `<li class="${k}">${t}</li>`).join("")}</ul></div>`).join("");
+  // The 3-band views have no token yet: measure what their rows add up to (before any scaling).
+  for (const k of ["three", "threeA"]) VIEWS[k].h = host.querySelector(`.mixer[data-view="${k}"]`).offsetHeight;
+  COLS.forEach((c) => {
+    const h = VIEWS[c.key].h, s = statsFor(h), approx = c.key.startsWith("three") ? "~" : "";
+    host.querySelector(`[data-h="${c.key}"]`).textContent = `${approx}${h} px`;
+    host.querySelector(`[data-stats="${c.key}"]`).innerHTML =
+      `<span>mixer</span><b>${approx}${h} px</b>`
+      + `<span>waveform, 2 decks</span><b>${s.w} px</b><span>library rows</span><b>${s.r1440} @1440 · ${s.r1280} @1280</b>`;
+  });
+  for (const k of ["three", "threeA"]) {
+    const t = statsFor(VIEWS[k].h);
+    document.querySelector(`[data-h3="${k}"]`).textContent = `~${VIEWS[k].h}`;
+    document.querySelector(`[data-w3="${k}"]`).textContent = `~${t.w}`;
+    document.querySelector(`[data-r3="${k}"]`).textContent = `${t.r1440} / ${t.r1280}`;
+  }
+}
+
+// ---------- §2 / §3 frames ----------
+function deck(x, y, w, h, n) {
+  const wv = h - 214, inner = w - 12 - 44 - 6;
+  return `<div class="fb" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;background:var(--box)"></div>`
+    + `<div class="fb" style="left:${x + 6}px;top:${y + 6}px;width:${inner}px;height:40px;justify-content:flex-start;padding-left:12px">Deck ${n} · artwork · title / artist · key · BPM · time</div>`
+    + `<div class="fb wave" style="left:${x + 6}px;top:${y + 52}px;width:${inner}px;height:${wv}px">${inner} × ${wv}</div>`
+    + `<div class="fb" style="left:${x + 6}px;top:${y + 56 + wv}px;width:${inner}px;height:20px;font-size:11px">overview</div>`
+    + `<div class="fb" style="left:${x + 6}px;top:${y + 82 + wv}px;width:${inner}px;height:24px;font-size:11px">quick loop · IN OUT ½ size 2× LOOP RELOOP</div>`
+    + `<div class="fb" style="left:${x + 6}px;top:${y + 112 + wv}px;width:${inner}px;height:${h - 118 - wv}px">CUE · PLAY · pads 2 × 4 · MASTER · SYNC</div>`
+    + `<div class="fb" style="left:${x + w - 50}px;top:${y + 6}px;width:44px;height:${h - 12}px;writing-mode:vertical-rl">tempo</div>`;
+}
+// Compact deck (4 decks): header 30, waveform 66, overview 14, pads with the loop block beside them 80.
+function deckCompact(x, y, w, n) {
+  const inner = w - 12 - 44 - 6;
+  return `<div class="fb" style="left:${x}px;top:${y}px;width:${w}px;height:216px;background:var(--box)"></div>`
+    + `<div class="fb" style="left:${x + 6}px;top:${y + 6}px;width:${inner}px;height:30px;justify-content:flex-start;padding-left:12px">Deck ${n} · title · key · BPM · time</div>`
+    + `<div class="fb wave" style="left:${x + 6}px;top:${y + 42}px;width:${inner}px;height:66px">${inner} × 66</div>`
+    + `<div class="fb" style="left:${x + 6}px;top:${y + 112}px;width:${inner}px;height:14px;font-size:10px">overview</div>`
+    + `<div class="fb" style="left:${x + 6}px;top:${y + 130}px;width:${inner - 110}px;height:80px">CUE · PLAY · pads · SYNC</div>`
+    + `<div class="fb" style="left:${x + inner - 98}px;top:${y + 130}px;width:104px;height:80px;font-size:11px">loop block</div>`
+    + `<div class="fb" style="left:${x + w - 50}px;top:${y + 6}px;width:44px;height:204px;writing-mode:vertical-rl">tempo</div>`;
+}
+function chrome(decks, libTop) {
+  const rows = Math.floor((900 - libTop - 142) / 26);
+  return `<div class="fb" style="left:0;top:0;width:1440px;height:36px;justify-content:flex-start;padding-left:14px;border-radius:0">reks · Scan folder · Import · Export to USB</div>`
+    + `<div class="fb" style="left:0;top:36px;width:1440px;height:40px;justify-content:flex-start;padding-left:14px;border-radius:0">1 deck · ${decks === 2 ? '<b style="color:var(--ink)">&nbsp;2 decks&nbsp;</b> · 4 decks' : '2 decks · <b style="color:var(--ink)">&nbsp;4 decks&nbsp;</b>'} · status · Shortcuts · Start output · volume · device</div>`
+    + `<div class="fb" style="left:0;top:${libTop}px;width:234px;height:${900 - libTop}px;align-items:flex-start;padding-top:12px;border-radius:0">sidebar</div>`
+    + `<div class="fb" style="left:234px;top:${libTop}px;width:1206px;height:116px;border-radius:0">library toolbar + filters (116)</div>`
+    + `<div class="fb lib" style="left:234px;top:${libTop + 116}px;width:1206px;height:${900 - libTop - 116}px;border-radius:0"><i style="background:var(--box-2);height:26px"></i>${"<i></i>".repeat(rows)}</div>`
+    + `<div class="fb rowsnum" style="left:234px;top:${libTop + 142}px;width:1206px;height:${rows * 26}px">${rows} rows</div>`;
+}
+function frame2(viewKey) {
+  const h = VIEWS[viewKey].h, top = 82;
+  return `<div class="frame">${chrome(2, 88 + h)}${deck(12, top, 528, h, 2)}`
+    + `<div style="position:absolute;left:548px;top:${top}px">${mixer(viewKey)}</div>${deck(900, top, 528, h, 3)}</div>`;
+}
+function frame4(viewKey) {
+  const top = 82;
+  return `<div class="frame">${chrome(4, 88 + 440)}${deckCompact(12, top, 528, 1)}${deckCompact(12, top + 224, 528, 2)}`
+    + `<div class="mixwrap" style="left:548px;top:${top}px">${mixer(viewKey, { h: "auto" })}</div>`
+    + `${deckCompact(900, top, 528, 3)}${deckCompact(900, top + 224, 528, 4)}</div>`;
+}
+const CARDS = [["full", "4-band Advanced (Full)"], ["simple", "4-band Simple"], ["bare", "4-band Simple, filters hidden"], ["three", "3-band Simple"], ["threeA", "3-band Advanced"]];
+function renderFrames() {
+  document.getElementById("frames").innerHTML = CARDS.map(([k, t]) => {
+    const h = VIEWS[k].h, s = statsFor(h), approx = k.startsWith("three") ? "~" : "";
+    return `<div class="frame-card"><h3>${t}${k.startsWith("three") ? ' <span class="tag new">new</span>' : ""}</h3>
+      <div class="fit" data-fit data-w="1440"><div class="scaled">${frame2(k)}</div></div>
+      <div class="frame-cap"><span>mixer / deck <b>${approx}${h}</b></span><span>waveform <b>${s.w}</b></span><span>library <b>${s.r1440}</b> rows (<b>${s.r1280}</b> at 1280×800)</span></div></div>`;
+  }).join("");
+  document.getElementById("frames4").innerHTML = CARDS.map(([k, t]) => `<div class="frame-card"><h3>${t}${k.startsWith("three") ? ' <span class="tag new">new</span>' : ""}</h3>
+      <div class="fit" data-fit data-w="1440"><div class="scaled">${frame4(k)}</div></div>
+      <div class="frame-cap" data-cap4="${k}"></div></div>`).join("");
+  // Measure each view's natural height, then spread the spare over the row spacing.
+  document.querySelectorAll("#frames4 .mixwrap").forEach((w) => {
+    const m = w.querySelector(".mixer"), k = m.dataset.view;
+    // The faders take up to --fader-bonus (60 px), never more than the mixer has spare.
+    const bonus = k === "full" ? 0 : Math.max(0, Math.min(60, 440 - m.offsetHeight));
+    m.querySelectorAll('[style*="--len"]').forEach((e) => e.style.setProperty("--len", `${96 + bonus}px`));
+    const spare = Math.max(0, 440 - m.offsetHeight);
+    const gaps = m.querySelector(".m-strip").children.length - 1, each = spare / gaps;
+    if (spare > 0) { m.classList.add("spread"); m.style.setProperty("--h", "440px"); }
+    const sp = spare > 4 ? `+${spare} px over ${gaps} row gaps (~${each.toFixed(1)} px each)` : "none";
+    document.querySelector(`[data-cap4="${k}"]`).innerHTML = `<span>mixer <b>440</b></span><span>faders <b>${96 + bonus}</b></span><span>row spacing <b>${sp}</b></span><span>waveform <b>66</b></span><span>library <b>8</b> rows (<b>5</b> at 1280×800)</span>`;
+    const cell = document.querySelector(`[data-e4="${k}"]`);
+    if (cell) cell.textContent = `faders +${bonus}, rows +${spare} px`;
+  });
+}
+
+// ---------- §4 knob states ----------
+function stateCards(list, detent, ends) {
+  return list.map(([v, t, d]) => `<div class="state">
+      <div class="big">${knob(84, v, { bipolar: true, detent, lit: offCentre(v), label: t })}</div>
+      <div class="lpfhpf"><span>${ends[0]}</span><span>${ends[1]}</span></div>
+      <b>${t}</b><small>${d}</small></div>`).join("");
+}
+function renderStates() {
+  document.getElementById("states").innerHTML = stateCards([
+    [0.5, "Centre: off", "No arc, unlit. Detent tick at 12 o'clock."],
+    [0.32, "LPF, a little", "Lit. Arc from centre to the left."],
+    [0.0, "LPF, full", "Lit. Only the lows left."],
+    [0.68, "HPF, a little", "Lit. Arc from centre to the right."],
+    [1.0, "HPF, full", "Lit. Only the highs left."],
+    [0.51, "Inside the dead zone", "0.485–0.515 counts as centre: off, unlit."],
+  ], true, ["LPF", "HPF"]);
+  document.getElementById("states-eq").innerHTML = stateCards([
+    [0.5, "Flat", "Unlit, as today."],
+    [0.15, "Cut", "Lit. Same look as FILTER."],
+    [0.0, "Full cut", "Lit."],
+    [0.7, "Boost", "Lit."],
+  ], false, ["cut", "boost"]);
+}
+
+// ---------- §5 effect select ----------
+function renderFx() {
+  document.getElementById("fx-rows").innerHTML = FX.map((e) => `<div style="display:flex;flex-direction:column;gap:6px"><h3>${e} selected</h3>${mixer("three", { fx: e })}</div>`).join("");
+}
+
+// ---------- fit-to-width ----------
+function fitAll() {
+  document.querySelectorAll("[data-fit]").forEach((box) => {
+    const inner = box.firstElementChild, cs = getComputedStyle(box);
+    inner.style.transform = "";
+    const natural = Number(box.dataset.w) || inner.scrollWidth;
+    const avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const s = Math.min(1, avail / natural);
+    inner.style.transform = `scale(${s})`;
+    inner.style.width = `${natural}px`;
+    if (inner.querySelector("#mixers")) document.getElementById("scale-note").textContent = s < 1 ? `shown at ${Math.round(s * 100)} %` : "1:1";
+    box.style.height = `${inner.scrollHeight * s + (box.offsetHeight - box.clientHeight) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)}px`;
+  });
+}
+
+// ---------- theme toggle ----------
+document.querySelectorAll("[data-theme-btn]").forEach((b) => b.addEventListener("click", () => {
+  const t = b.dataset.themeBtn;
+  if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.dataset.theme = t;
+  document.querySelectorAll("[data-theme-btn]").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+}));
+
+renderColumns();
+renderFrames();
+renderStates();
+renderFx();
+fitAll();
+window.addEventListener("resize", fitAll);
+</script>
+</body>
+</html>

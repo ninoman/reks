@@ -779,7 +779,16 @@ export type ChannelParam =
   | "filterAssign"
   /** 0 = X, 0.5 = off (direct), 1 = Y. */
   | "xfadeAssign"
-  | "cue";
+  | "cue"
+  /** The 3-band EQ (0.5 flat); the 4-band EQ and this one run in series, one of them at noon. */
+  | "eq3Hi"
+  | "eq3Mid"
+  | "eq3Lo"
+  /** The channel FX knob: 0.5 off, left and right per `FxKind`. */
+  | "fx";
+
+/** The effect every channel's FX knob drives (one for the mixer). */
+export type FxKind = "filter" | "echo" | "reverb";
 
 export type FilterUnit = "x" | "y";
 
@@ -835,6 +844,10 @@ export type MixControl =
   | { type: "channel"; ch: number; param: ChannelParam; value: number }
   | { type: "filter"; unit: FilterUnit; param: FilterParam; value: number }
   | { type: "crossfader"; pos: number; curve: number }
+  /** FX select: the effect of every channel's FX knob. */
+  | { type: "channelFx"; kind: FxKind }
+  /** PARAMETER, 0..1: resonance, feedback or decay, by the selected effect. */
+  | { type: "fxParameter"; value: number }
   | { type: "master"; param: MasterParam; value: number }
   /** The player's volume slider, 0..1 (squared taper in Rust), on top of the master level. */
   | { type: "volume"; value: number };
@@ -898,6 +911,9 @@ export type MixerView = "simple" | "advanced";
 /** Whether the simple mixer view shows the filter units (Advanced shows everything). */
 export type MixerFilters = "show" | "hide";
 
+/** The mixer's EQ layout: 4-band with the X/Y filters, or 3-band with the channel FX. */
+export type MixerEq = "fourBand" | "threeBand";
+
 /** Library window state kept across launches. */
 export interface UiState {
   /** Hidden column ids; `null` until changed (UI defaults). */
@@ -922,6 +938,7 @@ export interface Settings {
   deckWaveform: DeckWaveform;
   theme: Theme;
   syncAlign: SyncAlign;
+  mixerEq: MixerEq;
   mixerView: MixerView;
   mixerFilters: MixerFilters;
   /** The cache dir in use. */
@@ -943,6 +960,7 @@ export interface SettingsPatch {
   deckWaveform?: DeckWaveform;
   theme?: Theme;
   syncAlign?: SyncAlign;
+  mixerEq?: MixerEq;
   mixerView?: MixerView;
   mixerFilters?: MixerFilters;
   ui?: UiState;

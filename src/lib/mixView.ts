@@ -3,7 +3,16 @@
  * mixer laws are in Rust, `reks-mix`).
  */
 
-import type { CueRouting, DeckView, FilterUnit, MixerFilters, MixerView, MixState } from "./ipc";
+import type {
+  CueRouting,
+  DeckView,
+  FilterUnit,
+  FxKind,
+  MixerEq,
+  MixerFilters,
+  MixerView,
+  MixState,
+} from "./ipc";
 
 /**
  * Tempo fader ranges (CDJ-3000), as a fraction either side of 1. WIDE is
@@ -324,30 +333,49 @@ export function loopBlockState(
   };
 }
 
-/** The mixer's look: Simple hides the crossfader and the assign rows; `filters` only matters in Simple. */
+/**
+ * The mixer's look: the EQ layout, and Simple, which hides the crossfader and
+ * the assign rows; `filters` only matters in 4-band Simple.
+ */
 export interface MixerLook {
+  eq: MixerEq;
   view: MixerView;
   filters: MixerFilters;
 }
 
-export const DEFAULT_LOOK: MixerLook = { view: "simple", filters: "show" };
+export const DEFAULT_LOOK: MixerLook = { eq: "fourBand", view: "simple", filters: "show" };
 
 /** Which rows of the mixer are on screen. */
 export interface MixerParts {
-  /** The FILTER and X-F assign rows of every strip, and the crossfader row. */
-  assigns: boolean;
+  /** HI · MID · LOW · FX knob rows and the FX row, in place of the 4-band EQ, the X/Y units and FILTER assigns. */
+  threeBand: boolean;
+  /** Every strip's FILTER assign row (4-band Advanced). */
+  filterAssigns: boolean;
+  /** Every strip's X-F assign row, and the crossfader row (Advanced). */
+  crossfader: boolean;
+  /** Filter units X and Y. */
   filterRow: boolean;
 }
 
 export function mixerParts(look: MixerLook): MixerParts {
   const advanced = look.view === "advanced";
-  return { assigns: advanced, filterRow: advanced || look.filters === "show" };
+  const threeBand = look.eq === "threeBand";
+  return {
+    threeBand,
+    filterAssigns: advanced && !threeBand,
+    crossfader: advanced,
+    filterRow: !threeBand && (advanced || look.filters === "show"),
+  };
 }
 
-/** The mixer's height class (`--mixer-h` per `data-mixer` in tokens.css): 440 / 356 / 292 px. */
-export type MixerSize = "advanced" | "simple" | "simple-bare";
+/**
+ * The mixer's height class (`--mixer-h` per `data-mixer` in tokens.css): 4-band
+ * 440 / 356 / 292 px, 3-band 393 / 333 px.
+ */
+export type MixerSize = "advanced" | "simple" | "simple-bare" | "three-advanced" | "three";
 
 export function mixerSize(look: MixerLook): MixerSize {
+  if (look.eq === "threeBand") return look.view === "advanced" ? "three-advanced" : "three";
   if (look.view === "advanced") return "advanced";
   return look.filters === "show" ? "simple" : "simple-bare";
 }
@@ -357,32 +385,68 @@ export function defaultFilterAssign(ch: number): Assign {
   return ch < 2 ? "x" : "y";
 }
 
+/** The FX knob's dead zone either side of centre (0.485–0.515 is off), as reks-mix `taper` has it. */
+export const FX_DEAD_ZONE = 0.015;
+
+/** Whether a bipolar knob is off centre (lit); `zone` is a dead zone that still counts as centre. */
+export function offCentre(value: number, zone = 0): boolean {
+  return Math.abs(value - 0.5) > zone + 1e-6;
+}
+
+/** The effects of the FX select, in button order. */
+export const FX_KINDS: readonly FxKind[] = ["filter", "echo", "reverb"];
+
+const FX_LABEL: Record<FxKind, { name: string; parameter: string }> = {
+  filter: { name: "Filter", parameter: "Resonance" },
+  echo: { name: "Echo", parameter: "Feedback" },
+  reverb: { name: "Reverb", parameter: "Decay" },
+};
+
+/** The effect's name: the FX select button and the FX knob row's caption. */
+export function fxName(kind: FxKind): string {
+  return FX_LABEL[kind].name;
+}
+
+/** What PARAMETER sets for the effect, its caption. */
+export function fxParameterName(kind: FxKind): string {
+  return FX_LABEL[kind].parameter;
+}
+
+/** The 4-band EQ knobs, at noon in 3-band. */
+const NEUTRAL_FOUR_BAND = { eqHi: 0.5, eqMid1: 0.5, eqMid2: 0.5, eqLo: 0.5 } as const;
+/** The 3-band EQ and FX knobs, at noon in 4-band. */
+const NEUTRAL_THREE_BAND = { eq3Hi: 0.5, eq3Mid: 0.5, eq3Lo: 0.5, fx: 0.5 } as const;
+
+/** The channel values `effectiveMix` stands in for. */
+export type MixChannel = { -readonly [K in keyof typeof NEUTRAL_FOUR_BAND]: number } & {
+  -readonly [K in keyof typeof NEUTRAL_THREE_BAND]: number;
+} & { filterAssign: Assign; xfadeAssign: Assign };
+
 /** The values the engine takes; the user's own positions stay where they are. */
-export interface MixerValues<
-  C extends { filterAssign: Assign; xfadeAssign: Assign },
-  F extends { on: boolean },
-> {
+export interface MixerValues<C extends MixChannel, F extends { on: boolean }> {
   channels: C[];
   filters: Record<FilterUnit, F>;
 }
 
 /**
- * What the engine gets while controls are hidden: Simple puts the default
- * filter assigns and THRU (crossfader off) on every channel; with the filters
- * hidden too, both filter units are off. Advanced passes the values as they are.
+ * What the engine gets while controls are hidden: the other EQ layout's knobs
+ * at noon (each layout keeps its own positions); without FILTER assigns, the
+ * default assigns; without the crossfader, THRU on every channel; without
+ * the filter row, both filter units off. 4-band Advanced passes the values
+ * as they are, bar the 3-band knobs.
  */
-export function effectiveMix<
-  C extends { filterAssign: Assign; xfadeAssign: Assign },
-  F extends { on: boolean },
->(values: MixerValues<C, F>, look: MixerLook): MixerValues<C, F> {
+export function effectiveMix<C extends MixChannel, F extends { on: boolean }>(
+  values: MixerValues<C, F>,
+  look: MixerLook,
+): MixerValues<C, F> {
   const parts = mixerParts(look);
-  const channels = parts.assigns
-    ? values.channels
-    : values.channels.map((c, ch) => ({
-        ...c,
-        filterAssign: defaultFilterAssign(ch),
-        xfadeAssign: "off" as const,
-      }));
+  const neutral = parts.threeBand ? NEUTRAL_FOUR_BAND : NEUTRAL_THREE_BAND;
+  const channels = values.channels.map((c, ch) => ({
+    ...c,
+    ...neutral,
+    filterAssign: parts.filterAssigns ? c.filterAssign : defaultFilterAssign(ch),
+    xfadeAssign: parts.crossfader ? c.xfadeAssign : ("off" as const),
+  }));
   const filters = parts.filterRow
     ? values.filters
     : { x: { ...values.filters.x, on: false }, y: { ...values.filters.y, on: false } };

@@ -674,6 +674,46 @@ spec: [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md),
 sources with dates in its §3. Proposal only; no published usability guidance
 on waveform or knob sizes was found.
 
+### 9.5 DJM 3-band EQ and Sound Color FX (2026-10-23)
+
+For the 3-band EQ layout (issue #56): EQ, FX knob, effect select and PARAMETER. Spec: [`research/djm-eq-fx.md`](research/djm-eq-fx.md).
+Not checked on a real DJM.
+
+- Channel EQ, all three bands −26 / +6 dB, with an EQ CURVE switch
+  (ISOLATOR / EQ). Each band has a frequency printed next to it: DJM-900nexus
+  HI 13 kHz, MID 1 kHz, LOW 70 Hz (operating instructions, spec page; copy at
+  http://www.revolution.pt/pdfs/djm900n.pdf). DJM-900NXS2 HI 30 kHz, MID 1 kHz,
+  LOW 20 Hz (operating instructions 2015, "Adjusting the sound"; French copy at
+  http://www.la-bs.com/Objets/DJM-900NXS2_me.pdf). DJM-A9 HI 20 kHz, MID 1 kHz,
+  LOW 20 Hz (instruction manual, "Channel equalizer characteristic"; copy at
+  https://cdn01.4wall.com/cms/rentals/files/f6835eb526b3d2.pdf). The isolator
+  range, −∞ / +6 dB, appears in retailer spec sheets only (e.g.
+  https://www.scan.co.uk/products/pioneer-djm900-nexus-mk2-4ch-pro-dj-mixer-for-cdj900nxs-2000nxs-64-bit-mixing-processor-4-phono-inpu).
+  No source gives corner frequencies, slopes or Q. The 70 Hz / 1 kHz / 13 kHz
+  "crossover" figures on forums are disputed in the same threads
+  (https://forum.djtechtools.com/showthread.php?t=45205,
+  https://forum.djtechtools.com/showthread.php?t=24558): **UNVERIFIED**.
+- Sound Color FX (NXS2 and A9 manuals above): SPACE, DUB ECHO, SWEEP, NOISE,
+  CRUSH, FILTER. One effect is selected for CH1–CH4; each channel's COLOR
+  knob sets it and one PARAMETER knob sets resonance, feedback, frequency or level.
+  FILTER: counterclockwise lowers the LPF cutoff, clockwise raises the HPF
+  cutoff, PARAMETER = resonance. SWEEP is gate / band-pass on the NXS2 and
+  notch / band-pass on the A9. The DJM-900nexus had GATE/COMP in its place.
+  The A9 adds CENTER LOCK (the knob stops at centre on a quick turn). No
+  cutoff range, slope or resonance figure is published. Owners report the
+  NXS-series filter resonance as very high near 2–3 o'clock, which Pioneer
+  says is by design
+  (https://forums.pioneerdj.com/hc/en-us/community/posts/205869885-Adjust-DJM-900-Filter-Resonance).
+- Open reference for a 3-band DJ EQ: Mixxx splits at 246 Hz and 2.5 kHz by
+  default, as shelves plus a band (Mixxx 2.5 manual, "Equalizers",
+  https://manual.mixxx.org/2.5/en/chapters/preferences/equalizers).
+- Reverb: Freeverb, Jezar at Dreampoint, 2000, released into the public
+  domain; structure and tunings as published in J. O. Smith, *Physical
+  Audio Signal Processing*, "Freeverb" (CCRMA, online edition,
+  https://ccrma.stanford.edu/~jos/pasp/Freeverb.html, read 2026-10-23).
+- Shelf design: A. Simper, "Linear Trapezoidal Integrated SVF" (Cytomic,
+  2013, https://cytomic.com/technical-papers), the same paper as our SVF.
+
 ---
 
 ## 10. Play history and playlist dividers (Phases 2 and 2.5)

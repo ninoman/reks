@@ -24,7 +24,12 @@ impl SvfCoeffs {
     /// `fc` is clamped below Nyquist so `tan` stays finite.
     pub fn new(fc: f64, k: f64, sample_rate: f64) -> Self {
         let fc = fc.clamp(1.0, 0.49 * sample_rate);
-        let g = (PI * fc / sample_rate).tan();
+        Self::with_g((PI * fc / sample_rate).tan(), k)
+    }
+
+    /// From the prewarped integrator gain `g = tan(π·fc/fs)` directly; the
+    /// shelves scale `g` by √A rather than the cutoff.
+    pub fn with_g(g: f64, k: f64) -> Self {
         let a1 = 1.0 / (1.0 + g * (g + k));
         let a2 = g * a1;
         Self {

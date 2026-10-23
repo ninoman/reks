@@ -236,6 +236,17 @@ impl Deck {
         self.step = crate::varispeed::clamp_step(step);
     }
 
+    /// Output frames per beat at the playhead and the current speed, for the
+    /// channel echo; `None` without a grid or while held.
+    pub(crate) fn beat_frames(&self) -> Option<f64> {
+        let step = self.step();
+        if step <= 0.0 {
+            return None;
+        }
+        let period = self.src.as_ref()?.beats().period_at(self.position())?;
+        Some(period / step)
+    }
+
     /// Length of the active loop in beats; `None` without a loop or a grid.
     pub(crate) fn loop_beats(&self) -> Option<f64> {
         self.looping.and_then(|l| l.beats)
@@ -398,6 +409,8 @@ impl Deck {
             Control::TakeMaster { .. }
             | Control::Channel { .. }
             | Control::Filter { .. }
+            | Control::ChannelFx { .. }
+            | Control::FxParameter { .. }
             | Control::Crossfader { .. }
             | Control::Master { .. }
             | Control::Volume { .. } => None,

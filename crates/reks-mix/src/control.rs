@@ -175,6 +175,15 @@ pub enum Control {
         param: FilterParam,
         value: f32,
     },
+    /// The effect every channel's FX knob drives (3-band layout).
+    ChannelFx {
+        kind: FxKind,
+    },
+    /// The mixer-wide PARAMETER knob of the channel FX, 0..=1: FILTER
+    /// resonance, ECHO feedback or REVERB decay.
+    FxParameter {
+        value: f32,
+    },
     /// Crossfader position and curve (0 progressive, 1 near-instant cut).
     Crossfader {
         pos: f32,
@@ -222,6 +231,8 @@ impl Control {
             Self::TakeMaster { .. }
             | Self::Channel { .. }
             | Self::Filter { .. }
+            | Self::ChannelFx { .. }
+            | Self::FxParameter { .. }
             | Self::Crossfader { .. }
             | Self::Master { .. }
             | Self::Volume { .. } => None,
@@ -237,6 +248,13 @@ pub enum ChannelParam {
     EqMid1,
     EqMid2,
     EqLo,
+    /// 3-band EQ (`docs/research/djm-eq-fx.md` §2), 0.5 flat. Runs in series
+    /// with the 4-band EQ; the hidden layout's knobs sit at noon.
+    Eq3Hi,
+    Eq3Mid,
+    Eq3Lo,
+    /// Channel FX knob: 0 full left, 0.5 off, 1 full right.
+    Fx,
     Fader,
     /// 0 = X, 0.5 = off, 1 = Y.
     FilterAssign,
@@ -244,6 +262,18 @@ pub enum ChannelParam {
     XfadeAssign,
     /// 0 = off, 1 = on.
     Cue,
+}
+
+/// The channel FX effects (`docs/research/djm-eq-fx.md` §3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FxKind {
+    /// Left low-pass, right high-pass.
+    #[default]
+    Filter,
+    /// Left echo on the mids, right on the highs.
+    Echo,
+    /// Left reverb on the mids and lows, right on the mids and highs.
+    Reverb,
 }
 
 /// One of the two filter units.

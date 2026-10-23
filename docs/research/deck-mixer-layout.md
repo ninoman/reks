@@ -9,6 +9,10 @@ status proposed). The quick-loop scope needs a D21 amendment, recorded in
 - Wireframes (to scale; concept × 1/2/4 decks × 1280/1440/1920):
   <https://claude.ai/artifact/7CQDMaXzUJrWAKFzy1wZmu>. Source:
   [`wireframes/deck-mixer-layout.html`](wireframes/deck-mixer-layout.html).
+- Wireframe for #56, the 3-band mixer (Simple and Advanced) next to Full and Simple
+  (to scale, 2 and 4 decks, light and dark, maintainer answers):
+  <https://claude.ai/artifact/5akPftFpBaHN3xjNzxSp8V>. Source:
+  [`../wireframes/mix-view-56.html`](../wireframes/mix-view-56.html).
 - Current layout: [`../ui.md`](../ui.md#mix-panel-phase-5) and phase 5 tasks
   9, 12–18.
 
@@ -564,6 +568,9 @@ Constraints:
 
 ## 8. Decision impact
 
+- The 3-band EQ layout (§9) adds blocks to the D21 mixer and changes none.
+  Record it under D21 as proposed when it is built.
+
 - D21 accepts beat loops as preparation and says "loop rolls, slip mode and
   saved loops still need a decision". Manual IN/OUT, reloop and
   halve/double are a scope extension. They are recorded in D21 as
@@ -573,3 +580,21 @@ Constraints:
   They are noted under D21 with the spec in §6 as proposed.
 - No other decision conflicts. D30 (1-deck player) and D26 (UI system) are
   unchanged. Concept C's folded rail would need a line in `ui.md` only.
+
+## 9. Three-band EQ layout (issue #56)
+
+An EQ layout setting, research 2026-10-23: 3-band gives a 3-band EQ (HI ·
+MID · LOW), an FX knob per channel in the fourth knob slot, and an effect
+selector with a PARAMETER knob, in place of the X/Y filters and FILTER
+assigns. Mixer view Simple · Advanced (§6) applies to both layouts. Full engine spec, curves and tests:
+[`djm-eq-fx.md`](djm-eq-fx.md). In short:
+
+| | Value |
+|---|---|
+| Settings | new EQ 4-band · 3-band (`mix.mixer_eq`); Mixer view Simple · Advanced for both; Filters show/hide only in 4-band Simple |
+| EQ | LOW shelf 250 Hz, MID bell 1 kHz (Q 0.7), HI shelf 3 kHz; −26 / +6 dB each (corners and Q **UNVERIFIED**) |
+| FX knob (per channel) | centre off, dead zone 0.485–0.515; FILTER: left LP 20 kHz → 50 Hz, right HP 20 Hz → 10 kHz; ECHO: mids left, highs right; REVERB: mids+lows left, mids+highs right (figures **UNVERIFIED**) |
+| FX select, PARAMETER | one for the mixer: FILTER · ECHO · REVERB; PARAMETER = resonance, feedback or decay |
+| Hidden controls | 4-band EQ at noon, X/Y filters off, FILTER assigns default; in Simple also THRU, as in §6 |
+| Crossfader, X C V | 3-band Advanced only |
+| Mixer height (2 decks) | ~333 px Simple, ~393 px Advanced (wireframe #58) |

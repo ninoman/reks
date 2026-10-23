@@ -1,25 +1,31 @@
 import { describe, expect, it } from "vitest";
 
-import type { CueRouting, DeckView, MixState } from "./ipc";
+import type { CueRouting, DeckView, MixerEq, MixerFilters, MixerView, MixState } from "./ipc";
 import {
   cueFits,
   deckSide,
   effectiveMix,
+  FX_DEAD_ZONE,
+  FX_KINDS,
   formatBeats,
   formatClock,
   formatLoopBeats,
   formatLoopSeconds,
   formatTempo,
+  fxName,
+  fxParameterName,
   JUMP_PAGES,
   LOOP_PAGES,
   LOOP_SIZE_MAX,
   LOOP_SIZE_MIN,
   loopBlockState,
   loopPadControls,
+  type MixerLook,
   mixerParts,
   mixerSize,
   nextPadMode,
   nextTempoRange,
+  offCentre,
   outputSummary,
   phaseOffset,
   pickSwitches,
@@ -309,59 +315,164 @@ describe("loopBlockState", () => {
 });
 
 describe("effectiveMix", () => {
+  const knobs = {
+    eqHi: 0.1,
+    eqMid1: 0.2,
+    eqMid2: 0.3,
+    eqLo: 0.4,
+    eq3Hi: 0.6,
+    eq3Mid: 0.7,
+    eq3Lo: 0.8,
+    fx: 0.9,
+  };
   const values = {
     channels: [0, 1, 2, 3].map(() => ({
+      ...knobs,
       filterAssign: "off" as const,
       xfadeAssign: "y" as const,
       fader: 0.3,
     })),
     filters: { x: { on: true, freq: 0.2 }, y: { on: true, freq: 0.8 } },
   };
-
-  it("passes Advanced through, whatever the filters setting", () => {
-    expect(effectiveMix(values, { view: "advanced", filters: "hide" })).toEqual(values);
+  const four = { eqHi: 0.1, eqMid1: 0.2, eqMid2: 0.3, eqLo: 0.4 };
+  const fourFlat = { eqHi: 0.5, eqMid1: 0.5, eqMid2: 0.5, eqLo: 0.5 };
+  const three = { eq3Hi: 0.6, eq3Mid: 0.7, eq3Lo: 0.8, fx: 0.9 };
+  const threeFlat = { eq3Hi: 0.5, eq3Mid: 0.5, eq3Lo: 0.5, fx: 0.5 };
+  const look = (eq: MixerEq, view: MixerView, filters: MixerFilters = "show"): MixerLook => ({
+    eq,
+    view,
+    filters,
+  });
+  const assigns = (e: { channels: { filterAssign: string; xfadeAssign: string }[] }) => ({
+    filter: e.channels.map((c) => c.filterAssign),
+    xfade: e.channels.map((c) => c.xfadeAssign),
   });
 
-  it("Simple: default filter assigns and THRU, filters as they are", () => {
-    const e = effectiveMix(values, { view: "simple", filters: "show" });
-    expect(e.channels.map((c) => c.filterAssign)).toEqual(["x", "x", "y", "y"]);
-    expect(e.channels.map((c) => c.xfadeAssign)).toEqual(["off", "off", "off", "off"]);
-    expect(e.channels.map((c) => c.fader)).toEqual([0.3, 0.3, 0.3, 0.3]);
+  it("4-band Advanced: as stored, the 3-band knobs at noon, whatever the filters setting", () => {
+    for (const filters of ["show", "hide"] as const) {
+      const e = effectiveMix(values, look("fourBand", "advanced", filters));
+      for (const c of e.channels) expect(c).toMatchObject({ ...four, ...threeFlat, fader: 0.3 });
+      expect(assigns(e)).toEqual({
+        filter: ["off", "off", "off", "off"],
+        xfade: ["y", "y", "y", "y"],
+      });
+      expect(e.filters).toBe(values.filters);
+    }
+  });
+
+  it("4-band Simple: default filter assigns and THRU, filters as they are", () => {
+    const e = effectiveMix(values, look("fourBand", "simple"));
+    for (const c of e.channels) expect(c).toMatchObject({ ...four, ...threeFlat, fader: 0.3 });
+    expect(assigns(e)).toEqual({
+      filter: ["x", "x", "y", "y"],
+      xfade: ["off", "off", "off", "off"],
+    });
     expect(e.filters).toBe(values.filters);
   });
 
-  it("Simple with the filters hidden: both units off, their other values kept", () => {
-    const e = effectiveMix(values, { view: "simple", filters: "hide" });
+  it("4-band Simple with the filters hidden: both units off, their other values kept", () => {
+    const e = effectiveMix(values, look("fourBand", "simple", "hide"));
     expect(e.filters.x).toEqual({ on: false, freq: 0.2 });
     expect(e.filters.y).toEqual({ on: false, freq: 0.8 });
   });
 
+  it("3-band Simple: 3-band knobs as stored, 4-band EQ at noon, filters off, default assigns, THRU", () => {
+    for (const filters of ["show", "hide"] as const) {
+      const e = effectiveMix(values, look("threeBand", "simple", filters));
+      for (const c of e.channels) expect(c).toMatchObject({ ...fourFlat, ...three, fader: 0.3 });
+      expect(assigns(e)).toEqual({
+        filter: ["x", "x", "y", "y"],
+        xfade: ["off", "off", "off", "off"],
+      });
+      expect(e.filters.x).toEqual({ on: false, freq: 0.2 });
+      expect(e.filters.y).toEqual({ on: false, freq: 0.8 });
+    }
+  });
+
+  it("3-band Advanced: as 3-band Simple, but the stored crossfader assigns", () => {
+    const e = effectiveMix(values, look("threeBand", "advanced"));
+    for (const c of e.channels) expect(c).toMatchObject({ ...fourFlat, ...three, fader: 0.3 });
+    expect(assigns(e)).toEqual({ filter: ["x", "x", "y", "y"], xfade: ["y", "y", "y", "y"] });
+    expect(e.filters.x.on).toBe(false);
+    expect(e.filters.y.on).toBe(false);
+  });
+
+  it("keeps each layout's positions: switching back sends them again", () => {
+    const there = effectiveMix(values, look("threeBand", "simple"));
+    const back = effectiveMix(values, look("fourBand", "simple"));
+    expect(there.channels[0]).toMatchObject(three);
+    expect(back.channels[0]).toMatchObject(four);
+  });
+
   it("leaves the stored values alone", () => {
-    effectiveMix(values, { view: "simple", filters: "hide" });
-    expect(values.channels[0]?.xfadeAssign).toBe("y");
+    effectiveMix(values, look("threeBand", "simple", "hide"));
+    expect(values.channels[0]).toMatchObject({ ...knobs, xfadeAssign: "y", filterAssign: "off" });
     expect(values.filters.x.on).toBe(true);
   });
 });
 
 describe("mixer parts and size", () => {
-  it("shows the assign rows and crossfader in Advanced only; the filter row unless hidden in Simple", () => {
-    expect(mixerParts({ view: "advanced", filters: "hide" })).toEqual({
-      assigns: true,
+  it("4-band: assign rows and crossfader in Advanced only; the filter row unless hidden in Simple", () => {
+    expect(mixerParts({ eq: "fourBand", view: "advanced", filters: "hide" })).toEqual({
+      threeBand: false,
+      filterAssigns: true,
+      crossfader: true,
       filterRow: true,
     });
-    expect(mixerParts({ view: "simple", filters: "show" })).toEqual({
-      assigns: false,
+    expect(mixerParts({ eq: "fourBand", view: "simple", filters: "show" })).toEqual({
+      threeBand: false,
+      filterAssigns: false,
+      crossfader: false,
       filterRow: true,
     });
-    expect(mixerParts({ view: "simple", filters: "hide" })).toEqual({
-      assigns: false,
+    expect(mixerParts({ eq: "fourBand", view: "simple", filters: "hide" })).toEqual({
+      threeBand: false,
+      filterAssigns: false,
+      crossfader: false,
       filterRow: false,
     });
   });
 
+  it("3-band: no filter row or FILTER assigns; Advanced adds the crossfader", () => {
+    for (const filters of ["show", "hide"] as const) {
+      expect(mixerParts({ eq: "threeBand", view: "simple", filters })).toEqual({
+        threeBand: true,
+        filterAssigns: false,
+        crossfader: false,
+        filterRow: false,
+      });
+      expect(mixerParts({ eq: "threeBand", view: "advanced", filters })).toEqual({
+        threeBand: true,
+        filterAssigns: false,
+        crossfader: true,
+        filterRow: false,
+      });
+    }
+  });
+
   it("names the height class", () => {
-    expect(mixerSize({ view: "advanced", filters: "hide" })).toBe("advanced");
-    expect(mixerSize({ view: "simple", filters: "show" })).toBe("simple");
-    expect(mixerSize({ view: "simple", filters: "hide" })).toBe("simple-bare");
+    expect(mixerSize({ eq: "fourBand", view: "advanced", filters: "hide" })).toBe("advanced");
+    expect(mixerSize({ eq: "fourBand", view: "simple", filters: "show" })).toBe("simple");
+    expect(mixerSize({ eq: "fourBand", view: "simple", filters: "hide" })).toBe("simple-bare");
+    expect(mixerSize({ eq: "threeBand", view: "simple", filters: "hide" })).toBe("three");
+    expect(mixerSize({ eq: "threeBand", view: "advanced", filters: "show" })).toBe(
+      "three-advanced",
+    );
+  });
+});
+
+describe("channel FX labels and knob light", () => {
+  it("names each effect and what PARAMETER sets for it", () => {
+    expect(FX_KINDS.map(fxName)).toEqual(["Filter", "Echo", "Reverb"]);
+    expect(FX_KINDS.map(fxParameterName)).toEqual(["Resonance", "Feedback", "Decay"]);
+  });
+
+  it("lights a knob off centre; the FX knob only outside its dead zone", () => {
+    expect(offCentre(0.5)).toBe(false);
+    expect(offCentre(0.51)).toBe(true);
+    expect(offCentre(0.49, FX_DEAD_ZONE)).toBe(false);
+    expect(offCentre(0.515, FX_DEAD_ZONE)).toBe(false);
+    expect(offCentre(0.52, FX_DEAD_ZONE)).toBe(true);
+    expect(offCentre(0.48, FX_DEAD_ZONE)).toBe(true);
   });
 });

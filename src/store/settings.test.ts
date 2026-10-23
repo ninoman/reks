@@ -25,6 +25,7 @@ const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
   deckWaveform: "rgb",
   theme: "graphite",
   syncAlign: "bar",
+  mixerEq: "fourBand",
   mixerView: "simple",
   mixerFilters: "show",
   cacheDir: "/cache",

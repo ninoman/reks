@@ -70,8 +70,8 @@ const SHORTCUTS: [string, string][] = [
 ];
 
 export function ShortcutHelp() {
-  // The Simple mixer view has no crossfader, so its keys do nothing.
-  const crossfader = useMix((s) => mixerParts(s.look).assigns);
+  // The Simple mixer view (either EQ layout) has no crossfader, so its keys do nothing.
+  const crossfader = useMix((s) => mixerParts(s.look).crossfader);
   const rows = crossfader ? SHORTCUTS : SHORTCUTS.filter((row) => row !== CROSSFADER_ROW);
   return (
     <Popover>

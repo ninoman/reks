@@ -113,6 +113,98 @@ pub fn resonance_q(value: f32) -> f32 {
     RESONANCE_MIN_Q * (RESONANCE_MAX_Q / RESONANCE_MIN_Q).powf(v * v)
 }
 
+/// Range of the 3-band EQ (DJM-900NXS2 / A9 EQ mode, R§9.5).
+pub const EQ3_CUT_DB: f32 = -26.0;
+pub const EQ3_BOOST_DB: f32 = 6.0;
+
+/// 3-band EQ gain in dB: linear in dB on each side of noon, −26 dB fully
+/// anticlockwise, 0 at noon, +6 dB fully clockwise. UNVERIFIED shape.
+pub fn eq3_db(value: f32) -> f32 {
+    let v = unit(value, 0.5);
+    if v >= 0.5 {
+        EQ3_BOOST_DB * (2.0 * v - 1.0)
+    } else {
+        EQ3_CUT_DB * (1.0 - 2.0 * v)
+    }
+}
+
+/// Dead zone of the channel FX knob either side of centre, as a fraction of
+/// the half travel (0.485–0.515 of the knob): the software CENTER LOCK.
+pub const FX_DEAD_ZONE: f32 = 0.03;
+
+/// Which way a channel FX knob is turned and how far past the dead zone.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FxSend {
+    /// −1 left, 0 centre, 1 right.
+    pub side: f32,
+    /// 0 in the dead zone, 1 at either end.
+    pub amount: f32,
+}
+
+/// The channel FX knob law shared by every effect (`docs/research/djm-eq-fx.md` §3).
+pub fn fx_send(value: f32) -> FxSend {
+    let d = 2.0 * unit(value, 0.5) - 1.0;
+    let amount = ((d.abs() - FX_DEAD_ZONE) / (1.0 - FX_DEAD_ZONE)).clamp(0.0, 1.0);
+    let side = if amount == 0.0 { 0.0 } else { d.signum() };
+    FxSend { side, amount }
+}
+
+/// Channel filter cutoff ends: full low-pass and full high-pass. UNVERIFIED
+/// (no DJM figure); chosen so full travel leaves a rumble or a thin top.
+pub const CH_FILTER_LP_END_HZ: f32 = 50.0;
+pub const CH_FILTER_HP_END_HZ: f32 = 10_000.0;
+const CH_FILTER_OPEN_LP_HZ: f32 = 20_000.0;
+const CH_FILTER_OPEN_HP_HZ: f32 = 20.0;
+
+/// The channel filter's settings for one knob position and PARAMETER.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChannelFilter {
+    pub lp_hz: f32,
+    pub lp_q: f32,
+    pub hp_hz: f32,
+    pub hp_q: f32,
+    /// Filtered share of the output; fades in over the first 5% past the
+    /// dead zone so leaving centre is flat.
+    pub wet: f32,
+}
+
+/// Channel filter law: left closes a low-pass, right opens a high-pass,
+/// exponential in Hz; resonance by [`resonance_q`] of PARAMETER, faded in
+/// over the first fifth of the travel.
+pub fn channel_filter(value: f32, parameter: f32) -> ChannelFilter {
+    let s = fx_send(value);
+    let t = s.amount;
+    let q_res = resonance_q(parameter);
+    let moving_q = RESONANCE_MIN_Q + (q_res - RESONANCE_MIN_Q) * (t / 0.2).min(1.0);
+    let lp = s.side < 0.0;
+    let hp = s.side > 0.0;
+    ChannelFilter {
+        lp_hz: if lp {
+            CH_FILTER_OPEN_LP_HZ * (CH_FILTER_LP_END_HZ / CH_FILTER_OPEN_LP_HZ).powf(t)
+        } else {
+            CH_FILTER_OPEN_LP_HZ
+        },
+        lp_q: if lp { moving_q } else { RESONANCE_MIN_Q },
+        hp_hz: if hp {
+            CH_FILTER_OPEN_HP_HZ * (CH_FILTER_HP_END_HZ / CH_FILTER_OPEN_HP_HZ).powf(t)
+        } else {
+            CH_FILTER_OPEN_HP_HZ
+        },
+        hp_q: if hp { moving_q } else { RESONANCE_MIN_Q },
+        wet: (t / 0.05).min(1.0),
+    }
+}
+
+/// ECHO feedback per repeat from PARAMETER: 0.3 … 0.9, 0.6 at noon. UNVERIFIED.
+pub fn echo_feedback(parameter: f32) -> f32 {
+    0.3 + 0.6 * unit(parameter, 0.5)
+}
+
+/// REVERB comb feedback ("room") from PARAMETER: 0.70 … 0.95. UNVERIFIED.
+pub fn reverb_room(parameter: f32) -> f32 {
+    0.70 + 0.25 * unit(parameter, 0.5)
+}
+
 /// Crossfader travel over which a side fades in at the sharpest curve, as a
 /// fraction of the full travel (1.5 mm of a 60 mm fader). UNVERIFIED.
 pub const XFADE_MIN_WIDTH: f32 = 1.0 / 40.0;
@@ -230,6 +322,86 @@ mod tests {
             assert!(q > last);
             last = q;
         }
+    }
+
+    #[test]
+    fn eq3_taper_spans_minus_26_to_plus_6_with_noon_flat() {
+        assert!(close(eq3_db(0.0), -26.0, 1e-5));
+        assert!(close(eq3_db(0.25), -13.0, 1e-5));
+        assert_eq!(eq3_db(0.5), 0.0);
+        assert!(close(eq3_db(1.0), 6.0, 1e-5));
+        assert_eq!(eq3_db(f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn fx_send_has_a_dead_zone_and_reaches_both_ends() {
+        for v in [0.485, 0.5, 0.515, f32::NAN] {
+            let s = fx_send(v);
+            assert_eq!((s.side, s.amount), (0.0, 0.0), "{v}");
+        }
+        assert_eq!(
+            fx_send(0.0),
+            FxSend {
+                side: -1.0,
+                amount: 1.0
+            }
+        );
+        assert_eq!(
+            fx_send(1.0),
+            FxSend {
+                side: 1.0,
+                amount: 1.0
+            }
+        );
+        assert!(fx_send(0.6).amount > 0.0 && fx_send(0.6).side == 1.0);
+    }
+
+    #[test]
+    fn channel_filter_matches_the_spec_table_at_parameter_noon() {
+        // (knob, lp or hp, cutoff Hz, Q, wet) from djm-eq-fx.md §3.
+        let rows: [(f32, bool, f32, f32, f32); 10] = [
+            (0.0, true, 50.0, 1.37, 1.0),
+            (0.1, true, 172.0, 1.37, 1.0),
+            (0.2, true, 592.0, 1.37, 1.0),
+            (0.3, true, 2_035.0, 1.37, 1.0),
+            (0.4, true, 7_000.0, 1.29, 1.0),
+            (0.6, false, 59.0, 1.29, 1.0),
+            (0.7, false, 214.0, 1.37, 1.0),
+            (0.8, false, 771.0, 1.37, 1.0),
+            (0.9, false, 2_777.0, 1.37, 1.0),
+            (1.0, false, 10_000.0, 1.37, 1.0),
+        ];
+        for (v, lp, hz, q, wet) in rows {
+            let f = channel_filter(v, 0.5);
+            let (got_hz, got_q) = if lp {
+                (f.lp_hz, f.lp_q)
+            } else {
+                (f.hp_hz, f.hp_q)
+            };
+            assert!((got_hz / hz - 1.0).abs() <= 0.01, "{v}: {got_hz} Hz");
+            assert!(close(got_q, q, 0.01), "{v}: Q {got_q}");
+            assert_eq!(f.wet, wet, "{v}");
+            // The other filter stays wide open at Butterworth.
+            let (open_hz, open_q) = if lp {
+                (f.hp_hz, f.hp_q)
+            } else {
+                (f.lp_hz, f.lp_q)
+            };
+            assert!(open_hz == 20.0 || open_hz == 20_000.0);
+            assert_eq!(open_q, RESONANCE_MIN_Q);
+        }
+        assert_eq!(channel_filter(0.5, 0.5).wet, 0.0);
+        let edge = channel_filter(0.47, 0.5);
+        assert!(close(edge.wet, 0.62, 0.01) && close(edge.lp_q, 0.81, 0.01));
+    }
+
+    #[test]
+    fn echo_and_reverb_parameter_laws() {
+        assert!(close(echo_feedback(0.0), 0.3, 1e-6));
+        assert!(close(echo_feedback(0.5), 0.6, 1e-6));
+        assert!(close(echo_feedback(1.0), 0.9, 1e-6));
+        assert!(close(reverb_room(0.0), 0.70, 1e-6));
+        assert!(close(reverb_room(1.0), 0.95, 1e-6));
     }
 
     #[test]
