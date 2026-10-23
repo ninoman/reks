@@ -174,14 +174,14 @@ kbd { font-family: var(--font-mono); font-size: 11.5px; border: 1px solid var(--
       <div class="tablewrap"><table>
         <thead><tr><th>Control</th><th>Not looping</th><th>Looping</th><th>Keys (deck 2 / 3)</th></tr></thead>
         <tbody>
-          <tr><td>IN</td><td>Sets a loop-in point at the playhead (nearest beat with Q). Marked on the waveform.</td><td>Moves the loop's start to the playhead (nearest beat with Q), end kept.</td><td><kbd>V</kbd> / <kbd>N</kbd></td></tr>
-          <tr><td>OUT</td><td>With an IN behind the head: loop from IN to here (nearest beat with Q), looping at once. No grid needed.</td><td>Moves the loop's end to the playhead (nearest beat with Q), start kept.</td><td><kbd>B</kbd> / <kbd>M</kbd></td></tr>
-          <tr><td>½ · 2×</td><td>Halves or doubles the size LOOP will use (1/32 … 512).</td><td>Halves or doubles the loop, start kept.</td><td><kbd>Alt Q</kbd> <kbd>Alt W</kbd> / <kbd>Alt U</kbd> <kbd>Alt I</kbd></td></tr>
-          <tr><td>LOOP</td><td>Loop of the shown size from the playhead (quantised).</td><td>Leaves the loop.</td><td><kbd>F</kbd> / <kbd>;</kbd> (today's key)</td></tr>
-          <tr><td>RELOOP</td><td>Jumps back into the last loop, or a memory loop just called, and loops.</td><td>Leaves the loop and keeps it for RELOOP.</td><td><kbd>Alt F</kbd> / <kbd>Alt ;</kbd></td></tr>
+          <tr><td>IN</td><td>Sets a loop-in point at the playhead (nearest beat with Q). Marked on the waveform.</td><td>Moves the loop's start to the playhead (nearest beat with Q), end kept.</td><td><kbd>D</kbd> / <kbd>K</kbd></td></tr>
+          <tr><td>OUT</td><td>With an IN behind the head: loop from IN to here (nearest beat with Q), looping at once. No grid needed.</td><td>Moves the loop's end to the playhead (nearest beat with Q), start kept.</td><td><kbd>F</kbd> / <kbd>L</kbd></td></tr>
+          <tr><td>½ · 2×</td><td>Halves or doubles the size LOOP will use (1/32 … 512).</td><td>Halves or doubles the loop, start kept.</td><td><kbd>Shift D</kbd> <kbd>Shift G</kbd> / <kbd>Shift K</kbd> <kbd>Shift ;</kbd></td></tr>
+          <tr><td>LOOP</td><td>Loop of the shown size from the playhead (quantised).</td><td>Leaves the loop.</td><td><kbd>Shift F</kbd> / <kbd>Shift L</kbd> (today's key)</td></tr>
+          <tr><td>RELOOP</td><td>Jumps back into the last loop, or a memory loop just called, and loops.</td><td>Leaves the loop and keeps it for RELOOP.</td><td><kbd>G</kbd> / <kbd>;</kbd></td></tr>
         </tbody>
       </table></div>
-      <p class="foot">Shift moves each key to deck 1 / 4, as today. Engine commands, sync, quantise, beat jump and memory-loop rules: <code>docs/research/deck-mixer-layout.md</code>.</p>
+      <p class="foot">Keys follow rekordbox's default Performance 1 layout, like the other deck keys; Option moves each to deck 1 / 4. Engine commands, sync, quantise, beat jump and memory-loop rules: <code>docs/research/deck-mixer-layout.md</code>.</p>
     </div>
   </section>
 
@@ -200,7 +200,7 @@ kbd { font-family: var(--font-mono); font-size: 11.5px; border: 1px solid var(--
           <span class="seg" aria-hidden="true"><button type="button" tabindex="-1" aria-pressed="true">Show</button><button type="button" tabindex="-1" aria-pressed="false">Hide</button></span>
         </div>
       </div>
-      <p class="foot">The <b>⚙</b> in the mixer's top-left corner (C: on the rail; D: in the centre column) opens Settings scrolled to this group, with focus on Mixer view.</p>
+      <p class="foot">The <b>⚙</b> in the mixer's top-left corner (C: on the rail; D: in the centre column) opens Settings on the Mixer tab, with focus on Mixer view.</p>
     </div>
     <div>
       <h2>What hides, and what it does while hidden</h2>
@@ -209,7 +209,7 @@ kbd { font-family: var(--font-mono); font-size: 11.5px; border: 1px solid var(--
         <tbody>
           <tr><td>FILTER assign X · off · Y</td><td>hidden</td><td>hidden</td><td>Channels 1–2 on X, 3–4 on Y (today's defaults)</td></tr>
           <tr><td>X-F assign X · off · Y</td><td>hidden</td><td>hidden</td><td>Off (THRU) on every channel</td></tr>
-          <tr><td>Crossfader and curve</td><td>hidden</td><td>hidden</td><td>No effect, since nothing is assigned; Z X C do nothing</td></tr>
+          <tr><td>Crossfader and curve</td><td>hidden</td><td>hidden</td><td>No effect, since nothing is assigned; X C V do nothing</td></tr>
           <tr><td>Filter X and Y: ON, FREQ, RES, HP · BP · LP</td><td>shown</td><td>hidden</td><td>Both units off</td></tr>
           <tr><td>Trim, EQ, CUE, faders, meters, master, cue section</td><td>shown</td><td>shown</td><td>–</td></tr>
         </tbody>
@@ -240,7 +240,7 @@ kbd { font-family: var(--font-mono); font-size: 11.5px; border: 1px solid var(--
     "rationale": "As built after phase 5 task 18, measured in the dev build. Decks 1–2 left and 3–4 right of a 358 × 493 px mixer; every deck is 260 px tall in 2- and 4-deck mode; 1 deck is the flat 162 px player deck.",
     "pros": ["Hardware mental model: two players either side of a 4-channel mixer.", "One deck design for 2 and 4 decks."],
     "cons": ["2 decks: 233 px of empty card under each deck, while the waveform is 72 px tall.", "Library left with 6 rows (2 decks) and 5 rows (4 decks) at 1440×900; 3 rows at 1280×800, where the 4-deck panel also scrolls inside its 62vh cap.", "Loops only through the LOOP pad mode or F: no loop size readout, no ½/2×, no reloop, no manual IN/OUT.", "Crossfader is 119 px, shorter than a channel fader (108 px) plus its cap.", "1 deck: deck keys are off, and decks 1/3/4 or mixer settings left from the Mix panel keep acting unseen."],
-    "loop": "LOOP pad mode only (2 × 4 sizes per page) and F / ;.",
+    "loop": "LOOP pad mode only (2 × 4 sizes per page) and Shift F / Shift L.",
     "w1280": "Decks shrink to the 440 px minimum; the 4-deck panel (528 px) scrolls inside 496 px; the library shows 3 rows.",
     "moves": "Reference frame."},
   "A": {"name": "A · Console", "short": "A",
@@ -299,7 +299,7 @@ kbd { font-family: var(--font-mono); font-size: 11.5px; border: 1px solid var(--
  ["Pad rename (double-click), × delete, memory right-click menu", ["On the pads", "Same", "Same", "Same", "Same"]],
  ["Loops", null],
  ["Beat loop sizes (LOOP pad mode)", ["Pads", "Kept", "Kept", "Kept", "Kept"]],
- ["Quick loop: IN · OUT · ½ · size · 2× · LOOP · RELOOP", ["None (F / ; only)", "Row under overview; block beside pads [new]", "Row in deck block [new]", "Block beside pads [new]", "Row under overview [new]"]],
+ ["Quick loop: IN · OUT · ½ · size · 2× · LOOP · RELOOP", ["None (Shift F / Shift L only)", "Row under overview; block beside pads [new]", "Row in deck block [new]", "Block beside pads [new]", "Row under overview [new]"]],
  ["Sync", null],
  ["MASTER", ["Right of the pads", "Same", "Same", "Same", "Bottom row of the column"]],
  ["SYNC", ["Right of the pads", "Same", "Same", "Same", "Bottom row of the column"]],
@@ -343,7 +343,7 @@ kbd { font-family: var(--font-mono); font-size: 11.5px; border: 1px solid var(--
  ["Output device", ["Player bar right", "Same", "Same", "Same", "Same"]],
  ["Mixer view (new, every concept)", null],
  ["Mixer settings button ⚙ (opens Settings at Mixer)", ["None", "Mixer top-left corner [new]", "Mixer top-left corner [new]", "Mixer top-left; rail top-right [new]", "Centre column [new]"]],
- ["Settings → Mixer: view Simple / Advanced, filters Show / Hide", ["None", "Settings dialog [new]", "Settings dialog [new]", "Settings dialog [new]", "Settings dialog [new]"]],
+ ["Settings → Mixer: view Simple / Advanced, filters Show / Hide", ["None", "Settings dialog, Mixer tab [new]", "Settings dialog, Mixer tab [new]", "Settings dialog, Mixer tab [new]", "Settings dialog, Mixer tab [new]"]],
  ["FILTER assign, X-F assign, crossfader, curve in Simple view", ["Always shown", "Hidden; defaults apply [behind]", "Hidden; defaults apply [behind]", "Hidden; defaults apply [behind]", "Hidden; defaults apply [behind]"]],
  ["Filter units with Filters: Hide", ["Always shown", "Hidden; both off [behind]", "Hidden; both off [behind]", "Hidden; both off [behind]", "Hidden; both off [behind]"]],
  ["New in every concept (fixes)", null],
@@ -1015,7 +1015,7 @@ function compareTable() {
   line('Library rows, 2 decks: Advanced / Simple / no filters (1280)', (c) => views(c, 2, '1280', (x) => x.lib));
   line('Waveform, 2 decks: Advanced / Simple / no filters (1440)', (c) => views(c, 2, '1440', (x) => (x.wave ? `${x.wave[0]}×${x.wave[1]}` : '—')));
   const hand = {
-    'Loop reach': { T: 'LOOP pad mode + pad (2 clicks) or F; no IN/OUT, ½/2×, reloop', A: '1 click / 1 key, all loop controls visible', B: '1 click / 1 key; loop row away from the lane', C: '1 click / 1 key', D: '1 click / 1 key' },
+    'Loop reach': { T: 'LOOP pad mode + pad (2 clicks) or Shift F; no IN/OUT, ½/2×, reloop', A: '1 click / 1 key, all loop controls visible', B: '1 click / 1 key; loop row away from the lane', C: '1 click / 1 key', D: '1 click / 1 key' },
     'Mixer readability': { T: 'Fair: captions far from ch 3–4, short crossfader, 5 copies of the dB scale', A: 'Good: hardware order, one scale, long crossfader', B: 'Good: filters next to their side of the mixer', C: 'Good open; folded shows faders, cues, meters only', D: 'Mixed: strip order becomes rows, captions per block' },
     'Implementation cost': { T: '—', A: 'M: mixer re-layout, deck height variants, loop block', B: 'L: waveform lanes split from DeckStrip, new focus order', C: 'M–L: row decks for 2/4, dock, rail', D: 'L: mixer split into channel blocks, centre column' },
   };

@@ -43,8 +43,9 @@ Pain points, from the code and the measurements above.
 
 1. Loop controls exist only in the LOOP pad mode
    ([`DeckPads.tsx:369`](../../src/components/mix/DeckPads.tsx)) and on
-   F / ; ([`mixKeys.ts:57`](../../src/lib/mixKeys.ts)). To change a loop
-   while hot cues are showing, you switch modes (or press T/Y). Outside LOOP
+   Shift F / Shift L ([`mixKeys.ts`](../../src/lib/mixKeys.ts)). To change a
+   loop while hot cues are showing, you switch modes (or press Shift S /
+   Shift J). Outside LOOP
    mode the only sign of a loop is the band on the waveform.
 2. There is no loop length readout. The pads cover 1/8…32
    ([`mixView.ts:179`](../../src/lib/mixView.ts)), but the engine resizes to
@@ -112,7 +113,7 @@ Pain points, from the code and the measurements above.
     panel makes the player sound wrong for no visible reason.
 17. In 1-deck mode the deck keys are off
     ([`App.tsx:68`](../../src/App.tsx), `useMixShortcuts(mixOpen)`), so
-    F, E/R and the hot cue keys do nothing on the player deck. Only Space
+    the loop, jump and hot cue keys do nothing on the player deck. Only Space
     and − / + work.
 
 **Small**
@@ -223,7 +224,7 @@ Computed from the frames, with the Advanced mixer unless stated:
 | Waveform, 4 decks (1440) | 444 × 72 | 451 × 66 | 1416 × 44 | 275 × 65 (469 folded) | 199 × 64 |
 | Waveform, 4 decks (1280) | 364 × 72 | 371 × 66 | 1256 × 44 | 115 × 65 (309 folded) | 159 × 64 |
 | Crossfader | 119 | 234 | 172 | 234 | 166 |
-| Loop reach | LOOP pad mode or F | 1 click / key | 1 click / key | 1 click / key | 1 click / key |
+| Loop reach | LOOP pad mode or Shift F | 1 click / key | 1 click / key | 1 click / key | 1 click / key |
 | Mixer readability | fair | good | good | good open, partial folded | mixed |
 | Cost | – | M | L | M–L | L |
 
@@ -280,7 +281,7 @@ the Simple mixer view (§6).
 | Pad rename (double-click), × delete, memory right-click menu | On the pads | Same | Same | Same | Same |
 | **Loops** | | | | | |
 | Beat loop sizes (LOOP pad mode) | Pads | Kept | Kept | Kept | Kept |
-| Quick loop: IN · OUT · ½ · size · 2× · LOOP · RELOOP | None (F / ; only) | Row under overview; block beside pads **new** | Row in deck block **new** | Block beside pads **new** | Row under overview **new** |
+| Quick loop: IN · OUT · ½ · size · 2× · LOOP · RELOOP | None (Shift F / Shift L only) | Row under overview; block beside pads **new** | Row in deck block **new** | Block beside pads **new** | Row under overview **new** |
 | **Sync** | | | | | |
 | MASTER | Right of the pads | Same | Same | Same | Bottom row of the column |
 | SYNC | Right of the pads | Same | Same | Same | Bottom row of the column |
@@ -324,7 +325,7 @@ the Simple mixer view (§6).
 | Output device | Player bar right | Same | Same | Same | Same |
 | **Mixer view (new, every concept)** | | | | | |
 | Mixer settings button ⚙ (opens Settings at Mixer) | None | Mixer top-left corner **new** | Mixer top-left corner **new** | Mixer top-left; rail top-right **new** | Centre column **new** |
-| Settings → Mixer: view Simple / Advanced, filters Show / Hide | None | Settings dialog **new** | Settings dialog **new** | Settings dialog **new** | Settings dialog **new** |
+| Settings → Mixer: view Simple / Advanced, filters Show / Hide | None | Settings dialog, Mixer tab **new** | Settings dialog **new** | Settings dialog, Mixer tab **new** | Settings dialog **new** |
 | FILTER assign, X-F assign, crossfader, curve in Simple view | Always shown | Hidden; defaults apply **hidden by a setting or toggle** | Hidden; defaults apply **hidden by a setting or toggle** | Hidden; defaults apply **hidden by a setting or toggle** | Hidden; defaults apply **hidden by a setting or toggle** |
 | Filter units with Filters: Hide | Always shown | Hidden; both off **hidden by a setting or toggle** | Hidden; both off **hidden by a setting or toggle** | Hidden; both off **hidden by a setting or toggle** | Hidden; both off **hidden by a setting or toggle** |
 | **New in every concept (fixes)** | | | | | |
@@ -435,18 +436,19 @@ IN/OUT edit while looping, and behaviour when paused.
 
 ### Shortcuts
 
-Every plain letter for each hand is taken, except V B (left) and N M
-(right). Alt extends the key it sits on, as for memory cues.
+Since 2026-10-23 the deck keys follow rekordbox's default "Performance 1"
+layout (`mixKeys.ts`). The loop keys take rekordbox's own loop keys from the
+same layout ([RBK]); none are in use today.
 
-| Action | Deck 2 | Deck 3 |
-|---|---|---|
-| LOOP on/off (today) | F | ; |
-| RELOOP / exit | Alt F | Alt ; |
-| Loop IN · OUT | V · B | N · M |
-| Loop ½ · 2× | Alt Q · Alt W (the nudge keys: slower = smaller) | Alt U · Alt I |
+| Action | Deck 2 | Deck 3 | rekordbox P1 |
+|---|---|---|---|
+| LOOP on/off (today) | Shift F | Shift L | Auto beat loop |
+| Loop IN · OUT | D · F | K · L | Loop In · Loop Out |
+| RELOOP / exit | G | ; | Exit/Reloop |
+| Loop ½ · 2× | Shift D · Shift G | Shift K · Shift ; | Halve · Double loop |
 
-Shift moves each key to deck 1 / 4. `ShortcutHelp`, `ui.md` and the tooltips
-all read from `mixKeys.ts`, as now. Open question: should the deck-2
+Option moves each key to deck 1 / 4, as for the other deck keys.
+`ShortcutHelp`, `ui.md` and the tooltips all read from `mixKeys.ts`, as now. Open question: should the deck-2
 (left-hand) keys work in 1-deck mode too? Finding 17 says they don't today.
 None of these keys conflict with library keys (checked `keys.ts`); the Space
 and − / + rules stay.
@@ -457,7 +459,7 @@ Maintainer's request, 2026-10-23. It applies to every concept and changes no
 DSP: the engine is the same in both views. Wireframes: **Mixer view** in the
 toolbar, and the "Simple and advanced mixer" section.
 
-**Settings → Mixer**, a new group in the Settings dialog after Decks:
+**Settings → Mixer**, a new tab in the Settings dialog's sidebar after Decks:
 
 | Setting | Values | Default | Stored as |
 |---|---|---|---|
@@ -491,16 +493,15 @@ Two alternatives were rejected:
 - Hiding them while they keep acting: this is the trap of findings 15–16, a
   sound with no visible cause.
 
-**Keys.** Z X C (crossfader) do nothing in Simple. The Shortcuts popover and
+**Keys.** X C V (crossfader) do nothing in Simple. The Shortcuts popover and
 the tooltips leave them out.
 
 **Settings button.** An `IconButton` (gear icon, `aria-label="Mixer
 settings"`, hint "Mixer settings") sits in the mixer's top-left corner, in
 the legend column's header cell. In C it is on the rail when folded; in D it
-is in the centre column. It opens the Settings dialog scrolled to the Mixer
-group, with focus on Mixer view: `useSettings.setDialogOpen(true, "mixer")`.
-`Group` takes an `id`, and the dialog scrolls it into view on open. New
-shared pieces: a gear icon in `icons.tsx` and the section anchor on `Group`.
+is in the centre column. It opens the Settings dialog on the Mixer tab, with
+focus on Mixer view: `useSettings.setDialogOpen(true, "mixer")` picks the
+tab (`Tabs` value). New shared piece: a gear icon in `icons.tsx`.
 
 **Layout** (numbers from the frames, 1440×900 unless stated):
 
@@ -522,9 +523,9 @@ shared pieces: a gear icon in `icons.tsx` and the section anchor on `Group`.
 - `mixView.test.ts`: `effectiveMix` for every view.
 - `mix.test.ts`: the engine gets the defaults in Simple and the stored
   values back in Advanced.
-- `MixerPanel.test.tsx`: hidden rows, and the gear opening Settings at
-  Mixer.
-- `mixKeys.test.ts`: Z X C ignored in Simple.
+- `MixerPanel.test.tsx`: hidden rows, and the gear opening Settings on the
+  Mixer tab.
+- `mixKeys.test.ts`: X C V ignored in Simple.
 
 ## 7. Sizing rules (as tokens)
 

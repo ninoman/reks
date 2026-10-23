@@ -570,7 +570,8 @@ pub enum Control {
 Maintainer picked concept A (Console) with simple and advanced mixer views,
 2026-10-23. Research, measurements, wireframes and specs:
 [`../research/deck-mixer-layout.md`](../research/deck-mixer-layout.md)
-(§ numbers below refer to it); wireframes
+(§ numbers below refer to it); tracking issue
+[#39](https://github.com/ninoman/reks/issues/39); wireframes
 <https://claude.ai/artifact/7CQDMaXzUJrWAKFzy1wZmu>. Tasks 20–21 need the
 D21 amendment on manual loops accepted first. One PR per task; each updates
 `ui.md` (and `decisions.md` where noted) and is checked in the dev mock at
@@ -578,7 +579,7 @@ D21 amendment on manual loops accepted first. One PR per task; each updates
 start at once; 21 needs 20; 22 needs nothing; 23 needs 21 and 22; 24 needs
 nothing; 25 needs 22–24.
 
-19. [ ] **Hidden decks and the 1-deck player** (§2 findings 15–17). UI and
+19. [ ] **Hidden decks and the 1-deck player** ([#40](https://github.com/ninoman/reks/issues/40)) (§2 findings 15–17). UI and
     store only.
     - A deck that plays while not shown (decks 1/4 in 2-deck mode, 1/3/4 in
       1-deck mode) shows a chip in the player bar, "Deck 1 playing"; a
@@ -591,7 +592,7 @@ nothing; 25 needs 22–24.
       Space and − / + unchanged).
     Tests: `PlayerBar` chip from the engine state, `PlayerDeck` chip from
     the mixer store, `mixShortcuts` in 1-deck mode if confirmed.
-20. [ ] **Engine: manual loops and reloop** (§5 Engine). `reks-mix`,
+20. [ ] **Engine: manual loops and reloop** ([#41](https://github.com/ninoman/reks/issues/41)) (§5 Engine). `reks-mix`,
     `src-tauri/src/mix.rs`, `ipc.ts`, dev mock; no UI.
     - New controls `LoopIn { deck }`, `LoopOut { deck }`, `Reloop { deck }`;
       `CallCue` gains `end: Option<i64>` (a memory loop call arms RELOOP);
@@ -609,7 +610,7 @@ nothing; 25 needs 22–24.
     master rule; the engine's real-time test sends every new control;
     `controls_parse_from_the_ui_shapes`; `mockMix.test.ts`. UNVERIFIED on a
     CDJ.
-21. [ ] **Quick-loop block on every deck** (§5 UI, Shortcuts).
+21. [ ] **Quick-loop block on every deck** ([#42](https://github.com/ninoman/reks/issues/42)) (§5 UI, Shortcuts).
     - `mix/LoopBlock` (row and 3 × 2 grid layouts): IN, OUT, ½, size
       readout, 2×, LOOP, RELOOP, from `Button variant="control"`; new
       `ui/Readout` (mono value box with a dimmed state). In this PR the
@@ -620,13 +621,14 @@ nothing; 25 needs 22–24.
       readout formatting in `mixView.ts` (beats, fractions, seconds without
       a grid).
     - Pending IN drawn on both waveforms (`deckMarks.ts`).
-    - Keys (`mixKeys.ts`): V B / N M loop IN / OUT, Alt F / Alt ; reloop,
-      Alt Q W / Alt U I halve / double; `ShortcutHelp` and tooltips from
+    - Keys (`mixKeys.ts`, rekordbox Performance 1): D F / K L loop IN /
+      OUT, G / ; reloop, Shift D G / Shift K ; halve / double (Option for
+      decks 1 / 4); `ShortcutHelp` and tooltips from
       the same table.
     Tests: `mixView.test.ts` (readout, size steps), `mixKeys.test.ts`,
     `DeckStrip.test.tsx` (block states: no grid, pending IN, looping,
     reloop armed), `ui.test.tsx` (`Readout`), `deckMarks.test.ts`.
-22. [ ] **Mixer re-layout** (§4 A, §7). Layout only, no behaviour change.
+22. [ ] **Mixer re-layout** ([#43](https://github.com/ninoman/reks/issues/43)) (§4 A, §7). Layout only, no behaviour change.
     - Filter X and Y in one row above a crossfader that spans the mixer
       (119 → ~234 px), curve at the crossfader's right end.
     - One dB scale in the legend column's fader row; channel meters lose
@@ -638,7 +640,7 @@ nothing; 25 needs 22–24.
     Tests: `MixerPanel.test.tsx` (every control still present by role and
     name, order), `Meter.test.tsx` (scale off), `tokens.test.ts` if a token
     is mirrored.
-23. [ ] **Deck section sizes to the mixer** (§4 A, §7). Needs 21 and 22.
+23. [ ] **Deck section sizes to the mixer** ([#44](https://github.com/ninoman/reks/issues/44)) (§4 A, §7). Needs 21 and 22.
     - 2 decks: decks as tall as the mixer; the waveform takes the spare
       height (min 60 px); quick-loop row under the overview.
     - 4 decks: decks 216 px (header 30, overview 14), quick-loop grid
@@ -651,26 +653,26 @@ nothing; 25 needs 22–24.
     headless measurements at the three window sizes recorded in `ui.md`
     (target: library 8 rows at 1440 × 900 in 2- and 4-deck mode, 5 at
     1280 × 800).
-24. [ ] **Settings → Mixer and the mixer's settings button** (§6).
+24. [ ] **Settings → Mixer and the mixer's settings button** ([#45](https://github.com/ninoman/reks/issues/45)) (§6).
     - `reks-core` `settings.rs`: `mix.mixer_view` (`MixerView`: simple,
       advanced; default simple) and `mix.mixer_filters` (`MixerFilters`:
       show, hide; default show), in `Settings` and `SettingsPatch`.
-    - Settings dialog: a Mixer group after Decks (Filters disabled in
-      Advanced); `Group` takes an `id`; `setDialogOpen(open, section?)`
-      scrolls to it and focuses its first control.
+    - Settings dialog: a Mixer tab after Decks (Filters disabled in
+      Advanced); `setDialogOpen(open, tab?)` opens on that tab and focuses
+      its first control.
     - Gear `IconButton` ("Mixer settings") in the mixer's top-left corner,
       opening Settings at Mixer; gear icon in `icons.tsx`.
     Tests: `settings.rs` round trip and defaults, `SettingsDialog.test.tsx`
     (Mixer group, Filters disabled in Advanced, opening at a section),
-    `MixerPanel.test.tsx` (gear opens Settings at Mixer).
-25. [ ] **Simple mixer view** (§6). Needs 22–24.
+    `MixerPanel.test.tsx` (gear opens Settings on the Mixer tab).
+25. [ ] **Simple mixer view** ([#46](https://github.com/ninoman/reks/issues/46)) (§6). Needs 22–24.
     - `effectiveMix(values, view)` in `mixView.ts`: Simple sends the
       default filter assigns (1–2 X, 3–4 Y) and THRU for every crossfader
       assign; filters hidden sends both units off. The store sends the
       effective values on every change, view switch and start; the user's
       positions stay in the store and return in Advanced.
     - Simple hides the FILTER and X-F assign rows, the crossfader and
-      curve; filters hidden also hides the filter row. Z X C do nothing in
+      curve; filters hidden also hides the filter row. X C V do nothing in
       Simple and leave the Shortcuts list.
     - Mixer height per view (440 / 356 / 292); 2 decks follow it; in
       4-deck mode a shorter mixer gives up to 60 px to its faders.
@@ -678,7 +680,7 @@ nothing; 25 needs 22–24.
     Tests: `mixView.test.ts` (`effectiveMix` for every view),
     `mix.test.ts` (engine values in Simple, stored values back in
     Advanced, after a start), `MixerPanel.test.tsx` (hidden rows per
-    view), `mixKeys.test.ts` (Z X C in Simple).
+    view), `mixKeys.test.ts` (X C V in Simple).
 
 ## Acceptance criteria
 
