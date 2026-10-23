@@ -126,7 +126,7 @@ have the same height (tested in `ui.test.tsx`).
 | gap | 4 | 4 | 6 | 8 |
 
 Use: `xs` inside rows (tree "+", sheet close, key grid); `sm` in bars (app
-header, library toolbar, filter bar, player bar, decks); `md` (default) in dialogs and
+header, library toolbar, drawers, player bar, decks); `md` (default) in dialogs and
 forms; `lg` for large standalone controls. Table and tree rows use `--row-h`,
 menu items `--menu-item-h`.
 
@@ -630,7 +630,10 @@ edit through `tags_mutate`; assigning patches the loaded table rows in place
 re-queries. Pure helpers (coverage, search, create offers) are in
 [`tagModel.ts`](../src/store/tagModel.ts).
 
-- `TagDrawer`: a `Sheet` on the right, over the info panel (toolbar tag
+- `FilterDrawer`: the library filters in a `Sheet`, same header and Escape/×
+  close as My Tags; the toolbar Filters button toggles it (hidden by default).
+- `TagDrawer`: a `Sheet` on the right, over the info panel (and sharing the
+  spot with `FilterDrawer`: opening one closes the other; toolbar tag
   button, "Manage tags…", the info panel's "Edit
   tags"). Attach and manage in one place: a checkbox per tag for the main
   list's selection, following it live (`tagTargets.ts`; mixed when only some
@@ -647,17 +650,17 @@ re-queries. Pure helpers (coverage, search, create offers) are in
   for the whole selection; a tag only some selected tracks have is mixed and a
   click adds it to all; the menu stays open; the search field offers
   "Create 'X' in <category>".
-- `TagPicker` (Popover body, search + checkboxes by category): the filter bar's
+- `TagPicker` (Popover body, search + checkboxes by category): the Filters drawer's
   My Tags field (`FilterState.tagIds` → `tagAny`, counted in the Filters badge).
 - `TrackTags`: the info panel's removable chips and the "Edit tags" button.
 - "My Tags" table column, hidden until switched on.
-- States: loading, load error with Retry, no tags yet ("Create your first
-  tag"), no match for the search.
+- States: loading, load error with Retry, no tags in a category (its add field
+  is always there), no match for the search.
 - Dev: `npm run dev` serves tags from [`mockTags.ts`](../src/dev/mockTags.ts).
 
 ## Rule builder and smart playlists (D29)
 
-The **Advanced** button in the filter bar opens the builder under it
+The **Advanced** button in the Filters drawer opens the builder under the fields
 (`RuleBuilder` → `RuleGroup` → `RuleRow` → `RuleValueEditor`; the last three
 take props, `RuleBuilder` reads the stores). State is
 [`store/rules.ts`](../src/store/rules.ts), the tree edits are pure functions in

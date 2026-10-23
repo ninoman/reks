@@ -287,7 +287,7 @@ let settings: Settings = {
   onelibraryKeyBuiltin: true,
   ui: {
     hiddenColumns: null,
-    filterBarOpen: true,
+    filterBarOpen: false,
     filtersEnabled: true,
     infoOpen: false,
     volume: 0.8,

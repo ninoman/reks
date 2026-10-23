@@ -196,7 +196,7 @@ impl Default for UiState {
     fn default() -> Self {
         Self {
             hidden_columns: None,
-            filter_bar_open: true,
+            filter_bar_open: false,
             filters_enabled: true,
             info_open: false,
             volume: 1.0,
@@ -762,7 +762,7 @@ mod tests {
             )
             .unwrap();
         let ui = lib.settings().unwrap().ui;
-        assert!(ui.info_open && ui.filter_bar_open && ui.filters_enabled);
+        assert!(ui.info_open && !ui.filter_bar_open && ui.filters_enabled);
         let s = lib
             .update_settings(SettingsPatch {
                 ui: Some(UiState { volume: 3.0, ..ui }),

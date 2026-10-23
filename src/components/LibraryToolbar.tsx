@@ -11,7 +11,7 @@ import { ruleLeafCount } from "../store/ruleTree";
 import { useTags } from "../store/tags";
 import { AnalysisIndicator } from "./AnalysisIndicator";
 import { ColumnChooser } from "./ColumnChooser";
-import { FiltersSwitch } from "./FilterBar";
+import { FiltersSwitch } from "./FilterDrawer";
 import { FilterIcon, InfoIcon, TagIcon } from "./icons";
 import { SearchBox } from "./SearchBox";
 import type { TrackTableModel } from "./trackTableModel";
