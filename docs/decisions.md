@@ -629,6 +629,13 @@ Date of decisions: 2026-10-18.
   Traktor, Engine, CDJ-3000). Still out: slip, loop roll, emergency loop.
   Spec and sources: [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §5;
   phase 5 tasks 20–21.
+  Revised 2026-10-23 (maintainer's call, wireframe
+  [`wireframes/loop-control.html`](wireframes/loop-control.html) option B):
+  rekordbox's paged block. BEAT page: the size is the loop button, ‹ › halve
+  and double; IN/OUT page: IN OUT over RELOOP, which reads EXIT while
+  looping. Tabs in the pad-tab row switch pages; the LOOP button goes.
+  Rationale: seven controls were busy for a block used mostly for one tap;
+  rekordbox users know this layout. Phase 5 task 28.
 - Simple and advanced mixer views (maintainer's request, 2026-10-23; spec
   **accepted**, maintainer's call, 2026-10-23): a Settings → Mixer group, also opened from a gear on the
   mixer, chooses Simple (no filter assign, crossfader or crossfader assign;
