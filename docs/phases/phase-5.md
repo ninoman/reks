@@ -591,7 +591,8 @@ nothing; 25 needs 22–24.
       work in 1-deck mode (`mixKeyAction(e, 1)`; Space and − / + unchanged),
       except SYNC, MASTER and the crossfader, which the player deck lacks.
     Tests: `PlayerBar` chip from the engine state, `PlayerDeck` chip from
-P. [x] **Engine: manual loops and reloop** ([#41](https://github.com/ninoman/reks/issues/41)) (§5 Engine). `reks-mix`,
+    the mixer store, `mixKeyAction` in 1-deck mode.
+20. [x] **Engine: manual loops and reloop** ([#41](https://github.com/ninoman/reks/issues/41)) (§5 Engine). `reks-mix`,
     `src-tauri/src/mix.rs`, `ipc.ts`, dev mock; no UI.
     - New controls `LoopIn { deck }`, `LoopOut { deck }`, `Reloop { deck }`;
       `CallCue` gains `end: Option<i64>` (a memory loop call arms RELOOP);
