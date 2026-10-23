@@ -1,6 +1,6 @@
 /**
  * App header: the top bar across the whole window for library-wide actions
- * (scan, import, export to USB, USB devices, settings), with the scan status
+ * (scan, import, export to USB, USB devices, report a problem, settings), with the scan status
  * line under it.
  * "Scan folder…" adds the folder to the library folders (Settings) and scans
  * it. "Import rekordbox XML…" picks the file and opens the import wizard
@@ -15,9 +15,10 @@ import { useConverter } from "../store/converter";
 import { useDevices } from "../store/devices";
 import { openExportWizard } from "../store/exportWizard";
 import { useImportWizard } from "../store/importWizard";
+import { useReport } from "../store/report";
 import { useScan } from "../store/scan";
 import { useSettings } from "../store/settings";
-import { GearIcon, UsbIcon } from "./icons";
+import { FeedbackIcon, GearIcon, UsbIcon } from "./icons";
 import { Button } from "./ui/Button";
 import { IconButton } from "./ui/IconButton";
 import { Tooltip } from "./ui/Tooltip";
@@ -82,6 +83,15 @@ export function AppHeader() {
             onClick={() => useDevices.getState().setDialogOpen(true)}
           >
             <UsbIcon />
+          </IconButton>
+        </Tooltip>
+        <Tooltip content="Report a problem or idea">
+          <IconButton
+            size="sm"
+            aria-label="Report a problem or idea"
+            onClick={() => void useReport.getState().openReport()}
+          >
+            <FeedbackIcon />
           </IconButton>
         </Tooltip>
         <Tooltip content="Settings" shortcut="⌘ ,">

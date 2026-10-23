@@ -174,7 +174,7 @@ pub async fn history_import(
             Some((id, plan)) if id == plan_id => plan,
             other => {
                 shown.plan = other;
-                return Err(CmdError(
+                return Err(CmdError::new(
                     "this dry run is out of date or was already imported; scan again".into(),
                 ));
             }

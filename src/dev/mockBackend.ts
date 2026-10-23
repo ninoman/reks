@@ -43,6 +43,7 @@ import { mockBrowse } from "./mockBrowse";
 import { mockGrid } from "./mockGrid";
 import { mockHistory } from "./mockHistory";
 import { mockMix } from "./mockMix";
+import { mockReport } from "./mockReport";
 import { createMockSmart } from "./mockSmart";
 import { createMockTags } from "./mockTags";
 
@@ -1213,6 +1214,8 @@ mockIPC((cmd, payload) => {
       return null;
     case "plugin:dialog|open":
       return "/Users/dj/Music/rekordbox/collection.xml";
+    case "plugin:dialog|save":
+      return "/Users/dj/Desktop/reks-report.txt";
     default:
       return (
         history(cmd, args) ??
@@ -1220,6 +1223,7 @@ mockIPC((cmd, payload) => {
         mockBrowse(cmd, args, TRACKS) ??
         mockGrid(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
         mockMix(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
+        mockReport(cmd, args) ??
         null
       );
   }

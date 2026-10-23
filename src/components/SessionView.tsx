@@ -14,6 +14,7 @@ import { useHistory } from "../store/history";
 import { libraryRef } from "../store/mix";
 import { playTrack } from "../store/player";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { ErrorMessage } from "./ErrorMessage";
 import { KeyLabel } from "./KeyLabel";
 import { LocateDialog } from "./LocateDialog";
 import { Button } from "./ui/Button";
@@ -43,9 +44,7 @@ export function SessionView() {
     <section className="flex min-h-0 flex-1 flex-col" aria-label="Play session">
       <SessionHeader key={detail.session.id} detail={detail} />
       {error !== null && (
-        <div className="border-b border-border px-2.5 py-1 text-danger select-text" role="alert">
-          {error}
-        </div>
+        <ErrorMessage className="border-b border-border px-2.5 py-1" message={error} />
       )}
       <EntryList detail={detail} />
       {confirmDelete !== null && (

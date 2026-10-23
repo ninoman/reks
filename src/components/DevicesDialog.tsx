@@ -27,6 +27,7 @@ import { useAdopt } from "../store/adopt";
 import { deviceName, useDevices } from "../store/devices";
 import { openExportWizard } from "../store/exportWizard";
 import { mountOf, sortedKnown, useProfiles } from "../store/profiles";
+import { ErrorMessage } from "./ErrorMessage";
 import { EjectIcon } from "./icons";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
@@ -138,11 +139,7 @@ export function DeviceList({ selected = null, onSelect }: DeviceListProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      {error !== null && (
-        <p className="m-0 text-danger select-text" role="alert">
-          {error}
-        </p>
-      )}
+      {error !== null && <ErrorMessage as="p" className="m-0" message={error} />}
       {notice !== null && (
         <p className="m-0 text-success" role="status">
           {notice}
@@ -243,11 +240,7 @@ function StickIdentity({ mountPoint }: { mountPoint: string }) {
   const entry = useProfiles((s) => s.mounted[mountPoint]);
   if (entry === undefined) return null;
   if (entry.error !== null) {
-    return (
-      <p className="m-0 text-xs text-danger select-text" role="alert">
-        {entry.error}
-      </p>
-    );
+    return <ErrorMessage as="p" className="m-0 text-xs" message={entry.error} />;
   }
   const match = entry.match;
   if (match === null) return <p className="m-0 text-xs text-fg-subtle">Identifying…</p>;
@@ -381,11 +374,7 @@ function Sticks() {
   return (
     <section aria-label="Your sticks" className="flex flex-col gap-2">
       <h3 className="m-0 text-sm font-semibold">Your sticks</h3>
-      {error !== null && (
-        <p className="m-0 text-danger select-text" role="alert">
-          {error}
-        </p>
-      )}
+      {error !== null && <ErrorMessage as="p" className="m-0" message={error} />}
       {known.length === 0 ? (
         <p className="m-0 text-fg-muted">
           No sticks saved yet. Plug one in and name it; reks remembers which playlists it carries.

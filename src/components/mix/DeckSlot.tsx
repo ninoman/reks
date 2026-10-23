@@ -4,6 +4,7 @@
  * error with Retry and Eject. Same height as the two views.
  */
 import { cn } from "../../lib/cn";
+import { ReportErrorButton } from "../ErrorMessage";
 import { Button } from "../ui/Button";
 import { Progress } from "../ui/Progress";
 
@@ -73,6 +74,7 @@ export function DeckSlot({ deck, state, solo, onRetry, onEject }: DeckSlotProps)
                 Eject
               </Button>
             )}
+            <ReportErrorButton message={state.message} />
           </span>
         </div>
       );

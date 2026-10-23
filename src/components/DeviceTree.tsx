@@ -19,6 +19,7 @@ import {
 } from "../store/deviceBrowser";
 import { deviceName, useDevices } from "../store/devices";
 import { Disclosure } from "./Disclosure";
+import { ReportErrorButton } from "./ErrorMessage";
 import { EjectIcon, FolderIcon, GearIcon, PlaylistIcon, UsbIcon } from "./icons";
 import { ICON, INDENT, NAME, PAD, ROW } from "./treeStyles";
 import { Button } from "./ui/Button";
@@ -202,13 +203,16 @@ function DeviceContents({
     return (
       <div className="flex flex-col items-start gap-1 py-1 pr-2" style={indent(3)} role="alert">
         <span className="text-xs text-danger select-text">{load.message}</span>
-        <Button
-          size="xs"
-          variant="link"
-          onClick={() => void useDeviceBrowser.getState().reload(mountPoint)}
-        >
-          Try again
-        </Button>
+        <span className="flex gap-1.5">
+          <Button
+            size="xs"
+            variant="link"
+            onClick={() => void useDeviceBrowser.getState().reload(mountPoint)}
+          >
+            Try again
+          </Button>
+          <ReportErrorButton message={load.message} />
+        </span>
       </div>
     );
   }

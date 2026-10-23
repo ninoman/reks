@@ -65,7 +65,7 @@ pub async fn adopt_apply(
             Some((id, plan)) if id == plan_id => plan,
             other => {
                 shown.plan = other;
-                return Err(CmdError(
+                return Err(CmdError::new(
                     "this dry run is out of date or was already applied; scan again".into(),
                 ));
             }

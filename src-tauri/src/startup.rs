@@ -73,5 +73,5 @@ pub async fn app_ready(app: AppHandle) -> CmdResult<()> {
     tauri::async_runtime::spawn_blocking(move || app.state::<Startup>().wait())
         .await
         .map_err(CmdError::from)?
-        .map_err(CmdError)
+        .map_err(CmdError::new)
 }

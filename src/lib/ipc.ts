@@ -1781,3 +1781,56 @@ export function adoptScan(info: DeviceInfo): Promise<AdoptScan> {
 export function adoptApply(planId: number, choices: AdoptChoices): Promise<AdoptReport> {
   return invoke("adopt_apply", { planId, choices });
 }
+
+/** What a report is about (`reks_core::diagnostics::ReportKind`, D34). */
+export type ReportKind = "bug" | "feature" | "feedback";
+
+/** What the user wrote; empty strings mean left blank. */
+export interface ReportDraft {
+  kind: ReportKind;
+  title: string;
+  description: string;
+  /** Bugs only. */
+  steps: string;
+  /** Bugs only. */
+  expected: string;
+  /** Optional email for follow-up questions. */
+  contact: string;
+  /** The error message the report was started from. */
+  context: string;
+  includeDiagnostics: boolean;
+}
+
+/** A report exactly as it is sent: issue title and Markdown body. */
+export interface Report {
+  kind: ReportKind;
+  title: string;
+  body: string;
+}
+
+/** Whether this build knows a feedback relay; without one reports can only be saved. */
+export function reportCanSend(): Promise<boolean> {
+  return invoke("report_can_send");
+}
+
+/** Whether the app crashed since the user was last told; tells them once. */
+export function reportNewCrash(): Promise<boolean> {
+  return invoke("report_new_crash");
+}
+
+export function reportPreview(draft: ReportDraft): Promise<Report> {
+  return invoke("report_preview", { draft });
+}
+
+export function reportSend(draft: ReportDraft): Promise<void> {
+  return invoke("report_send", { draft });
+}
+
+export function reportSave(draft: ReportDraft, path: string): Promise<void> {
+  return invoke("report_save", { draft, path });
+}
+
+/** Records a UI error in the app log, so reports include it. */
+export function logUiError(message: string, stack: string | null): Promise<void> {
+  return invoke("log_ui_error", { message, stack });
+}

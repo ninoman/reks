@@ -71,7 +71,7 @@ impl MixSlot {
     fn engine(&mut self) -> CmdResult<&mut Engine> {
         self.engine
             .as_mut()
-            .ok_or_else(|| CmdError("the mixer's audio output is not started".into()))
+            .ok_or_else(|| CmdError::new("the mixer's audio output is not started".into()))
     }
 
     fn stop(&mut self) {
@@ -277,7 +277,7 @@ fn snapshot(slot: &mut MixSlot) -> Option<MixState> {
 fn lock(mix: &Mix) -> CmdResult<std::sync::MutexGuard<'_, MixSlot>> {
     mix.slot
         .lock()
-        .map_err(|_| CmdError("mixer state poisoned".into()))
+        .map_err(|_| CmdError::new("mixer state poisoned".into()))
 }
 
 /// Rates and buffer sizes `device` (`None`: system default) offers.
@@ -425,7 +425,7 @@ fn deck_index(deck: u8) -> CmdResult<usize> {
     if i < DECKS {
         Ok(i)
     } else {
-        Err(CmdError(format!("no deck {}", i + 1)))
+        Err(CmdError::new(format!("no deck {}", i + 1)))
     }
 }
 
@@ -597,11 +597,11 @@ pub async fn mix_cue_edit(
                 src,
             }) => (*id, Arc::clone(src)),
             Some(_) => {
-                return Err(CmdError(
+                return Err(CmdError::new(
                     "The cues of a track on a stick can't be changed here.".into(),
                 ))
             }
-            None => return Err(CmdError(format!("deck {} is empty", i + 1))),
+            None => return Err(CmdError::new(format!("deck {} is empty", i + 1))),
         };
         let generation = s.generation[i];
         let engine = s.engine()?;

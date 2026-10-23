@@ -26,8 +26,18 @@ tauri-plugin-window-state = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+# Log file for bug reports (D34). MIT.
+tracing-appender = "0.2"
+tracing-subscriber = "0.3"
+# Sends reports to the feedback relay (D34). rustls with ring and the OS
+# certificate store: aws-lc and webpki-roots would add licences outside deny.toml.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 reks-analysis = { workspace = true }
 reks-core = { workspace = true }
 reks-mix = { workspace = true }
 reks-export-onelibrary = { workspace = true }
 reks-export-rb = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

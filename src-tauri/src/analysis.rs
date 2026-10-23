@@ -101,7 +101,7 @@ impl Analysis {
     fn queue(&self) -> CmdResult<&Arc<AnalysisQueue>> {
         self.queue
             .as_ref()
-            .ok_or_else(|| CmdError("analysis is off: the beat model was not found".into()))
+            .ok_or_else(|| CmdError::new("analysis is off: the beat model was not found".into()))
     }
 
     /// True while tracks are queued or being analysed.

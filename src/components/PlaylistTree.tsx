@@ -22,6 +22,7 @@ import { usePlaylists } from "../store/playlists";
 import { visibleNodes } from "../store/playlistTree";
 import { useRules } from "../store/rules";
 import { Disclosure } from "./Disclosure";
+import { ErrorMessage } from "./ErrorMessage";
 import { FolderIcon, InfoIcon, PlaylistIcon, PlusIcon } from "./icons";
 import { DISCLOSURE, ICON, INDENT, NAME, PAD, ROW } from "./treeStyles";
 import {
@@ -137,11 +138,7 @@ export function PlaylistTree() {
 
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-label="Playlists">
-      {error !== null && (
-        <div className="mx-2 my-1.5 text-danger select-text" role="alert">
-          {error}
-        </div>
-      )}
+      {error !== null && <ErrorMessage className="mx-2 my-1.5" message={error} />}
       <ContextMenu modal={false}>
         <ContextMenuTrigger asChild>
           <ScrollArea className="min-h-0 flex-1">

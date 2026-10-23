@@ -8,6 +8,7 @@ import { useState } from "react";
 import type { TagId } from "../lib/ipc";
 import { creatableIn, searchTags, type TagCoverage } from "../store/tagModel";
 import { useTags } from "../store/tags";
+import { ReportErrorButton } from "./ErrorMessage";
 import { Button } from "./ui/Button";
 import { Caption } from "./ui/Caption";
 import { Checkbox } from "./ui/Checkbox";
@@ -32,9 +33,12 @@ export function TagPicker({ coverageOf, onToggle, onCreate }: TagPickerProps) {
     return status === "error" ? (
       <div className="flex w-64 flex-col gap-1.5 p-1.5 text-sm" role="alert">
         <span className="text-danger select-text">{error}</span>
-        <Button size="sm" onClick={() => void load()}>
-          Retry
-        </Button>
+        <span className="flex gap-1.5">
+          <Button size="sm" onClick={() => void load()}>
+            Retry
+          </Button>
+          <ReportErrorButton message={error ?? ""} />
+        </span>
       </div>
     ) : (
       <p className="m-0 w-64 p-1.5 text-sm text-fg-muted">Loading tags…</p>

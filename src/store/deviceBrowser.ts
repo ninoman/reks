@@ -18,6 +18,7 @@ import {
 import { useDevices } from "./devices";
 import { useHistory } from "./history";
 import type { TrackRef } from "./mix";
+import { reportAction } from "./report";
 import { useToasts } from "./toasts";
 
 /** How often the list of drives is refreshed while the section is open. */
@@ -182,8 +183,8 @@ export const useDeviceBrowser = create<DeviceBrowserState>()((set, get) => ({
     const devices = useDevices.getState();
     await devices.eject(mountPoint);
     const { notice, error } = useDevices.getState();
-    const message = error ?? notice;
-    if (message !== null) useToasts.getState().show(message);
+    if (error !== null) useToasts.getState().show(error, reportAction(error));
+    else if (notice !== null) useToasts.getState().show(notice);
   },
 
   syncDevices(devices) {

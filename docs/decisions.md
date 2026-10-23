@@ -556,6 +556,11 @@ Date of decisions: 2026-10-18.
   crates) are unmaintained build-time macro crates with no replacement release.
   Remove each ignore when `rekordcrate`, `lofty` or Tauri moves off it; a new
   advisory still fails the check.
+- 2026-10-23: `cargo deny` checks only the four release targets (`[graph]
+  targets` in `deny.toml`). Dependencies for other targets never reach a
+  binary. The case that prompted it: `rustls-platform-verifier` (D34) pulls
+  `webpki-root-certs` (CDLA-Permissive-2.0) on wasm32 only. Add a target
+  there when the release matrix gains one.
 
 ## D19. Naming and identifiers
 
@@ -1037,6 +1042,49 @@ Date of decisions: 2026-10-18.
   `docs/hw-test-log.md`.
 - Why: the docs carry the design and are what coding sessions read; the
   board gives a cross-phase view of what is left without copying the plan.
+
+## D34. Bug reports and feedback from inside the app
+
+- Date: 2026-10-23 (maintainer's request; outside the phase plan).
+- Decision: a **Report a problem or idea** dialog (header button, a
+  "Report" link on error messages and error toasts, the crash notice) sends a bug, feature
+  request or feedback to a small relay we host
+  ([`services/feedback-relay`](../services/feedback-relay)), a Cloudflare
+  Worker. The relay adds it as a **draft item** to the maintainer's
+  **private** GitHub Projects board, the reks roadmap (D33), with the board's
+  Kind field set from the kind and Status set to "Needs triage". Triage
+  happens on that board, next to the rest of the work; a report worth
+  working on is turned into an issue with the board's "Convert to issue".
+  No repo holds untriaged reports, and the board being private keeps
+  testers' text, logs and emails private.
+- Context for bugs: diagnostics are on by default for bugs and off
+  otherwise. They hold the version, OS and architecture, schema version,
+  track and playlist counts, the tail of the newest log file and the newest
+  crash file younger than a week. The home dir becomes `~` and each library
+  folder `<library-root-N>` ([`reks_core::diagnostics`](../crates/reks-core/src/diagnostics.rs)).
+  "Show what's sent" previews the exact body.
+- **Manual only.** The app writes a daily rolling log (5 days kept) and a
+  `crash-<utc>.txt` per panic to the app log dir
+  ([`logging.rs`](../src-tauri/src/logging.rs)). Every command error is
+  logged when it is created (`CmdError::new`), and uncaught UI errors go to
+  the same log. Nothing leaves the machine until the user presses Send. There is
+  no telemetry and no automatic crash upload.
+- The relay URL is built in from `REKS_FEEDBACK_URL` (a repository
+  variable in the release workflow). A build without it can only save the
+  report to a file. Sending uses `reqwest` with rustls on `ring` and the OS
+  certificate store, since aws-lc and webpki-roots bring licences outside
+  `deny.toml`.
+- Rejected: pre-filled GitHub issues (some beta testers have no GitHub
+  account; logs do not fit in a URL); Sentry (telemetry in a privacy-minded
+  app, and a second place to triage); issues in the public repo (testers'
+  text, logs and file names would be public); issues in a separate private
+  repo (a second place to look, when the board already exists).
+- Limits of draft items: no comments or notifications, and commits cannot
+  close them; that ends once one is converted to an issue. The board must
+  stay private for as long as it receives reports.
+- Risks: the relay URL is public in an open-source binary. Defences are a
+  per-IP rate limit (3 a minute), size caps and a version header; add
+  Turnstile if spam shows up.
 
 ## Open risks (cross-cutting)
 

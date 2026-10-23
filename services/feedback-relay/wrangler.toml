@@ -1,0 +1,22 @@
+# Feedback relay (docs/feedback.md). Secret: GITHUB_TOKEN (wrangler secret put).
+name = "reks-feedback-relay"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+# Served at https://reks-feedback-relay.ninoman.workers.dev; no preview URLs needed.
+workers_dev = true
+preview_urls = false
+
+[vars]
+# Private GitHub Projects board that receives reports as draft items (D34).
+PROJECT_OWNER = "ninoman"
+PROJECT_NUMBER = "1"
+# Single-select fields set on each item; skipped when the board lacks them.
+TYPE_FIELD = "Kind"
+STATUS_FIELD = "Status"
+STATUS_VALUE = "Needs triage"
+
+# Per-IP limit: the URL ships inside an open-source binary.
+[[ratelimits]]
+name = "REPORT_LIMIT"
+namespace_id = "1001"
+simple = { limit = 3, period = 60 }

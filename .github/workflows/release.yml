@@ -117,6 +117,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REKS_BUILD_ONELIBRARY_KEY: ${{ secrets.REKS_ONELIBRARY_KEY }}
+          # Feedback relay (D34, docs/feedback.md). A variable, not a secret: it ships in the binary.
+          REKS_FEEDBACK_URL: ${{ vars.REKS_FEEDBACK_URL }}
         with:
           tauriScript: npx tauri
           args: --target ${{ matrix.target }}

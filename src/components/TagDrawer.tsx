@@ -17,6 +17,7 @@ import { clickAction, coverage, type TagCoverage } from "../store/tagModel";
 import { useTags } from "../store/tags";
 import { useTagTargets } from "../store/tagTargets";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { ErrorMessage } from "./ErrorMessage";
 import { CloseIcon, GripIcon, PlusIcon } from "./icons";
 import { Button } from "./ui/Button";
 import { Checkbox } from "./ui/Checkbox";
@@ -302,11 +303,7 @@ export function TagDrawer() {
           {targetText(targets)}
         </p>
       </div>
-      {error !== null && (
-        <div className="px-3 pb-2 text-sm text-danger select-text" role="alert">
-          {error}
-        </div>
-      )}
+      {error !== null && <ErrorMessage className="px-3 pb-2 text-sm" message={error} />}
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-4 px-3 pt-1 pb-3">
           {tree === null ? (

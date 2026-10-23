@@ -9,6 +9,7 @@ import type { KeyboardEvent } from "react";
 
 import { groupSessions, useHistory } from "../store/history";
 import { Disclosure } from "./Disclosure";
+import { ErrorMessage } from "./ErrorMessage";
 import { PlusIcon } from "./icons";
 import { INDENT, NAME, PAD, ROW } from "./treeStyles";
 import { focusRingInset } from "./ui/control";
@@ -144,11 +145,7 @@ export function HistoryTree() {
             ])}
         </div>
       </ScrollArea>
-      {error !== null && (
-        <div className="mx-2 my-1.5 text-danger select-text" role="alert">
-          {error}
-        </div>
-      )}
+      {error !== null && <ErrorMessage className="mx-2 my-1.5" message={error} />}
     </section>
   );
 }
