@@ -40,6 +40,7 @@ export function readTokens(el: Element) {
       memory: token("--color-deck-memory"),
       autoLoop: token("--color-deck-auto-loop"),
       cue: token("--color-deck-cue"),
+      loopIn: token("--color-deck-loop-in"),
     },
     font: token("--font-sans"),
   };

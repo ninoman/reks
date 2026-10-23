@@ -69,7 +69,7 @@ on the `deck`, the theme's darkest panel (Paper's is light, so its
 `waveform-high`, `waveform-blue-high`, `led-hot` and `grid-beat` are dark):
 `deck`, `deck-fg`, `waveform-low/mid/high` (3-band), `grid-beat`,
 `grid-downbeat`, `grid-cursor` (the accent); the mixer's decks add
-`deck-cue`, `deck-hotcue`, `deck-memory`, `deck-loop`, `deck-auto-loop` and the other waveform styles' `waveform-rgb-*` and
+`deck-cue`, `deck-hotcue`, `deck-memory`, `deck-loop`, `deck-loop-in` (the pending loop IN), `deck-auto-loop` and the other waveform styles' `waveform-rgb-*` and
 `waveform-blue(-high)`. The mark colours are the same in every theme.
 
 The `accent` stays scarce: primary buttons, the loaded track, the played
@@ -148,6 +148,7 @@ menu items `--menu-item-h`.
 | `Toast` | bottom-centre message with an optional action (Undo); one at a time via `store/toasts` + `ToastHost` | – |
 | `Badge` | `variant`: neutral, accent, muted; `size`: sm, md | – |
 | `Kbd` | `variant`: default, inverse | – |
+| `Readout` | mono, tabular value box in the control size scale (`size`); `dimmed` for a value not in effect yet (the next loop size); `role="img"`, name it with `aria-label` | – |
 | `Tooltip` | `content`, `shortcut`, `side` | Radix Tooltip |
 | Shortcut hint | `Button` / `IconButton` take `shortcut` (+ `hint`, default `aria-label`) and show it in a tooltip on hover/focus; the key text comes from `lib/mixKeys` (`deckKeyHint`, `crossfaderKeyHint`) or `lib/keys` (`PLAYER_PLAY_KEY`), never a literal | `ShortcutTooltip` |
 | `DropdownMenu*` | Content, Item (`variant`: default, danger), CheckboxItem, Separator | Radix DropdownMenu |
@@ -378,9 +379,9 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 Modelled on rekordbox's 2Deck Horizontal. Approved wireframe:
 <https://claude.ai/artifact/1bLg3dZwjRfL4nXbYvFdzD> (revision 3).
 
-**Size.** 260 px tall in both 2- and 4-deck mode (no compact deck; 248
-until Q moved over CUE and PLAY, 2026-10-22). The mixer is 344 × 440 px since task 22, so
-two stacked decks (528 px) make 4-deck mode 88 px taller than the mixer until task 23 sizes the decks to it. Width is what's left on each side: 441 px at a 1280 px
+**Size.** 290 px tall in both 2- and 4-deck mode (no compact deck; 248
+until Q moved over CUE and PLAY, 2026-10-22; 260 until the quick-loop row, task 21). The mixer is 344 × 440 px since task 22, so
+two stacked decks (588 px) make 4-deck mode 148 px taller than the mixer until task 23 sizes the decks to it. Width is what's left on each side: 441 px at a 1280 px
 window (minimum, `--deck-min-w` 440), 521 at 1440, 761 at 1920; extra width
 goes to the header and waveforms, the pads stop at 336 px.
 
@@ -391,6 +392,7 @@ goes to the header and waveforms, the pads stop at 336 px.
 | Header (40 px) | Deck number (lit when loaded) · artwork (eject ⏏ on hover or focus; dashed box without artwork) · title / artist · key (in the Settings notation; a readout with KEY under it, not a pill) · BPM with tempo % under it · remaining over elapsed time |
 | Zoomed waveform (72 px, full width) | Playhead centred, beat lines, hot cue and loop markers, sync phase meter on the top edge when synced. Zoom − / + float top right on hover or focus-within, zoom level between them. Drag to skim |
 | Overview (20 px) | Whole track, played part shaded, hot cue ticks in cue colour, cue point, loop bar. Keyboard seek slider |
+| Quick loop (24 px) | `LoopBlock` row: IN · OUT · ½ · size · 2× · LOOP · RELOOP, in every pad mode (see [Quick loop](#quick-loop-task-21)) |
 | Bottom (92 px) | Q over CUE and PLAY (round, 32 px), at the bottom of their column · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · MASTER and SYNC (bottom-aligned like Q, CUE and PLAY) |
 | Tempo column (44 px) | Range button (±6 / ±10 / ±16 / WIDE) and **M** (master tempo, ghost; disabled until task 10 picks an engine) · full-height fader · nudge |
 
@@ -470,7 +472,7 @@ take-master controls; task 15's per-deck zoom became one `MixStore.waveZoom`
 (maintainer, 2026-10-22). Pure helpers in `mixView.ts`:
 `JUMP_PAGES`, `LOOP_PAGES` (FINE = a 1/32 `beatJump`; the engine's 10 ms
 `fineJump` is unused by the deck), `formatBeats`, `snapToDetent`,
-`tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` 260,
+`tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` 290 (260 + the quick-loop row), `--loop-block-w` 104,
 `--deck-header-h` 40, `--deck-min-w` 440, `--deck-wave-h` 72,
 `--deck-overview-h` 20, `--deck-views-h`, `--deck-bottom-h` 92, `--deck-solo-h`, `--deck-art`
 40, `--deck-pads-max-w` 336, `--deck-transport`, `--deck-sync-w`,
@@ -491,16 +493,45 @@ Shift is a key's second function, ⌘ (or Ctrl) its third:
 | Previous / next memory cue | R T | O P |
 | Set memory cue at the playhead | Shift T | Shift P |
 | Beat jump back / forward, last jump size | ⌘ R, ⌘ T | ⌘ O, ⌘ P |
-| Loop on / off, last loop size (rekordbox: auto beat loop) | Shift F | Shift L |
+| Loop on / off, next loop size (rekordbox: auto beat loop) | Shift F | Shift L |
+| Loop IN · OUT (rekordbox: Loop In / Out) | D · F | K · L |
+| Reloop, or leave the loop (rekordbox: Exit / Reloop) | G | ; |
+| Halve · double the loop, or the next loop size (rekordbox: Halve / Double) | Shift D · Shift G | Shift K · Shift ; |
 | Next pad mode (no rekordbox key) | Shift S | Shift J |
 
 Crossfader X / C / V (rekordbox has none; it puts sampler slots there),
 Space (player deck) and waveform zoom − / + (every deck at once, also
 with the Mix panel closed) are not per deck. rekordbox keys we have no
-action for yet stay free: loop in / out / exit (D F G, K L ;), halve /
-double loop, slip reverse (S, J), return to start, tempo. Mouse or Tab
+action for yet stay free: slip reverse (S, J), return to start, tempo. Mouse or Tab
 only: hot cues E–H, other pads, page arrows, Q, M, tempo range, BPM edit,
 eject, the memory cue list, renames.
+
+### Quick loop (task 21)
+
+[Phase 5 task 21](phases/phase-5.md), spec
+[`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §5.
+`mix/LoopBlock` is on every deck in every pad mode, from `Button
+variant="control"` and the new `ui/Readout` (a mono value box, `dimmed` when
+not in effect). `layout="row"` is one 24 px line under the overview (the
+2- and 4-deck decks, which are too narrow for a block beside their pads);
+`layout="grid"` is the 3 × 2 block (`--loop-block-w` 104: IN OUT / ½ size 2× /
+LOOP RELOOP) between the waveform and the pads of the player deck. Task 23
+moves the 4-deck decks to the grid and sizes both layouts to the mixer.
+
+| Control | Not looping | Looping |
+|---|---|---|
+| IN | pending loop IN at the playhead; lit, and drawn on both waveforms (`deck-loop-in`, a line with a bracket) | moves the loop's start |
+| OUT | loops from a pending IN to the playhead; disabled until the head is past IN | moves the loop's end |
+| ½ / 2× | change the next LOOP size (`DeckMeta.lastLoop`, 1/32 … 512; needs a grid) | resize the loop (by time without a grid) |
+| size | the next size, dimmed | the loop's length: `64`, `1/16`, `3.87`, or seconds (`1.25s`) without a grid |
+| LOOP | loop of the shown size (needs a grid) | leaves it; lit while any loop plays |
+| RELOOP | back into the last loop; disabled when there is none | leaves it, keeping it |
+
+State and format are pure in `mixView.ts` (`loopBlockState`, `stepLoopSize`,
+`formatLoopBeats`, `formatLoopSeconds`); `DeckStrip` passes them to the
+block. A memory loop pad sends its end with `callCue`, which arms RELOOP.
+Keys and tooltips come from `mixKeys.ts`; `ShortcutHelp` is built from the
+same table (`deckKeysHelp`). UNVERIFIED on a CDJ (hardware checks deferred).
 
 ### Cue editing (task 17)
 

@@ -4,14 +4,14 @@
  * Hot cues are a line with a flag carrying the slot letter in the cue's own
  * library colour; memory cues and the deck's cue point are a line with a
  * triangle on the bottom edge, a memory loop also a bar along the bottom to
- * its end (an auto-entered one in `deck-auto-loop`, thicker); the playing
- * loop is a shaded band.
+ * its end (an auto-entered one in `deck-auto-loop`, thicker); a pending loop
+ * IN is a line with a bracket; the playing loop is a shaded band.
  */
 import { formatRgb, hotCueLabel } from "./format";
 import type { HotCueView, LoopView, MemoryCueView } from "./ipc";
 import { hexRgb } from "./waveDraw";
 
-export type MarkKind = "hot" | "memory" | "cue";
+export type MarkKind = "hot" | "memory" | "cue" | "loopIn";
 
 export interface DeckMark {
   kind: MarkKind;
@@ -33,13 +33,18 @@ export interface MarkColours {
   memory: string;
   autoLoop: string;
   cue: string;
+  loopIn: string;
 }
 
-/** A deck's marks, drawn in order: memory cues, the cue point, then hot cues on top. */
+/**
+ * A deck's marks, drawn in order: memory cues, the cue point, the pending
+ * loop IN (`loopInMs`, null when none), then hot cues on top.
+ */
 export function deckMarks(
   hotCues: HotCueView[],
   memoryCues: MemoryCueView[],
   cueMs: number,
+  loopInMs: number | null,
   colours: MarkColours,
 ): DeckMark[] {
   const colour = (rgb: number | null, fallback: string) =>
@@ -63,6 +68,19 @@ export function deckMarks(
       endMs: null,
       auto: false,
     },
+    ...(loopInMs === null
+      ? []
+      : [
+          {
+            kind: "loopIn" as const,
+            ms: loopInMs,
+            colour: colours.loopIn,
+            label: null,
+            name: null,
+            endMs: null,
+            auto: false,
+          },
+        ]),
     ...hotCues.map((c) => ({
       kind: "hot" as const,
       ms: c.positionMs,
@@ -87,18 +105,20 @@ export function markAt(marks: DeckMark[], ms: number, slopMs: number): DeckMark 
   return best;
 }
 
-/** A mark's hover hint: "Hot cue A: Drop", "Memory cue", "Memory loop", "Auto loop", "Cue point". */
+/** A mark's hover hint: "Hot cue A: Drop", "Memory cue", "Memory loop", "Auto loop", "Cue point", "Loop IN". */
 export function markTitle(m: DeckMark): string {
   const what =
     m.kind === "hot"
       ? `Hot cue ${m.label}`
       : m.kind === "cue"
         ? "Cue point"
-        : m.auto
-          ? "Auto loop"
-          : m.endMs !== null
-            ? "Memory loop"
-            : "Memory cue";
+        : m.kind === "loopIn"
+          ? "Loop IN"
+          : m.auto
+            ? "Auto loop"
+            : m.endMs !== null
+              ? "Memory loop"
+              : "Memory cue";
   return m.name === null ? what : `${what}: ${m.name}`;
 }
 
@@ -156,6 +176,11 @@ export function drawMarks(
       ctx.fillRect(x, 0, w, flagH);
       ctx.fillStyle = darkText(m.colour) ? s.dark : s.light;
       ctx.fillText(m.label ?? "", x + w / 2 + line / 2, flagH / 2 + s.dpr / 2);
+    } else if (m.kind === "loopIn") {
+      // A bracket "[" opening to the right: the loop starts here.
+      const arm = Math.round(s.flag * 0.6 * s.dpr);
+      ctx.fillRect(x, 0, arm, line * 2);
+      ctx.fillRect(x, height - line * 2, arm, line * 2);
     } else {
       ctx.beginPath();
       ctx.moveTo(x + line / 2 - tri, height);

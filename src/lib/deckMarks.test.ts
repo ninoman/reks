@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { activeLoop, darkText, deckMarks, markAt, markTitle } from "./deckMarks";
 
-const colours = { hot: "#00ff00", memory: "#ff0000", autoLoop: "#839cff", cue: "#ffaa00" };
+const colours = {
+  hot: "#00ff00",
+  memory: "#ff0000",
+  autoLoop: "#839cff",
+  cue: "#ffaa00",
+  loopIn: "#ffd60a",
+};
 
 describe("deckMarks", () => {
   it("lists memory cues, the cue point, then lettered hot cues in their own colours", () => {
@@ -13,6 +19,7 @@ describe("deckMarks", () => {
       ],
       [{ id: 3, positionMs: 500, endMs: null, activeLoop: false, colorRgb: null, name: "Break" }],
       250,
+      null,
       colours,
     );
     expect(marks).toEqual([
@@ -60,6 +67,7 @@ describe("deckMarks", () => {
       [{ id: 1, slot: 1, positionMs: 1_000, colorRgb: null, name: "Drop" }],
       [{ id: 2, positionMs: 998, endMs: null, activeLoop: false, colorRgb: null, name: null }],
       5_000,
+      null,
       colours,
     );
     const at = (ms: number) => {
@@ -81,12 +89,23 @@ describe("deckMarks", () => {
       colorRgb: 0x112233,
       name: null,
     });
-    const marks = deckMarks([], [loop(1, 1_000, false), loop(2, 3_000, true)], 0, colours);
+    const marks = deckMarks([], [loop(1, 1_000, false), loop(2, 3_000, true)], 0, null, colours);
     expect(marks.slice(0, 2).map((m) => [m.endMs, m.auto, m.colour])).toEqual([
       [1_500, false, "#112233"],
       [3_500, true, "#839cff"],
     ]);
     expect(marks.slice(0, 2).map(markTitle)).toEqual(["Memory loop", "Auto loop"]);
+  });
+});
+
+describe("pending loop IN", () => {
+  it("is a mark after the cue point and before the hot cues, only while pending", () => {
+    const hot = [{ id: 1, slot: 0, positionMs: 9_000, colorRgb: null, name: null }];
+    expect(deckMarks(hot, [], 250, null, colours).map((m) => m.kind)).toEqual(["cue", "hot"]);
+    const marks = deckMarks(hot, [], 250, 4_000, colours);
+    expect(marks.map((m) => m.kind)).toEqual(["cue", "loopIn", "hot"]);
+    expect(marks[1]).toMatchObject({ ms: 4_000, colour: "#ffd60a", endMs: null });
+    expect(markTitle(marks[1] as (typeof marks)[number])).toBe("Loop IN");
   });
 });
 

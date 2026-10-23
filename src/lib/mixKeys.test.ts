@@ -4,6 +4,7 @@ import {
   crossfaderKeyHint,
   type DeckAction,
   deckKeyHint,
+  deckKeysHelp,
   type KeyPress,
   mixKeyAction,
 } from "./mixKeys";
@@ -44,6 +45,53 @@ describe("mixKeyAction", () => {
     expect(mixKeyAction(key("KeyJ", shift), 2)).toEqual({ type: "padMode", deck: 2 });
     expect(mixKeyAction(key("KeyA", shift), 2)).toBeNull();
     expect(mixKeyAction(key("KeyX", shift), 2)).toBeNull();
+  });
+
+  it("D F / K L set loop IN and OUT, G / ; reloop, Shift D G / Shift K ; halve and double", () => {
+    expect(mixKeyAction(key("KeyD"), 2)).toEqual({ type: "loopIn", deck: 1 });
+    expect(mixKeyAction(key("KeyK"), 2)).toEqual({ type: "loopIn", deck: 2 });
+    expect(mixKeyAction(key("KeyF"), 2)).toEqual({ type: "loopOut", deck: 1 });
+    expect(mixKeyAction(key("KeyL"), 2)).toEqual({ type: "loopOut", deck: 2 });
+    expect(mixKeyAction(key("KeyG"), 2)).toEqual({ type: "reloop", deck: 1 });
+    expect(mixKeyAction(key("Semicolon"), 2)).toEqual({ type: "reloop", deck: 2 });
+    const shift = { shiftKey: true };
+    expect(mixKeyAction(key("KeyD", shift), 2)).toEqual({
+      type: "loopResize",
+      double: false,
+      deck: 1,
+    });
+    expect(mixKeyAction(key("KeyG", shift), 2)).toEqual({
+      type: "loopResize",
+      double: true,
+      deck: 1,
+    });
+    expect(mixKeyAction(key("KeyK", shift), 2)).toEqual({
+      type: "loopResize",
+      double: false,
+      deck: 2,
+    });
+    expect(mixKeyAction(key("Semicolon", shift), 2)).toEqual({
+      type: "loopResize",
+      double: true,
+      deck: 2,
+    });
+    // Shift F stays LOOP on/off; ⌘ D is no loop key.
+    expect(mixKeyAction(key("KeyF", shift), 2)).toEqual({ type: "loop", deck: 1 });
+    expect(mixKeyAction(key("KeyD", { metaKey: true }), 2)).toBeNull();
+  });
+
+  it("Option moves the loop keys to decks 1 and 4", () => {
+    expect(mixKeyAction(key("KeyD", { altKey: true }), 4)).toEqual({ type: "loopIn", deck: 0 });
+    expect(mixKeyAction(key("Semicolon", { altKey: true }), 4)).toEqual({
+      type: "reloop",
+      deck: 3,
+    });
+    expect(mixKeyAction(key("KeyK", { altKey: true, shiftKey: true }), 4)).toEqual({
+      type: "loopResize",
+      double: false,
+      deck: 3,
+    });
+    expect(mixKeyAction(key("KeyD", { altKey: true }), 2)).toBeNull();
   });
 
   it("⌘ or Ctrl on the memory cue keys beat jumps", () => {
@@ -117,6 +165,33 @@ describe("key hints", () => {
     expect(row({ type: "jump", dir: 1 })).toEqual(["⌘ T", "⌘ P"]);
     expect(row({ type: "loop" })).toEqual(["Shift F", "Shift L"]);
     expect(row({ type: "padMode" })).toEqual(["Shift S", "Shift J"]);
+    expect(row({ type: "loopIn" })).toEqual(["D", "K"]);
+    expect(row({ type: "loopOut" })).toEqual(["F", "L"]);
+    expect(row({ type: "reloop" })).toEqual(["G", ";"]);
+    expect(row({ type: "loopResize", double: false })).toEqual(["Shift D", "Shift K"]);
+    expect(row({ type: "loopResize", double: true })).toEqual(["Shift G", "Shift ;"]);
+    expect(deckKeyHint({ type: "reloop" }, 3)).toBe("⌥ ;");
+  });
+
+  it("read as one line for the shortcut list", () => {
+    expect(deckKeysHelp([{ type: "play" }])).toBe("Z / N");
+    expect(deckKeysHelp([{ type: "loopIn" }, { type: "loopOut" }])).toBe("D F / K L");
+    expect(
+      deckKeysHelp([
+        { type: "loopResize", double: false },
+        { type: "loopResize", double: true },
+      ]),
+    ).toBe("Shift D G / Shift K ;");
+    expect(deckKeysHelp([{ type: "memoryCue" }])).toBe("Shift T / Shift P");
+    expect(
+      deckKeysHelp(
+        [
+          { type: "hotCue", slot: 0 },
+          { type: "hotCue", slot: 3 },
+        ],
+        true,
+      ),
+    ).toBe("1–4 / 6–9");
   });
 
   it("round-trips through mixKeyAction for every deck and action", () => {
@@ -130,6 +205,11 @@ describe("key hints", () => {
       { type: "jump", dir: -1 },
       { type: "jump", dir: 1 },
       { type: "loop" },
+      { type: "loopIn" },
+      { type: "loopOut" },
+      { type: "reloop" },
+      { type: "loopResize", double: false },
+      { type: "loopResize", double: true },
       { type: "padMode" },
       { type: "memoryCue" },
       { type: "callCue", dir: 1 },
@@ -138,7 +218,7 @@ describe("key hints", () => {
       for (let deck = 0; deck < 4; deck++) {
         const parts = (deckKeyHint(action, deck) ?? "").split(" ");
         const name = parts.at(-1) ?? "";
-        const code = /\d/.test(name) ? `Digit${name}` : `Key${name}`;
+        const code = name === ";" ? "Semicolon" : /\d/.test(name) ? `Digit${name}` : `Key${name}`;
         const press = key(code, {
           altKey: parts.includes("⌥"),
           shiftKey: parts.includes("Shift"),

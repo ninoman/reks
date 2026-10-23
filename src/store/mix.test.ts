@@ -348,8 +348,8 @@ describe("mix store", () => {
     mix.callAdjacentCue(0, -1);
     mix.callAdjacentCue(0, 1);
     expect(sent().slice(1)).toEqual([
-      { type: "callCue", deck: 0, ms: 1_000 },
-      { type: "callCue", deck: 0, ms: 9_000 },
+      { type: "callCue", deck: 0, ms: 1_000, endMs: null },
+      { type: "callCue", deck: 0, ms: 9_000, endMs: null },
     ]);
 
     vi.mocked(ipc.mixCueEdit).mockRejectedValue(new Error("hot cue A is already set"));

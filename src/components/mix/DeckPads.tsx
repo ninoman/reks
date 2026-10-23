@@ -78,8 +78,8 @@ export interface DeckPadsProps {
   /** Jumps to a set hot cue, sets an empty one. */
   onHotCuePad: (slot: number) => void;
   onEditCues: (edit: CueEdit) => void;
-  /** Cue point and playhead to a memory cue. */
-  onCallCue: (ms: number) => void;
+  /** Cue point and playhead to a memory cue; a memory loop's `endMs` arms RELOOP. */
+  onCallCue: (ms: number, endMs: number | null) => void;
   onJump: (beats: number) => void;
   onLoop: (beats: number) => void;
 }
@@ -298,7 +298,7 @@ function MemoryPads({
               hint={`Memory ${what} ${at}${cue.name ? `: ${cue.name}` : ""} · double-click to rename · × or Shift+click to delete · right-click for more`}
               onClick={(e) => {
                 if (e.shiftKey) onEditCues({ type: "delete", cueId: cue.id });
-                else onCallCue(cue.positionMs);
+                else onCallCue(cue.positionMs, cue.endMs);
               }}
               onDoubleClick={() => setRenaming(cue.id)}
               remove={{
@@ -314,7 +314,9 @@ function MemoryPads({
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onSelect={() => onCallCue(cue.positionMs)}>Jump here</ContextMenuItem>
+          <ContextMenuItem onSelect={() => onCallCue(cue.positionMs, cue.endMs)}>
+            Jump here
+          </ContextMenuItem>
           <ContextMenuItem onSelect={() => setRenaming(cue.id)}>Rename</ContextMenuItem>
           {cue.endMs !== null && (
             <ContextMenuCheckboxItem

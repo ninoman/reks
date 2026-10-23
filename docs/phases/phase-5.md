@@ -620,7 +620,7 @@ nothing; 25 needs 22–24.
     UNVERIFIED against a CDJ (hardware checks deferred): RELOOP with no
     loop active, IN/OUT editing an active loop, and IN/OUT/RELOOP while
     paused.
-21. [ ] **Quick-loop block on every deck** ([#42](https://github.com/ninoman/reks/issues/42)) (§5 UI, Shortcuts).
+21. [x] **Quick-loop block on every deck** ([#42](https://github.com/ninoman/reks/issues/42)) (§5 UI, Shortcuts).
     - `mix/LoopBlock` (row and 3 × 2 grid layouts): IN, OUT, ½, size
       readout, 2×, LOOP, RELOOP, from `Button variant="control"`; new
       `ui/Readout` (mono value box with a dimmed state). In this PR the
@@ -638,6 +638,12 @@ nothing; 25 needs 22–24.
     Tests: `mixView.test.ts` (readout, size steps), `mixKeys.test.ts`,
     `DeckStrip.test.tsx` (block states: no grid, pending IN, looping,
     reloop armed), `ui.test.tsx` (`Readout`), `deckMarks.test.ts`.
+    Done 2026-10-23. Deviation: the 2- and 4-deck decks (448 px wide at
+    1280) left the pads 81 px with the grid beside them, so those decks get
+    the row under the overview and `--deck-h` 260 → 290; only the player deck
+    has the grid. Task 23 sizes the decks to the mixer and moves the 4-deck
+    decks to the grid. The memory loop pads now send `endMs` (arming RELOOP),
+    wired here as task 20 left it.
 22. [x] **Mixer re-layout** ([#43](https://github.com/ninoman/reks/issues/43)) (§4 A, §7). Layout only, no behaviour change.
     - Filter X and Y in one row above a crossfader that spans the mixer
       (119 → ~234 px), curve at the crossfader's right end.

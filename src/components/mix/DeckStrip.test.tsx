@@ -73,6 +73,11 @@ function setup(props: Partial<DeckStripProps> = {}) {
       "callAdjacentCue",
       "beatJump",
       "loopPad",
+      "toggleLoop",
+      "loopIn",
+      "loopOut",
+      "reloop",
+      "loopResize",
       "setPadMode",
       "setPadPage",
       "nudge",
@@ -224,7 +229,7 @@ describe("DeckStrip", () => {
     const cue = screen.getByRole("button", { name: "Deck 2 memory cue at 0:06.0" });
     expect(cue.textContent).toContain("Break");
     fireEvent.click(cue);
-    expect(a.callCue).toHaveBeenLastCalledWith(6_000);
+    expect(a.callCue).toHaveBeenLastCalledWith(6_000, null);
     expect(
       screen.getByRole("button", { name: "Deck 2 memory loop at 0:20.0" }).textContent,
     ).toContain("LOOP");
@@ -430,5 +435,121 @@ describe("DeckStrip", () => {
     expect(screen.getByRole("button", { name: "Deck 2 cue" })).toBeTruthy();
     expect(screen.getByRole("slider", { name: "Deck 2 tempo" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Deck 2 hot cue B" })).toBeTruthy();
+  });
+});
+
+describe("DeckStrip quick-loop block", () => {
+  const btn = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
+  const readout = () => screen.getByRole("img", { name: /Deck 2 (next )?loop size/ });
+  const loop = { startMs: 1_000, endMs: 3_000, beats: 4 };
+
+  it("is on the deck in every pad mode, with IN, OUT, ½, size, 2×, LOOP and RELOOP", () => {
+    for (const padMode of ["hotCue", "memory", "beatJump", "beatLoop"] as const) {
+      setup({ view: view(), meta: loadedMeta({ padMode }) });
+      const block = screen.getByRole("group", { name: "Deck 2 quick loop" });
+      expect([...block.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+        "IN",
+        "OUT",
+        "½",
+        "2×",
+        "LOOP",
+        "RELOOP",
+      ]);
+      expect(readout()).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("empty deck: all of it is disabled", () => {
+    setup();
+    for (const name of [
+      "Deck 2 loop in",
+      "Deck 2 loop out",
+      "Deck 2 halve loop",
+      "Deck 2 double loop",
+      "Deck 2 loop",
+      "Deck 2 reloop",
+    ]) {
+      expect(btn(name).disabled).toBe(true);
+    }
+  });
+
+  it("no loop: LOOP and the next size are on, the readout is dimmed, OUT and RELOOP wait", () => {
+    const a = setup({ view: view(), meta: loadedMeta({ lastLoop: 1 / 8 }) });
+    expect(readout().textContent).toBe("1/8");
+    expect(readout().dataset.dimmed).toBe("true");
+    expect(btn("Deck 2 loop").getAttribute("aria-pressed")).toBe("false");
+    expect(btn("Deck 2 loop out").disabled).toBe(true);
+    expect(btn("Deck 2 reloop").disabled).toBe(true);
+    fireEvent.click(btn("Deck 2 halve loop"));
+    fireEvent.click(btn("Deck 2 double loop"));
+    expect(a.loopResize).toHaveBeenNthCalledWith(1, false);
+    expect(a.loopResize).toHaveBeenNthCalledWith(2, true);
+    fireEvent.click(btn("Deck 2 loop"));
+    expect(a.toggleLoop).toHaveBeenCalledTimes(1);
+    fireEvent.click(btn("Deck 2 loop in"));
+    expect(a.loopIn).toHaveBeenCalledTimes(1);
+  });
+
+  it("no grid: IN works, LOOP and ½ / 2× do not", () => {
+    setup({ view: view({ beat: null, bpm: null }), meta: loadedMeta({ beats: [] }) });
+    expect(btn("Deck 2 loop in").disabled).toBe(false);
+    expect(btn("Deck 2 loop").disabled).toBe(true);
+    expect(btn("Deck 2 halve loop").disabled).toBe(true);
+    expect(btn("Deck 2 double loop").disabled).toBe(true);
+  });
+
+  it("pending IN: IN is lit, and OUT is on once the head is past it", () => {
+    const a = setup({ view: view({ loopIn: 20_000 }), meta: loadedMeta() });
+    expect(btn("Deck 2 loop in").getAttribute("aria-pressed")).toBe("true");
+    expect(btn("Deck 2 loop out").disabled).toBe(true);
+    cleanup();
+    const b = setup({ view: view({ loopIn: 4_000 }), meta: loadedMeta() });
+    expect(btn("Deck 2 loop out").disabled).toBe(false);
+    fireEvent.click(btn("Deck 2 loop out"));
+    expect(b.loopOut).toHaveBeenCalledTimes(1);
+    expect(a.loopOut).not.toHaveBeenCalled();
+  });
+
+  it("looping: LOOP is lit, the readout is the loop's length, RELOOP leaves it", () => {
+    const a = setup({
+      view: view({ loopRegion: { ...loop, beats: 3.87 }, lastLoop: loop }),
+      meta: loadedMeta({ lastLoop: 8 }),
+    });
+    expect(btn("Deck 2 loop").getAttribute("aria-pressed")).toBe("true");
+    expect(readout().textContent).toBe("3.87");
+    expect(readout().dataset.dimmed).toBeUndefined();
+    expect(btn("Deck 2 loop out").disabled).toBe(false);
+    fireEvent.click(btn("Deck 2 reloop"));
+    expect(a.reloop).toHaveBeenCalledTimes(1);
+  });
+
+  it("looping without a grid: the readout is in seconds", () => {
+    setup({
+      view: view({ loopRegion: { startMs: 1_000, endMs: 2_500, beats: null }, beat: null }),
+      meta: loadedMeta({ beats: [] }),
+    });
+    expect(readout().textContent).toBe("1.5s");
+    expect(btn("Deck 2 loop").disabled).toBe(false);
+    expect(btn("Deck 2 halve loop").disabled).toBe(false);
+  });
+
+  it("reloop armed: a loop was left, or a memory loop was called", () => {
+    const a = setup({ view: view({ lastLoop: loop }), meta: loadedMeta() });
+    expect(btn("Deck 2 reloop").disabled).toBe(false);
+    fireEvent.click(btn("Deck 2 reloop"));
+    expect(a.reloop).toHaveBeenCalledTimes(1);
+  });
+
+  it("a memory loop pad sends its end with the call, so RELOOP can enter it", () => {
+    const a = setup({ view: view(), meta: loadedMeta({ padMode: "memory" }) });
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 memory loop at 0:20.0" }));
+    expect(a.callCue).toHaveBeenLastCalledWith(20_000, 22_000);
+  });
+
+  it("the player deck alone has the block too", () => {
+    setup({ solo: true, view: view({ loopIn: 4_000 }), meta: loadedMeta() });
+    expect(screen.getByRole("group", { name: "Deck 2 quick loop" })).toBeTruthy();
+    expect(btn("Deck 2 loop out").disabled).toBe(false);
   });
 });
