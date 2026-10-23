@@ -383,8 +383,7 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 - Sizes (mixer 344 × 440, `--mixer-w` × `--mixer-h`; strips 52, rows 26, faders 96,
   filter FREQ `--knob-lg` 32; ![Mixer, dark](img/mixer-2-decks-dark.jpg) ![Mixer, light](img/mixer-2-decks-light.jpg)):
   `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-*`, `--pad-h`,
-  `--mixer-*`, `--mix-panel-max-h` (the panel scrolls
-  inside 62% of the window height).
+  `--mixer-*`, `--mix-panel-max-h` (window height − `--app-chrome-h` − `--library-min-h`, so the library keeps 4+ rows and the panel does not scroll at 1280 × 800).
 
 ### Deck layout (task 16)
 
@@ -392,21 +391,38 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
 Modelled on rekordbox's 2Deck Horizontal. Approved wireframe:
 <https://claude.ai/artifact/1bLg3dZwjRfL4nXbYvFdzD> (revision 3).
 
-**Size.** 290 px tall in both 2- and 4-deck mode (no compact deck; 248
-until Q moved over CUE and PLAY, 2026-10-22; 260 until the quick-loop row, task 21). The mixer is 344 × 440 px since task 22, so
-two stacked decks (588 px) make 4-deck mode 148 px taller than the mixer until task 23 sizes the decks to it. Width is what's left on each side: 441 px at a 1280 px
-window (minimum, `--deck-min-w` 440), 521 at 1440, 761 at 1920; extra width
-goes to the header and waveforms, the pads stop at 336 px.
+**Size** (task 23). 2 decks: `--deck-h` = `--mixer-h` (440 px, so the decks follow the mixer when
+task 25 changes its height); the waveform takes the spare height (222 px; `--deck-wave-min-h` 60 is the floor) and the
+quick-loop row sits under the overview. 4 decks (`compact`): `--deck-h-compact` 216 px, two stacked make the mixer's
+440; header 30, overview 14, waveform 60, and the quick-loop grid beside the pads. The panel is capped by
+`--mix-panel-max-h` = window height − `--app-chrome-h` (82) − `--library-min-h` (246: toolbar and filters 116, column
+header, 4 rows). Width is what's left on each side: 448 px at a 1280 px window (minimum `--deck-min-w` 440),
+528 at 1440, 768 at 1920; extra width goes to the header and waveforms, the pads stop at 336 px.
+
+Compact bottom row (80 px, 4 px gaps), left to right: a 60 px cluster (CUE · PLAY round 28 px; Q · SYNC; MASTER across),
+pads (tabs 20 + two 26 px rows), the 3 × 2 loop grid. At 1280 px the pads are 46 px wide (research §7 asked 52): the
+row has 378 px for cluster 60 + loop grid 104 + pads, and the tabs read tight there. 1440 px and up have room.
+
+Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light give the same numbers; library rows =
+`(grid height − header) / 26`, whole rows):
+
+| Window | Mix panel (2 / 4 decks) | Panel scrolls | Library rows 2 / 4 decks | Deck-2 waveform 2 / 4 decks |
+|---|---|---|---|---|
+| 1280 × 800 | 448 / 448 | no | 5 / 5 | 369 × 222 / 369 × 60 |
+| 1440 × 900 | 448 / 448 | no | 8 / 8 | 449 × 222 / 449 × 60 |
+| 1920 × 1080 | 448 / 448 | no | 17 / 17 | 689 × 222 / 689 × 60 |
+
+(Before: 501 / 536 px, 3 library rows at 1280 × 800, the 4-deck panel scrolling; 1 deck is unchanged, 15 / 19 / 27 rows.)
 
 **Rows**, top to bottom, with the tempo column down the right edge:
 
 | Row | Contents |
 |---|---|
-| Header (40 px) | Deck number (lit when loaded) · artwork (eject ⏏ on hover or focus; dashed box without artwork) · title / artist · key (in the Settings notation; a readout with KEY under it, not a pill) · BPM with tempo % under it · remaining over elapsed time |
-| Zoomed waveform (72 px, full width) | Playhead centred, beat lines, hot cue and loop markers, sync phase meter on the top edge when synced. Zoom − / + float top right on hover or focus-within, zoom level between them. Drag to skim |
-| Overview (20 px) | Whole track, played part shaded, hot cue ticks in cue colour, cue point, loop bar. Keyboard seek slider |
-| Quick loop (24 px) | `LoopBlock` row: IN · OUT · ½ · size · 2× · LOOP · RELOOP, in every pad mode (see [Quick loop](#quick-loop-task-21)) |
-| Bottom (92 px) | Q over CUE and PLAY (round, 32 px), at the bottom of their column · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · MASTER and SYNC (bottom-aligned like Q, CUE and PLAY) |
+| Header (40 px; 30 compact) | Deck number (lit when loaded) · artwork (eject ⏏ on hover or focus; dashed box without artwork) · title / artist · key (in the Settings notation; a readout with KEY under it, not a pill) · BPM with tempo % under it · remaining over elapsed time |
+| Zoomed waveform (spare height, min 60 px; the player deck 72 px) | Playhead centred, beat lines, hot cue and loop markers, sync phase meter on the top edge when synced. Zoom − / + float top right on hover or focus-within, zoom level between them. Drag to skim |
+| Overview (20 px; 14 compact) | Whole track, played part shaded, hot cue ticks in cue colour, cue point, loop bar. Keyboard seek slider |
+| Quick loop (24 px; compact: the 3 × 2 grid beside the pads) | `LoopBlock` row: IN · OUT · ½ · size · 2× · LOOP · RELOOP, in every pad mode (see [Quick loop](#quick-loop-task-21)) |
+| Bottom (92 px; compact 80, see Size) | Q over CUE and PLAY (round, 32 px), at the bottom of their column · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · MASTER and SYNC (bottom-aligned like Q, CUE and PLAY) |
 | Tempo column (44 px) | Range button (±6 / ±10 / ±16 / WIDE) and **M** (master tempo, ghost; disabled until task 10 picks an engine) · full-height fader · nudge |
 
 - **BPM edit**: double-click (or Enter when focused) turns the BPM into a
@@ -485,9 +501,9 @@ take-master controls; task 15's per-deck zoom became one `MixStore.waveZoom`
 (maintainer, 2026-10-22). Pure helpers in `mixView.ts`:
 `JUMP_PAGES`, `LOOP_PAGES` (FINE = a 1/32 `beatJump`; the engine's 10 ms
 `fineJump` is unused by the deck), `formatBeats`, `snapToDetent`,
-`tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` 290 (260 + the quick-loop row), `--loop-block-w` 104,
-`--deck-header-h` 40, `--deck-min-w` 440, `--deck-wave-h` 72,
-`--deck-overview-h` 20, `--deck-views-h`, `--deck-bottom-h` 92, `--deck-solo-h`, `--deck-art`
+`tempoForBpm`, `nextPadMode`, `loopPadControls`. Tokens: `--deck-h` (= `--mixer-h`), `--deck-h-compact` 216, `--loop-block-w` 104,
+`--deck-header-h` 40 / `-compact` 30, `--deck-min-w` 440, `--deck-wave-h` 72 (player deck), `--deck-wave-min-h` 60,
+`--deck-overview-h` 20 / `-compact` 14, `--deck-bottom-h-compact` 80, `--deck-cluster-w`, `--deck-views-h`, `--deck-bottom-h` 92, `--deck-solo-h`, `--deck-art`
 40, `--deck-pads-max-w` 336, `--deck-transport`, `--deck-sync-w`,
 `--deck-tempo-w`, `--pad-h` 26, `--fader-detent` 6.
 
@@ -525,11 +541,10 @@ eject, the memory cue list, renames.
 [`research/deck-mixer-layout.md`](research/deck-mixer-layout.md) §5.
 `mix/LoopBlock` is on every deck in every pad mode, from `Button
 variant="control"` and the new `ui/Readout` (a mono value box, `dimmed` when
-not in effect). `layout="row"` is one 24 px line under the overview (the
-2- and 4-deck decks, which are too narrow for a block beside their pads);
-`layout="grid"` is the 3 × 2 block (`--loop-block-w` 104: IN OUT / ½ size 2× /
-LOOP RELOOP) between the waveform and the pads of the player deck. Task 23
-moves the 4-deck decks to the grid and sizes both layouts to the mixer.
+not in effect). `layout="row"` is one 24 px line under the overview (2-deck decks, which have
+the height); `layout="grid"` is the 3 × 2 block (`--loop-block-w` 104: IN OUT /
+½ size 2× / LOOP RELOOP) beside the pads on the 4-deck (compact) decks, and
+between the waveform and the pads of the player deck.
 
 | Control | Not looping | Looping |
 |---|---|---|

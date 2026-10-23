@@ -656,7 +656,7 @@ nothing; 25 needs 22–24.
     Tests: `MixerPanel.test.tsx` (every control still present by role and
     name, order), `Meter.test.tsx` (scale off), `tokens.test.ts` if a token
     is mirrored.
-23. [ ] **Deck section sizes to the mixer** ([#44](https://github.com/ninoman/reks/issues/44)) (§4 A, §7). Needs 21 and 22.
+23. [x] **Deck section sizes to the mixer** ([#44](https://github.com/ninoman/reks/issues/44)) (§4 A, §7). Needs 21 and 22.
     - 2 decks: decks as tall as the mixer; the waveform takes the spare
       height (min 60 px); quick-loop row under the overview.
     - 4 decks: decks 216 px (header 30, overview 14), quick-loop grid
@@ -669,6 +669,10 @@ nothing; 25 needs 22–24.
     headless measurements at the three window sizes recorded in `ui.md`
     (target: library 8 rows at 1440 × 900 in 2- and 4-deck mode, 5 at
     1280 × 800).
+    Done 2026-10-23. Deviation: at 1280 px the compact decks' pads are 46 px
+    wide, not 52 (a 60 px CUE / PLAY / Q / SYNC / MASTER cluster and the loop
+    grid take the rest); measurements in `ui.md` (5 library rows at
+    1280 × 800, 8 at 1440 × 900).
 24. [x] **Settings → Mixer and the mixer's settings button** ([#45](https://github.com/ninoman/reks/issues/45)) (§6).
     - `reks-core` `settings.rs`: `mix.mixer_view` (`MixerView`: simple,
       advanced; default simple) and `mix.mixer_filters` (`MixerFilters`:

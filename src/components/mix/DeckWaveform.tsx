@@ -274,10 +274,10 @@ export function DeckWaveform({
 
   const n = deck + 1;
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex min-h-0 flex-1 flex-col gap-1.5">
       <div
         ref={setScrollBox}
-        className="group/wave relative h-(--deck-wave-h) overflow-hidden rounded-xs bg-deck"
+        className="group/wave relative min-h-(--deck-wave-min-h) flex-1 overflow-hidden rounded-xs bg-deck"
       >
         {/* Pointer-only: the overview below is the keyboard way to seek. */}
         <canvas
@@ -291,7 +291,7 @@ export function DeckWaveform({
       </div>
       <div
         ref={setOverviewBox}
-        className="h-(--deck-overview-h) overflow-hidden rounded-xs bg-deck"
+        className="h-(--deck-overview-h) shrink-0 overflow-hidden rounded-xs bg-deck"
       >
         <canvas
           ref={overview}
