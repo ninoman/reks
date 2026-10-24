@@ -11,7 +11,9 @@ use std::time::Duration;
 use rusqlite::Connection;
 use rusqlite_migration::{Migrations, M};
 
+use crate::backup::{self, BackupReason, BackupState};
 use crate::error::{Error, Result};
+use crate::settings;
 
 /// Ordered schema migrations. Append only; never edit a released migration.
 const MIGRATION_LIST: &[M<'static>] = &[
@@ -42,6 +44,8 @@ pub struct Library {
     conn: Mutex<Connection>,
     /// Changed only by `use_cache_dir` / `move_cache_dir` (settings.rs).
     pub(crate) cache_dir: RwLock<PathBuf>,
+    /// Where snapshots go and how the last one fared (`backup` module).
+    pub(crate) backup: BackupState,
 }
 
 impl Library {
@@ -62,19 +66,35 @@ impl Library {
         // NORMAL is durable across application crashes in WAL mode; only a
         // power loss can drop the last commits.
         conn.pragma_update(None, "synchronous", "NORMAL")?;
-        Self::init(conn, cache_dir)
+        // Snapshots sit next to the DB: the data dir, not the cache (D36).
+        let backup_dir = db_path.parent().map(|dir| dir.join(backup::BACKUP_DIR));
+        Self::init(conn, cache_dir, backup_dir)
     }
 
-    /// Opens a fresh in-memory library (tests and headless tools).
+    /// Opens a fresh in-memory library (tests and headless tools). It cannot
+    /// be backed up.
     pub fn open_in_memory(cache_dir: &Path) -> Result<Self> {
-        Self::init(Connection::open_in_memory()?, cache_dir)
+        Self::init(Connection::open_in_memory()?, cache_dir, None)
     }
 
-    fn init(mut conn: Connection, cache_dir: &Path) -> Result<Self> {
+    fn init(mut conn: Connection, cache_dir: &Path, backup_dir: Option<PathBuf>) -> Result<Self> {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.busy_timeout(BUSY_TIMEOUT)?;
         let before: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        MIGRATIONS.to_latest(&mut conn)?;
+        // A library with data and an older schema is about to be rewritten:
+        // keep its last good state. A failed snapshot is reported, not fatal.
+        let mut backup_failure = None;
+        if let Some(dir) = backup_dir
+            .as_deref()
+            .filter(|_| 0 < before && before < SCHEMA_VERSION)
+        {
+            let keep = settings::backup_keep(&conn);
+            if let Err(err) = backup::take(&conn, dir, BackupReason::Migration, keep) {
+                tracing::warn!(%err, "pre-migration library backup failed");
+                backup_failure = Some(backup::failure_of(BackupReason::Migration, &err));
+            }
+        }
+        migrate(&mut conn)?;
         if before != SCHEMA_VERSION {
             tracing::info!(
                 from = before,
@@ -85,6 +105,7 @@ impl Library {
         Ok(Self {
             conn: Mutex::new(conn),
             cache_dir: RwLock::new(cache_dir.to_path_buf()),
+            backup: BackupState::new(backup_dir).with_failure(backup_failure),
         })
     }
 
@@ -100,6 +121,12 @@ impl Library {
     pub(crate) fn conn(&self) -> Result<MutexGuard<'_, Connection>> {
         self.conn.lock().map_err(|_| Error::LockPoisoned)
     }
+}
+
+/// Brings the schema to the latest version.
+pub(crate) fn migrate(conn: &mut Connection) -> Result<()> {
+    MIGRATIONS.to_latest(conn)?;
+    Ok(())
 }
 
 pub(crate) fn create_dir(path: &Path) -> Result<()> {
@@ -574,6 +601,57 @@ mod tests {
         assert_eq!(counts, (9, 4));
         assert_eq!(baseline_date(&c), "\"2026-01-02\"");
         let version: i64 = c
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn migrating_snapshots_the_old_library_first() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("reks.sqlite");
+        let cache = dir.path().join("cache");
+
+        // A fresh library has nothing to protect.
+        drop(Library::open(&db, &cache).unwrap());
+        assert!(!dir.path().join(backup::BACKUP_DIR).exists());
+
+        // One left at schema 11 holds a track that migration 12 must not endanger.
+        std::fs::remove_file(&db).unwrap();
+        {
+            let mut c = Connection::open(&db).unwrap();
+            MIGRATIONS.to_version(&mut c, 11).unwrap();
+            insert_track(&c, "/music/a.wav", "Alpha");
+        }
+        let lib = Library::open(&db, &cache).unwrap();
+        let backups = lib.backups().unwrap();
+        assert_eq!(backups.len(), 1);
+        assert_eq!(backups[0].reason, BackupReason::Migration);
+        let contents = backups[0].contents.unwrap();
+        assert_eq!((contents.schema_version, contents.tracks), (11, 1));
+        assert_eq!(lib.backup_status().last_failure, None);
+        drop(lib);
+
+        // Up to date: reopening adds nothing.
+        let lib = Library::open(&db, &cache).unwrap();
+        assert_eq!(lib.backups().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_failed_pre_migration_snapshot_does_not_stop_the_migration() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("reks.sqlite");
+        {
+            let mut c = Connection::open(&db).unwrap();
+            MIGRATIONS.to_version(&mut c, 11).unwrap();
+        }
+        std::fs::write(dir.path().join(backup::BACKUP_DIR), b"in the way").unwrap();
+        let lib = Library::open(&db, &dir.path().join("cache")).unwrap();
+        let failure = lib.backup_status().last_failure.unwrap();
+        assert_eq!(failure.reason, BackupReason::Migration);
+        let version: i64 = lib
+            .conn()
+            .unwrap()
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
         assert_eq!(version, SCHEMA_VERSION);

@@ -171,6 +171,34 @@ pub enum Error {
     #[error("the beatgrid of track {0} is locked")]
     GridLocked(crate::scan::TrackId),
 
+    /// This library has nowhere to keep backups (an in-memory one).
+    #[error("this library has no backup folder")]
+    NoBackupDir,
+
+    /// A snapshot failed its integrity check; it was not kept (or not restored).
+    #[error("backup {name} failed its integrity check: {detail}")]
+    BackupCorrupt { name: String, detail: String },
+
+    /// A snapshot is not a reks library.
+    #[error("backup {0} is not a reks library")]
+    BackupNotALibrary(String),
+
+    /// A snapshot was made by a newer reks than this one; restoring it would
+    /// lose or misread data.
+    #[error(
+        "backup {name} has schema version {found}, newer than this reks supports ({supported}); \
+         update reks to restore it"
+    )]
+    BackupTooNew {
+        name: String,
+        found: i64,
+        supported: i64,
+    },
+
+    /// No backup with this name in the backup folder.
+    #[error("backup {0} not found")]
+    BackupNotFound(String),
+
     /// A thread panicked while holding the connection lock.
     #[error("library connection lock poisoned")]
     LockPoisoned,

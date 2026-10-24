@@ -451,7 +451,8 @@ Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs),
   `display.key_notation` (`classical` default, `camelot`, `openKey`), `display.deck_waveform`
   (Phase 5: `rgb` default since D30, `threeBand`, `blue`), `display.theme` (`booth`
   default, `graphite`, `paper`, `midnight`, `dusk`; see [ui.md](../ui.md)), `storage.cache_dir`
-  (absent = `app_cache_dir`), `ui.state` (hidden columns, filter bar shown, filters on, track
+  (absent = `app_cache_dir`), `backup.keep` (recent library backups kept, default 10,
+  clamped to 1–100; D36), `ui.state` (hidden columns, filter bar shown, filters on, track
   info open, volume, the Filters drawer's default fields). A missing or unreadable value is its default (unreadable ones are logged).
   `settings_get` / `settings_set(patch)` (the UI stores `audioDevice` when the device changes).
 - Key notation is display only: the Key column, the track info key field and the key picker
@@ -700,6 +701,24 @@ per task; 6 and 7 can run in parallel, 8 needs 7, 9 needs 6 and 7.
    rename, duplicate, delete, reorder, summary tooltip), "edited" with
    Update / Revert, one **Save…** (saved filter or smart playlist; the smart
    path saves the whole drawer), toolbar Filters button menu.
+
+### Library backups (D36)
+
+Added 2026-10-24 at the maintainer's request, outside the original plan. User
+notes: [`../backups.md`](../backups.md).
+
+10. [x] **Library backups and restore**: `reks-core::backup` (online-backup
+    snapshots into `app_data_dir/library-backups/`, verified, named by UTC time
+    and reason; retention newest N plus one per week for 8 weeks; restore with
+    a `before-restore` snapshot, refusal of damaged, foreign and newer-schema
+    files), `Library::snapshot(reason)` called at start-up (daily), before a
+    migration, and before XML import, convert Replace and history import,
+    `backups_list` / `backup_status` / `backup_now` / `backup_restore` /
+    `backup_restart` / `backup_show_folder` commands, `backup.keep` setting,
+    Settings → Library → Backups (list, Restore…, Back up now, Show in
+    folder, keep count, failure warning and start-up toast). Tests: snapshot
+    under a live writer, retention, restore round trip, newer schema,
+    damaged file, migration snapshot, settings clamp.
 
 ## Acceptance criteria
 

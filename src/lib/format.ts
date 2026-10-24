@@ -58,3 +58,8 @@ export function formatBytes(bytes: number): string {
   }
   return i === 0 ? `${v} B` : `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
 }
+
+/** A UTC ISO-8601 instant as a short local date and time, e.g. "19 Oct 2026, 20:48". */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}

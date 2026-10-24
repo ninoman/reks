@@ -43,6 +43,7 @@ import { useTrackTable, visibleColumns } from "./components/trackTableModel";
 import { keepsSpace, PLAYER_PLAY_KEY, waveZoomKey } from "./lib/keys";
 import { dismissSplash } from "./lib/splash";
 import { useAnalysis } from "./store/analysis";
+import { offerBackupWarning } from "./store/backups";
 import { useDeviceBrowser } from "./store/deviceBrowser";
 import { useFilterPresets } from "./store/filterPresets";
 import { useHistory } from "./store/history";
@@ -92,6 +93,7 @@ export default function App() {
     void useHistory.getState().load();
     void useAnalysis.getState().subscribe();
     void offerCrashReport();
+    void offerBackupWarning();
     return () => {
       live = false;
       stopSync?.();

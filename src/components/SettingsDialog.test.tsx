@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LibraryRoot, Settings } from "../lib/ipc";
+import type { BackupInfo, LibraryRoot, Settings } from "../lib/ipc";
 
 vi.mock("../lib/ipc", () => ({
   DECKS: 4,
@@ -15,6 +15,12 @@ vi.mock("../lib/ipc", () => ({
   audioDevices: vi.fn(),
   mixDeviceOptions: vi.fn(),
   libraryQuery: vi.fn(),
+  backupsList: vi.fn(),
+  backupStatus: vi.fn(),
+  backupNow: vi.fn(),
+  backupRestore: vi.fn(),
+  backupRestart: vi.fn(),
+  backupShowFolder: vi.fn(),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
@@ -22,6 +28,7 @@ const ipc = await import("../lib/ipc");
 const dialog = await import("@tauri-apps/plugin-dialog");
 const { startThemeSync, useSettings } = await import("../store/settings");
 const { useMix } = await import("../store/mix");
+const { useBackups } = await import("../store/backups");
 const { SettingsDialog } = await import("./SettingsDialog");
 
 const settings: Settings = {
@@ -38,6 +45,7 @@ const settings: Settings = {
   mixerFilters: "show",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
+  backupKeep: 10,
   onelibraryKeyBuiltin: false,
   ui: {
     hiddenColumns: null,
@@ -56,7 +64,23 @@ const roots: LibraryRoot[] = [
   { id: 2, path: "/Music/Techno", lastScan: "2026-10-19T10:00:00Z" },
 ];
 
+const backup = (over: Partial<BackupInfo>): BackupInfo => ({
+  name: "reks-20261024T153012123Z-startup.sqlite",
+  takenAt: "2026-10-24T15:30:12.123Z",
+  reason: "startup",
+  sizeBytes: 2048,
+  contents: { schemaVersion: 12, tracks: 3012, playlists: 41 },
+  problem: null,
+  tooNew: false,
+  ...over,
+});
+
 beforeEach(() => {
+  vi.mocked(ipc.backupsList).mockResolvedValue([]);
+  vi.mocked(ipc.backupStatus).mockResolvedValue({
+    dir: "/data/library-backups",
+    lastFailure: null,
+  });
   vi.mocked(ipc.settingsGet).mockResolvedValue(settings);
   vi.mocked(ipc.libraryRoots).mockResolvedValue(roots);
   vi.mocked(ipc.audioDevices).mockResolvedValue(["Built-in Output"]);
@@ -77,6 +101,7 @@ afterEach(() => {
   cleanup();
   useSettings.setState({ dialogOpen: false });
   useMix.setState(initialMix, true);
+  useBackups.setState({ backups: null, status: null, busy: null, error: null });
 });
 
 /** As at start-up: the saved output reaches the mix store, then the dialog opens. */
@@ -254,5 +279,79 @@ describe("SettingsDialog", () => {
     fireEvent.click(move);
     await screen.findByText("/Volumes/SSD/cache");
     expect(ipc.cacheDirMove).toHaveBeenCalledWith("/Volumes/SSD/cache");
+  });
+
+  it("says so when there are no backups yet", async () => {
+    await openDialog();
+    expect(await screen.findByText(/No backups yet/)).toBeTruthy();
+  });
+
+  it("lists backups with their counts and restores one after asking", async () => {
+    vi.mocked(ipc.backupsList).mockResolvedValue([
+      backup({}),
+      backup({
+        name: "reks-20261023T100000000Z-migration.sqlite",
+        takenAt: "2026-10-23T10:00:00.000Z",
+        reason: "migration",
+      }),
+    ]);
+    vi.mocked(ipc.backupRestore).mockResolvedValue();
+    vi.mocked(ipc.backupRestart).mockResolvedValue();
+    await openDialog();
+    const list = await screen.findByRole("list", { name: "Backups" });
+    expect(list.textContent).toContain("3012 tracks, 41 playlists");
+    expect(list.textContent).toContain("Before a library update");
+
+    const restoreButtons = screen.getAllByRole("button", { name: /^Restore the backup from/ });
+    fireEvent.click(restoreButtons[1] as HTMLElement);
+    expect(ipc.backupRestore).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Restore and restart" }));
+    await waitFor(() =>
+      expect(ipc.backupRestore).toHaveBeenCalledWith("reks-20261023T100000000Z-migration.sqlite"),
+    );
+    await waitFor(() => expect(ipc.backupRestart).toHaveBeenCalled());
+  });
+
+  it("does not offer to restore a damaged backup or one from a newer reks", async () => {
+    vi.mocked(ipc.backupsList).mockResolvedValue([
+      backup({ problem: "file is not a database", contents: null }),
+      backup({ name: "reks-20261022T100000000Z-manual.sqlite", tooNew: true }),
+    ]);
+    await openDialog();
+    await screen.findByRole("list", { name: "Backups" });
+    const buttons = screen.getAllByRole("button", { name: /^Restore the backup from/ });
+    expect(buttons.map((b) => (b as HTMLButtonElement).disabled)).toEqual([true, true]);
+    expect(screen.getByText("Damaged")).toBeTruthy();
+    expect(screen.getByText("Newer reks")).toBeTruthy();
+  });
+
+  it("shows a failed backup and refused restores", async () => {
+    vi.mocked(ipc.backupStatus).mockResolvedValue({
+      dir: "/data/library-backups",
+      lastFailure: { reason: "startup", at: "2026-10-24T16:00:00.000Z", message: "disk full" },
+    });
+    vi.mocked(ipc.backupsList).mockResolvedValue([backup({})]);
+    vi.mocked(ipc.backupRestore).mockRejectedValue(new Error("an export is running"));
+    await openDialog();
+    expect(await screen.findByText(/The last backup failed: disk full/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: /^Restore the backup from/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Restore and restart" }));
+    expect(await screen.findByText("an export is running")).toBeTruthy();
+    expect(ipc.backupRestart).not.toHaveBeenCalled();
+  });
+
+  it("backs up on request and stores how many recent backups to keep", async () => {
+    vi.mocked(ipc.backupNow).mockResolvedValue(backup({ reason: "manual" }));
+    await openDialog();
+    fireEvent.click(await screen.findByRole("button", { name: "Back up now" }));
+    await waitFor(() => expect(ipc.backupNow).toHaveBeenCalled());
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Recent backups kept" }));
+    const field = screen.getByRole("textbox", { name: "Recent backups kept" });
+    fireEvent.change(field, { target: { value: "20" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    await waitFor(() =>
+      expect(ipc.settingsSet).toHaveBeenLastCalledWith(expect.objectContaining({ backupKeep: 20 })),
+    );
   });
 });

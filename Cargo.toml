@@ -66,7 +66,8 @@ rekordcrate = { version = "=0.3.0", default-features = false }
 libc = "0.2"
 # FFT for key detection (D12). MIT/Apache-2.0.
 rustfft = "6.4"
-rusqlite = { version = "0.40", features = ["bundled"] }
+# `backup`: online backup API for library snapshots (D36); gated code in the same crate, no new dependency.
+rusqlite = { version = "0.40", features = ["bundled", "backup"] }
 rubato = "5"
 # Key lock (phase 5 task 10), exact pins: young crates. timestretch is pure
 # Rust (MIT) and is reks-mix's key lock head (D21, proposed); the other two

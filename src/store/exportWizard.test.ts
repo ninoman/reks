@@ -274,6 +274,7 @@ describe("useExportWizard", () => {
         filterSaveTarget: "filter",
       },
       anlzPreference: "reksFirst",
+      backupKeep: 10,
       onelibraryKeyBuiltin: false,
     } as const;
     useSettings.setState({ settings });

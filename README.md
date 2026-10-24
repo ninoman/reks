@@ -35,6 +35,8 @@ every stick as untested.
   waveforms through a 4-channel mixer (EQ, filters, crossfader, headphone
   cue), in a simple or an advanced mixer view
   ([`docs/phases/phase-5.md`](docs/phases/phase-5.md)).
+- Automatic library backups with restore, so a broken database never costs
+  your cues and grids ([`docs/backups.md`](docs/backups.md)).
 - Next: Denon Engine DJ export
   ([`docs/phases/phase-6.md`](docs/phases/phase-6.md)).
 

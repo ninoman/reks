@@ -9,10 +9,10 @@ use reks_core::rbxml::{
     self, ImportEvent, ImportOptions, ImportPreview, ImportReport, PrefixRemap,
 };
 use reks_core::{
-    ArtworkId, CancelToken, Facets, FilterPreset, FilterPresetOp, FilterPresetOutcome, Library,
-    LibraryRoot, PlaylistId, PlaylistOp, PlaylistOutcome, PlaylistTree, RuleNode, ScanEvent,
-    ScanReport, Settings, SettingsPatch, TagOp, TagOutcome, TagTree, TrackDetail, TrackId,
-    TrackPage, TrackPatch, TrackQuery,
+    ArtworkId, BackupReason, CancelToken, Facets, FilterPreset, FilterPresetOp,
+    FilterPresetOutcome, Library, LibraryRoot, PlaylistId, PlaylistOp, PlaylistOutcome,
+    PlaylistTree, RuleNode, ScanEvent, ScanReport, Settings, SettingsPatch, TagOp, TagOutcome,
+    TagTree, TrackDetail, TrackId, TrackPage, TrackPatch, TrackQuery,
 };
 use reks_export_onelibrary::{OneLibraryWriter, RbVersion};
 use reks_export_rb::device::{self, DeviceInfo};
@@ -26,6 +26,7 @@ use serde::Serialize;
 use tauri::ipc::{Channel, Response};
 use tauri::State;
 
+use crate::backup;
 use crate::state::AppState;
 
 /// Error returned to the UI: the message of the underlying error. Every one
@@ -245,6 +246,7 @@ pub async fn rbxml_import_start(
     }
     let result = blocking(&state, move |lib| {
         let collection = rbxml::parse_file(&path)?;
+        backup::before_bulk(lib, BackupReason::XmlImport);
         let opts = ImportOptions {
             remap,
             cancel: Some(cancel),
@@ -658,6 +660,9 @@ pub async fn convert_apply(
         *running = Some(cancel.clone());
     }
     let result = blocking(&state, move |lib| {
+        if plan.options.library == convert::LibraryMode::Replace {
+            backup::before_bulk(lib, BackupReason::ConvertReplace);
+        }
         let events = |e: ConvertEvent| {
             if let Err(err) = on_event.send(e) {
                 tracing::warn!(%err, "convert progress channel closed");
