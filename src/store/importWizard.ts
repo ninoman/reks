@@ -1,5 +1,6 @@
 /**
- * rekordbox XML import wizard: review (counts from a read-only preview, map
+ * rekordbox XML import wizard: choose (how to export the XML from rekordbox,
+ * then pick the file) → review (counts from a read-only preview, map
  * moved folders, read My Tags from comments or not) → importing (progress,
  * stop while files are read) → report, which can open the tag organizer.
  * Every remap change re-runs the preview; a newer preview drops older answers.
@@ -20,7 +21,7 @@ import { usePlaylists } from "./playlists";
 import { useTagOrganizer } from "./tagOrganizer";
 import { useTags } from "./tags";
 
-export type WizardStep = "closed" | "review" | "importing" | "report";
+export type WizardStep = "closed" | "choose" | "review" | "importing" | "report";
 
 export interface ImportProgress {
   stage: "files" | "database";
@@ -44,6 +45,8 @@ interface ImportWizardState {
   report: ImportReport | null;
   error: string | null;
 
+  /** Show how to export the XML; the file is picked from there. */
+  begin(): void;
   open(path: string): Promise<void>;
   addRemap(from: string, to: string): Promise<void>;
   removeRemap(index: number): Promise<void>;
@@ -91,6 +94,10 @@ export const useImportWizard = create<ImportWizardState>((set, get) => {
 
   return {
     ...idle,
+
+    begin() {
+      set({ ...idle, step: "choose" });
+    },
 
     async open(path) {
       set({ ...idle, step: "review", path });

@@ -83,6 +83,27 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ImportWizard", () => {
+  it("starts with how to export from rekordbox, then picks the file", async () => {
+    render(<ImportWizard />);
+    useImportWizard.getState().begin();
+    expect(await screen.findByText(/Export Collection in xml format/)).toBeTruthy();
+    expect(ipc.rbxmlPreview).not.toHaveBeenCalled();
+
+    vi.mocked(dialog.open).mockResolvedValue("/x/collection.xml");
+    fireEvent.click(screen.getByRole("button", { name: "Choose file…" }));
+    expect(await screen.findByText("3,062")).toBeTruthy();
+    expect(ipc.rbxmlPreview).toHaveBeenCalledWith("/x/collection.xml", []);
+  });
+
+  it("cancelling the file picker stays on the instructions", async () => {
+    render(<ImportWizard />);
+    useImportWizard.getState().begin();
+    vi.mocked(dialog.open).mockResolvedValue(null);
+    fireEvent.click(await screen.findByRole("button", { name: "Choose file…" }));
+    await vi.waitFor(() => expect(dialog.open).toHaveBeenCalled());
+    expect(useImportWizard.getState().step).toBe("choose");
+  });
+
   it("review shows the counts and maps the missing folder", async () => {
     render(<ImportWizard />);
     await useImportWizard.getState().open("/x/collection.xml");

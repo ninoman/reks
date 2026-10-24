@@ -3,8 +3,8 @@
  * (scan, import, export to USB, USB devices, report a problem, settings), with the scan status
  * line under it.
  * "Scan folder…" adds the folder to the library folders (Settings) and scans
- * it. "Import rekordbox XML…" picks the file and opens the import wizard
- * (`ImportWizard`). "Export to USB…" opens the export wizard (`ExportWizard`)
+ * it. "Import rekordbox XML…" opens the import wizard (`ImportWizard`), which
+ * says how to export the XML and picks the file. "Export to USB…" opens the export wizard (`ExportWizard`)
  * with the playlist selected in the sidebar ticked. While the converter's
  * dialog is hidden, a button shows its progress and reopens it.
  */
@@ -45,14 +45,6 @@ export function AppHeader() {
     await useSettings.getState().loadRoots();
   }
 
-  async function chooseXml() {
-    const path = await open({
-      title: "Import rekordbox collection.xml",
-      filters: [{ name: "rekordbox XML", extensions: ["xml"] }],
-    });
-    if (typeof path === "string") await useImportWizard.getState().open(path);
-  }
-
   return (
     <header>
       <div className="flex h-(--toolbar-h) items-center gap-2 border-b border-border bg-bg-subtle px-3">
@@ -70,7 +62,11 @@ export function AppHeader() {
             Stop
           </Button>
         )}
-        <Button size="sm" disabled={scanning || importing} onClick={() => void chooseXml()}>
+        <Button
+          size="sm"
+          disabled={scanning || importing}
+          onClick={() => useImportWizard.getState().begin()}
+        >
           Import rekordbox XML…
         </Button>
         <Button size="sm" disabled={importing} onClick={() => openExportWizard()}>
