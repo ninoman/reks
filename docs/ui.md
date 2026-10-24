@@ -159,6 +159,7 @@ menu items `--menu-item-h`.
 | `Dialog*` | Content `size`: sm, md, lg, xl (960 px, the grid editor), `closeOnOutsideClick`; Header, Title, Description, Body, Footer | Radix Dialog |
 | `Sheet` + `SheetHeader` | right-hand slide-over (non-modal, inside its parent) | Web Animations |
 | `ScrollArea` | themed scrollbars; not for the virtualised table | Radix ScrollArea |
+| `ResizeHandle` | drag-to-resize edge of its (positioned) parent: `edge`: right, left; `min`, `max`, `value`; arrow keys step 16 px, double-click resets; reports widths, the caller stores them | own (`role="separator"`) |
 | `Separator` | `orientation` (decorative) | – |
 | `Field` | `orientation`: vertical, horizontal, inline; `active`; `hint`, `error` | – |
 | `Card` | `variant`: subtle, surface; `divided` | – |
@@ -195,9 +196,23 @@ the headphone cue when the output routes one (the cue level and CUE/MASTER
 mix apply), else on the master with the mix faded out over `DUCK_MS`
 (300 ms) and back in when it pauses. The **Waveform** column draws each
 visible track's whole waveform in the decks' style from `waveform_overview`
-(columns squeezed to 400 in Rust, a few KB a row), fetched one at a time,
-newest rows first ([`overviews.ts`](../src/store/overviews.ts)): a track
-without cached columns is decoded on request.
+(columns squeezed to 400 in Rust, a few KB a row), newest rows first
+([`overviews.ts`](../src/store/overviews.ts)), in two lanes: up to four
+requests at a time read columns already on disk (`decode: false`: the
+columns cache, else reks's analysis `bands.bin`, else the track's mapped
+rekordbox `PWV7`/`PWV3` via `reks_anlz::deckwave::entry_columns`;
+[`columns::stored_columns`](../crates/reks-analysis/src/columns.rs)), and one
+at a time decodes a track that has none, so an unanalysed track never holds
+up the rest.
+
+Column edges in the header drag to resize (`ResizeHandle`); a dragged column
+keeps its width (`fixed` in `fitColumnWidths`) while the others share the
+spare width, and a double-click gives back the default. The sidebar's right
+edge and the right-hand drawers' left edge (info panel, My Tags, Filters: one
+shared width) resize the same way
+([`PanelResizers.tsx`](../src/components/PanelResizers.tsx)), overriding
+`--sidebar-w` / `--sheet-w` on the app root. All three are saved in
+`UiState` (`columnWidths`, `sidebarWidth`, `sheetWidth`).
 
 Columns that become hidden by default bump `COLUMN_DEFAULTS.version`
 ([`columns.tsx`](../src/components/columns.tsx)); a saved column list older

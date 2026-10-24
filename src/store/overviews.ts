@@ -1,21 +1,28 @@
 /**
  * Waveform thumbnails for the track table (`waveform_overview`). Rows ask
- * while they are on screen and let go when they scroll away; one request runs
- * at a time, newest first, because a track without cached columns is decoded
- * in Rust (seconds) and a fast scroll must not queue the whole library.
+ * while they are on screen and let go when they scroll away; newest rows are
+ * served first. Two lanes: up to `FAST_LANES` requests read columns already on
+ * disk (the columns cache, reks's or rekordbox's analysis; milliseconds), and
+ * one decodes a track that has none (seconds), so a track without analysis
+ * never holds up the rest and a fast scroll does not queue the whole library.
  */
 import { waveformOverview } from "../lib/ipc";
 
 /** Columns per thumbnail; the canvas resamples them to its width. */
 export const OVERVIEW_WIDTH = 400;
 const CACHE_MAX = 2000;
+const FAST_LANES = 4;
 
 /** id → columns (null: unreadable, not asked again). Map order = recency. */
 const cache = new Map<number, Uint8Array | null>();
-/** Ids rows are waiting for, with how many rows wait. */
+/** Ids rows are waiting for, with how many rows wait. Map order = recency. */
 const wanted = new Map<number, number>();
 const listeners = new Map<number, Set<() => void>>();
-let running = false;
+/** Ids with nothing on disk: only the decode lane serves them. */
+const misses = new Set<number>();
+const inFlight = new Set<number>();
+let fastRunning = 0;
+let decoding = false;
 
 /** The cached thumbnail; `undefined` while not loaded. */
 export function overviewOf(id: number): Uint8Array | null | undefined {
@@ -32,7 +39,7 @@ export function watchOverview(id: number, onLoad: () => void): () => void {
     const waiting = wanted.get(id) ?? 0;
     wanted.delete(id);
     wanted.set(id, waiting + 1);
-    void pump();
+    pump();
   }
   return () => {
     set.delete(onLoad);
@@ -43,26 +50,48 @@ export function watchOverview(id: number, onLoad: () => void): () => void {
   };
 }
 
-async function pump() {
-  if (running) return;
-  running = true;
-  try {
-    for (let id = newest(); id !== undefined; id = newest()) {
-      wanted.delete(id);
-      const columns = await waveformOverview(id, OVERVIEW_WIDTH).then(
-        (b) => new Uint8Array(b),
-        () => null,
-      );
-      store(id, columns);
-      for (const f of listeners.get(id) ?? []) f();
-    }
-  } finally {
-    running = false;
+function pump() {
+  for (let id = nextFast(); id !== undefined; id = nextFast()) void load(id, false);
+  if (!decoding) {
+    const id = newest(true);
+    if (id !== undefined) void load(id, true);
   }
 }
 
-function newest(): number | undefined {
-  return [...wanted.keys()].pop();
+function nextFast(): number | undefined {
+  return fastRunning < FAST_LANES ? newest(false) : undefined;
+}
+
+/** The newest wanted id not in flight that needs decoding (`decode`) or not. */
+function newest(decode: boolean): number | undefined {
+  const ids = [...wanted.keys()];
+  for (let i = ids.length - 1; i >= 0; i--) {
+    const id = ids[i];
+    if (id !== undefined && !inFlight.has(id) && misses.has(id) === decode) return id;
+  }
+  return undefined;
+}
+
+async function load(id: number, decode: boolean) {
+  inFlight.add(id);
+  if (decode) decoding = true;
+  else fastRunning++;
+  const columns = await waveformOverview(id, OVERVIEW_WIDTH, decode).then(
+    (b) => new Uint8Array(b),
+    () => null,
+  );
+  inFlight.delete(id);
+  if (decode) decoding = false;
+  else fastRunning--;
+  if (!decode && columns?.length === 0) {
+    misses.add(id);
+  } else {
+    misses.delete(id);
+    wanted.delete(id);
+    store(id, columns);
+    for (const f of listeners.get(id) ?? []) f();
+  }
+  pump();
 }
 
 function store(id: number, columns: Uint8Array | null) {
@@ -78,4 +107,5 @@ export function clearOverviews(): void {
   cache.clear();
   wanted.clear();
   listeners.clear();
+  misses.clear();
 }

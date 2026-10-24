@@ -68,6 +68,8 @@ export function buildQuery(inputs: QueryInputs, page: number): TrackQuery {
 
 export interface LibraryState extends QueryInputs {
   columnVisibility: Record<string, boolean>;
+  /** Column widths the user dragged to, px, by column id; others use their default. */
+  columnWidths: Record<string, number>;
   /** Matching tracks over all pages (dividers not counted). */
   total: number;
   /** The shown playlist's dividers, when `dividerView`. */
@@ -102,6 +104,9 @@ export interface LibraryState extends QueryInputs {
   /** Header click: same column flips direction, another column sorts ascending. */
   toggleSort(column: Sort["column"]): void;
   setColumnVisibility(v: Record<string, boolean>): void;
+  /** `null`: back to the column's default width. */
+  setColumnWidth(id: string, width: number | null): void;
+  setColumnWidths(widths: Record<string, number>): void;
   /**
    * Re-runs the query from page 0 (after a query change or an import).
    * `keepPlace`: the same view after an edit, so the table keeps its scroll.
@@ -164,6 +169,7 @@ export function createLibraryStore(): LibraryStore {
       rule: null,
       sort: defaultSort,
       columnVisibility: {},
+      columnWidths: {},
       total: 0,
       dividers: [],
       dividerView: false,
@@ -207,6 +213,15 @@ export function createLibraryStore(): LibraryStore {
       },
       setColumnVisibility(columnVisibility) {
         set({ columnVisibility });
+      },
+      setColumnWidth(id, width) {
+        set((s) => {
+          const { [id]: _, ...rest } = s.columnWidths;
+          return { columnWidths: width === null ? rest : { ...rest, [id]: width } };
+        });
+      },
+      setColumnWidths(columnWidths) {
+        set({ columnWidths });
       },
       refresh(keepPlace = false) {
         const generation = get().generation + 1;

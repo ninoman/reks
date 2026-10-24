@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fitColumnWidths } from "./trackTableModel";
+import { fitColumnWidths, sizedColumns } from "./trackTableModel";
 
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 
@@ -39,8 +39,27 @@ describe("fitColumnWidths", () => {
     expect(out).toEqual([150, 150]);
   });
 
+  it("leaves fixed (dragged) columns at their width", () => {
+    expect(fitColumnWidths([{ width: 100, grow: true, fixed: true }, { width: 50 }], 300)).toEqual([
+      100, 200,
+    ]);
+    expect(fitColumnWidths([{ width: 100, fixed: true }], 300)).toEqual([100]);
+  });
+
   it("handles an unmeasured container and no columns", () => {
     expect(fitColumnWidths(cols, 0)).toEqual([28, 300, 100, 70]);
     expect(fitColumnWidths([], 500)).toEqual([]);
+  });
+});
+
+describe("sizedColumns", () => {
+  it("fixes dragged columns at their width", () => {
+    const cols = [
+      { id: "a", header: "A", width: 50, sort: null, cell: () => null },
+      { id: "b", header: "B", width: 80, grow: true as const, sort: null, cell: () => null },
+    ];
+    const out = sizedColumns(cols, { b: 120 });
+    expect(out[0]).toBe(cols[0]);
+    expect(out[1]).toMatchObject({ id: "b", width: 120, fixed: true });
   });
 });

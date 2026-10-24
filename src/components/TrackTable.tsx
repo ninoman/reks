@@ -16,6 +16,7 @@
  * Double-click or Enter loads
  * a row into the player and plays it; the loaded track's row is marked with
  * an accent bar and accent text, separate from the selection background.
+ * Header edges drag to resize a column (widths shared by every list).
  */
 
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -33,7 +34,7 @@ import { hasType, readTracks, TRACKS_MIME, type TrackDrag, zoneAt } from "../lib
 import { shownDecks } from "../lib/mixView";
 import { useAnalysis } from "../store/analysis";
 import { useConverter } from "../store/converter";
-import { entryPosition, itemAt, type ViewItem, viewCount } from "../store/library";
+import { entryPosition, itemAt, useLibrary, type ViewItem, viewCount } from "../store/library";
 import { libraryRef, useMix } from "../store/mix";
 import { usePanels } from "../store/panels";
 import { activateTrack, usePlayerTrackId } from "../store/player";
@@ -45,7 +46,13 @@ import { DividerLabel } from "./DividerLabel";
 import { useLibraryStore } from "./libraryStoreContext";
 import { findMissingFiles } from "./relocateActions";
 import { TagSubmenu } from "./TagSubmenu";
-import { fitColumnWidths, ROW_HEIGHTS } from "./trackTableModel";
+import {
+  COLUMN_MAX_WIDTH,
+  COLUMN_MIN_WIDTH,
+  fitColumnWidths,
+  ROW_HEIGHTS,
+  sizedColumns,
+} from "./trackTableModel";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -53,6 +60,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "./ui/ContextMenu";
+import { ResizeHandle } from "./ui/ResizeHandle";
 
 /*
  * Row and cell classes are constant strings; per-row state is data
@@ -61,7 +69,7 @@ import {
 const CELL =
   "flex-none overflow-hidden text-ellipsis whitespace-nowrap px-1.5 h-(--row-h) leading-(--row-h)";
 const CELL_RIGHT = `${CELL} text-right`;
-const HEAD_CELL = `${CELL} data-[sort]:cursor-pointer data-[sort]:hover:text-fg`;
+const HEAD_CELL = `${CELL} relative data-[sort]:cursor-pointer data-[sort]:hover:text-fg`;
 const HEAD_CELL_RIGHT = `${HEAD_CELL} text-right`;
 const ROW = [
   "absolute inset-x-0 top-0 flex cursor-default items-center",
@@ -93,9 +101,15 @@ export function TrackTable({ columns: visible }: { columns: ColumnSpec[] }) {
   const deckCount = useMix((s) => s.deckCount);
   const density = usePanels((s) => s.rowDensity);
   const rowHeight = ROW_HEIGHTS[density];
+  const dragged = useLibrary((s) => s.columnWidths);
+  const setColumnWidth = useLibrary((s) => s.setColumnWidth);
   const specs = useMemo(
-    () => (density === "compact" ? visible : visible.filter((c) => c.compactOnly !== true)),
-    [visible, density],
+    () =>
+      sizedColumns(
+        density === "compact" ? visible : visible.filter((c) => c.compactOnly !== true),
+        dragged,
+      ),
+    [visible, density, dragged],
   );
   // The My Tags column reads names from the tree: redraw when it changes.
   useTags((s) => s.tree);
@@ -351,6 +365,14 @@ export function TrackTable({ columns: visible }: { columns: ColumnSpec[] }) {
               >
                 {c.header}
                 {c.sort !== null && sort.column === c.sort ? (sort.descending ? " ▼" : " ▲") : ""}
+                <ResizeHandle
+                  label={`Resize ${c.header || c.id} column`}
+                  min={COLUMN_MIN_WIDTH}
+                  max={COLUMN_MAX_WIDTH}
+                  value={c.width}
+                  onResize={(w) => setColumnWidth(c.id, w)}
+                  onReset={() => setColumnWidth(c.id, null)}
+                />
               </div>
             ))}
           </div>

@@ -18,6 +18,7 @@ import { EmptyResult } from "./EmptyResult";
 import { FilterDrawer } from "./FilterDrawer";
 import { CloseIcon } from "./icons";
 import { LibraryStoreContext, useLibraryStore } from "./libraryStoreContext";
+import { SheetResizeHandle } from "./PanelResizers";
 import { SmartListHeader } from "./SmartListHeader";
 import { TagDrawer } from "./TagDrawer";
 import { TrackInfoPanel } from "./TrackDetailPanel";
@@ -54,12 +55,15 @@ export function TrackLists({ columns }: { columns: ColumnSpec[] }) {
       ))}
       <Sheet open={infoOpen}>
         <TrackInfoPanel />
+        <SheetResizeHandle />
       </Sheet>
       <Sheet open={tagsOpen}>
         <TagDrawer />
+        <SheetResizeHandle />
       </Sheet>
       <Sheet open={filtersOpen}>
         <FilterDrawer />
+        <SheetResizeHandle />
       </Sheet>
     </div>
   );

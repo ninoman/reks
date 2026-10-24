@@ -45,20 +45,40 @@ export function visibleColumns(table: TrackTableModel): ColumnSpec[] {
     .filter((c): c is ColumnSpec => c !== undefined);
 }
 
+/** Narrowest and widest a column can be dragged to, px. */
+export const COLUMN_MIN_WIDTH = 24;
+export const COLUMN_MAX_WIDTH = 1200;
+
+/**
+ * The visible columns at their dragged-to widths (`widths`, by id). A dragged
+ * column is `fixed`: it keeps that width instead of taking spare width.
+ */
+export function sizedColumns(
+  columns: readonly ColumnSpec[],
+  widths: Readonly<Record<string, number>>,
+): (ColumnSpec & { fixed?: true })[] {
+  return columns.map((c) => {
+    const width = widths[c.id];
+    return width === undefined ? c : { ...c, width, fixed: true };
+  });
+}
+
 /**
  * Column widths that fill `available` px. Spare width goes to the `grow`
- * columns in proportion to their width (to all columns if none grow); base
+ * columns in proportion to their width (to all columns if none grow); `fixed`
+ * columns never take any, so with only those the table stays narrower. Base
  * widths are minimums, so a wide table keeps them and scrolls.
  */
 export function fitColumnWidths(
-  columns: readonly Pick<ColumnSpec, "width" | "grow">[],
+  columns: readonly (Pick<ColumnSpec, "width" | "grow"> & { fixed?: true })[],
   available: number,
 ) {
   const base = columns.map((c) => c.width);
   const spare = Math.floor(available) - base.reduce((a, b) => a + b, 0);
   if (spare <= 0) return base;
-  const anyGrow = columns.some((c) => c.grow);
-  const weights = columns.map((c) => (anyGrow && c.grow !== true ? 0 : c.width));
+  const free = columns.map((c) => c.fixed !== true);
+  const anyGrow = columns.some((c, i) => c.grow && free[i]);
+  const weights = columns.map((c, i) => (!free[i] || (anyGrow && c.grow !== true) ? 0 : c.width));
   const totalWeight = weights.reduce((a, b) => a + b, 0);
   if (totalWeight === 0) return base;
   const shares = weights.map((w) => Math.floor((spare * w) / totalWeight));

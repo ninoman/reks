@@ -3996,6 +3996,7 @@ name = "reks-app"
 version = "0.1.0"
 dependencies = [
  "reks-analysis",
+ "reks-anlz",
  "reks-core",
  "reks-export-onelibrary",
  "reks-export-rb",

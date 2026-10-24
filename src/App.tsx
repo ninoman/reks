@@ -29,6 +29,7 @@ import { HistoryTree } from "./components/HistoryTree";
 import { ImportWizard } from "./components/ImportWizard";
 import { LibraryToolbar } from "./components/LibraryToolbar";
 import { MixPanel } from "./components/mix/MixPanel";
+import { SidebarResizeHandle } from "./components/PanelResizers";
 import { PlayerBar } from "./components/PlayerBar";
 import { PlayerDeck } from "./components/PlayerDeck";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
@@ -44,6 +45,7 @@ import { TagOrganizer } from "./components/TagOrganizer";
 import { ToastHost } from "./components/ToastHost";
 import { TrackLists } from "./components/TrackLists";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
+import { usePanelWidthVars } from "./components/usePanelWidthVars";
 import { keepsSpace, PLAYER_PLAY_KEY, waveZoomKey } from "./lib/keys";
 import { dismissSplash } from "./lib/splash";
 import { useAnalysis } from "./store/analysis";
@@ -71,6 +73,7 @@ export default function App() {
   const stickListOpen = useDeviceBrowser((s) => s.open !== null);
   const stickCheckOpen = useDeviceBrowser((s) => s.checking !== null);
   const mixOpen = usePanels((s) => s.mixOpen);
+  const panelWidths = usePanelWidthVars();
   useMixShortcuts();
 
   useEffect(() => {
@@ -135,17 +138,18 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" style={panelWidths}>
       <AppHeader />
       <div className="flex shrink-0 flex-col border-b border-border bg-bg-subtle">
         <PlayerBar />
         {mixOpen ? <MixPanel /> : <PlayerDeck />}
       </div>
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-(--sidebar-w) shrink-0 flex-col border-r border-border bg-bg-subtle">
+        <aside className="relative flex w-(--sidebar-w) shrink-0 flex-col border-r border-border bg-bg-subtle">
           <PlaylistTree />
           <DeviceTree />
           <HistoryTree />
+          <SidebarResizeHandle />
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
           {stickCheckOpen ? (

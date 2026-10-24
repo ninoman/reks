@@ -744,9 +744,12 @@ export function waveformColumns(id: number): Promise<ArrayBuffer> {
   return invoke("waveform_columns", { id });
 }
 
-/** `waveformColumns` reduced to at most `width` columns (track-list thumbnails). */
-export function waveformOverview(id: number, width: number): Promise<ArrayBuffer> {
-  return invoke("waveform_overview", { id, width });
+/**
+ * `waveformColumns` reduced to at most `width` columns (track-list thumbnails).
+ * Without `decode`, only from caches and analyses on disk: empty when none has them.
+ */
+export function waveformOverview(id: number, width: number, decode: boolean): Promise<ArrayBuffer> {
+  return invoke("waveform_overview", { id, width, decode });
 }
 
 /** `mix_*`: the Phase 5 mixer (src-tauri `mix.rs`, reks-mix `Control`). */
@@ -1079,6 +1082,12 @@ export interface UiState {
   rowDensity: RowDensity;
   /** The default column set `hiddenColumns` was saved against (`COLUMNS_VERSION`). */
   columnsVersion: number;
+  /** Column widths dragged to, px, by column id. */
+  columnWidths: Record<string, number>;
+  /** px; `null`: the default. */
+  sidebarWidth: number | null;
+  /** The info panel's and drawers' width, px; `null`: the default. */
+  sheetWidth: number | null;
   /**
    * The Filters drawer's default fields (`bpm`, `key`, …, `tag:<category id>`);
    * `null` until changed: BPM, Key, Genre, Rating and the first My Tags category.

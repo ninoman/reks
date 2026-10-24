@@ -54,9 +54,8 @@ export const COLUMNS: ColumnSpec[] = [
   },
   {
     id: "waveform",
-    grow: true,
     header: "Waveform",
-    width: 200,
+    width: 120,
     sort: null,
     cell: (r) => <TrackWaveform trackId={r.missing ? null : r.id} durationMs={r.durationMs} />,
   },

@@ -225,6 +225,30 @@ pub fn has_valid(cache_dir: &Path, track: TrackId, content_hash: &str) -> bool {
     }
 }
 
+/// The waveform columns of `track`'s entry if [`load_valid`] would return
+/// it, without parsing the beats and key (the track list's thumbnails).
+pub fn load_columns(
+    cache_dir: &Path,
+    track: TrackId,
+    content_hash: &str,
+) -> Option<WaveformColumns> {
+    let dir = entry_dir(cache_dir, track);
+    let json = fs::read(dir.join(META_FILE)).ok()?;
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Head {
+        analyser_version: u32,
+        content_hash: String,
+        columns: usize,
+    }
+    let head: Head = serde_json::from_slice(&json).ok()?;
+    if head.analyser_version != ANALYSER_VERSION || head.content_hash != content_hash {
+        return None;
+    }
+    let columns = decode_columns(&fs::read(dir.join(COLUMNS_FILE)).ok()?)?;
+    (columns.len() == head.columns).then_some(columns)
+}
+
 /// Deletes `track`'s entry, if any.
 pub fn remove(cache_dir: &Path, track: TrackId) -> Result<(), CacheError> {
     let dir = entry_dir(cache_dir, track);
@@ -492,6 +516,8 @@ mod tests {
         assert!(load_valid(dir.path(), 5, "other").is_none());
         assert!(has_valid(dir.path(), 5, "h"));
         assert!(!has_valid(dir.path(), 5, "other"));
+        assert_eq!(load_columns(dir.path(), 5, "h"), Some(a.columns.clone()));
+        assert!(load_columns(dir.path(), 5, "other").is_none());
         assert!(!has_valid(dir.path(), 6, "h"));
 
         // Constant grid and silence survive too.
@@ -520,6 +546,7 @@ mod tests {
         fs::write(&path, serde_json::to_vec(&meta).unwrap()).unwrap();
         assert!(load_valid(dir.path(), 1, "h").is_none());
         assert!(!has_valid(dir.path(), 1, "h"));
+        assert!(load_columns(dir.path(), 1, "h").is_none());
     }
 
     #[test]
@@ -531,6 +558,7 @@ mod tests {
         bytes.pop();
         fs::write(&cols, &bytes).unwrap();
         assert!(load_valid(dir.path(), 1, "h").is_none());
+        assert!(load_columns(dir.path(), 1, "h").is_none());
         fs::write(entry_dir(dir.path(), 1).join("analysis.json"), b"{").unwrap();
         assert!(load_valid(dir.path(), 1, "h").is_none());
         assert!(!has_valid(dir.path(), 1, "h"));

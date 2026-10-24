@@ -99,6 +99,9 @@ export function currentUi(): UiState {
     volume: useMix.getState().volume,
     rowDensity: panels.rowDensity,
     columnsVersion,
+    columnWidths: lib.columnWidths,
+    sidebarWidth: panels.sidebarWidth,
+    sheetWidth: panels.sheetWidth,
     filterFields: useRules.getState().defaultFields,
     filterSaveTarget: useRules.getState().saveTarget,
   };
@@ -111,10 +114,13 @@ function applyUi(ui: UiState, columns: ColumnDefaults) {
   const lib = useLibrary.getState();
   lib.setColumnVisibility(Object.fromEntries(hidden.map((id) => [id, false])));
   lib.setFiltersEnabled(ui.filtersEnabled);
+  lib.setColumnWidths(ui.columnWidths);
   usePanels.setState({
     filterBarOpen: ui.filterBarOpen,
     infoOpen: ui.infoOpen,
     rowDensity: ui.rowDensity,
+    sidebarWidth: ui.sidebarWidth,
+    sheetWidth: ui.sheetWidth,
   });
   useMix.getState().setVolume(ui.volume);
   useRules.getState().setDefaultFields(ui.filterFields ?? null);

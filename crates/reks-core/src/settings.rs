@@ -8,6 +8,7 @@
 //! [`SYNC_ALIGN`], [`MIXER_VIEW`], [`MIXER_FILTERS`], [`MIXER_EQ`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`],
 //! [`TAGS_IN_COMMENTS`].
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension};
@@ -232,6 +233,12 @@ pub struct UiState {
     /// Version of the UI's default column set that `hidden_columns` was
     /// saved against; the UI hides columns newly defaulted to hidden once.
     pub columns_version: u32,
+    /// Track table column widths the user dragged to, px, by column id.
+    pub column_widths: BTreeMap<String, u32>,
+    /// Sidebar width, px; `None`: the UI default.
+    pub sidebar_width: Option<u32>,
+    /// Width of the info panel and the drawers, px; `None`: the UI default.
+    pub sheet_width: Option<u32>,
     /// The Filters drawer's default fields (`bpm`, `key`, …, `tag:<category id>`);
     /// `None` until the user changes them (UI defaults). Only the UI reads them.
     pub filter_fields: Option<Vec<String>>,
@@ -258,6 +265,9 @@ impl Default for UiState {
             volume: 1.0,
             row_density: RowDensity::Default,
             columns_version: 0,
+            column_widths: BTreeMap::new(),
+            sidebar_width: None,
+            sheet_width: None,
             filter_fields: None,
             filter_save_target: FilterSaveTarget::Filter,
         }
@@ -729,6 +739,9 @@ mod tests {
             volume: 0.5,
             row_density: RowDensity::Compact,
             columns_version: 1,
+            column_widths: BTreeMap::from([("waveform".into(), 96)]),
+            sidebar_width: Some(300),
+            sheet_width: None,
             filter_fields: Some(vec!["bpm".into(), "tag:3".into()]),
             filter_save_target: FilterSaveTarget::Smart,
         };
