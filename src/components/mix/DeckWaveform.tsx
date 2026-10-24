@@ -194,10 +194,14 @@ export function DeckWaveform({
           ? 0
           : Math.round((at / i.durationMs) * i.overviewSize.width);
       const key = `${version.current}:${scrollLeft}:${overviewX}`;
-      if (key === drawn) return;
+      if (key === drawn) {
+        if (i.scrollSize !== null) i.strip?.prefetch(scrollLeft, i.scrollSize.width);
+        return;
+      }
       drawn = key;
       if (scroll.current !== null && i.scrollSize !== null)
         drawScroll(scroll.current, i.scrollSize, i, i.tokens, at);
+      if (i.scrollSize !== null) i.strip?.prefetch(scrollLeft, i.scrollSize.width);
       if (overview.current !== null && i.overviewSize !== null)
         drawOverview(overview.current, i.overviewSize, i, i.tokens, at);
     }

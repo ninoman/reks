@@ -4,7 +4,7 @@
  * playhead. Colours come from tokens.css (a canvas can't use classes).
  */
 import { type DeckMark, drawLoop, drawMarks } from "../../lib/deckMarks";
-import { frameX, scrollFrame } from "../../lib/deckScroll";
+import { frameMs, frameX, scrollFrame } from "../../lib/deckScroll";
 import type { BeatMark, LoopView } from "../../lib/ipc";
 import { wavePalette } from "../../lib/waveDraw";
 import type { WaveStrip } from "../../lib/waveStrip";
@@ -62,6 +62,18 @@ export interface Inputs {
   durationMs: number;
 }
 
+/** Index of the first beat at or after `us` (beats are sorted). */
+export function firstBeatFrom(beats: BeatMark[], us: number): number {
+  let lo = 0;
+  let hi = beats.length;
+  while (lo < hi) {
+    const m = (lo + hi) >> 1;
+    if ((beats[m]?.positionUs ?? 0) < us) lo = m + 1;
+    else hi = m;
+  }
+  return lo;
+}
+
 export function drawScroll(
   canvas: HTMLCanvasElement,
   size: CanvasSize,
@@ -83,7 +95,11 @@ export function drawScroll(
   i.strip?.draw(ctx, f.left, width);
   if (i.beats !== null) {
     const line = Math.max(1, Math.round(dpr));
-    for (const b of i.beats) {
+    const beats = i.beats;
+    // Skip to the view instead of walking the track's beats from the start each frame.
+    for (let k = firstBeatFrom(beats, frameMs(f, -2 * line) * 1000); k < beats.length; k++) {
+      const b = beats[k];
+      if (b === undefined) break;
       const x = xOf(b.positionUs / 1000);
       if (x < -2 * line) continue;
       if (x > width) break;
