@@ -138,21 +138,81 @@ export function waveBars(
     }
     return out;
   }
-  const rgb = [palette.rgbLow, palette.rgbMid, palette.rgbHigh].map(hexRgb);
-  const blue = hexRgb(palette.blue);
-  const blueHigh = hexRgb(palette.blueHigh);
+  const colour = bandColour(style, palette);
   for (let x = 0; x < width; x++) {
     const half = (mono[x] ?? 0) * mid;
     if (half <= MIN_HALF) continue;
-    const low = bands[3 * x] ?? 0;
-    const midBand = bands[3 * x + 1] ?? 0;
-    const high = bands[3 * x + 2] ?? 0;
-    const sum = low + midBand + high;
-    const colour =
-      style === "rgb"
-        ? mixColour(rgb, [low, midBand, high])
-        : lerpColour(blue, blueHigh, sum > 0 ? high / sum : 0);
-    out.push({ x, half, colour });
+    out.push({
+      x,
+      half,
+      colour: colour(bands[3 * x] ?? 0, bands[3 * x + 1] ?? 0, bands[3 * x + 2] ?? 0),
+    });
+  }
+  return out;
+}
+
+/**
+ * A pixel's colour in `style` from its band levels (0..1). RGB mixes the RGB
+ * band colours and Blue shades towards its high colour; 3-band, drawn as one
+ * line at close zoom, mixes its own band colours like RGB.
+ */
+export function bandColour(
+  style: DeckWaveform,
+  palette: WavePalette,
+): (low: number, mid: number, high: number) => string {
+  if (style === "blue") {
+    const blue = hexRgb(palette.blue);
+    const blueHigh = hexRgb(palette.blueHigh);
+    return (low, mid, high) => {
+      const sum = low + mid + high;
+      return lerpColour(blue, blueHigh, sum > 0 ? high / sum : 0);
+    };
+  }
+  const colours = (
+    style === "rgb"
+      ? [palette.rgbLow, palette.rgbMid, palette.rgbHigh]
+      : [palette.low, palette.mid, palette.high]
+  ).map(hexRgb);
+  return (low, mid, high) => mixColour(colours, [low, mid, high]);
+}
+
+/** One filled column from `top` down `h` px, CSS colour. */
+export interface WaveRect {
+  x: number;
+  top: number;
+  h: number;
+  colour: string;
+}
+
+/**
+ * The close-zoom bars from per-pixel signed peaks (`detailPeaks`): each pixel
+ * a line from its min to its max, uneven about the middle of a view `height`
+ * px tall (up is positive), at least 1 px. Silent pixels are skipped; the
+ * strip's centre line covers them.
+ */
+export function detailBars(
+  style: DeckWaveform,
+  lo: Float32Array,
+  hi: Float32Array,
+  bands: Float32Array,
+  height: number,
+  palette: WavePalette,
+): WaveRect[] {
+  const mid = height / 2;
+  const colour = bandColour(style, palette);
+  const out: WaveRect[] = [];
+  for (let x = 0; x < lo.length; x++) {
+    const l = lo[x] ?? 0;
+    const h = hi[x] ?? 0;
+    if (Math.max(Math.abs(l), Math.abs(h)) * mid <= MIN_HALF) continue;
+    const top = Math.floor(mid - h * mid);
+    const bottom = Math.ceil(mid - l * mid);
+    out.push({
+      x,
+      top,
+      h: Math.max(1, bottom - top),
+      colour: colour(bands[3 * x] ?? 0, bands[3 * x + 1] ?? 0, bands[3 * x + 2] ?? 0),
+    });
   }
   return out;
 }

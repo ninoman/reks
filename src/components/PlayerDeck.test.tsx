@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("../lib/ipc", () => ({
   DECKS: 4,
   mixControl: vi.fn(),
+  mixWaveformDetail: vi.fn(),
+  DETAIL_POINTS_PER_SECOND: 3000,
+  DETAIL_POINT_BYTES: 5,
   waveformColumns: vi.fn(),
   beatgridGet: vi.fn(),
 }));

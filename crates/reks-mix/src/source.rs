@@ -81,6 +81,11 @@ impl DeckSource {
         (self.pcm.len() / 2) as i64
     }
 
+    /// The PCM, `L R L R …`.
+    pub fn pcm(&self) -> &[i16] {
+        &self.pcm
+    }
+
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hexRgb, mixColour, type WavePalette, waveBars } from "./waveDraw";
+import { detailBars, hexRgb, mixColour, type WavePalette, waveBars } from "./waveDraw";
 
 const palette: WavePalette = {
   low: "#0000ff",
@@ -60,5 +60,38 @@ describe("waveBars", () => {
     const quiet = new Float32Array([0.001, 0]);
     expect(waveBars("rgb", new Float32Array(6), quiet, 100, palette)).toEqual([]);
     expect(waveBars("threeBand", new Float32Array(6), quiet, 100, palette)).toEqual([]);
+  });
+});
+
+describe("detailBars", () => {
+  const lo = new Float32Array([-0.5, 0.25, 0, -0.001]);
+  const hi = new Float32Array([0.25, 0.75, 0, 0.001]);
+  const detailBands = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+
+  it("draws each pixel from its min to its max, uneven about the middle (up is positive)", () => {
+    expect(detailBars("rgb", lo, hi, detailBands, 100, palette)).toEqual([
+      { x: 0, top: 37, h: 38, colour: "rgb(217 0 0)" },
+      { x: 1, top: 12, h: 26, colour: "rgb(0 0 217)" },
+    ]);
+  });
+
+  it("colours 3-band by the band mix and skips silent pixels", () => {
+    const bars = detailBars("threeBand", lo, hi, detailBands, 100, palette);
+    expect(bars.map((b) => [b.x, b.colour])).toEqual([
+      [0, "rgb(0 0 217)"],
+      [1, "rgb(217 217 217)"],
+    ]);
+  });
+
+  it("keeps a flat stretch at least one pixel tall", () => {
+    const bars = detailBars(
+      "blue",
+      new Float32Array([0.5]),
+      new Float32Array([0.5]),
+      new Float32Array(3),
+      100,
+      palette,
+    );
+    expect(bars).toEqual([{ x: 0, top: 25, h: 1, colour: "rgb(0 0 255)" }]);
   });
 });

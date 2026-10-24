@@ -27,6 +27,7 @@ import type {
   MixControl,
   MixState,
 } from "../lib/ipc";
+import { mockDetail } from "./mockDetail";
 
 const DURATION_MS = 30_000;
 const FIRST_BEAT_MS = 12;
@@ -36,6 +37,8 @@ const FRAME_MS = 1000 / 60;
 
 interface Deck {
   view: DeckView;
+  /** The load that put the track here (`DeckLoaded.load`). */
+  load: number;
   grid: boolean;
   /** When playing started, for electing a master. */
   since: number;
@@ -138,6 +141,7 @@ function editCues(id: number, edit: CueEdit, atMs: number, loop: LoopView | null
 
 function emptyDeck(): Deck {
   return {
+    load: 0,
     view: {
       trackId: null,
       loaded: false,
@@ -169,6 +173,7 @@ function emptyDeck(): Deck {
 /** ipc `PREVIEW_DECK`: the last slot, after the four mixer decks. */
 const PREVIEW_DECK = 4;
 let decks: Deck[] = [];
+let loadSeq = 0;
 let master: number | null = null;
 /** The master was playing at the last tick, so stopping hands it on. */
 let masterPlaying = false;
@@ -554,7 +559,9 @@ function load(deck: number, id: number, analysed: boolean): DeckLoaded {
   if (master === deck) masterPlaying = true;
   const cues = cuesOf(id, analysed);
   decks[deck] = d;
-  return { deck, trackId: id, durationMs: DURATION_MS, ...cues };
+  loadSeq += 1;
+  d.load = loadSeq;
+  return { deck, load: loadSeq, trackId: id, durationMs: DURATION_MS, ...cues };
 }
 
 export function mockMix(
@@ -614,6 +621,15 @@ export function mockMix(
       const d = decks[deck];
       if (d !== undefined) d.view = { ...d.view, trackId: null };
       return new Promise((resolve) => setTimeout(() => resolve({ ...loaded, trackId: null }), 300));
+    }
+    case "mix_waveform_detail": {
+      const d = decks[args.deck as number];
+      const bytes =
+        d === undefined || d.load !== args.load
+          ? new ArrayBuffer(0)
+          : mockDetail(args.first as number, args.count as number, d.view.durationMs);
+      // Building a chunk takes a moment.
+      return new Promise((resolve) => setTimeout(() => resolve(bytes), 30));
     }
     case "mix_cue_edit": {
       const d = decks[args.deck as number];

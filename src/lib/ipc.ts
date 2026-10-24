@@ -913,6 +913,8 @@ export type CueEdit =
 
 export interface DeckLoaded {
   deck: number;
+  /** This load, for `mixWaveformDetail`. */
+  load: number;
   /** Null for a stick track. */
   trackId: number | null;
   durationMs: number;
@@ -1035,6 +1037,25 @@ export function mixLoadStick(
   trackId: number,
 ): Promise<DeckLoaded | null> {
   return invoke("mix_load_stick", { deck, mountPoint, trackId });
+}
+
+/** Points per second of `mixWaveformDetail` (reks-analysis `detail`). */
+export const DETAIL_POINTS_PER_SECOND = 3000;
+/** Bytes per `mixWaveformDetail` point: `min, max` (i8, ±127 = full scale), `low, mid, high` 0..255. */
+export const DETAIL_POINT_BYTES = 5;
+
+/**
+ * Close-zoom waveform points `first..first + count` of the track that load
+ * `load` put on `deck`, built from the deck's audio (raw `ipc::Response`, not
+ * JSON). Empty once the deck holds another load.
+ */
+export function mixWaveformDetail(
+  deck: number,
+  load: number,
+  first: number,
+  count: number,
+): Promise<ArrayBuffer> {
+  return invoke("mix_waveform_detail", { deck, load, first, count });
 }
 
 export function mixControl(control: MixControl): Promise<void> {

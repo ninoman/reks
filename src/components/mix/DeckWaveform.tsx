@@ -10,6 +10,8 @@
  * Both canvases draw in device pixels from one animation-frame loop, which
  * runs the playhead on between engine states (`deckScroll.ts`) and copies
  * pre-drawn waveform tiles (`waveStrip.ts`); React renders only feed it.
+ * At `DETAIL_MAX_ZOOM_S` and closer the scrolling view draws the signed
+ * detail (`deckDetail.ts`) where it has arrived.
  */
 import {
   type KeyboardEvent,
@@ -21,6 +23,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { DETAIL_MAX_ZOOM_S, type DetailChunks } from "../../lib/deckDetail";
 import { activeLoop, deckMarks, markAt, markTitle } from "../../lib/deckMarks";
 import {
   followPlayhead,
@@ -47,6 +50,8 @@ const WHEEL_STEP_PX = 40;
 export interface DeckWaveformProps {
   deck: number;
   columns: Uint8Array | null;
+  /** Close-zoom detail of the deck's load, as far as it has arrived. */
+  detail?: DetailChunks | null;
   beats: BeatMark[] | null;
   positionMs: number;
   durationMs: number;
@@ -72,6 +77,7 @@ export interface DeckWaveformProps {
 export function DeckWaveform({
   deck,
   columns,
+  detail = null,
   beats,
   positionMs,
   durationMs,
@@ -95,6 +101,7 @@ export function DeckWaveform({
   const scrollSize = useCanvasSize(scrollBox);
   const overviewSize = useCanvasSize(overviewBox);
   const seconds = zoomSeconds(zoom);
+  const closeDetail = seconds <= DETAIL_MAX_ZOOM_S ? detail : null;
 
   const theme = useTheme();
   // biome-ignore lint/correctness/useExhaustiveDependencies: `theme` re-reads the deck and waveform colours.
@@ -112,8 +119,9 @@ export function DeckWaveform({
             palette: tokens.palette,
             pxPerS: scrollSize.width / seconds,
             height: scrollSize.height,
+            detail: closeDetail,
           }),
-    [columns, style, tokens, scrollSize, seconds],
+    [columns, style, tokens, scrollSize, seconds, closeDetail],
   );
   const overviewStrip = useMemo(
     () =>
@@ -193,7 +201,7 @@ export function DeckWaveform({
         i.overviewSize === null || i.durationMs <= 0
           ? 0
           : Math.round((at / i.durationMs) * i.overviewSize.width);
-      const key = `${version.current}:${scrollLeft}:${overviewX}`;
+      const key = `${version.current}:${i.strip?.detailVersion ?? 0}:${scrollLeft}:${overviewX}`;
       if (key === drawn) {
         if (i.scrollSize !== null) i.strip?.prefetch(scrollLeft, i.scrollSize.width);
         return;

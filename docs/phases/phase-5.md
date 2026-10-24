@@ -783,6 +783,19 @@ nothing; 25 needs 22–24.
     (`loopPage` survives an eject), `DeckStrip.test.tsx` (both pages, tabs,
     size click, EXIT, no grid), `ui.test.tsx` loses the `Readout`
     case. Done 2026-10-23.
+29. [x] **Close-zoom deck waveform** (maintainer request, 2026-10-24; D40).
+    At 2, 1 and 0.5 s the scrolling view draws the signed waveform.
+    - [x] `reks-analysis` `detail`: signed min/max and band levels at
+      3,000 points a second, any range of a deck's stereo PCM.
+    - [x] `mix_waveform_detail` (`ArrayBuffer`), keyed by `DeckLoaded.load`;
+      `DeckSource::pcm`.
+    - [x] UI: `lib/deckDetail.ts` (chunks, per-pixel peaks),
+      `mix/useDeckDetail` (playhead-first fetch), `WaveStrip` detail tiles
+      with a columns fallback, `detailBars`; dev mock (`dev/mockDetail.ts`).
+    - [x] Docs: [`../ui.md`](../ui.md), D40.
+    Tests: `detail.rs` (sine min/max, asymmetry, bands, range = whole build),
+    `deckDetail.test.ts`, `waveDraw.test.ts` (`detailBars`),
+    `waveStrip.test.ts` (detail tiles, fallback and redraw).
 
 ## Acceptance criteria
 

@@ -4,9 +4,14 @@
  * then every frame only copies tiles at a whole-pixel offset: crisp on HiDPI
  * screens, no shimmer as peaks would re-bin under a moving view, and a few
  * `drawImage` calls a frame instead of a bar per pixel.
+ *
+ * At close zoom a strip also gets the deck's detail (`deckDetail.ts`): a
+ * tile draws from it when it holds the tile's points, else from the columns,
+ * and is redrawn once from the detail when its points arrive.
  */
-import { COLUMNS_PER_SECOND, type DeckWaveform } from "./ipc";
-import { centreLineColour, type WavePalette, waveBars } from "./waveDraw";
+import { type DetailChunks, detailPeaks, detailSpan } from "./deckDetail";
+import { COLUMNS_PER_SECOND, DETAIL_POINTS_PER_SECOND, type DeckWaveform } from "./ipc";
+import { centreLineColour, detailBars, type WavePalette, waveBars } from "./waveDraw";
 
 /** Device pixels per tile. */
 export const TILE_PX = 512;
@@ -89,11 +94,21 @@ export interface StripSpec {
   pxPerS: number;
   /** Device pixels. */
   height: number;
+  /** Close zoom: the signed detail, drawn where it is held. */
+  detail?: DetailChunks | null;
+}
+
+interface Tile {
+  canvas: HTMLCanvasElement;
+  /** Drawn from the detail; a columns tile is redrawn once the detail holds its points. */
+  fromDetail: boolean;
+  /** The detail version a columns tile last checked. */
+  checked: number;
 }
 
 export class WaveStrip {
   readonly spec: StripSpec;
-  private tiles = new Map<number, HTMLCanvasElement>();
+  private tiles = new Map<number, Tile>();
 
   constructor(spec: StripSpec) {
     this.spec = spec;
@@ -125,24 +140,54 @@ export class WaveStrip {
     }
   }
 
+  /** The detail's version, or 0: a frame redraws when it changes. */
+  get detailVersion(): number {
+    return this.spec.detail?.version ?? 0;
+  }
+
   private tile(i: number): HTMLCanvasElement | null {
     const cached = this.tiles.get(i);
-    if (cached !== undefined) {
+    if (cached !== undefined && !this.stale(i, cached)) {
       // Most recently used last, so the oldest goes first.
       this.tiles.delete(i);
       this.tiles.set(i, cached);
-      return cached;
+      return cached.canvas;
     }
-    const { columns, style, palette, pxPerS, height } = this.spec;
+    const tile = this.build(i, cached?.canvas);
+    if (tile === null) return null;
+    this.tiles.delete(i);
+    this.tiles.set(i, tile);
+    if (this.tiles.size > MAX_TILES) {
+      const oldest = this.tiles.keys().next().value;
+      if (oldest !== undefined) this.tiles.delete(oldest);
+    }
+    return tile.canvas;
+  }
+
+  /** A columns tile whose detail has arrived since it was drawn. */
+  private stale(i: number, t: Tile): boolean {
+    const detail = this.spec.detail;
+    if (t.fromDetail || detail == null || t.checked === detail.version) return false;
+    t.checked = detail.version;
+    const [from, to] = detailSpan(i * TILE_PX, this.ptsPerPx(), TILE_PX);
+    return detail.covers(from, to);
+  }
+
+  private ptsPerPx(): number {
+    return DETAIL_POINTS_PER_SECOND / this.spec.pxPerS;
+  }
+
+  private build(i: number, reuse?: HTMLCanvasElement): Tile | null {
+    const { columns, style, palette, pxPerS, height, detail } = this.spec;
     const colsPerPx = COLUMNS_PER_SECOND / pxPerS;
     const start = i * TILE_PX;
     if (start + TILE_PX < 0 || start * colsPerPx > columns.length / 4) return null;
-    const tile = document.createElement("canvas");
+    const tile = reuse ?? document.createElement("canvas");
     tile.width = TILE_PX;
     tile.height = height;
     const ctx = tile.getContext("2d");
     if (ctx === null) return null;
-    const { bands, mono } = stripPeaks(columns, start, colsPerPx, TILE_PX);
+    ctx.clearRect(0, 0, TILE_PX, height);
     const mid = height / 2;
     // A flat line under the bars keeps silent stretches continuous; it stops
     // at the track's ends, where the view stays empty.
@@ -152,15 +197,19 @@ export class WaveStrip {
       ctx.fillStyle = centreLineColour(style, palette);
       ctx.fillRect(from, Math.floor(mid), to - from, 1);
     }
-    for (const bar of waveBars(style, bands, mono, height, palette)) {
-      ctx.fillStyle = bar.colour;
-      ctx.fillRect(bar.x, mid - bar.half, 1, 2 * bar.half);
+    const peaks = detail == null ? null : detailPeaks(detail, start, this.ptsPerPx(), TILE_PX);
+    if (peaks !== null) {
+      for (const r of detailBars(style, peaks.lo, peaks.hi, peaks.bands, height, palette)) {
+        ctx.fillStyle = r.colour;
+        ctx.fillRect(r.x, r.top, 1, r.h);
+      }
+    } else {
+      const { bands, mono } = stripPeaks(columns, start, colsPerPx, TILE_PX);
+      for (const bar of waveBars(style, bands, mono, height, palette)) {
+        ctx.fillStyle = bar.colour;
+        ctx.fillRect(bar.x, mid - bar.half, 1, 2 * bar.half);
+      }
     }
-    this.tiles.set(i, tile);
-    if (this.tiles.size > MAX_TILES) {
-      const oldest = this.tiles.keys().next().value;
-      if (oldest !== undefined) this.tiles.delete(oldest);
-    }
-    return tile;
+    return { canvas: tile, fromDetail: peaks !== null, checked: detail?.version ?? 0 };
   }
 }

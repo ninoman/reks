@@ -7,6 +7,7 @@ pub mod beats;
 pub mod cache;
 pub mod calib;
 pub mod columns;
+pub mod detail;
 pub mod grid;
 pub mod input;
 pub mod key;

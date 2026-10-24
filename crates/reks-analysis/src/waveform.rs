@@ -120,12 +120,16 @@ impl Biquad {
 
 /// 4th-order Bessel low- or high-pass as two cascaded biquads.
 #[derive(Debug, Clone, Copy)]
-struct Bessel4 {
+pub(crate) struct Bessel4 {
     sections: [Biquad; 2],
 }
 
 impl Bessel4 {
-    fn new(cutoff_hz: f64, sample_rate: u32, high_pass: bool) -> Result<Self, WaveformError> {
+    pub(crate) fn new(
+        cutoff_hz: f64,
+        sample_rate: u32,
+        high_pass: bool,
+    ) -> Result<Self, WaveformError> {
         let fs = f64::from(sample_rate);
         if !(cutoff_hz > 0.0 && cutoff_hz < fs / 2.0) {
             return Err(WaveformError::CrossoverAboveNyquist {
@@ -152,7 +156,7 @@ impl Bessel4 {
     }
 
     #[inline]
-    fn process(&mut self, x: f64) -> f64 {
+    pub(crate) fn process(&mut self, x: f64) -> f64 {
         let y = self.sections[0].process(x);
         self.sections[1].process(y)
     }

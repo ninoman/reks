@@ -1446,6 +1446,36 @@ Date of decisions: 2026-10-18.
   `/* … */` that is not tags is read as tags and, with write-back on and the
   track tagged, replaced.
 
+## D40. Close-zoom deck waveform from the deck's own audio
+
+- Date: 2026-10-24 (design agreed with the maintainer). Extends the deck
+  waveform in [`ui.md`](ui.md) (Mix panel).
+- Decision:
+  - At 2 s across the view and closer, the deck draws the signed waveform
+    (rekordbox's close-zoom look) instead of the 150/s columns, which are
+    only ~75 points across the view at 0.5 s. Points are 3,000 a second,
+    5 bytes each: `[min, max]` of the mono mix as `i8`, then low/mid/high
+    band levels from the columns' Bessel crossovers, each the band peak
+    over ±5 ms so the colour follows the music, not each cycle
+    ([`reks-analysis/src/detail.rs`](../crates/reks-analysis/src/detail.rs)).
+    About 4.5 MB per 5-minute track.
+  - Built from the PCM the deck already holds (`DeckSource::pcm`), not by
+    decoding the file again: no second decode, the same timeline as the
+    playhead, and stick tracks get it too. Not cached on disk.
+  - Fetched in 30 s chunks (`mix_waveform_detail`, an `ArrayBuffer`), the
+    playhead's chunk first, then outward; a deck keeps the 20 chunks nearest
+    the playhead, so a 2-hour mix costs no more than a 10-minute track.
+    Requests carry the deck's load generation (`DeckLoaded.load`): after a
+    newer load they come back empty and the UI stops.
+  - Until a tile's chunk arrives it draws from the columns; playback never
+    waits for the detail.
+- Rejected: decoding the file in the background on load (a second full
+  decode, and for a long mix the whole payload at once); a disk cache
+  (building a chunk from memory takes milliseconds); sending the points as
+  JSON.
+- Risks: a paused deck reloaded for a new grid (`reloadForGrid`) fetches its
+  detail again and shows the columns at close zoom for a moment.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

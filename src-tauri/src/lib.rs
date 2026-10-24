@@ -107,6 +107,7 @@ pub fn run() {
             mix::mix_stop,
             mix::mix_load,
             mix::mix_load_stick,
+            mix::mix_waveform_detail,
             mix::mix_control,
             mix::mix_cue_edit,
             grid::beatgrid_get,

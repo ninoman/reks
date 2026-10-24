@@ -378,6 +378,16 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   default and remembered across launches (`lib/deckZoomMemory.ts`), with − / + on a view, the − / + keys (anywhere outside text
   fields, dialogs and menus, Mix panel open or not; `waveZoomKey` in
   `lib/keys.ts`), or Cmd/Ctrl + scroll.
+- Close zoom (2, 1 and 0.5 s across; D40): the scrolling view draws the
+  real signed waveform, each device pixel a line from its min to its max,
+  uneven about the centre and coloured by band in the chosen style
+  (`detailBars` in `lib/waveDraw.ts`). The points (3,000 a second) are built
+  by Rust from the loaded deck's audio and fetched in 30 s chunks nearest
+  the playhead first (`mix/useDeckDetail`, `lib/deckDetail.ts`); a tile whose
+  points have not arrived draws from the columns and is redrawn once from
+  the detail when they do. A deck holds at most 20 chunks (10 min), so a
+  long mix keeps those near the playhead. 4 s and wider, and the overview,
+  stay on the analysis columns.
 - Marks (`lib/deckMarks.ts`), on both views: hot cues are a flag with the
   slot letter in the cue's library colour (`deck-hotcue` without one; text
   dark or light by the flag's brightness), memory cues a triangle on the
@@ -433,8 +443,9 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   colour mixed from `waveform-rgb-low/mid/high` by band level), **3-band**
   (low/mid/high overlaid, `waveform-low/mid/high`) and **Blue** (mono height in `waveform-blue`, lightening to
   `waveform-blue-high` as highs dominate). All three come from the same
-  analysis columns; drawing is pure in [`waveDraw.ts`](../src/lib/waveDraw.ts)
-  (`waveBars`). Only styles our columns can feed are offered.
+  analysis columns (close zoom: from the deck's detail, where 3-band mixes
+  its band colours into one line like RGB); drawing is pure in
+  [`waveDraw.ts`](../src/lib/waveDraw.ts) (`waveBars`, `detailBars`). Only styles our columns can feed are offered.
 - Sync phase: a marker half a beat either side (two beats with bar sync),
   green within 1/32 beat. The tempo fader is CDJ-style: faster towards the
   bottom.

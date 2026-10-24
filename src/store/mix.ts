@@ -126,6 +126,8 @@ export interface DeckMeta {
   failed: TrackRef | null;
   hotCues: HotCueView[];
   memoryCues: MemoryCueView[];
+  /** The engine's handle on the deck's current load (`mixWaveformDetail`); null when empty. */
+  load: number | null;
   /** Waveform columns (4 bytes each), null until fetched. */
   columns: Uint8Array | null;
   beats: BeatMark[] | null;
@@ -313,6 +315,7 @@ export function emptyDeck(): DeckMeta {
     failed: null,
     hotCues: [],
     memoryCues: [],
+    load: null,
     columns: null,
     beats: null,
     viewError: null,
@@ -476,7 +479,11 @@ export const useMix = create<MixStore>((set, get) => {
     try {
       const loaded = await mixLoad(deck, id);
       if (loaded === null || loads[deck] !== seq) return;
-      patchDeck(deck, { hotCues: loaded.hotCues, memoryCues: loaded.memoryCues });
+      patchDeck(deck, {
+        load: loaded.load,
+        hotCues: loaded.hotCues,
+        memoryCues: loaded.memoryCues,
+      });
       if (cueMs > 0) {
         // CUE on a paused deck off its cue point sets it at the head.
         get().send({ type: "seek", deck, ms: cueMs });
@@ -695,6 +702,7 @@ export const useMix = create<MixStore>((set, get) => {
         patchDeck(deck, {
           track: meta,
           loading: null,
+          load: loaded.load,
           hotCues: loaded.hotCues,
           memoryCues: loaded.memoryCues,
           columns: null,

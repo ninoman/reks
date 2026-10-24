@@ -32,6 +32,7 @@ import { DeckTransport } from "./DeckTransport";
 import { DeckWaveform } from "./DeckWaveform";
 import { DeckWaveformRow } from "./DeckWaveformRow";
 import { LoopBlock } from "./LoopBlock";
+import { useDeckDetail } from "./useDeckDetail";
 import { useDeckScrub } from "./useDeckScrub";
 
 export interface DeckActions {
@@ -147,6 +148,12 @@ export function DeckStrip({
     play: actions.play,
     pause: actions.pause,
   });
+  const detail = useDeckDetail(
+    deck,
+    loaded ? meta.load : null,
+    view?.durationMs ?? 0,
+    view?.positionMs ?? 0,
+  );
   const slot = slotState(meta, loaded);
 
   const viewsBody =
@@ -163,6 +170,7 @@ export function DeckStrip({
         <DeckWaveform
           deck={deck}
           columns={meta.columns}
+          detail={detail}
           beats={meta.beats}
           positionMs={view.positionMs}
           durationMs={view.durationMs}

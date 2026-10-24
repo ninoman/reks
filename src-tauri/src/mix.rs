@@ -16,7 +16,7 @@ use std::time::Duration;
 use reks_core::{CueMark, DeckAudio, Library, TrackId};
 use reks_mix::{DeckSource, DeckState, Engine, EngineConfig, DECKS, PREVIEW_DECK};
 use serde::{Deserialize, Serialize};
-use tauri::ipc::Channel;
+use tauri::ipc::{Channel, Response};
 use tauri::State;
 
 use crate::commands::{blocking, CmdError, CmdResult};
@@ -50,6 +50,8 @@ struct LoadedDeck {
     track: DeckTrack,
     /// The engine's source, for where a cue set at the head goes.
     src: Arc<DeckSource>,
+    /// The `generation` that loaded it; the UI's handle on this load.
+    load: u64,
 }
 
 /// Where a deck's track comes from.
@@ -377,6 +379,8 @@ pub fn mix_stop(state: State<'_, AppState>) -> CmdResult<()> {
 #[serde(rename_all = "camelCase")]
 pub struct DeckLoaded {
     pub deck: u8,
+    /// This load, for `mix_waveform_detail`.
+    pub load: u64,
     /// `None` for a stick track.
     pub track_id: Option<TrackId>,
     pub duration_ms: f64,
@@ -515,14 +519,47 @@ where
         deck,
         src: Arc::clone(&src),
     })?;
-    s.decks[i] = Some(LoadedDeck { track, src });
+    s.decks[i] = Some(LoadedDeck {
+        track,
+        src,
+        load: generation,
+    });
     Ok(Some(DeckLoaded {
         deck,
+        load: generation,
         track_id: track.library_id(),
         duration_ms,
         hot_cues,
         memory_cues,
     }))
+}
+
+/// Most points one `mix_waveform_detail` request builds (60 s).
+const MAX_DETAIL_POINTS: u64 = 180_000;
+
+/// Close-zoom waveform points `first..first + count` of the track that load
+/// `load` put on `deck` (`reks_analysis::detail`), built from the deck's PCM
+/// on a worker thread and sent raw (an `ArrayBuffer` in the UI). Empty when
+/// the deck holds another load by now.
+#[tauri::command]
+pub async fn mix_waveform_detail(
+    state: State<'_, AppState>,
+    deck: u8,
+    load: u64,
+    first: u64,
+    count: u64,
+) -> CmdResult<Response> {
+    let i = deck_index(deck)?;
+    let src = match &lock(&state.mix)?.decks[i] {
+        Some(d) if d.load == load => Arc::clone(&d.src),
+        _ => return Ok(Response::new(Vec::new())),
+    };
+    let count = count.min(MAX_DETAIL_POINTS);
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        reks_analysis::detail::stereo_detail(src.pcm(), src.sample_rate(), first, count)
+    })
+    .await??;
+    Ok(Response::new(bytes))
 }
 
 /// Splits a deck's cue marks into hot and memory cue views in ms.
@@ -616,6 +653,7 @@ pub async fn mix_cue_edit(
             Some(LoadedDeck {
                 track: DeckTrack::Library(id),
                 src,
+                ..
             }) => (*id, Arc::clone(src)),
             Some(_) => {
                 return Err(CmdError::new(
