@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–11, 11b and 13 done; 12 measured, tuning (12a) in progress: BPM and downbeat met; key port verified, mode kept, tonic next). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–11, 11b and 13 done; 12 measured, tuning (12a) in progress: BPM and downbeat met; key port verified, mode kept, tonic next; grid editing with tempo sections, tasks 15–18, added 2026-10-24). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -27,13 +27,16 @@ the repo before tuning begins.
 - Comparison harness: rekordbox XML + rekordbox ANLZ cache vs reks results,
   with a report (`docs/analysis-parity.md`).
 - Phase 2 writer switched from `AnlzSource::Generated` (baken) to reks ANLZ.
-- UI: waveform display (from our data), grid editor basics (set downbeat,
-  nudge, tap BPM, double/halve), key display in the user's notation.
+- UI: waveform display (from our data), grid editor (set downbeat,
+  nudge, tap BPM, double/halve; tempo sections since 2026-10-24, tasks
+  15–18), key display in the user's notation.
 
 ## Non-goals
 
 - Phrase analysis (PSSI). Vocal detection. Loudness/gain.
-- Dynamic-grid *editing* beyond anchor nudge.
+- ~~Dynamic-grid *editing* beyond anchor nudge.~~ Changed 2026-10-24
+  (maintainer's call, D10 "Grid editing with tempo sections"): full grid
+  editing with tempo sections, tasks 15–18.
 - Matching rekordbox byte-for-byte; the target is "indistinguishable on the
   player" and "same BPM/downbeat in the large majority of cases".
 - Changing Phase 2's writer path (still baken for PDB); only ANLZ sourcing changes.
@@ -405,6 +408,40 @@ rekordbox keys (D10, "Queue"). A track rekordbox analysed has a rekordbox entry 
 14. **Hardware check**: export 20 reks-analysed tracks (no rekordbox data)
     and run the Phase 2 checklist on NXS2 and CDJ-3000; log ([#23](https://github.com/ninoman/reks/issues/23)).
 
+Grid editing with tempo sections (added 2026-10-24, maintainer's call; D10
+"Grid editing with tempo sections" has the model and the rules):
+
+15. [ ] **Section model and edits** (`reks-core::beatgrid`): one beat rule
+    (`grid_beats`: a section's beats stop half a beat before the next
+    marker; the first section runs back to 0); `validate_anchors` refuses
+    degenerate grids on every edit; new `GridEdit`s, each a pure function
+    over anchors: `addMarker`, `moveMarker`, `deleteMarker`,
+    `setSectionBpm`, `stretch` (beat k of a section lands on a time; the
+    tempo rounds to 0.01 BPM, so it lands within ~1 ms per 64 beats),
+    `setDownbeat` (the section at the time), `double`/`halve` (a section or
+    all), `nudge` (whole grid), `reset` (a section or all, to the grid from
+    before the first edit: `beatgrid_base`, migration 0013; else reks's
+    cached analysis), `setAnchors` (the editor's undo/redo). Edits store
+    `manual` rows (user-owned, analysis keeps them); XML re-import skips
+    user-owned grids. Tests: unit tests per edit, property tests (valid
+    grids give strictly increasing beats; XML round trip of anchors).
+16. [ ] **Export**: `PQTZ` from `grid_beats`; `anchors_from_pqtz` for stick
+    reads (round trip of the beat list exact, of anchors exact for
+    canonical grids); `AnlzSource::ReksGrid` so a user-owned grid reaches
+    the stick under `rekordboxFirst` without reks analysis; validator
+    checks `PQTZ` order (exists) — test it on a stick. Tests: property
+    round trip through `PQTZ`, our reader and rekordcrate; XML writes every
+    section.
+17. [ ] **Decks** (`reks-mix`): `BeatMap` from the beat list; sync, beat
+    jump, beat loops and quantise on a two-tempo fixture (140 → 174 BPM
+    click track, `fixtures/gen`).
+18. [ ] **Editor UI**: section markers on a zoomable waveform, select a
+    section, drag a marker (move) or Alt-drag a beat (stretch), add/delete
+    marker, typed or tapped BPM per section, set downbeat, ½/×2, reset
+    section/all, shift, snap to transients (`waveform_transients`),
+    keyboard shortcuts, undo/redo. Tests: component tests for each
+    operation, history reducer.
+
 ## Acceptance criteria
 
 - On the maintainer's library (≥ 2,500 rekordbox-analysed tracks), reks
@@ -447,6 +484,14 @@ rekordbox keys (D10, "Queue"). A track rekordbox analysed has a rekordbox entry 
    grid lines sit on the kicks at the start and the end, as with the
    rekordbox-analysed copy (the CDJ's MP3 decoder must agree with rekordbox's
    timeline; UNVERIFIED until run).
+7. Multi-tempo grid (tasks 15–18): export the 140 → 174 BPM fixture and a
+   real tempo-change track with an edited grid (several sections, one
+   section re-phased) on NXS2 and CDJ-3000: grid lines follow every
+   section, the BPM display changes at each marker, the beat counter and
+   bar phase stay right across markers, beat jump and quantised loops land
+   on beats in both sections, and sync to another deck holds through the
+   change. Also whether the player needs a full `PQT2` for any of it.
+   UNVERIFIED until run.
 
 ## Risks
 
