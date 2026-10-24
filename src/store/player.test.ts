@@ -56,6 +56,7 @@ const state = (decks: DeckView[]): MixState => ({
   xruns: 0,
   masterDeck: null,
   decks,
+  preview: view({}),
   meters: [],
   masterMeter: { level: 0, clip: false },
 });
