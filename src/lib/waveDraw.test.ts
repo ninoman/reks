@@ -25,10 +25,10 @@ describe("hexRgb", () => {
 });
 
 describe("mixColour", () => {
-  it("weights the colours by level and brightens the top channel to full", () => {
+  it("weights the colours by sharpened level and scales the top channel to the peak", () => {
     const rgb = [hexRgb("#ff0000"), hexRgb("#00ff00"), hexRgb("#0000ff")];
-    expect(mixColour(rgb, [0.5, 0, 0])).toBe("rgb(255 0 0)");
-    expect(mixColour(rgb, [0.4, 0.2, 0])).toBe("rgb(255 128 0)");
+    expect(mixColour(rgb, [0.5, 0, 0])).toBe("rgb(217 0 0)");
+    expect(mixColour(rgb, [0.4, 0.2, 0])).toBe("rgb(217 27 0)");
     expect(mixColour(rgb, [0, 0, 0])).toBe("rgb(0 0 0)");
   });
 });
@@ -44,8 +44,8 @@ describe("waveBars", () => {
 
   it("RGB: one mono-height bar per pixel, hue from the band mix", () => {
     expect(waveBars("rgb", bands, mono, 100, palette)).toEqual([
-      { x: 0, half: 50, colour: "rgb(255 0 0)" },
-      { x: 1, half: 25, colour: "rgb(0 0 255)" },
+      { x: 0, half: 50, colour: "rgb(217 0 0)" },
+      { x: 1, half: 25, colour: "rgb(0 0 217)" },
     ]);
   });
 
