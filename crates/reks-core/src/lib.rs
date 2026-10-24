@@ -23,6 +23,7 @@ pub mod playlist;
 pub mod preview;
 pub mod query;
 pub mod rbxml;
+pub mod relocate;
 pub mod rule;
 pub mod scan;
 pub mod secret;

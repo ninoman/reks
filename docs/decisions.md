@@ -1186,6 +1186,44 @@ Date of decisions: 2026-10-18.
   field · operator · value rows (needs ~380px); saved filters in settings
   (the core owns library data, and presets reference tags and playlists).
 
+## D36. Relocating missing files: content decides, names only suggest
+
+- Date: 2026-10-24. Status: accepted (maintainer request). Task:
+  [`phases/phase-1.md`](phases/phase-1.md) "Relocate missing files and change
+  a library folder". Evidence: rekordbox's Relocate relinks the first name
+  match, a standing complaint (the pain-points research, PR #75).
+- Decision:
+  - **Sure match = equal `content_hash`** (D3: blake3 of the first and last
+    MiB plus the size) with exactly one such file in the folder. Only files
+    whose size equals a missing track's are hashed. Only these relink without
+    the user choosing.
+  - **Candidate = a different file with the same normalised file name** (case,
+    accents, punctuation and a leading track number ignored) **or the same
+    artist and title tags, and a duration within 1 s** (unknown durations don't
+    rule out). Never relinked unless the user picks it; the dry run flags a
+    different byte size. Equal size is not required: retagging changes it, and
+    the hash covers the tags at the start of the file.
+  - **Several identical copies** are listed for a pick, not resolved by
+    folder order. A file serves one track; a second track wanting it is told
+    so in the report.
+  - **Apply rewrites only `track.path`, `missing` and, for hash-verified
+    files, `file_mtime`.** For a picked non-identical file the stored size and
+    mtime stay, so the next scan of that folder refreshes the track's technical
+    fields (tags fill only empty fields, as always). Everything keyed by track
+    id stays, including `export_manifest` (D23); D28's stick identity is
+    unaffected.
+  - **Changing a library folder** rewrites the path prefix of all tracks (and
+    nested library folders) in one transaction, after checking a 24-file
+    sample at the new place. It never touches files. Refused when the sample
+    is empty, a path would collide, or the folder is the same, nested in
+    itself or already a library folder.
+  - **Dry run first**, like exports: `plan` is pure data held in the app
+    state under an id; `apply` re-checks every file (size) and row (still
+    missing, same old path) and skips and reports what changed.
+- Rejected: auto-relinking by name or by (artist, title, duration) alone (the
+  failure rekordbox users complain about: two edits of one song share both);
+  relinking by hash only inside library folders (the scan already does that).
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

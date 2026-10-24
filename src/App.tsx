@@ -33,6 +33,8 @@ import { PlayerBar } from "./components/PlayerBar";
 import { PlayerDeck } from "./components/PlayerDeck";
 import { DeleteDialog, DuplicateDialog } from "./components/PlaylistDialogs";
 import { PlaylistTree } from "./components/PlaylistTree";
+import { RelocateDialog } from "./components/RelocateDialog";
+import { RemapDialog } from "./components/RemapDialog";
 import { ReportDialog } from "./components/ReportDialog";
 import { SessionView } from "./components/SessionView";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -162,6 +164,8 @@ export default function App() {
       <SettingsDialog />
       <DevicesDialog />
       <AdoptDialog />
+      <RelocateDialog />
+      <RemapDialog />
       <ExportWizard />
       <ConvertDialog />
       <HistoryImportDialog />

@@ -117,6 +117,10 @@ pub enum Error {
     #[error("library folder {0} not found")]
     LibraryRootNotFound(i64),
 
+    /// A relocate or library-folder change was refused; nothing was written.
+    #[error("{0}")]
+    RelocateRefused(String),
+
     /// An export selection that holds no playlist (nothing, or only empty folders).
     #[error("the selection contains no playlist")]
     EmptySelection,

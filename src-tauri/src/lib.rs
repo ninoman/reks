@@ -9,6 +9,7 @@ mod grid;
 mod history;
 mod logging;
 mod mix;
+mod relocate;
 mod report;
 mod startup;
 mod state;
@@ -141,6 +142,11 @@ pub fn run() {
             history::history_track_sessions,
             history::history_scan,
             history::history_import,
+            relocate::relocate_plan,
+            relocate::relocate_apply,
+            relocate::relocate_cancel,
+            relocate::remap_plan,
+            relocate::remap_apply,
             adopt::adopt_scan,
             adopt::adopt_apply,
             analysis::analysis_subscribe,

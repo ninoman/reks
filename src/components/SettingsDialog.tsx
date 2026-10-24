@@ -16,6 +16,7 @@ import { useScan } from "../store/scan";
 import { type SettingsTab, useSettings } from "../store/settings";
 import { ErrorMessage } from "./ErrorMessage";
 import { OutputSettings } from "./OutputSettings";
+import { changeLibraryFolder, findMissingFiles } from "./relocateActions";
 import { DeckSettings } from "./settings/DeckSettings";
 import { DisplaySettings } from "./settings/DisplaySettings";
 import { MixerSettings } from "./settings/MixerSettings";
@@ -188,32 +189,47 @@ function LibraryFolders() {
     <div className={item}>
       <h5 className={itemTitle}>Library folders</h5>
       <p className={hint}>
-        Scanned folders are listed here. Removing one keeps its tracks in the library.
+        Scanned folders are listed here. Removing one keeps its tracks in the library. If a folder
+        moved, “Change folder…” points it and its tracks at the new place; “Find missing files…”
+        searches any folder for tracks the library lost.
       </p>
       {roots.length > 0 && (
         <Card
           variant="surface"
-          className="mt-2.5 rounded-md [&_li]:grid [&_li]:grid-cols-[1fr_auto_auto] [&_li]:items-center [&_li]:gap-3 [&_li]:py-1.5 [&_li]:pr-1.5 [&_li]:pl-2.5"
+          className="mt-2.5 rounded-md [&_li]:grid [&_li]:grid-cols-[minmax(0,1fr)_auto] [&_li]:items-center [&_li]:gap-3 [&_li]:py-1.5 [&_li]:pr-1.5 [&_li]:pl-2.5"
           asChild
         >
           <ul className="m-0 list-none p-0">
             {roots.map((r) => (
               <li key={r.id}>
-                <span className={path} title={r.path}>
-                  {r.path}
+                <span className="flex min-w-0 flex-col">
+                  <span className={path} title={r.path}>
+                    {r.path}
+                  </span>
+                  <span className="text-xs whitespace-nowrap text-fg-muted">
+                    {r.lastScan === null ? "Never scanned" : `Scanned ${scanDate(r.lastScan)}`}
+                  </span>
                 </span>
-                <span className="text-xs whitespace-nowrap text-fg-muted">
-                  {r.lastScan === null ? "Never scanned" : `Scanned ${scanDate(r.lastScan)}`}
+                <span className="flex gap-1">
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    aria-label={`Change folder for ${r.path}`}
+                    disabled={scanning}
+                    onClick={() => void changeLibraryFolder(r)}
+                  >
+                    Change folder…
+                  </Button>
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    aria-label={`Remove ${r.path}`}
+                    disabled={scanning}
+                    onClick={() => void removeRoot(r.id)}
+                  >
+                    Remove
+                  </Button>
                 </span>
-                <Button
-                  variant="quiet"
-                  size="sm"
-                  aria-label={`Remove ${r.path}`}
-                  disabled={scanning}
-                  onClick={() => void removeRoot(r.id)}
-                >
-                  Remove
-                </Button>
               </li>
             ))}
           </ul>
@@ -225,6 +241,9 @@ function LibraryFolders() {
         </Button>
         <Button disabled={scanning || roots.length === 0} onClick={() => void rescan()}>
           {scanning ? "Scanning…" : "Rescan all"}
+        </Button>
+        <Button disabled={scanning} onClick={() => void findMissingFiles({ kind: "allMissing" })}>
+          Find missing files…
         </Button>
       </div>
     </div>

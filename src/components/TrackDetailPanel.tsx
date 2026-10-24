@@ -33,6 +33,7 @@ import { useKeyLabel } from "../store/settings";
 import { ErrorMessage } from "./ErrorMessage";
 import { GridEditorDialog } from "./GridEditor";
 import { PlayedIn } from "./PlayedIn";
+import { findMissingFiles } from "./relocateActions";
 import { TrackTags } from "./TrackTags";
 import {
   buildPatch,
@@ -217,6 +218,15 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
           {t.missing ? "Missing: " : ""}
           {t.path}
         </div>
+        {t.missing && (
+          <Button
+            size="xs"
+            className="mt-1"
+            onClick={() => void findMissingFiles({ kind: "tracks", ids: [t.id] })}
+          >
+            Find file…
+          </Button>
+        )}
       </div>
 
       <form className="flex flex-col gap-1.5" onSubmit={(e) => void save(e)} onKeyDown={onKeyDown}>

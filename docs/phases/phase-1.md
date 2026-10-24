@@ -1,6 +1,6 @@
 # Phase 1 — Scaffold + library
 
-Status: in progress (tasks 1–14 done 2026-10-19; acceptance criteria and manual checklist open). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
+Status: in progress (tasks 1–16 done; acceptance criteria and manual checklist open). Depends on: nothing. Read `CLAUDE.md` and `docs/decisions.md` first.
 
 ## Goal
 
@@ -595,7 +595,8 @@ there, the `player_*` commands, polling and transport bar are gone.
 `player_state` (polled every 100 ms while playing; these and `overview_waveform` were replaced by the
 mix engine's deck 2 and `audio_devices` in D30), `artwork_get(artwork_id) -> Response(bytes)`, `overview_waveform(id) ->
 Response(bytes)`, `settings_get`, `settings_set(patch)`, `library_roots`, `library_root_add(path)`,
-`library_root_remove(id)`, `cache_dir_move(path)`.
+`library_root_remove(id)`, `cache_dir_move(path)`,
+`relocate_plan` / `relocate_apply` (progress via Channel) / `relocate_cancel`, `remap_plan` / `remap_apply` (D36).
 
 ## Tasks (each sized for one coding session)
 
@@ -701,6 +702,35 @@ per task; 6 and 7 can run in parallel, 8 needs 7, 9 needs 6 and 7.
    Update / Revert, one **Save…** (saved filter or smart playlist; the smart
    path saves the whole drawer), toolbar Filters button menu.
 
+### Relocate missing files and change a library folder (D36)
+
+Added 2026-10-24 (maintainer request, outside the original plan). Rekordbox's
+Relocate relinks the first name match; reks matches by content and asks
+otherwise. The folder scan already follows moves *inside* the library
+folders (task 5); this covers a folder outside them and a moved library folder.
+
+15. [x] **Relocate missing files**: `reks-core::relocate`. *Find missing files
+    in…* (a track's info panel, the table's context menu on a selection,
+    Settings → Library folders for all missing) walks a folder, hashes only
+    files whose size equals a missing track's, and makes a dry run: sure
+    matches (equal `content_hash`), tracks that need a pick (identical copies,
+    or candidates sharing normalised file name or artist and title, with a
+    duration within 1 s; never relinked unless picked) and not found. Apply
+    updates `track.path`, `file_mtime` and `missing` in one transaction after
+    re-checking each file and row (stale rows are skipped and listed); cues,
+    grids, tags, playlists, history and `export_manifest` stay (they hang off
+    the track id). A folder outside the library folders can be added as one
+    (tick, off by default). Progress events and cancellation; a cancelled dry
+    run cannot be applied and a cancelled apply writes nothing. Commands
+    `relocate_plan`, `relocate_apply`, `relocate_cancel`.
+16. [x] **Change library folder**: Settings → Library folders → *Change
+    folder…*. `reks-core::relocate::{plan_remap, remap}` swap the path prefix
+    of every track (and nested library folders) in one transaction; the dry
+    run shows counts, examples and how many of a 24-file sample exist at the
+    new place; refused when none do, when a new path would collide, or when
+    the new folder is the old one, inside it, or already a library folder.
+    The scan of the new folder follows. Commands `remap_plan`, `remap_apply`.
+
 ## Acceptance criteria
 
 Tracked in [#16](https://github.com/ninoman/reks/issues/16).
@@ -731,6 +761,9 @@ Tracked in [#16](https://github.com/ninoman/reks/issues/16).
 - Import: idempotency (import twice → same row count); unmatched handling;
   prefix remap.
 - Scan: add/modify/move/delete scenarios in a temp dir.
+- Relocate: exact hash match keeps cues and `export_manifest`; identical copies need a pick; a
+  name-only match is never relinked; cancelled plan/apply leaves the library unchanged; library
+  folder change round-trips.
 - Audio: probe values for each fixture format; decode length equals probe
   duration ± 1 frame; player seek accuracy.
 - UI: Vitest + React Testing Library for the table's query building and the
