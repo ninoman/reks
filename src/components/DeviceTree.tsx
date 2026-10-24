@@ -4,7 +4,8 @@
  * holds (read each time the drive is opened). Click a playlist or history
  * session (or Up/Down with the tree focused) to show it in the main area,
  * where its tracks play off the stick. The gear opens the USB devices
- * dialog; a drive's eject button ejects it.
+ * dialog; a drive's check button shows its pre-gig report
+ * (`StickCheckView`), its eject button ejects it.
  */
 import type { KeyboardEvent, ReactNode } from "react";
 
@@ -20,7 +21,7 @@ import {
 import { deviceName, useDevices } from "../store/devices";
 import { Disclosure } from "./Disclosure";
 import { ReportErrorButton } from "./ErrorMessage";
-import { EjectIcon, FolderIcon, GearIcon, PlaylistIcon, UsbIcon } from "./icons";
+import { CheckListIcon, EjectIcon, FolderIcon, GearIcon, PlaylistIcon, UsbIcon } from "./icons";
 import { ICON, INDENT, NAME, PAD, ROW } from "./treeStyles";
 import { Button } from "./ui/Button";
 import { focusRingInset } from "./ui/control";
@@ -144,6 +145,7 @@ function DeviceNode({
   open: StickListRef | null;
 }) {
   const ejecting = useDevices((s) => s.ejecting);
+  const checking = useDeviceBrowser((s) => s.checking === device.mountPoint);
   const b = useDeviceBrowser.getState;
   const mountPoint = device.mountPoint;
   const isOpen = expanded.has(nodeKey.device(mountPoint));
@@ -165,6 +167,22 @@ function DeviceNode({
           <UsbIcon />
         </span>
         <span className={NAME}>{name}</span>
+        <IconButton
+          size="xs"
+          shape="round"
+          className={
+            checking ? undefined : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+          }
+          title={`Check ${name} before a gig`}
+          aria-label={`Check ${name}`}
+          aria-pressed={checking}
+          onClick={(e) => {
+            e.stopPropagation();
+            b().openCheck(device);
+          }}
+        >
+          <CheckListIcon />
+        </IconButton>
         <IconButton
           size="xs"
           shape="round"

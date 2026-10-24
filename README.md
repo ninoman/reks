@@ -24,6 +24,8 @@ every stick as untested.
 - Stick profiles: a saved list of playlists per stick, synced with a dry run;
   sticks written by rekordbox can be adopted
   ([`docs/stick-profiles.md`](docs/stick-profiles.md)).
+- Check a stick before a gig: a read-only report on any stick, whoever made
+  it ([`docs/check-a-stick.md`](docs/check-a-stick.md)).
 - Converts lossless tracks to WAV, AIFF or FLAC, keeping cues and playlists
   ([`docs/phases/phase-2.6.md`](docs/phases/phase-2.6.md)).
 - Analyses tracks itself: BPM, beatgrid, key and every Pioneer waveform type
@@ -65,6 +67,7 @@ player has to confirm is marked UNVERIFIED. Open work is tracked on the
 | [`docs/decisions.md`](docs/decisions.md) | Architecture and product decisions, with status |
 | [`docs/phases/`](docs/phases/) | Phase 1–6 plans (plus 2.5 and 2.6) with task checklists |
 | [`docs/stick-profiles.md`](docs/stick-profiles.md) | Stick profiles and adopting foreign sticks (spec, D27) |
+| [`docs/check-a-stick.md`](docs/check-a-stick.md) | Check a stick before a gig: what the report checks (user guide, D36) |
 | [`docs/research.md`](docs/research.md) | Evidence and sources behind the decisions |
 | [`docs/research/`](docs/research/) | Raw research notes per topic |
 | [`docs/analysis-parity.md`](docs/analysis-parity.md) | reks analysis vs rekordbox on the maintainer's library: method, numbers, tuning plan |

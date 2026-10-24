@@ -1,9 +1,10 @@
 /**
  * The sidebar's Devices section (Zustand): the plugged-in drives (`useDevices`),
  * each one's stick library read when it is first expanded, which tree nodes
- * are open, and the stick playlist or history shown in the main area instead
- * of the track table or a library history session. Read-only: a stick track
- * plays on the player deck straight off the stick (`stickRef`).
+ * are open, and the stick playlist, history or check report shown in the
+ * main area instead of the track table or a library history session.
+ * Read-only: a stick track plays on the player deck straight off the stick
+ * (`stickRef`).
  */
 import { useEffect } from "react";
 import { create } from "zustand";
@@ -19,6 +20,7 @@ import { useDevices } from "./devices";
 import { useHistory } from "./history";
 import type { TrackRef } from "./mix";
 import { reportAction } from "./report";
+import { useStickCheck } from "./stickCheck";
 import { useToasts } from "./toasts";
 
 /** How often the list of drives is refreshed while the section is open. */
@@ -52,6 +54,8 @@ export interface DeviceBrowserState {
   /** By mount point. */
   libraries: Readonly<Record<string, LibraryLoad>>;
   open: StickListRef | null;
+  /** Mount point of the drive whose check report the main area shows. */
+  checking: string | null;
   toggleTree(): void;
   /**
    * Opens or closes a drive. Opening reads its library: shown as loading the
@@ -62,6 +66,9 @@ export interface DeviceBrowserState {
   /** Reads the drive's library again; `quiet` keeps showing the last read meanwhile. */
   reload(mountPoint: string, quiet?: boolean): Promise<void>;
   openList(ref: StickListRef): void;
+  /** Shows the drive's check report and checks it (again). */
+  openCheck(device: DeviceInfo): void;
+  /** Closes the stick list or check report. */
   close(): void;
   /** Ejects the drive; the outcome shows as a toast. */
   eject(mountPoint: string): Promise<void>;
@@ -129,6 +136,7 @@ export const useDeviceBrowser = create<DeviceBrowserState>()((set, get) => ({
   expanded: new Set(),
   libraries: {},
   open: null,
+  checking: null,
 
   toggleTree() {
     set((s) => ({ treeOpen: !s.treeOpen }));
@@ -172,11 +180,17 @@ export const useDeviceBrowser = create<DeviceBrowserState>()((set, get) => ({
 
   openList(ref) {
     useHistory.getState().close();
-    set({ open: ref });
+    set({ open: ref, checking: null });
+  },
+
+  openCheck(device) {
+    useHistory.getState().close();
+    set({ open: null, checking: device.mountPoint });
+    void useStickCheck.getState().run(device);
   },
 
   close() {
-    if (get().open !== null) set({ open: null });
+    if (get().open !== null || get().checking !== null) set({ open: null, checking: null });
   },
 
   async eject(mountPoint) {
@@ -192,14 +206,21 @@ export const useDeviceBrowser = create<DeviceBrowserState>()((set, get) => ({
     const s = get();
     const gone = Object.keys(s.libraries).filter((m) => !present.has(m));
     const openGone = s.open !== null && !present.has(s.open.mountPoint);
-    if (gone.length === 0 && !openGone) return;
+    const checkGone = s.checking !== null && !present.has(s.checking);
+    useStickCheck.getState().forget(gone);
+    if (gone.length === 0 && !openGone && !checkGone) return;
     const libraries = { ...s.libraries };
     for (const m of gone) delete libraries[m];
     // A drive plugged in again starts closed: its library may have changed.
     const expanded = new Set(
       [...s.expanded].filter((k) => !gone.some((m) => k.split("\u0000")[1] === m)),
     );
-    set({ libraries, expanded, open: openGone ? null : s.open });
+    set({
+      libraries,
+      expanded,
+      open: openGone ? null : s.open,
+      checking: checkGone ? null : s.checking,
+    });
   },
 }));
 

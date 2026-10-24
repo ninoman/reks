@@ -16,6 +16,8 @@
 //!     exits non-zero on findings
 //! reks rb history <stick> [--json]
 //!     list the play history sessions players left on the stick
+//! reks rb check <stick> [--target nxs|nxs2|3000|xdj-xz|generic] [--library <library.sqlite>] [--json]
+//!     read-only report before a gig (see `check.rs`); exits non-zero on problems
 //! ```
 //!
 //! `<stick>` is the stick's mount point. Any other directory is used as the
@@ -67,6 +69,7 @@ const USAGE: &str = "usage: reks rb plan <stick> --library <library.sqlite> \
        reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]
        reks rb validate <stick> <plan flags>
        reks rb history <stick> [--json]
+       reks rb check <stick> [--target <target>] [--library <library.sqlite>] [--json]
        reks rb map --library <library.sqlite> [--cache-dir <dir>] [--anlz-root <dir>]...";
 
 pub fn run(args: &[String]) -> anyhow::Result<()> {
@@ -110,6 +113,9 @@ pub fn run(args: &[String]) -> anyhow::Result<()> {
                 Some(e) => bail!(e),
                 None => Ok(()),
             }
+        }
+        [cmd, stick_path, flags @ ..] if cmd == "check" => {
+            crate::check::run(&stick(Path::new(stick_path))?, flags)
         }
         [cmd, flags @ ..] if cmd == "map" => map(flags),
         [cmd, ours, theirs, flags @ ..] if cmd == "diff" => {
@@ -315,7 +321,7 @@ pub(crate) struct Stick {
     pub(crate) dev: DeviceInfo,
     pub(crate) serial: Option<String>,
     /// [`StickCheck::Directory`] for a folder standing in for a stick.
-    check: StickCheck,
+    pub(crate) check: StickCheck,
 }
 
 /// The device for `path`, and its volume serial. A directory that is not a
@@ -347,6 +353,18 @@ pub(crate) fn stick(path: &Path) -> anyhow::Result<Stick> {
             check: StickCheck::Directory,
         })
     }
+}
+
+/// `--target`'s value.
+pub(crate) fn parse_target(value: &str) -> anyhow::Result<TargetProfile> {
+    Ok(match value {
+        "nxs" => TargetProfile::Cdj2000Nxs,
+        "nxs2" => TargetProfile::Cdj2000Nxs2,
+        "3000" => TargetProfile::Cdj3000,
+        "xdj-xz" => TargetProfile::XdjXz,
+        "generic" => TargetProfile::Generic,
+        other => bail!("unknown target {other}"),
+    })
 }
 
 /// Which `rb` command flags are parsed for.
@@ -395,16 +413,7 @@ fn parse_plan_args(flags: &[String], cmd: Command) -> anyhow::Result<PlanArgs> {
         match flag.as_str() {
             "--library" => library = Some(PathBuf::from(value()?)),
             "--playlist" => playlists.push(value()?.clone()),
-            "--target" => {
-                opts.target = match value()?.as_str() {
-                    "nxs" => TargetProfile::Cdj2000Nxs,
-                    "nxs2" => TargetProfile::Cdj2000Nxs2,
-                    "3000" => TargetProfile::Cdj3000,
-                    "xdj-xz" => TargetProfile::XdjXz,
-                    "generic" => TargetProfile::Generic,
-                    other => bail!("unknown target {other}"),
-                }
-            }
+            "--target" => opts.target = parse_target(value()?)?,
             "--missing-analysis" => {
                 opts.missing_analysis = match value()?.as_str() {
                     "skip" => MissingAnalysis::Skip,

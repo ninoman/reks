@@ -148,7 +148,7 @@ menu items `--menu-item-h`.
 | `Tabs` + `TabsList`, `TabsTrigger`, `TabsContent` | `orientation`: horizontal, vertical (a sidebar, Settings); chosen tab in the `selected` tint; arrow keys move between tabs | Radix Tabs |
 | `Chip` | label pill (`onRemove`, `removeLabel`; `onActivate` makes it a button); `tone`: neutral, notice | – |
 | `Toast` | bottom-centre message with an optional action (Undo); one at a time via `store/toasts` + `ToastHost` | – |
-| `Badge` | `variant`: neutral, accent, muted, danger and outline (a ringed word on a row: the Filters drawer's "not" / "all"); `size`: sm, md | – |
+| `Badge` | `variant`: neutral, accent, muted, danger and outline (a ringed word on a row: the Filters drawer's "not" / "all"), warning and success (a check result); `size`: sm, md | – |
 | `Kbd` | `variant`: default, inverse | – |
 | `Tooltip` | `content`, `shortcut`, `side` | Radix Tooltip |
 | Shortcut hint | `Button` / `IconButton` take `shortcut` (+ `hint`, default `aria-label`) and show it in a tooltip on hover/focus; the key text comes from `lib/mixKeys` (`deckKeyHint`, `crossfaderKeyHint`) or `lib/keys` (`PLAYER_PLAY_KEY`), never a literal | `ShortcutTooltip` |
@@ -309,13 +309,21 @@ read-only.
   #, title, artist, genre, BPM, key, time, with a play button per row (hover
   or focus) and double-click to play. Entries whose track the stick no longer
   has show as "Not on the stick". The track on the player deck is marked.
+- A drive row's check button (on hover, and while its report is open) shows
+  `StickCheckView` in the main area: summary badge (OK / Warnings /
+  Problems), library files with their players (UNVERIFIED badge), then the
+  findings by section, each group's tracks folded in a `<details>`. States:
+  "Checking every track on the stick…", error with "Try again", "Nothing to
+  report". All wording comes from `device_check` (D36); the report store is
+  [`stickCheck.ts`](../src/store/stickCheck.ts), what the main area shows is
+  `deviceBrowser.checking`.
 - Selecting anything in the playlist tree or a library history session closes
-  the stick list, and the other way round.
+  the stick list or report, and the other way round.
 - A stick track on a deck is a `TrackRef` of kind `stick` (`mix.ts`): its
   grid and waveform come from `device_beatgrid` / `device_waveform_columns`
   (the stick's own analysis, so both show at once; D32),
   an empty hot cue pad stays dark and cue edits say the cues are the stick's.
-- Dev: `npm run dev` serves the REKS stick from
+- Dev: `npm run dev` serves the REKS stick (and its check report) from
   [`mockBrowse.ts`](../src/dev/mockBrowse.ts).
 
 ## Mix panel (phase 5)

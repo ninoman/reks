@@ -1186,6 +1186,52 @@ Date of decisions: 2026-10-18.
   field · operator · value rows (needs ~380px); saved filters in settings
   (the core owns library data, and presets reference tags and playlists).
 
+## D36. Check a stick: a read-only report worded in Rust
+
+- Date: 2026-10-24 (maintainer's request; outside the phase plan). Task:
+  [`phases/phase-2.5.md`](phases/phase-2.5.md) task 13. User guide:
+  [`check-a-stick.md`](check-a-stick.md). Code:
+  [`reks_export_rb::check`](../crates/reks-export-rb/src/check/mod.rs).
+- Decision:
+  - One report for any mounted drive, whoever wrote it: library files and
+    the players that read each, damage in `export.pdb`, playlists and tracks
+    that differ between the two libraries, every track's audio, path and
+    ANLZ files, `audiocheck` issues, file system (D16) and play history not
+    yet imported (D23). Nothing is written: files are only read, and
+    `exportLibrary.db` through a temp copy.
+  - Three severities: **problem** (likely to fail on a player), **warning**
+    (may fail or look wrong on some players), **note** (information; does
+    not change the OK / warnings / problems status). Findings of one kind
+    are grouped, one item per track, playlist or file.
+  - All wording (titles with counts, what it means, section titles, summary)
+    is in Rust, so the UI and `reks rb check` only show it.
+  - Audio is checked against the stick profile's target when the stick is
+    known, else against CDJ-2000NXS, the strictest `TargetProfile`. A chosen
+    target is a Device Library player, so a stick without `export.pdb` is
+    then a problem; without one it is a warning, as is a missing
+    `exportLibrary.db` (no target covers OneLibrary players yet).
+  - The player table comes from the AlphaTheta notice of 2026-03-18 (R§2)
+    and is UNVERIFIED per player until `hw-test-log.md` has a pass.
+  - `exportLibrary.db` is read through a `check::OneLibraryRead` trait that
+    `reks-export-onelibrary` implements (`check::CheckReader`), the same
+    seam as `OneLibraryExport` (D14): that crate depends on this one.
+  - `export.pdb` is read leniently (`pdbread::read_pdb_lenient`): a row
+    that does not decode, or an entry of a missing playlist, is a finding
+    and the rest is checked. Damage that rekordcrate's page parser rejects
+    still makes the whole file one "does not open" finding; the rest of the
+    report (OneLibrary, files it names, file system) goes on.
+- Rejected: wording findings in TS (two places to keep in step with the
+  Rust checks); running the export validator against a made-up plan (it
+  needs a plan and reports plan mismatches, not stick health); checking
+  `analyze_path` against the folder players derive (`anlz_dir`): R§4 marks
+  that rule UNVERIFIED, and a wrong rule would flag every rekordbox stick.
+- Risks: a missing `.2EX` is only a note and a missing `.EXT` a warning;
+  players may treat them more strictly (UNVERIFIED). rekordcrate 0.3.0
+  overflows on some damaged string offsets: a panic in debug and test
+  builds, a wrap in release builds (no overflow checks, `panic = "abort"`).
+  Every track's audio is probed, so a large stick takes a while (no
+  progress bar yet).
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

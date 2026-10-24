@@ -36,6 +36,7 @@ import { PlaylistTree } from "./components/PlaylistTree";
 import { ReportDialog } from "./components/ReportDialog";
 import { SessionView } from "./components/SessionView";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { StickCheckView } from "./components/StickCheckView";
 import { StickListView } from "./components/StickListView";
 import { ToastHost } from "./components/ToastHost";
 import { TrackLists } from "./components/TrackLists";
@@ -64,6 +65,7 @@ export default function App() {
   const error = useLibrary((s) => s.error);
   const sessionOpen = useHistory((s) => s.openId !== null);
   const stickListOpen = useDeviceBrowser((s) => s.open !== null);
+  const stickCheckOpen = useDeviceBrowser((s) => s.checking !== null);
   const mixOpen = usePanels((s) => s.mixOpen);
   useMixShortcuts();
 
@@ -141,7 +143,9 @@ export default function App() {
           <HistoryTree />
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
-          {stickListOpen ? (
+          {stickCheckOpen ? (
+            <StickCheckView />
+          ) : stickListOpen ? (
             <StickListView />
           ) : sessionOpen ? (
             <SessionView />

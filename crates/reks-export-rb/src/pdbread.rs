@@ -150,8 +150,21 @@ const TABLES: [PageType; 10] = [
     PageType::Artwork,
 ];
 
-/// Decodes an `export.pdb`'s tracks, lookups and playlists.
+/// Decodes an `export.pdb`'s tracks, lookups and playlists. Any row that
+/// does not decode is an error.
 pub fn read_pdb(bytes: &[u8]) -> Result<PdbLibrary, String> {
+    let (lib, mut damage) = read_pdb_lenient(bytes)?;
+    if damage.is_empty() {
+        Ok(lib)
+    } else {
+        Err(damage.swap_remove(0))
+    }
+}
+
+/// [`read_pdb`] for reports ([`crate::check`]): a row that does not decode
+/// is left out and described in the second value, in row order. `Err` only
+/// when the pages themselves can't be walked.
+pub fn read_pdb_lenient(bytes: &[u8]) -> Result<(PdbLibrary, Vec<String>), String> {
     let mut rows: Vec<(PageType, Vec<u8>)> = Vec::new();
     walk_pages(bytes, &TABLES, |page, raw| {
         if page.has_data() {
@@ -159,12 +172,16 @@ pub fn read_pdb(bytes: &[u8]) -> Result<PdbLibrary, String> {
         }
     })?;
     let mut lib = PdbLibrary::default();
+    let mut damage = Vec::new();
     let mut entries: Vec<(u32, u32, u32)> = Vec::new(); // (playlist, index, track)
     for (table, r) in &rows {
         let r = r.as_slice();
-        let bad = || format!("{table:?} row does not decode");
+        let mut bad = || damage.push(format!("{table:?} row does not decode"));
         match table {
-            PageType::Tracks => lib.tracks.push(track(r).ok_or_else(bad)?),
+            PageType::Tracks => match track(r) {
+                Some(t) => lib.tracks.push(t),
+                None => bad(),
+            },
             PageType::Genres => insert(&mut lib.genres, u32_at(r, 0), string(r, 4)),
             PageType::Labels => insert(&mut lib.labels, u32_at(r, 0), string(r, 4)),
             PageType::Artwork => insert(&mut lib.artwork, u32_at(r, 0), string(r, 4)),
@@ -200,25 +217,28 @@ pub fn read_pdb(bytes: &[u8]) -> Result<PdbLibrary, String> {
                         entries: Vec::new(),
                     })
                 })();
-                lib.playlists.push(node.ok_or_else(bad)?);
+                match node {
+                    Some(node) => lib.playlists.push(node),
+                    None => bad(),
+                }
             }
             PageType::PlaylistEntries => {
-                let e = (|| Some((u32_at(r, 8)?, u32_at(r, 0)?, u32_at(r, 4)?)))();
-                entries.push(e.ok_or_else(bad)?);
+                match (|| Some((u32_at(r, 8)?, u32_at(r, 0)?, u32_at(r, 4)?)))() {
+                    Some(e) => entries.push(e),
+                    None => bad(),
+                }
             }
             _ => {}
         }
     }
     entries.sort_unstable();
     for (playlist, _, track) in entries {
-        let p = lib
-            .playlists
-            .iter_mut()
-            .find(|p| p.id == playlist)
-            .ok_or_else(|| format!("entry for missing playlist {playlist}"))?;
-        p.entries.push(track);
+        match lib.playlists.iter_mut().find(|p| p.id == playlist) {
+            Some(p) => p.entries.push(track),
+            None => damage.push(format!("entry for missing playlist {playlist}")),
+        }
     }
-    Ok(lib)
+    Ok((lib, damage))
 }
 
 fn insert<T>(map: &mut BTreeMap<u32, T>, id: Option<u32>, value: Option<T>) {

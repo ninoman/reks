@@ -1154,6 +1154,76 @@ export function deviceWaveformColumns(mountPoint: string, trackId: number): Prom
 /** Player family the export is checked against (`TargetProfile`). */
 export type TargetProfile = "Cdj2000Nxs" | "Cdj2000Nxs2" | "Cdj3000" | "XdjXz" | "Generic";
 
+// Checking a stick before a gig (`reks_export_rb::check`); read-only. All
+// wording comes from Rust.
+
+export type CheckSeverity = "problem" | "warning" | "note";
+
+export interface CheckFindingItem {
+  /** A track ("Artist – Title"), playlist path or file. */
+  subject: string;
+  detail: string | null;
+  /** The stick path concerned. */
+  path: string | null;
+}
+
+/** Findings of one kind with one severity. */
+export interface CheckFindingGroup {
+  /** Stable id (`FindingKind`), e.g. `audioMissing`. */
+  kind: string;
+  severity: CheckSeverity;
+  /** With the count: "3 tracks: audio file missing". */
+  title: string;
+  /** What it means and what to do. */
+  detail: string;
+  /** Empty for a finding about the whole stick. */
+  items: CheckFindingItem[];
+}
+
+export interface CheckSection {
+  section: "library" | "filesystem" | "playlists" | "files" | "audio" | "history";
+  title: string;
+  /** Most severe first. */
+  groups: CheckFindingGroup[];
+}
+
+export interface CheckFormatRow {
+  format: "deviceLibrary" | "deviceLibraryExt" | "oneLibrary";
+  name: string;
+  file: string;
+  present: boolean;
+  status: string;
+  players: string[];
+  /** False until a hardware test is logged. */
+  playersVerified: boolean;
+  note: string;
+}
+
+export interface StickReport {
+  mountPoint: string;
+  label: string;
+  target: TargetProfile;
+  targetText: string;
+  summary: {
+    status: "ok" | "warnings" | "problems";
+    problems: number;
+    warnings: number;
+    notes: number;
+    headline: string;
+  };
+  formats: CheckFormatRow[];
+  playersSource: string;
+  filesystem: { fs: FsKind; fsName: string; totalBytes: number; freeBytes: number; text: string };
+  tracksChecked: number;
+  /** Only sections with findings, in a fixed order. */
+  sections: CheckSection[];
+}
+
+/** Checks the stick on `info` (every track's files and headers; takes a while). */
+export function deviceCheck(info: DeviceInfo): Promise<StickReport> {
+  return invoke("device_check", { info });
+}
+
 /** A known stick with a saved profile (`devices::Device`, D27). */
 export interface Device {
   id: number;

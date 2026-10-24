@@ -14,6 +14,9 @@ export const badgeVariants = cva(
         muted: "bg-surface-strong text-fg-muted",
         /** A word on a row, e.g. the Filters drawer's "not" / "all". */
         danger: "text-danger ring-1 ring-danger ring-inset",
+        /** Ringed words for a check result: warning, all clear. */
+        warning: "text-warning ring-1 ring-warning ring-inset",
+        success: "text-success ring-1 ring-success ring-inset",
         outline: "text-accent ring-1 ring-accent ring-inset",
       },
       size: {

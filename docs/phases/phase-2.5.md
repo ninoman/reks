@@ -2,7 +2,7 @@
 
 Status: started 2026-10-20 ahead of the Phase 2 hardware campaign with the
 maintainer's approval (software only; anything that needs a player stays
-UNVERIFIED); tasks 1–10 and 12 done; task 11 (hardware) waits for players. Depends on: Phase 2 done, including its hardware campaign,
+UNVERIFIED); tasks 1–10, 12 and 13 (extra) done; task 11 (hardware) waits for players. Depends on: Phase 2 done, including its hardware campaign,
 history safeguard and `export_manifest` (tasks 12–14). Runs before Phase 3.
 Read `docs/decisions.md` D7, D22, D23, D27 and `docs/research.md` §10 first.
 
@@ -395,6 +395,42 @@ Divider rules
     `fixtures/rekordbox/ref-<ver>/` exists; `reks_core::adopt::tests`;
     [AdoptDialog.test.tsx](../../src/components/AdoptDialog.test.tsx) and
     the Foreign case in DevicesDialog.test.tsx.
+
+13. [x] **Check a stick** (extra task, maintainer request 2026-10-24, outside
+    the original plan; D36): a read-only report for any mounted drive, from
+    rekordbox, reks or another tool, run before a gig. Done in
+    [`reks_export_rb::check`](../../crates/reks-export-rb/src/check/mod.rs)
+    (`check_stick(device, opts, onelibrary_reader, library)`, never fails):
+    library files and their players ([`players.rs`](../../crates/reks-export-rb/src/check/players.rs),
+    UNVERIFIED); `export.pdb` tables (the validator's check) and damaged
+    rows (`pdbread::read_pdb_lenient`); playlists and tracks in one library
+    only or with other contents or order ([`playlists.rs`](../../crates/reks-export-rb/src/check/playlists.rs));
+    per track ([`tracks.rs`](../../crates/reks-export-rb/src/check/tracks.rs)):
+    path leaving the stick or failing `fsname::check_path`, audio missing or
+    unreadable, `audiocheck` issues against the profile's target (default
+    CDJ-2000NXS), no analysis, `.DAT` missing or damaged, `PPTH` naming
+    another file, no `PWAV` preview, `.EXT` missing or damaged, `.2EX`
+    missing (note) or damaged; file system (D16); play history not yet
+    imported (D23, `history::scan`). Wording in
+    [`text.rs`](../../crates/reks-export-rb/src/check/text.rs). OneLibrary:
+    `reks_export_onelibrary::check::CheckReader` (built-in key, D14). App:
+    `device_check` ([browse.rs](../../src-tauri/src/browse.rs)), a check
+    button on each drive in the Devices section,
+    [StickCheckView.tsx](../../src/components/StickCheckView.tsx)
+    ([stickCheck.ts](../../src/store/stickCheck.ts)). CLI: `reks rb check
+    <stick> [--target …] [--library …] [--json]`, non-zero on problems
+    ([check.rs](../../crates/reks-cli/src/check.rs)). Tests:
+    `check::tests` (both libraries, one only, none, missing audio and ANLZ,
+    a bad WAV header, FLAC per target, a damaged row, missing tables, an
+    unreadable PDB, playlist differences, file systems, history before and
+    after import, a stick baken wrote, rekordbox 7.2.19's reference; every
+    run checks the stick is byte- and time-identical after),
+    `reks_export_onelibrary::check::tests` (both libraries from one export
+    agree; a reordered playlist; no or wrong key),
+    [StickCheckView.test.tsx](../../src/components/StickCheckView.test.tsx)
+    and the CLI's. On the computer the real reference `exportLibrary.db`
+    read with the built-in key matches its `export.pdb` (no playlist or
+    track differences). What players make of each finding is UNVERIFIED.
 
 ## Acceptance criteria
 

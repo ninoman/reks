@@ -5,9 +5,11 @@
 //! [`build::from_pdb`] turns the `export.pdb` just written into rows,
 //! [`schema`] and [`store`] put them into a database, [`reader`] reads one
 //! back, [`writer`] puts it on a stick, [`validate`] and [`diff`] check it.
-//! [`history`] reads the play history players logged in one (task 11).
+//! [`history`] reads the play history players logged in one (task 11);
+//! [`check`] reads one for checking a stick.
 
 pub mod build;
+pub mod check;
 pub mod cipher;
 pub mod diff;
 pub mod dump;

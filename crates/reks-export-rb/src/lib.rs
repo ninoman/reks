@@ -6,6 +6,7 @@ pub mod adopt;
 pub mod apply;
 pub mod audiocheck;
 pub mod browse;
+pub mod check;
 pub mod device;
 pub mod devices;
 pub mod diff;
