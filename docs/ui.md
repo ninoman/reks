@@ -730,6 +730,35 @@ re-queries. Pure helpers (coverage, search, create offers) are in
   is always there), no match for the search.
 - Dev: `npm run dev` serves tags from [`mockTags.ts`](../src/dev/mockTags.ts).
 
+## Track info panel and bulk edit
+
+The info panel (`TrackInfoPanel`, `InfoPanel.tsx` is its frame) shows the
+primary selected track (`TrackDetailPanel`: one form, Save/Revert, Escape
+reverts) and, from two selected rows on, `BulkEditPanel` instead. The bulk
+form edits what is safe on many tracks: artist, album, genre, label, year,
+rating, colour, key, comment and My Tags; title, BPM, grid, cues and path are
+left out.
+
+- A field where the tracks differ shows **Mixed** (placeholder, or a hidden
+  "Mixed" option in the rating and colour selects) and is untouched until
+  changed. Typing back the shared value untouches it again
+  ([`bulkEditForm.ts`](../src/components/bulkEditForm.ts), pure).
+- **Comment**: a segmented control, "Replace comment" or "Append to comment";
+  nothing is edited until text is typed.
+- **My Tags**: the `TagPicker` body inline. A click adds the tag to all (or
+  removes it from all when every track has it); a second click undoes the
+  click; the box is a dash when only some tracks have it.
+- The primary button reads "Apply to N tracks", N being the tracks that would
+  actually change. One call (`library_bulk_update_tracks`) writes everything
+  in one transaction. 20 or more tracks open a confirmation naming the fields
+  ("cannot be undone"). Discard or Escape drops the edits. Changing the
+  selection starts a fresh form.
+- The selection is resolved with `useSelectedTracks`, which loads the pages a
+  selection spans (select-all over several pages); the panel says "Loading N
+  selected tracks…" meanwhile.
+- States: loading, load error, nothing but dividers selected, the form, apply
+  error (the form stays), saving.
+
 ## Filters drawer and smart playlists (D35)
 
 One query, edited in the Filters drawer ([wireframe](wireframes/filters-drawer.html),
