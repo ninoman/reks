@@ -153,13 +153,13 @@ pub(crate) fn follow(lead: &Lead, me: &Follower<'_>, engine_rate: f64) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::beatmap::GridAnchor;
+    use crate::beatmap::GridBeat;
 
     const RATE: f64 = 48_000.0;
 
-    fn grid(bpm: f64, frame: i64) -> BeatMap {
+    fn grid(bpm: f64, frame: f64) -> BeatMap {
         BeatMap::new(
-            &[GridAnchor {
+            &[GridBeat {
                 frame,
                 bpm,
                 beat_in_bar: 1,
@@ -183,8 +183,8 @@ mod tests {
 
     #[test]
     fn matches_tempo_from_the_grids() {
-        let lead_map = grid(128.0, 0);
-        let mine = grid(125.0, 0);
+        let lead_map = grid(128.0, 0.0);
+        let mine = grid(125.0, 0.0);
         let lead = Lead::new(&lead_map, 0.0, 1.0, false, None).unwrap();
         let plan = follow(&lead, &follower(&mine, 0.0), RATE).unwrap();
         assert_eq!(plan, Plan::Speed(128.0 / 125.0));
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn small_errors_bend_the_speed_large_ones_jump() {
-        let map = grid(120.0, 0); // 24,000 frames a beat
+        let map = grid(120.0, 0.0); // 24,000 frames a beat
         let lead = Lead::new(&map, 240_000.0, 1.0, true, None).unwrap();
         // 240 frames ahead: 0.01 beat, under the jump threshold.
         let Plan::Speed(s) = follow(&lead, &follower(&map, 240_240.0), RATE).unwrap() else {
@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn bar_sync_matches_the_downbeat() {
-        let map = grid(120.0, 0);
+        let map = grid(120.0, 0.0);
         let lead = Lead::new(&map, 240_000.0, 1.0, true, None).unwrap(); // beat 10: 3rd of its bar
         let me = Follower {
             bar: true,
@@ -262,11 +262,11 @@ mod tests {
 
     #[test]
     fn a_jump_never_lands_before_the_track() {
-        let map = grid(120.0, 0);
+        let map = grid(120.0, 0.0);
         let lead = Lead::new(&map, 240_000.0, 1.0, true, None).unwrap(); // bar position 2
                                                                          // A follower whose first beat is 0.2 beats into the track, at its
                                                                          // start: bar position 3.8, a bar later than the in-phase beat 2.
-        let late = grid(120.0, 4_800);
+        let late = grid(120.0, 4_800.0);
         let me = Follower {
             bar: true,
             ..follower(&late, 0.0)
@@ -286,7 +286,7 @@ mod tests {
 
     #[test]
     fn nudge_and_stopped_decks_only_match_tempo() {
-        let map = grid(120.0, 0);
+        let map = grid(120.0, 0.0);
         let lead = Lead::new(&map, 240_000.0, 1.0, true, None).unwrap();
         let me = Follower {
             nudge: 1.04,
@@ -312,7 +312,7 @@ mod tests {
 
     #[test]
     fn loops_limit_sync_to_what_keeps_time() {
-        let map = grid(120.0, 0);
+        let map = grid(120.0, 0.0);
         // A looping follower a third of a beat off: tempo only, no jump.
         let me = Follower {
             looping: true,
@@ -351,7 +351,7 @@ mod tests {
                 .unwrap()
                 .bars
         );
-        let slower = grid(125.0, 0);
+        let slower = grid(125.0, 0.0);
         let m = matched_speed(&lead, &follower(&slower, 0.0)).unwrap();
         assert!((m - 120.0 / 125.0).abs() < 1e-12, "{m}");
     }

@@ -1,18 +1,19 @@
 //! Beat positions from a track's grid: source frame ↔ beat number.
 //!
-//! A grid is a list of tempo anchors (`beatgrid` rows, converted to source
-//! frames by the app layer). Each anchor is a beat; between two anchors the
-//! beat number runs linearly, so a dynamic grid's beats land exactly on its
-//! anchors and the beat position never jumps. Past the last anchor (and
-//! before the first) the anchor's tempo carries on. Sync and quantise work
-//! on these beat numbers.
+//! A grid is its list of beats, as the library's beat rule gives them
+//! (reks-core `beatgrid::grid_beats`, converted to source frames by the app
+//! layer), so a deck follows exactly the beats the grid editor draws and the
+//! stick's `PQTZ` holds, tempo sections included (D10, "Grid editing").
+//! Between two beats the beat number runs linearly, so it never jumps; before
+//! the first beat the first interval carries on, after the last its tempo
+//! does. Sync and quantise work on these beat numbers.
 
-/// One grid anchor: the beat at `frame` is beat `beat_in_bar` of a bar of
-/// `beats_per_bar`, at `bpm` until the next anchor.
+/// One beat of a grid: beat `beat_in_bar` of a bar of `beats_per_bar` at
+/// `frame`, in a section of `bpm`.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct GridAnchor {
-    /// Source frame of the beat.
-    pub frame: i64,
+pub struct GridBeat {
+    /// Source frame (fractional: beats need not fall on a frame).
+    pub frame: f64,
     pub bpm: f64,
     /// 1..=`beats_per_bar`.
     pub beat_in_bar: u8,
@@ -22,101 +23,92 @@ pub struct GridAnchor {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Segment {
     frame: f64,
-    /// Beat number at `frame`; whole, counted from the first anchor.
-    beat: f64,
-    /// Source frames per beat up to the next segment.
+    /// Source frames to the next beat (past the last: one beat of its tempo).
     period: f64,
-    /// Added to a beat number before `rem_euclid(beats_per_bar)` to give the
-    /// beat's place in its bar (0 = downbeat).
-    bar_offset: f64,
+    /// Place of this beat in its bar, 0 = downbeat.
+    in_bar: f64,
     beats_per_bar: f64,
 }
 
 /// A grid ready for lookups. Empty when the track has no usable grid.
+/// Segment `i` starts at beat number `i`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct BeatMap {
     segs: Box<[Segment]>,
 }
 
 impl BeatMap {
-    /// Builds the map. Anchors with a non-positive or non-finite tempo are
-    /// dropped, and so is an anchor less than half a beat after the one
-    /// before it.
-    pub fn new(anchors: &[GridAnchor], sample_rate: u32) -> Self {
-        let mut sorted: Vec<GridAnchor> = anchors
-            .iter()
-            .copied()
-            .filter(|a| a.bpm.is_finite() && a.bpm > 0.0 && sample_rate > 0)
-            .collect();
-        sorted.sort_by_key(|a| a.frame);
-        let period = |a: &GridAnchor| 60.0 * f64::from(sample_rate) / a.bpm;
-        let mut segs: Vec<Segment> = Vec::with_capacity(sorted.len());
-        for a in &sorted {
-            let frame = a.frame as f64;
-            let beat = match segs.last_mut() {
-                None => 0.0,
-                Some(prev) => {
-                    let beats = ((frame - prev.frame) / prev.period).round();
-                    if beats < 1.0 {
-                        continue;
-                    }
-                    // Stretch the previous segment to end exactly here.
-                    prev.period = (frame - prev.frame) / beats;
-                    prev.beat + beats
-                }
-            };
-            let bpb = a.beats_per_bar.max(1);
-            segs.push(Segment {
-                frame,
-                beat,
-                period: period(a),
-                bar_offset: f64::from(a.beat_in_bar.clamp(1, bpb) - 1) - beat,
-                beats_per_bar: f64::from(bpb),
-            });
+    /// Builds the map. Beats with a non-finite frame or a non-positive tempo
+    /// are dropped, and so is a beat not after the one before it.
+    pub fn new(beats: &[GridBeat], sample_rate: u32) -> Self {
+        let mut kept: Vec<&GridBeat> = Vec::with_capacity(beats.len());
+        for b in beats {
+            let usable = b.frame.is_finite() && b.bpm.is_finite() && b.bpm > 0.0;
+            if usable && kept.last().is_none_or(|p| b.frame > p.frame) && sample_rate > 0 {
+                kept.push(b);
+            }
         }
-        Self { segs: segs.into() }
+        let segs = kept
+            .iter()
+            .enumerate()
+            .map(|(i, b)| {
+                let bpb = b.beats_per_bar.max(1);
+                Segment {
+                    frame: b.frame,
+                    period: kept.get(i + 1).map_or_else(
+                        || 60.0 * f64::from(sample_rate) / b.bpm,
+                        |next| next.frame - b.frame,
+                    ),
+                    in_bar: f64::from(b.beat_in_bar.clamp(1, bpb) - 1),
+                    beats_per_bar: f64::from(bpb),
+                }
+            })
+            .collect();
+        Self { segs }
     }
 
     pub fn is_empty(&self) -> bool {
         self.segs.is_empty()
     }
 
-    fn seg_at_frame(&self, frame: f64) -> Option<&Segment> {
-        let i = self.segs.partition_point(|s| s.frame <= frame);
-        self.segs.get(i.saturating_sub(1))
+    /// The segment holding `frame` and its beat number.
+    fn seg_at_frame(&self, frame: f64) -> Option<(f64, &Segment)> {
+        let i = self
+            .segs
+            .partition_point(|s| s.frame <= frame)
+            .saturating_sub(1);
+        self.segs.get(i).map(|s| (i as f64, s))
     }
 
-    fn seg_at_beat(&self, beat: f64) -> Option<&Segment> {
-        let i = self.segs.partition_point(|s| s.beat <= beat);
-        self.segs.get(i.saturating_sub(1))
-    }
-
-    /// Beat number at a source frame (fractional; 0 at the first anchor).
+    /// Beat number at a source frame (fractional; 0 at the first beat).
     pub fn beat_at(&self, frame: f64) -> Option<f64> {
-        let s = self.seg_at_frame(frame)?;
-        Some(s.beat + (frame - s.frame) / s.period)
+        let (beat, s) = self.seg_at_frame(frame)?;
+        Some(beat + (frame - s.frame) / s.period)
     }
 
     /// Source frame of a beat number; the inverse of [`Self::beat_at`].
     pub fn frame_at(&self, beat: f64) -> Option<f64> {
-        let s = self.seg_at_beat(beat)?;
-        Some(s.frame + (beat - s.beat) * s.period)
+        let last = self.segs.len().checked_sub(1)?;
+        let i = if beat.is_nan() || beat <= 0.0 {
+            0
+        } else {
+            (beat.floor() as usize).min(last)
+        };
+        let s = &self.segs[i];
+        Some(s.frame + (beat - i as f64) * s.period)
     }
 
     /// Source frames per beat at a frame.
     pub fn period_at(&self, frame: f64) -> Option<f64> {
-        self.seg_at_frame(frame).map(|s| s.period)
+        self.seg_at_frame(frame).map(|(_, s)| s.period)
     }
 
     /// Place in the bar at a frame, in beats (`0..beats_per_bar`, 0 on the
     /// downbeat), and the beats per bar.
     pub fn bar_at(&self, frame: f64) -> Option<(f64, u8)> {
-        let s = self.seg_at_frame(frame)?;
-        let beat = s.beat + (frame - s.frame) / s.period;
-        Some((
-            (beat + s.bar_offset).rem_euclid(s.beats_per_bar),
-            s.beats_per_bar as u8,
-        ))
+        let (_, s) = self.seg_at_frame(frame)?;
+        let in_bar = s.in_bar + (frame - s.frame) / s.period;
+        Some((in_bar.rem_euclid(s.beats_per_bar), s.beats_per_bar as u8))
     }
 
     /// The beat nearest `frame`; `frame` itself without a grid.
@@ -150,8 +142,8 @@ mod tests {
 
     const RATE: u32 = 48_000;
 
-    fn anchor(frame: i64, bpm: f64, beat_in_bar: u8) -> GridAnchor {
-        GridAnchor {
+    fn beat(frame: f64, bpm: f64, beat_in_bar: u8) -> GridBeat {
+        GridBeat {
             frame,
             bpm,
             beat_in_bar,
@@ -159,58 +151,82 @@ mod tests {
         }
     }
 
+    /// `n` beats at `bpm` from `frame`, the first beat `beat_in_bar`.
+    fn run(frame: f64, bpm: f64, beat_in_bar: u8, n: usize) -> Vec<GridBeat> {
+        let period = 60.0 * f64::from(RATE) / bpm;
+        (0..n)
+            .map(|k| {
+                let in_bar = (usize::from(beat_in_bar) - 1 + k) % 4 + 1;
+                beat(frame + k as f64 * period, bpm, in_bar as u8)
+            })
+            .collect()
+    }
+
     #[test]
     fn constant_grid() {
-        // 120 BPM: 24,000 frames per beat; the anchor is beat 2 of its bar.
-        let m = BeatMap::new(&[anchor(1_000, 120.0, 2)], RATE);
+        // 120 BPM: 24,000 frames per beat; the first beat is beat 2 of its bar.
+        let m = BeatMap::new(&run(1_000.0, 120.0, 2, 8), RATE);
         assert_eq!(m.beat_at(1_000.0), Some(0.0));
         assert_eq!(m.beat_at(13_000.0), Some(0.5));
         assert_eq!(m.beat_at(-23_000.0), Some(-1.0));
         assert_eq!(m.frame_at(3.0), Some(73_000.0));
         assert_eq!(m.period_at(0.0), Some(24_000.0));
-        // Beat 2 of the bar at the anchor; the downbeat a beat before it.
+        // Beat 2 of the bar at the first beat; the downbeat a beat before it.
         assert_eq!(m.bar_at(1_000.0), Some((1.0, 4)));
         assert_eq!(m.bar_at(-23_000.0), Some((0.0, 4)));
         assert_eq!(m.bar_at(85_000.0), Some((0.5, 4)));
+        // Past the last beat (frame 169,000) the tempo carries on.
+        assert_eq!(m.frame_at(10.0), Some(241_000.0));
+        assert_eq!(m.beat_at(241_000.0), Some(10.0));
+        // One beat is a constant grid too.
+        let one = BeatMap::new(&[beat(1_000.0, 120.0, 2)], RATE);
+        assert_eq!(one.frame_at(3.0), Some(73_000.0));
+        assert_eq!(one.bar_at(-23_000.0), Some((0.0, 4)));
     }
 
     #[test]
-    fn dynamic_grid_runs_through_its_anchors() {
-        // 4 beats at 120, then 100 BPM; the second anchor is 1 ms late.
-        let m = BeatMap::new(&[anchor(0, 120.0, 1), anchor(96_048, 100.0, 1)], RATE);
-        assert_eq!(m.beat_at(96_048.0), Some(4.0));
-        assert_eq!(m.frame_at(4.0), Some(96_048.0));
-        assert_eq!(m.period_at(10.0), Some(24_012.0));
-        assert_eq!(m.period_at(96_048.0), Some(28_800.0));
-        assert_eq!(m.frame_at(5.0), Some(96_048.0 + 28_800.0));
-        // No jump in the beat number across the anchor.
-        let before = m.beat_at(96_047.999).unwrap();
+    fn sections_follow_their_beats() {
+        // 120 BPM, then 100 BPM from a marker 1.6 beats after the 4th beat:
+        // the rule's last interval (1.6 beats) is one beat here.
+        let mut beats = run(0.0, 120.0, 1, 4);
+        beats.extend(run(110_400.0, 100.0, 1, 4));
+        let m = BeatMap::new(&beats, RATE);
+        assert_eq!(m.beat_at(110_400.0), Some(4.0));
+        assert_eq!(m.frame_at(4.0), Some(110_400.0));
+        assert_eq!(m.period_at(10.0), Some(24_000.0));
+        assert_eq!(m.period_at(80_000.0), Some(38_400.0));
+        assert_eq!(m.period_at(110_400.0), Some(28_800.0));
+        assert_eq!(m.frame_at(5.0), Some(110_400.0 + 28_800.0));
+        // No jump in the beat number across the marker.
+        let before = m.beat_at(110_399.999).unwrap();
         assert!((before - 4.0).abs() < 1e-6);
-        assert_eq!(m.bar_at(96_048.0), Some((0.0, 4)));
+        assert_eq!(m.bar_at(110_400.0), Some((0.0, 4)));
+        assert_eq!(m.bar_at(72_000.0 + 19_200.0), Some((3.5, 4)));
     }
 
     #[test]
-    fn bad_anchors_are_dropped() {
+    fn bad_beats_are_dropped() {
         let m = BeatMap::new(
             &[
-                anchor(50_000, 120.0, 1),
-                anchor(0, f64::NAN, 1),
-                anchor(0, 120.0, 1),
-                anchor(30_000, 120.0, 1), // 1.25 beats in: kept, 1 beat
-                anchor(35_000, 120.0, 1), // 0.2 beats on: dropped
+                beat(0.0, 120.0, 1),
+                beat(f64::NAN, 120.0, 2),
+                beat(24_000.0, 0.0, 2),
+                beat(24_000.0, 120.0, 2),
+                beat(24_000.0, 120.0, 3), // not after the one before
+                beat(48_000.0, 120.0, 3),
             ],
             RATE,
         );
-        assert_eq!(m.beat_at(30_000.0), Some(1.0));
-        assert_eq!(m.period_at(1.0), Some(30_000.0));
-        assert_eq!(m.beat_at(50_000.0), Some(2.0));
+        assert_eq!(m.beat_at(48_000.0), Some(2.0));
+        assert_eq!(m.bar_at(48_000.0), Some((2.0, 4)));
         assert!(BeatMap::new(&[], RATE).is_empty());
         assert_eq!(BeatMap::new(&[], RATE).beat_at(5.0), None);
+        assert_eq!(BeatMap::new(&[], RATE).frame_at(5.0), None);
     }
 
     #[test]
     fn snap_and_keep_phase() {
-        let m = BeatMap::new(&[anchor(0, 120.0, 1)], RATE);
+        let m = BeatMap::new(&run(0.0, 120.0, 1, 16), RATE);
         assert_eq!(m.snap(13_000.0), 24_000.0);
         assert_eq!(m.snap(11_000.0), 0.0);
         // A quarter beat in, jumping near beat 10: lands a quarter beat past it.

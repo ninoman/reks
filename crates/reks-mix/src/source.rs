@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use crate::beatmap::{BeatMap, GridAnchor};
+use crate::beatmap::{BeatMap, GridBeat};
 
 /// Interleaved stereo `i16` at the file's rate (or the engine's, when the
 /// caller resampled at load), with the beat grid and hot cues in its frames.
@@ -38,9 +38,9 @@ impl DeckSource {
         }
     }
 
-    /// Adds the grid (`beatgrid` rows in this source's frames).
-    pub fn with_grid(mut self, anchors: &[GridAnchor]) -> Self {
-        self.beats = BeatMap::new(anchors, self.sample_rate);
+    /// Adds the grid: its beats in this source's frames ([`BeatMap`]).
+    pub fn with_grid(mut self, beats: &[GridBeat]) -> Self {
+        self.beats = BeatMap::new(beats, self.sample_rate);
         self
     }
 
@@ -170,8 +170,8 @@ mod tests {
 
     #[test]
     fn cues_at_the_head_snap_with_quantise_and_stay_in_the_track() {
-        let grid = [GridAnchor {
-            frame: 100,
+        let grid = [GridBeat {
+            frame: 100.0,
             bpm: 120.0,
             beat_in_bar: 1,
             beats_per_bar: 4,

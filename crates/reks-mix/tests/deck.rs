@@ -60,7 +60,6 @@ fn at_1_05_click_spacing_is_1_over_1_05_within_a_sample() {
             bpm: 120.0,
             beats: 40,
         }],
-        false,
     );
     let mut g = Graph::new(RATE).unwrap();
     g.apply(Control::Load {

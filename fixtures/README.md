@@ -87,6 +87,16 @@ on every downbeat (110, 87, 98, 82 Hz). Beat `n` starts at
 `beat_onset_at(rate, n)`; beats 0, 4, 8, … are downbeats. 16 bars are 30 s.
 Used by `crates/reks-analysis/tests/beats.rs`.
 
+## 140 → 174 BPM click track for tempo sections (generated, not checked in)
+
+[`gen/src/tempo.rs`](gen/src/tempo.rs) `render_tempo(rate, &TWO_TEMPO)`:
+mono `f64`, 100 ms of silence, then 140 beats at 140 BPM (60 s) and 128
+beats at 174 BPM; each section starts on a downbeat (1 kHz click, louder;
+other beats 2 kHz). `beat_onsets` gives every beat's sample. Used by the
+`reks-mix` sync and beat jump tests on a two-tempo grid (phase 3 task 17);
+`cargo run -p reks-fixtures-gen -- tempo <out.wav>` writes it for the
+hardware check (phase 3 checklist item 7).
+
 ## `keyfinder/driver.cpp` — libKeyFinder reference driver
 
 A 40-line C++ program that runs the C++ libKeyFinder on raw f32 PCM and

@@ -150,8 +150,9 @@ fn deck_audio_decodes_the_stick_file_with_its_grid() {
     let audio = deck_audio(dir.path(), id, 44_100).unwrap();
     assert_eq!(audio.pcm.sample_rate, 44_100);
     assert!(!audio.pcm.samples.is_empty());
-    assert_eq!(audio.anchors.len(), 1);
-    assert!((audio.anchors[0].bpm - 128.0).abs() < 1e-9);
+    // 30 s at 128 BPM: a beat every 468.75 ms, one tempo.
+    assert!(audio.beats.len() >= 63, "{}", audio.beats.len());
+    assert!(audio.beats.iter().all(|b| (b.bpm - 128.0).abs() < 1e-9));
     let columns = waveform_columns(dir.path(), id).unwrap();
     assert!(!columns.is_empty() && columns.len().is_multiple_of(4));
 }

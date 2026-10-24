@@ -40,8 +40,8 @@ fn start(g: &mut Graph, o: &mut Onsets, lead: &Fixture, follow: &Fixture, bar: b
 #[test]
 fn synced_128_and_125_stay_within_1_ms_for_64_bars() {
     // The leader at 128, the follower at 125 with its first beat elsewhere.
-    let lead = click_track(RATE, Side::Left, 100.0, &constant(128.0, 300), false);
-    let follow = click_track(RATE, Side::Right, 437.0, &constant(125.0, 330), false);
+    let lead = click_track(RATE, Side::Left, 100.0, &constant(128.0, 300));
+    let follow = click_track(RATE, Side::Right, 437.0, &constant(125.0, 330));
     let mut g = Graph::new(RATE).unwrap();
     let mut o = Onsets::new(RATE);
     let from = start(&mut g, &mut o, &lead, &follow, true);
@@ -87,8 +87,8 @@ fn a_tempo_change_in_the_follower_stays_within_2_ms() {
         bpm: 130.0,
         beats: 120,
     });
-    let lead = click_track(RATE, Side::Left, 250.0, &constant(126.0, 200), false);
-    let follow = click_track(RATE, Side::Right, 80.0, &sections, false);
+    let lead = click_track(RATE, Side::Left, 250.0, &constant(126.0, 200));
+    let follow = click_track(RATE, Side::Right, 80.0, &sections);
     let mut g = Graph::new(RATE).unwrap();
     let mut o = Onsets::new(RATE);
     let from = start(&mut g, &mut o, &lead, &follow, false);
@@ -117,8 +117,8 @@ fn a_tempo_change_in_the_leader_is_followed_within_2_ms() {
         bpm: 132.0,
         beats: 100,
     });
-    let lead = click_track(RATE, Side::Left, 0.0, &sections, false);
-    let follow = click_track(RATE, Side::Right, 300.0, &constant(128.0, 200), false);
+    let lead = click_track(RATE, Side::Left, 0.0, &sections);
+    let follow = click_track(RATE, Side::Right, 300.0, &constant(128.0, 200));
     let mut g = Graph::new(RATE).unwrap();
     let mut o = Onsets::new(RATE);
     let from = start(&mut g, &mut o, &lead, &follow, false);
@@ -137,8 +137,8 @@ fn a_tempo_change_in_the_leader_is_followed_within_2_ms() {
 #[test]
 fn two_synced_constant_grids_stay_within_2_ms_for_10_minutes() {
     const SRC_RATE: u32 = 22_050;
-    let lead = click_track(SRC_RATE, Side::Left, 60.0, &constant(128.0, 1_300), false);
-    let follow = click_track(SRC_RATE, Side::Right, 510.0, &constant(126.0, 1_300), false);
+    let lead = click_track(SRC_RATE, Side::Left, 60.0, &constant(128.0, 1_300));
+    let follow = click_track(SRC_RATE, Side::Right, 510.0, &constant(126.0, 1_300));
     let mut g = Graph::new(RATE).unwrap();
     let mut o = Onsets::new(RATE);
     let from = start(&mut g, &mut o, &lead, &follow, true);

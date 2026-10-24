@@ -84,7 +84,7 @@ fn unknown_track_and_missing_file_are_errors() {
 fn deck_audio_carries_the_grid_in_frames_of_the_decoded_audio() {
     let (_dir, lib, id) = setup();
     let empty = lib.deck_audio(id, 48_000).unwrap();
-    assert!(empty.anchors.is_empty());
+    assert!(empty.beats.is_empty());
     assert!(empty.hot_cues.is_empty());
 
     lib.edit_beatgrid(
@@ -98,13 +98,16 @@ fn deck_audio_carries_the_grid_in_frames_of_the_decoded_audio() {
     let deck = lib.deck_audio(id, 48_000).unwrap();
     assert_eq!(deck.pcm.sample_rate, 48_000);
     assert_eq!(deck.pcm.frames(), 1_440_000);
+    // 30 s at 128 BPM from 250 ms: 64 beats, 22,500 frames apart.
+    assert_eq!(deck.beats.len(), 64);
     assert_eq!(
-        deck.anchors,
-        [reks_core::DeckAnchor {
-            frame: 12_000,
+        deck.beats[0],
+        reks_core::DeckBeat {
+            frame: 12_000.0,
             bpm: 128.0,
             beat_in_bar: 1,
             beats_per_bar: 4,
-        }]
+        }
     );
+    assert_eq!(deck.beats[63].frame, 12_000.0 + 63.0 * 22_500.0);
 }

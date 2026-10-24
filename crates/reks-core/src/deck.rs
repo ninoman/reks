@@ -1,11 +1,11 @@
 //! A library track ready for a mixer deck (Phase 5 task 8): decoded audio at
-//! the engine rate plus its grid anchors and hot cues in frames of that audio.
+//! the engine rate plus its grid's beats and hot cues in frames of that audio.
 //! The app layer turns this into a `reks_mix::DeckSource` field by field, so
 //! this crate stays free of the audio engine.
 
 use reks_audio::StereoPcm;
 
-use crate::beatgrid::GridAnchor;
+use crate::beatgrid::{grid_beats, GridAnchor};
 use crate::db::Library;
 use crate::error::Result;
 use crate::scan::TrackId;
@@ -20,8 +20,9 @@ const KIND_LOOP: i64 = 4;
 pub struct DeckAudio {
     /// Resampled to the rate asked for.
     pub pcm: StereoPcm,
-    /// Grid anchors in frames of `pcm`, sorted; empty without a grid.
-    pub anchors: Vec<DeckAnchor>,
+    /// Every beat of the grid in frames of `pcm` ([`deck_beats`]); empty
+    /// without a grid.
+    pub beats: Vec<DeckBeat>,
     /// `(slot, frame)` of each hot cue (slot 0..7 = A..H), sorted by slot.
     pub hot_cues: Vec<(u8, i64)>,
     /// What the deck's waveforms mark: the hot cues with their colours, then
@@ -46,10 +47,12 @@ pub struct CueMark {
     pub active_loop: bool,
 }
 
-/// One `beatgrid` row in frames of the deck's audio.
+/// One beat of the grid in frames of the deck's audio.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct DeckAnchor {
-    pub frame: i64,
+pub struct DeckBeat {
+    /// Fractional: a beat need not fall on a frame.
+    pub frame: f64,
+    /// Its section's tempo.
     pub bpm: f64,
     /// 1..=`beats_per_bar`.
     pub beat_in_bar: u8,
@@ -60,14 +63,14 @@ impl Library {
     /// Decodes track `id` whole at `sample_rate` with its grid and hot cues.
     /// Runs for seconds on a long track: call it off the UI and audio threads.
     pub fn deck_audio(&self, id: TrackId, sample_rate: u32) -> Result<DeckAudio> {
-        let anchors = deck_anchors(&self.beatgrid(id)?.anchors, sample_rate);
         let cues = self.track(id)?.cues;
         let hot_cues = hot_cue_frames(&cues, sample_rate);
         let marks = cue_marks(&cues, sample_rate);
         let pcm = self.preview_audio(id, sample_rate)?.pcm;
+        let beats = deck_beats(&self.beatgrid(id)?.anchors, sample_rate, pcm.frames());
         Ok(DeckAudio {
             pcm,
-            anchors,
+            beats,
             hot_cues,
             marks,
         })
@@ -79,15 +82,18 @@ pub fn ms_to_frame(ms: f64, rate: u32) -> i64 {
     (ms * f64::from(rate) / 1000.0).round() as i64
 }
 
-/// Grid rows in frames at `rate`.
-pub fn deck_anchors(anchors: &[GridAnchor], rate: u32) -> Vec<DeckAnchor> {
-    anchors
+/// Every beat of the grid `anchors` in `frames` frames at `rate`: the beat
+/// rule's beats ([`grid_beats`]), so the deck follows the beats the grid
+/// editor shows and the stick holds (D10, "Grid editing").
+pub fn deck_beats(anchors: &[GridAnchor], rate: u32, frames: usize) -> Vec<DeckBeat> {
+    let per_ms = f64::from(rate) / 1000.0;
+    grid_beats(anchors, frames as f64 / per_ms)
         .iter()
-        .map(|a| DeckAnchor {
-            frame: ms_to_frame(a.position_ms as f64, rate),
-            bpm: a.bpm_x100 as f64 / 100.0,
-            beat_in_bar: a.beat_in_bar,
-            beats_per_bar: a.beats_per_bar,
+        .map(|b| DeckBeat {
+            frame: b.position_ms * per_ms,
+            bpm: b.bpm_x100 as f64 / 100.0,
+            beat_in_bar: b.beat_in_bar,
+            beats_per_bar: b.beats_per_bar,
         })
         .collect()
 }
@@ -166,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn anchors_convert_to_frames_at_the_rate() {
+    fn beats_convert_to_frames_at_the_rate() {
         let rows = [
             GridAnchor {
                 position_ms: 12,
@@ -181,23 +187,23 @@ mod tests {
                 beats_per_bar: 4,
             },
         ];
+        // 61 s at 48 kHz: 128 BPM from 12 ms, 125.5 BPM from 60 s.
+        let beats = deck_beats(&rows, 48_000, 61 * 48_000);
         assert_eq!(
-            deck_anchors(&rows, 48_000),
-            [
-                DeckAnchor {
-                    frame: 576,
-                    bpm: 128.0,
-                    beat_in_bar: 1,
-                    beats_per_bar: 4
-                },
-                DeckAnchor {
-                    frame: 2_880_000,
-                    bpm: 125.5,
-                    beat_in_bar: 3,
-                    beats_per_bar: 4
-                },
-            ]
+            beats[0],
+            DeckBeat {
+                frame: 576.0,
+                bpm: 128.0,
+                beat_in_bar: 1,
+                beats_per_bar: 4
+            }
         );
+        assert_eq!(beats[1].frame, 576.0 + 22_500.0);
+        let at = beats.iter().position(|b| b.frame == 2_880_000.0).unwrap();
+        assert_eq!((beats[at].bpm, beats[at].beat_in_bar), (125.5, 3));
+        assert_eq!(beats[at - 1].bpm, 128.0);
+        assert!(beats.last().unwrap().frame < 61.0 * 48_000.0);
+        assert!(deck_beats(&[], 48_000, 1_000).is_empty());
     }
 
     #[test]

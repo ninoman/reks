@@ -425,18 +425,18 @@ pub struct DeckCues {
 }
 
 fn deck_source(audio: DeckAudio) -> DeckSource {
-    let anchors: Vec<reks_mix::GridAnchor> = audio
-        .anchors
+    let beats: Vec<reks_mix::GridBeat> = audio
+        .beats
         .iter()
-        .map(|a| reks_mix::GridAnchor {
-            frame: a.frame,
-            bpm: a.bpm,
-            beat_in_bar: a.beat_in_bar,
-            beats_per_bar: a.beats_per_bar,
+        .map(|b| reks_mix::GridBeat {
+            frame: b.frame,
+            bpm: b.bpm,
+            beat_in_bar: b.beat_in_bar,
+            beats_per_bar: b.beats_per_bar,
         })
         .collect();
     DeckSource::new(audio.pcm.samples, audio.pcm.sample_rate)
-        .with_grid(&anchors)
+        .with_grid(&beats)
         .with_hot_cues(audio.hot_cues)
         .with_auto_loops(reks_core::deck::auto_loops(&audio.marks))
 }

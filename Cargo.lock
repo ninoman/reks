@@ -4140,6 +4140,7 @@ version = "0.1.0"
 dependencies = [
  "cpal",
  "reks-audio",
+ "reks-core",
  "reks-fixtures-gen",
  "rtrb",
  "rubato 5.0.1",
