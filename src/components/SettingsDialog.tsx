@@ -22,6 +22,7 @@ import { DeckSettings } from "./settings/DeckSettings";
 import { DisplaySettings } from "./settings/DisplaySettings";
 import { MixerSettings } from "./settings/MixerSettings";
 import { settingItemClass as item } from "./settings/SettingItem";
+import { TagSettings } from "./settings/TagSettings";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import {
@@ -137,6 +138,7 @@ function SettingsBody({
           <LibraryFolders />
           {settings !== null && <CacheFolder cacheDir={settings.cacheDir} />}
           {settings !== null && <BackupSettings keep={settings.backupKeep} />}
+          {settings !== null && <TagSettings on={settings.tagsInComments} />}
         </Panel>
         {settings !== null && (
           <>

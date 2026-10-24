@@ -540,8 +540,22 @@ fn comment_tags_become_my_tags() {
     let mut c = small_collection();
     c.tracks[0].comments = Some("ok /* deep / Peak */".into());
     c.tracks[1].comments = Some(" /* Peak */".into());
-    let report = env.import(&c, fixture_remap());
-    assert_eq!((report.tags_created, report.tags_assigned), (1, 3));
+    let with_tags = || ImportOptions {
+        comment_tags: true,
+        ..fixture_remap()
+    };
+    let preview = rbxml::preview(&c, &env.lib, &with_tags()).unwrap();
+    assert_eq!(
+        (
+            preview.comment_tags.tracks,
+            preview.comment_tags.names,
+            preview.comment_tags.new_names
+        ),
+        (2, 2, 1)
+    );
+    let report = env.import(&c, with_tags());
+    let tags = report.comment_tags.unwrap();
+    assert_eq!((tags.tracks, tags.created, tags.assigned), (2, 1, 3));
 
     let tree = env.lib.tags().unwrap();
     let imported = tree.categories.last().unwrap();
@@ -552,6 +566,7 @@ fn comment_tags_become_my_tags() {
         ("Peak", 2)
     );
     let peak = imported.tags[0].id;
+    assert_eq!(tags.tag_ids, vec![deep, peak]);
     let first = env.lib.track(env.track_id(c.tracks[0].track_id)).unwrap();
     assert_eq!(first.track.row.tags, vec![deep, peak]);
     // The comment is stored as it is.
@@ -561,8 +576,27 @@ fn comment_tags_become_my_tags() {
     );
 
     // A second import adds nothing.
-    let again = env.import(&c, fixture_remap());
-    assert_eq!((again.tags_created, again.tags_assigned), (0, 0));
+    let again = env.import(&c, with_tags()).comment_tags.unwrap();
+    assert_eq!((again.created, again.assigned), (0, 0));
+}
+
+#[test]
+fn comment_tags_are_skipped_when_not_asked_for() {
+    let env = Env::new();
+    let mut c = small_collection();
+    c.tracks[0].comments = Some("ok /* Deep / Peak */".into());
+    let report = env.import(&c, fixture_remap());
+    assert_eq!(report.comment_tags, None);
+    let tree = env.lib.tags().unwrap();
+    assert!(tree.categories.iter().all(|cat| cat.tags.is_empty()));
+    // The comment is still stored, so the tags can be read later.
+    let id = env.track_id(c.tracks[0].track_id);
+    assert_eq!(
+        env.lib.track(id).unwrap().track.row.comment.as_deref(),
+        Some("ok /* Deep / Peak */")
+    );
+    let later = env.lib.comment_tags_import().unwrap();
+    assert_eq!((later.tracks, later.created, later.assigned), (1, 2, 2));
 }
 
 #[test]

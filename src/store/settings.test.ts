@@ -36,6 +36,7 @@ const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
   cacheDir: "/cache",
   anlzPreference: "rekordboxFirst",
   backupKeep: 10,
+  tagsInComments: false,
   onelibraryKeyBuiltin: false,
   ui: {
     hiddenColumns: null,

@@ -46,6 +46,7 @@ const settings: Settings = {
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
   backupKeep: 10,
+  tagsInComments: false,
   onelibraryKeyBuiltin: false,
   ui: {
     hiddenColumns: null,

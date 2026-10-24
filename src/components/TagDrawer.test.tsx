@@ -49,7 +49,7 @@ function select(indices: number[]) {
 const box = (name: string) => screen.getByRole("checkbox", { name: `Attach ${name}` });
 
 beforeEach(() => {
-  vi.mocked(ipc.tagsMutate).mockResolvedValue({ createdId: null, changed: 1 });
+  vi.mocked(ipc.tagsMutate).mockResolvedValue({ createdId: null, changed: 1, commentsUpdated: 0 });
   vi.mocked(ipc.tagsGet).mockResolvedValue(tree);
   useTags.setState({ tree, status: "ready", error: null, managerOpen: true });
 });
@@ -90,7 +90,11 @@ describe("TagDrawer", () => {
   });
 
   it("a tag added while a track is selected is attached to it", async () => {
-    vi.mocked(ipc.tagsMutate).mockResolvedValueOnce({ createdId: 12, changed: 0 });
+    vi.mocked(ipc.tagsMutate).mockResolvedValueOnce({
+      createdId: 12,
+      changed: 0,
+      commentsUpdated: 0,
+    });
     select([0]);
     render(<TagDrawer />);
     const field = screen.getByRole("textbox", { name: "New tag in Genre" });

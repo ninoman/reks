@@ -762,6 +762,24 @@ folders (task 5); this covers a folder outside them and a moved library folder.
     new place; refused when none do, when a new path would collide, or when
     the new folder is the old one, inside it, or already a library folder.
     The scan of the new folder follows. Commands `remap_plan`, `remap_apply`.
+### My Tags from Comments (D39)
+
+Added 2026-10-24.
+
+10. [x] **Core read**: `reks-core::tag_comments` (parser moved from `tag.rs`,
+    NFC names, `with_tag_block` writer), `ImportOptions::comment_tags`,
+    `ImportPreview::comment_tags`, `ImportReport::comment_tags`,
+    `Library::comment_tags_preview` / `comment_tags_import`, CLI
+    `--no-comment-tags`.
+11. [x] **Core organize**: `TagOp::Merge`, `Library::tag_duplicates`.
+12. [x] **Core write-back**: `tags_in_comments` setting, block rewrite after
+    every tag op, comment edit and XML import; `comment_tags_sync_all`.
+13. [x] **UI**: wizard checkbox with counts and "Organize tags…", tag
+    organizer, "Read from Comments…" / "Clean up…" in the My Tags drawer,
+    Settings → Library switch with "Update now".
+14. [ ] **Manual**: import the maintainer's `collection.xml` with tags on
+    (expect 2,562 tagged tracks, D29), organize, turn write-back on, export
+    XML and check rekordbox reads the comment blocks.
 
 ## Acceptance criteria
 

@@ -31,6 +31,7 @@ pub mod scan;
 pub mod secret;
 pub mod settings;
 pub mod tag;
+pub mod tag_comments;
 pub mod timefmt;
 pub mod track;
 
@@ -63,6 +64,7 @@ pub use settings::{
     RowDensity, Settings, SettingsPatch, SyncAlign, Theme, UiState,
 };
 pub use tag::{TagCategory, TagId, TagInfo, TagOp, TagOutcome, TagTree};
+pub use tag_comments::{CommentTagsPreview, CommentTagsReport};
 pub use track::{ArtworkInfo, BeatgridSummary, Cue, Track, TrackDetail, TrackPatch};
 
 /// Crate version, from Cargo metadata.

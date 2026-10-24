@@ -275,6 +275,7 @@ describe("useExportWizard", () => {
       },
       anlzPreference: "reksFirst",
       backupKeep: 10,
+      tagsInComments: false,
       onelibraryKeyBuiltin: false,
     } as const;
     useSettings.setState({ settings });

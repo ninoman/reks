@@ -263,8 +263,8 @@ export interface ImportReport {
   playlistsMatched: number;
   playlistEntries: number;
   playlistEntriesSkipped: number;
-  tagsCreated: number;
-  tagsAssigned: number;
+  /** My Tags read from Comments; `null` when the import was told not to. */
+  commentTags: CommentTagsReport | null;
   /** Deepest folder holding every file not found; the remap `from` to suggest. */
   missingRoot: string | null;
   elapsedMs: number;
@@ -290,6 +290,27 @@ export interface ImportPreview {
   missingRoot: string | null;
   /** The first few paths not found. */
   notFoundSample: string[];
+  /** Tag blocks in the comments of the tracks that will be stored. */
+  commentTags: CommentTagsPreview;
+}
+
+/** What reading My Tags from `/* A / B *\/` comment blocks would do (D39). */
+export interface CommentTagsPreview {
+  /** Tracks whose comment ends with a tag block. */
+  tracks: number;
+  /** Distinct names, case-insensitive. */
+  names: number;
+  /** Names no tag has yet (created under "Imported"). */
+  newNames: number;
+}
+
+/** What reading My Tags from comments did. */
+export interface CommentTagsReport {
+  tracks: number;
+  created: number;
+  assigned: number;
+  /** Every tag named in a block, created or already there: what the organizer shows. */
+  tagIds: TagId[];
 }
 
 /** Replace a path prefix in every XML `Location` (music folder moved). */
@@ -376,11 +397,12 @@ export function rbxmlImportCancel(): Promise<void> {
 export function rbxmlImportStart(
   path: string,
   remap: PrefixRemap[],
+  commentTags: boolean,
   onEvent: (e: ImportEvent) => void,
 ): Promise<ImportReport> {
   const channel = new Channel<ImportEvent>();
   channel.onmessage = onEvent;
-  return invoke("rbxml_import_start", { path, remap, onEvent: channel });
+  return invoke("rbxml_import_start", { path, remap, commentTags, onEvent: channel });
 }
 
 export interface ArtworkInfo {
@@ -567,11 +589,15 @@ export type TagOp =
   | { type: "move"; id: TagId; categoryId?: TagId | null; position: number }
   /** Idempotent; `changed` counts new links. */
   | { type: "assign"; trackIds: number[]; tagIds: TagId[] }
-  | { type: "unassign"; trackIds: number[]; tagIds: TagId[] };
+  | { type: "unassign"; trackIds: number[]; tagIds: TagId[] }
+  /** Gives `into` the tracks of every tag in `ids`, then deletes `ids`. */
+  | { type: "merge"; ids: TagId[]; into: TagId };
 
 export interface TagOutcome {
   createdId: TagId | null;
   changed: number;
+  /** Comments whose tag block was rewritten (write-to-Comments on): re-read rows. */
+  commentsUpdated: number;
 }
 
 /** A saved filter (D35, `filter_preset.rs`); `rule` is `null` when it doesn't parse. */
@@ -611,6 +637,25 @@ export function tagsGet(): Promise<TagTree> {
 
 export function tagsMutate(op: TagOp): Promise<TagOutcome> {
   return invoke("tags_mutate", { op });
+}
+
+/** Groups of tags whose names differ only in case, spacing or punctuation. */
+export function tagsDuplicates(): Promise<TagId[][]> {
+  return invoke("tags_duplicates");
+}
+
+export function commentTagsPreview(): Promise<CommentTagsPreview> {
+  return invoke("comment_tags_preview");
+}
+
+/** Reads My Tags from every track's comment. */
+export function commentTagsImport(): Promise<CommentTagsReport> {
+  return invoke("comment_tags_import");
+}
+
+/** Rewrites the tag block of every tagged track's comment; `apply` false only counts. */
+export function commentTagsSyncAll(apply: boolean): Promise<number> {
+  return invoke("comment_tags_sync_all", { apply });
 }
 
 /** Output device names, the system default first (`audio_devices`). */
@@ -1069,6 +1114,8 @@ export interface Settings {
   anlzPreference: AnlzPreference;
   /** Recent library backups kept (1..=100); one per week for 8 weeks stays besides. */
   backupKeep: number;
+  /** Tag edits keep each track's `/* A / B *\/` comment block in step (D39). */
+  tagsInComments: boolean;
   /** This build has the OneLibrary key built in; the key itself never leaves Rust. */
   onelibraryKeyBuiltin: boolean;
 }
@@ -1089,6 +1136,7 @@ export interface SettingsPatch {
   ui?: UiState;
   anlzPreference?: AnlzPreference;
   backupKeep?: number;
+  tagsInComments?: boolean;
 }
 
 export interface LibraryRoot {

@@ -46,7 +46,7 @@ function openMenu(trackIds: number[]) {
 }
 
 beforeEach(() => {
-  vi.mocked(ipc.tagsMutate).mockResolvedValue({ createdId: null, changed: 1 });
+  vi.mocked(ipc.tagsMutate).mockResolvedValue({ createdId: null, changed: 1, commentsUpdated: 0 });
   vi.mocked(ipc.tagsGet).mockResolvedValue(tree);
   useTags.setState({ tree, status: "ready", error: null, managerOpen: false });
   useLibrary.setState({
@@ -98,7 +98,11 @@ describe("TagSubmenu", () => {
   });
 
   it("offers Create 'X' per category and assigns the new tag", async () => {
-    vi.mocked(ipc.tagsMutate).mockResolvedValueOnce({ createdId: 12, changed: 0 });
+    vi.mocked(ipc.tagsMutate).mockResolvedValueOnce({
+      createdId: 12,
+      changed: 0,
+      commentsUpdated: 0,
+    });
     openMenu([2]);
     fireEvent.change(screen.getByRole("searchbox", { name: "Find a tag" }), {
       target: { value: "Deep" },

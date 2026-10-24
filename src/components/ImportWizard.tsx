@@ -2,14 +2,18 @@
  * The rekordbox XML import wizard (phase 1 task 12): review the counts and
  * map a moved music folder before anything is written, follow the import,
  * then read the report. All counting and matching happens in Rust; this only
- * shows `ImportPreview` / `ImportReport`.
+ * shows `ImportPreview` / `ImportReport`. When comments carry rekordbox's My
+ * Tag blocks, a checkbox (on by default) reads them into tags, and the report
+ * offers the tag organizer (D39).
  */
 import { open } from "@tauri-apps/plugin-dialog";
 
 import type { ImportPreview, ImportReport, Unmatched, UnmatchedReason } from "../lib/ipc";
 import { useImportWizard } from "../store/importWizard";
+import { commentTagsText } from "../store/tagOrganizerModel";
 import { ErrorMessage } from "./ErrorMessage";
 import { Button } from "./ui/Button";
+import { Checkbox } from "./ui/Checkbox";
 import {
   Dialog,
   DialogBody,
@@ -87,6 +91,7 @@ function Review() {
         ) : (
           <PreviewCounts preview={preview} />
         )}
+        {preview !== null && preview.commentTags.tracks > 0 && <CommentTagsChoice />}
         {preview !== null && preview.filesNotFound > 0 && (
           <div>
             <p className="text-warning">
@@ -143,6 +148,28 @@ function Review() {
         <Button onClick={close}>Cancel</Button>
       </DialogFooter>
     </>
+  );
+}
+
+function CommentTagsChoice() {
+  const preview = useImportWizard((s) => s.preview);
+  const on = useImportWizard((s) => s.commentTags);
+  if (preview === null) return null;
+  return (
+    <label className="flex items-start gap-2">
+      <Checkbox
+        className="mt-0.5"
+        checked={on}
+        onChange={(e) => useImportWizard.getState().setCommentTags(e.target.checked)}
+      />
+      <span>
+        Import My Tags from Comments
+        <span className="block text-xs text-fg-muted">
+          {commentTagsText(preview.commentTags)}. New tags go under "Imported"; you can sort them
+          into categories afterwards. Comments are kept as they are.
+        </span>
+      </span>
+    </label>
   );
 }
 
@@ -238,7 +265,7 @@ function reasonDetail(u: Unmatched): string {
 
 function Report() {
   const report = useImportWizard((s) => s.report);
-  const { close, remapAndReview } = useImportWizard.getState();
+  const { close, remapAndReview, organizeTags } = useImportWizard.getState();
   if (report === null) return null;
 
   async function mapAndReview(from: string) {
@@ -257,6 +284,9 @@ function Report() {
         )}
       </DialogBody>
       <DialogFooter>
+        {!report.cancelled && (report.commentTags?.tagIds.length ?? 0) > 0 && (
+          <Button onClick={organizeTags}>Organize tags…</Button>
+        )}
         {canRemap && (
           <Button onClick={() => void mapAndReview(report.missingRoot as string)}>
             Map folder and re-import…
@@ -300,10 +330,14 @@ function ReportBody({ report: r }: { report: ImportReport }) {
         <dd>
           {n(r.playlistEntries)} ({n(r.playlistEntriesSkipped)})
         </dd>
-        <dt>Tags created / assigned</dt>
-        <dd>
-          {n(r.tagsCreated)} / {n(r.tagsAssigned)}
-        </dd>
+        {r.commentTags !== null && (
+          <>
+            <dt>My Tags created / assigned</dt>
+            <dd>
+              {n(r.commentTags.created)} / {n(r.commentTags.assigned)}
+            </dd>
+          </>
+        )}
         <dt>Time</dt>
         <dd>{(r.elapsedMs / 1000).toFixed(1)} s</dd>
       </dl>

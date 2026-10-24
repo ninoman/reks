@@ -7,13 +7,15 @@
  * to another category); × deletes after a confirmation. Names read as text and turn
  * into a field on click (Enter or leaving it saves, Escape reverts);
  * reks-core validates them, so a rejected edit shows its reason at the top
- * and changes nothing. Escape elsewhere closes the drawer.
+ * and changes nothing. Escape elsewhere closes the drawer. "Read from
+ * Comments…" and "Clean up…" open the tag organizer (`TagOrganizer`).
  */
 import { useState } from "react";
 
 import { cn } from "../lib/cn";
 import type { TagCategory, TagId, TagInfo, TrackRow } from "../lib/ipc";
 import { clickAction, coverage, type TagCoverage } from "../store/tagModel";
+import { useTagOrganizer } from "../store/tagOrganizer";
 import { useTags } from "../store/tags";
 import { useTagTargets } from "../store/tagTargets";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -300,6 +302,14 @@ export function TagDrawer() {
         <p className="m-0 pb-2 text-xs text-fg-muted empty:hidden" aria-live="polite">
           {targetText(targets)}
         </p>
+        <div className="flex gap-1.5 pb-2">
+          <Button size="sm" onClick={() => void useTagOrganizer.getState().startRead()}>
+            Read from Comments…
+          </Button>
+          <Button size="sm" onClick={() => void useTagOrganizer.getState().open(null)}>
+            Clean up…
+          </Button>
+        </div>
       </div>
       {error !== null && <ErrorMessage className="px-3 pb-2 text-sm" message={error} />}
       <ScrollArea className="min-h-0 flex-1">

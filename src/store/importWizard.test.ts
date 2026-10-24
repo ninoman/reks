@@ -9,6 +9,8 @@ vi.mock("../lib/ipc", () => ({
   playlistsGet: vi.fn(),
   libraryFacets: vi.fn(),
   libraryQuery: vi.fn(),
+  tagsGet: vi.fn(),
+  tagsDuplicates: vi.fn(),
 }));
 
 const ipc = await import("../lib/ipc");
@@ -33,6 +35,7 @@ const previewOf = (over: Partial<ImportPreview> = {}): ImportPreview => ({
   inLibrary: 0,
   missingRoot: "/Music/old",
   notFoundSample: ["/Music/old/a.mp3"],
+  commentTags: { tracks: 0, names: 0, newNames: 0 },
   ...over,
 });
 
@@ -48,8 +51,7 @@ const reportOf = (over: Partial<ImportReport> = {}): ImportReport => ({
   beatgridRows: 3,
   cueRows: 10,
   playlistsCreated: 2,
-  tagsCreated: 0,
-  tagsAssigned: 0,
+  commentTags: null,
   playlistsMatched: 0,
   playlistEntries: 4,
   playlistEntriesSkipped: 0,
@@ -119,7 +121,7 @@ describe("useImportWizard", () => {
     const refresh = vi.spyOn(useLibrary.getState(), "refresh");
     let send: (e: ImportEvent) => void = () => {};
     let finish: (r: ImportReport) => void = () => {};
-    rbxmlImportStart.mockImplementation((_path, _remap, onEvent) => {
+    rbxmlImportStart.mockImplementation((_path, _remap, _tags, onEvent) => {
       send = onEvent;
       return new Promise((r) => (finish = r));
     });
@@ -145,7 +147,7 @@ describe("useImportWizard", () => {
   });
 
   it("stop is sent only while files are read", async () => {
-    rbxmlImportStart.mockImplementation((_p, _r, onEvent) => {
+    rbxmlImportStart.mockImplementation((_p, _r, _t, onEvent) => {
       onEvent({ type: "progress", stage: "database", done: 1, total: 3 });
       return new Promise(() => {});
     });

@@ -4,16 +4,20 @@
 //! Two levels, as in rekordbox: categories, and tags below a category. Only
 //! tags are assigned to tracks. Every op is validated before anything is
 //! written and runs in one transaction; sibling `sort_order`s stay dense.
+//! With the write-to-Comments setting on, every op also rewrites the comment
+//! tag block of the tracks it touched (`tag_comments`, D39).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use unicode_normalization::UnicodeNormalization;
 
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::playlist::{index, to_i64, to_u32, valid_name};
 use crate::scan::TrackId;
+use crate::tag_comments::sync_comments;
 use crate::timefmt::now_utc;
 
 /// Row id in the `tag` table (a category or a tag).
@@ -85,6 +89,9 @@ pub enum TagOp {
         track_ids: Vec<TrackId>,
         tag_ids: Vec<TagId>,
     },
+    /// Gives the tracks of every tag in `ids` the tag `into`, then deletes
+    /// `ids` (any categories). `changed` counts the links added to `into`.
+    Merge { ids: Vec<TagId>, into: TagId },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -92,14 +99,24 @@ pub enum TagOp {
 pub struct TagOutcome {
     /// The new category or tag, for the create ops.
     pub created_id: Option<TagId>,
-    /// Links added (assign) or removed (unassign).
+    /// Links added (assign, merge) or removed (unassign).
     pub changed: u32,
+    /// Track comments whose tag block was rewritten (write-to-Comments on):
+    /// the UI re-reads those rows.
+    pub comments_updated: u32,
 }
 
 impl Library {
     /// The tag tree, with a track count per tag.
     pub fn tags(&self) -> Result<TagTree> {
         tag_tree(&*self.conn()?)
+    }
+
+    /// Groups of tags (any category) whose names differ only in case,
+    /// accents' encoding, spaces or punctuation (`Prog-Trance`, `prog trance`,
+    /// `ProgTrance`): merge candidates. Each group in display order.
+    pub fn tag_duplicates(&self) -> Result<Vec<Vec<TagId>>> {
+        Ok(duplicate_groups(&self.tags()?))
     }
 
     /// Applies `op` in one transaction. A rejected op changes nothing.
@@ -110,7 +127,10 @@ impl Library {
         let mut out = TagOutcome {
             created_id: None,
             changed: 0,
+            comments_updated: 0,
         };
+        // Read before the op: a delete or merge takes the links with it.
+        let touched = touched_tracks(&tx, &op)?;
         match op {
             TagOp::CreateCategory { name, position } => {
                 out.created_id = Some(create(&tx, None, &name, position, &now)?);
@@ -141,7 +161,9 @@ impl Library {
             TagOp::Unassign { track_ids, tag_ids } => {
                 out.changed = unassign(&tx, &track_ids, &tag_ids)?;
             }
+            TagOp::Merge { ids, into } => out.changed = merge(&tx, &ids, into, &now)?,
         }
+        out.comments_updated = sync_comments(&tx, &touched)?;
         tx.commit()?;
         Ok(out)
     }
@@ -276,6 +298,98 @@ pub(crate) fn assign(c: &Connection, track_ids: &[TrackId], tag_ids: &[TagId]) -
         }
     }
     Ok(to_u32(added))
+}
+
+fn merge(c: &Connection, ids: &[TagId], into: TagId, now: &str) -> Result<u32> {
+    if parent_of(c, into)?.is_none() {
+        return Err(Error::NotATag(into));
+    }
+    if ids.is_empty() || ids.contains(&into) {
+        return Err(Error::InvalidField {
+            field: "ids",
+            reason: "pick at least one tag other than the one kept".into(),
+        });
+    }
+    for &id in ids {
+        if parent_of(c, id)?.is_none() {
+            return Err(Error::NotATag(id));
+        }
+    }
+    let mut relink = c.prepare_cached(
+        "INSERT OR IGNORE INTO track_tag (track_id, tag_id)
+         SELECT track_id, ?2 FROM track_tag WHERE tag_id = ?1",
+    )?;
+    let mut added = 0;
+    let mut parents = BTreeSet::new();
+    for id in ids.iter().copied().collect::<BTreeSet<_>>() {
+        added += relink.execute([id, into])?;
+        parents.insert(parent_of(c, id)?);
+        c.prepare_cached("DELETE FROM tag WHERE id = ?1")?
+            .execute([id])?;
+    }
+    for parent in parents {
+        write_order(c, &siblings(c, parent)?, now)?;
+    }
+    Ok(to_u32(added))
+}
+
+/// The tracks whose tag block `op` can change: their tags, or the names or
+/// order of their tags.
+fn touched_tracks(c: &Connection, op: &TagOp) -> Result<Vec<TrackId>> {
+    let mut stmt = c.prepare_cached(
+        "SELECT track_id FROM track_tag WHERE tag_id = ?1
+            OR tag_id IN (SELECT id FROM tag WHERE parent_id = ?1)",
+    )?;
+    let mut of = |ids: &[TagId]| -> Result<Vec<TrackId>> {
+        let mut out = BTreeSet::new();
+        for &id in ids {
+            for t in stmt.query_map([id], |r| r.get(0))? {
+                out.insert(t?);
+            }
+        }
+        Ok(out.into_iter().collect())
+    };
+    match op {
+        TagOp::CreateCategory { .. } | TagOp::CreateTag { .. } => Ok(Vec::new()),
+        TagOp::Rename { id, .. } | TagOp::Delete { id } | TagOp::Move { id, .. } => of(&[*id]),
+        TagOp::Merge { ids, .. } => of(ids),
+        TagOp::Assign { track_ids, .. } | TagOp::Unassign { track_ids, .. } => {
+            let mut ids = track_ids.clone();
+            ids.sort_unstable();
+            ids.dedup();
+            Ok(ids)
+        }
+    }
+}
+
+/// See [`Library::tag_duplicates`].
+fn duplicate_groups(tree: &TagTree) -> Vec<Vec<TagId>> {
+    let mut by_key: BTreeMap<String, Vec<TagId>> = BTreeMap::new();
+    let mut order: Vec<String> = Vec::new();
+    for tag in tree.categories.iter().flat_map(|c| &c.tags) {
+        let key = duplicate_key(&tag.name);
+        if key.is_empty() {
+            continue;
+        }
+        let group = by_key.entry(key.clone()).or_default();
+        if group.is_empty() {
+            order.push(key);
+        }
+        group.push(tag.id);
+    }
+    order
+        .into_iter()
+        .filter_map(|k| by_key.remove(&k))
+        .filter(|g| g.len() > 1)
+        .collect()
+}
+
+/// A name with case, compatibility forms, spaces and punctuation dropped.
+fn duplicate_key(name: &str) -> String {
+    name.nfkc()
+        .flat_map(char::to_lowercase)
+        .filter(|c| c.is_alphanumeric())
+        .collect()
 }
 
 /// Unlinks every track from every tag; returns the links removed.
@@ -418,58 +532,43 @@ pub(crate) fn tags_of(c: &Connection, track_ids: &[TrackId]) -> Result<Vec<(Trac
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// rekordbox's "Add My Tag to Comments" ends Comments with the track's tags
-/// as `/* Tag A / Tag B */`, after any text already there (checked against a
-/// rekordbox 6.8.6 `collection.xml`, 2026-10-21, D29). Names are split on
-/// ` / ` only, so `Deep/minimal House` is one tag. Returns the names, in
-/// order, without duplicates.
-pub fn parse_comment_tags(comment: &str) -> Vec<String> {
-    let Some(rest) = comment.trim_end().strip_suffix("*/") else {
-        return Vec::new();
-    };
-    let Some(start) = rest.rfind("/*") else {
-        return Vec::new();
-    };
-    let mut out: Vec<String> = Vec::new();
-    for name in rest[start + 2..].split(" / ") {
-        let name = name.trim();
-        if !name.is_empty() && !out.iter().any(|n| n.eq_ignore_ascii_case(name)) {
-            out.push(name.to_owned());
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn comment_tags_are_parsed_from_the_closing_block() {
-        // As rekordbox 6.8.6 writes them.
-        assert_eq!(
-            parse_comment_tags(" /* Psychodelic trance / Prog Trance / G 3 */"),
-            ["Psychodelic trance", "Prog Trance", "G 3"]
-        );
-        assert_eq!(
-            parse_comment_tags(
-                "Visit https://x.bandcamp.com /* Tech House / Deep/minimal House */"
-            ),
-            ["Tech House", "Deep/minimal House"]
-        );
-        assert_eq!(parse_comment_tags("/*Deep*/  "), ["Deep"]);
-        assert_eq!(
-            parse_comment_tags(" /* Deep / deep /  / Peak */"),
-            ["Deep", "Peak"]
-        );
+    fn tree(cats: &[&[(TagId, &str)]]) -> TagTree {
+        TagTree {
+            categories: cats
+                .iter()
+                .enumerate()
+                .map(|(i, tags)| TagCategory {
+                    id: 1000 + i64::try_from(i).unwrap(),
+                    name: format!("c{i}"),
+                    tags: tags
+                        .iter()
+                        .map(|&(id, name)| TagInfo {
+                            id,
+                            name: name.into(),
+                            track_count: 0,
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }
     }
 
     #[test]
-    fn comments_without_a_closing_block_have_no_tags() {
-        assert!(parse_comment_tags("").is_empty());
-        assert!(parse_comment_tags("great track").is_empty());
-        assert!(parse_comment_tags("/* Deep */ great track").is_empty());
-        assert!(parse_comment_tags("never opened */").is_empty());
-        assert!(parse_comment_tags(" /* */").is_empty());
+    fn duplicates_ignore_case_spacing_and_punctuation() {
+        let t = tree(&[
+            &[(1, "Prog Trance"), (2, "Deep"), (3, "!!")],
+            &[
+                (4, "prog-trance"),
+                (5, "ProgTrance"),
+                (6, "Deep House"),
+                (7, "??"),
+            ],
+            &[(8, "DEEP"), (9, "Ｄｅｅｐ")],
+        ]);
+        assert_eq!(duplicate_groups(&t), vec![vec![1, 4, 5], vec![2, 8, 9]]);
     }
 }

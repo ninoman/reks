@@ -5,7 +5,8 @@
 //! means the default (an unreadable one is logged), so a bad row never stops
 //! the app. Keys: [`AUDIO_DEVICE`], [`AUDIO_SAMPLE_RATE`],
 //! [`AUDIO_BUFFER_FRAMES`], [`AUDIO_CUE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`THEME`],
-//! [`SYNC_ALIGN`], [`MIXER_VIEW`], [`MIXER_FILTERS`], [`MIXER_EQ`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`].
+//! [`SYNC_ALIGN`], [`MIXER_VIEW`], [`MIXER_FILTERS`], [`MIXER_EQ`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`],
+//! [`TAGS_IN_COMMENTS`].
 
 use std::path::{Path, PathBuf};
 
@@ -50,6 +51,9 @@ pub const UI_STATE: &str = "ui.state";
 pub const ANLZ_PREFERENCE: &str = "export.anlz_preference";
 /// How many recent library backups to keep (`backup` module).
 pub const BACKUP_KEEP: &str = "backup.keep";
+/// `bool`: keep each track's My Tags in its comment as rekordbox's
+/// `/* A / B */` block (rekordbox's "Add My Tag to Comments"; D39). Off by default.
+pub const TAGS_IN_COMMENTS: &str = "tags.write_to_comments";
 
 /// Where a USB export takes a track's ANLZ files (waveforms, beatgrid, cues)
 /// from when both rekordbox's local analysis cache and reks's own analysis
@@ -196,6 +200,8 @@ pub struct Settings {
     pub anlz_preference: AnlzPreference,
     /// Recent library backups kept; one per week for 8 weeks stays besides.
     pub backup_keep: u32,
+    /// Tag edits rewrite the track's comment tag block ([`TAGS_IN_COMMENTS`]).
+    pub tags_in_comments: bool,
     /// This build has the OneLibrary key built in ([`crate::secret::builtin`]).
     pub onelibrary_key_builtin: bool,
 }
@@ -283,6 +289,9 @@ pub struct SettingsPatch {
     pub anlz_preference: Option<AnlzPreference>,
     /// Clamped to [`crate::backup::KEEP_RANGE`].
     pub backup_keep: Option<u32>,
+    /// Turning it on rewrites nothing by itself; see
+    /// [`Library::comment_tags_sync_all`].
+    pub tags_in_comments: Option<bool>,
 }
 
 /// Lets `null` mean "set to none" rather than "absent".
@@ -324,6 +333,7 @@ impl Library {
             ui: get(&conn, UI_STATE)?.unwrap_or_default(),
             anlz_preference: get(&conn, ANLZ_PREFERENCE)?.unwrap_or_default(),
             backup_keep: backup_keep(&conn),
+            tags_in_comments: tags_in_comments(&conn)?,
             onelibrary_key_builtin: crate::secret::builtin::present(),
         })
     }
@@ -376,6 +386,9 @@ impl Library {
             if let Some(n) = patch.backup_keep {
                 let keep = n.clamp(*KEEP_RANGE.start(), *KEEP_RANGE.end());
                 put(&tx, BACKUP_KEEP, Some(&keep))?;
+            }
+            if let Some(on) = patch.tags_in_comments {
+                put(&tx, TAGS_IN_COMMENTS, Some(&on))?;
             }
             tx.commit()?;
         }
@@ -538,6 +551,11 @@ pub(crate) fn backup_keep(conn: &Connection) -> u32 {
         .map_or(DEFAULT_KEEP, |n| {
             n.clamp(*KEEP_RANGE.start(), *KEEP_RANGE.end())
         })
+}
+
+/// [`TAGS_IN_COMMENTS`], read inside the caller's transaction.
+pub(crate) fn tags_in_comments(conn: &Connection) -> Result<bool> {
+    Ok(get(conn, TAGS_IN_COMMENTS)?.unwrap_or(false))
 }
 
 fn get<T: DeserializeOwned>(conn: &Connection, key: &str) -> Result<Option<T>> {
@@ -732,6 +750,7 @@ mod tests {
             ui: Some(ui.clone()),
             anlz_preference: Some(AnlzPreference::ReksFirst),
             backup_keep: Some(20),
+            tags_in_comments: Some(true),
         })
         .unwrap();
         let s = lib
@@ -760,6 +779,7 @@ mod tests {
         assert_eq!(s.ui, ui);
         assert_eq!(s.anlz_preference, AnlzPreference::ReksFirst);
         assert_eq!(s.backup_keep, 20);
+        assert!(s.tags_in_comments);
         assert_eq!(lib.settings().unwrap(), s);
 
         let s = lib

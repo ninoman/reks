@@ -706,8 +706,9 @@ the command returns the deck's cues and the store takes them.
 Two-level tags (category → tag, `tag.rs`). The store
 ([`src/store/tags.ts`](../src/store/tags.ts)) holds the tree and runs every
 edit through `tags_mutate`; assigning patches the loaded table rows in place
-(selection and scroll stay, so several tags can be ticked in a row), deleting
-re-queries. Pure helpers (coverage, search, create offers) are in
+(selection and scroll stay, so several tags can be ticked in a row); deleting,
+merging and any edit that rewrote comments (`commentsUpdated`, write-back on)
+re-query. Pure helpers (coverage, search, create offers) are in
 [`tagModel.ts`](../src/store/tagModel.ts).
 
 - `FilterDrawer`: the library filters in a `Sheet`, same header and Escape/×
@@ -727,6 +728,25 @@ re-queries. Pure helpers (coverage, search, create offers) are in
   tracks are selected is attached to them. `move` positions count the node
   where it still is (reks-core). Escape or × closes it; the info button
   brings the info panel back to the front.
+  Under the header, "Read from Comments…" and "Clean up…" open the organizer.
+- `TagOrganizer` (D39, [`store/tagOrganizer.ts`](../src/store/tagOrganizer.ts),
+  pure helpers in [`tagOrganizerModel.ts`](../src/store/tagOrganizerModel.ts)):
+  "Read from Comments…" first asks in a `ConfirmDialog` with the counts
+  (tracks, names, new); the organizer `Dialog` then shows the tags read ("Just
+  read" / "All tags" toggle; "Clean up…" and the import report open it too).
+  "Possible duplicates" lists `tags_duplicates` groups with a Keep select (the
+  tag on most tracks by default) and Merge. Below, tags by category: tick,
+  rename on click, track count, category select (moves at once). The toolbar
+  under the list acts on the ticked tags: Move to…, Move to a new category,
+  Merge… (pick the one to keep), Delete… (with the track count). States:
+  counting, nothing to read, loading, load error with Retry, no duplicates,
+  no tags.
+- Import wizard: when comments carry blocks, a checkbox (on) "Import My Tags
+  from Comments" with the counts; the report shows tags created / assigned
+  and "Organize tags…".
+- Settings → Library: "Write My Tags to Comments" switch (`TagSettings`);
+  when on, the count of tagged tracks whose block differs and "Update now"
+  (`useCommentSync`).
 - `TagSubmenu`: "My Tags" in the track context menu. One checkbox per tag
   for the whole selection; a tag only some selected tracks have is mixed and a
   click adds it to all; the menu stays open; the search field offers
