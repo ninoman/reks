@@ -24,30 +24,6 @@ vi.mock("../lib/ipc", () => ({
 const ipc = await import("../lib/ipc");
 const { libraryId, useMix } = await import("./mix");
 
-const running: MixState = {
-  device: "Out",
-  sampleRate: 44_100,
-  channels: 2,
-  bufferFrames: null,
-  deviceLost: false,
-  xruns: 0,
-  masterDeck: null,
-  decks: [],
-  meters: Array.from({ length: 4 }, () => ({ level: 0, clip: false })),
-  masterMeter: { level: 0, clip: false },
-};
-
-const outputs4: CueRouting = { type: "outputs", master: [0, 1], cue: [2, 3] };
-const options = (channels: number) => ({
-  rates: [48_000],
-  defaultRate: 48_000,
-  channels,
-  defaultCue: channels >= 4 ? outputs4 : ({ type: "off" } satisfies CueRouting),
-  bufferFrames: null,
-});
-
-const initial = useMix.getState();
-
 const deckView = (over: Partial<DeckView> = {}): DeckView => ({
   trackId: null,
   loaded: false,
@@ -72,6 +48,31 @@ const deckView = (over: Partial<DeckView> = {}): DeckView => ({
   master: false,
   ...over,
 });
+
+const running: MixState = {
+  device: "Out",
+  sampleRate: 44_100,
+  channels: 2,
+  bufferFrames: null,
+  deviceLost: false,
+  xruns: 0,
+  masterDeck: null,
+  decks: [],
+  preview: deckView(),
+  meters: Array.from({ length: 4 }, () => ({ level: 0, clip: false })),
+  masterMeter: { level: 0, clip: false },
+};
+
+const outputs4: CueRouting = { type: "outputs", master: [0, 1], cue: [2, 3] };
+const options = (channels: number) => ({
+  rates: [48_000],
+  defaultRate: 48_000,
+  channels,
+  defaultCue: channels >= 4 ? outputs4 : ({ type: "off" } satisfies CueRouting),
+  bufferFrames: null,
+});
+
+const initial = useMix.getState();
 
 const sent = () => vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0]);
 

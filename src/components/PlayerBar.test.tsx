@@ -30,6 +30,7 @@ function run(playing: number[]) {
     xruns: 0,
     masterDeck: null,
     decks: [0, 1, 2, 3].map((d) => deck(playing.includes(d))),
+    preview: deck(false),
     meters: [],
     masterMeter: { level: 0, clip: false },
   } as MixState;
