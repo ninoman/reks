@@ -238,7 +238,7 @@ fn each_filter_unit_has_its_own_freq() {
     channel(&mut g, 0, ChannelParam::FilterAssign, 1.0);
     for unit in [FilterUnit::X, FilterUnit::Y] {
         filter(&mut g, unit, FilterParam::On, 1.0);
-        filter(&mut g, unit, FilterParam::Freq, 1.0);
+        filter(&mut g, unit, FilterParam::Freq, 0.0);
     }
     let level = |g: &mut Graph| {
         frames(g, 9_600);
@@ -246,11 +246,11 @@ fn each_filter_unit_has_its_own_freq() {
     };
     let open = level(&mut g);
     assert!(open > 0.45, "{open}");
-    // The channel is on Y: X's FREQ leaves it alone, Y's closes it.
-    filter(&mut g, FilterUnit::X, FilterParam::Freq, 0.0);
+    // Units default to HP. The channel is on Y: X's FREQ leaves it alone, Y's closes it.
+    filter(&mut g, FilterUnit::X, FilterParam::Freq, 1.0);
     assert!((level(&mut g) - open).abs() < 1e-3, "X moved Y");
-    filter(&mut g, FilterUnit::Y, FilterParam::Freq, 0.0);
-    assert!(level(&mut g) < 0.01, "Y at 30 Hz");
+    filter(&mut g, FilterUnit::Y, FilterParam::Freq, 1.0);
+    assert!(level(&mut g) < 0.01, "Y HP fully closed");
 }
 
 #[test]
