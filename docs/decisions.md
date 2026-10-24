@@ -1186,6 +1186,77 @@ Date of decisions: 2026-10-18.
   field · operator · value rows (needs ~380px); saved filters in settings
   (the core owns library data, and presets reference tags and playlists).
 
+## D36. Automatic library backups and restore
+
+- Date: 2026-10-24. Status: accepted (maintainer request 2026-10-24). Task:
+  [`phases/phase-1.md`](phases/phase-1.md) "Library backups". User notes:
+  [`backups.md`](backups.md). Evidence:
+  [`research/rekordbox-pain-points.md`](research/rekordbox-pain-points.md)
+  (DJs lose every cue and grid when rekordbox's database breaks; its own
+  backup is Professional-plan only).
+- Context: cues, grids, tags, playlists and history exist only in `reks.sqlite`
+  (D19). Until now only stick databases were backed up (D23).
+- Decision:
+  - **Snapshots use SQLite's online backup API** (`rusqlite` feature `backup`:
+    gated code in the crate already used, no new dependency, licence
+    unchanged), never a file copy: with WAL (D3) a copy misses what sits in
+    `-wal`. The source is the library's writer connection, so a snapshot is a
+    consistent state; it blocks other queries for the copy (milliseconds for a
+    few thousand tracks). Each snapshot is switched to rollback-journal mode,
+    so it is one self-contained `.sqlite` file.
+  - **Where:** `app_data_dir/library-backups/` next to the DB (data dir, not
+    cache: it can be the only copy, as with D23). Names
+    `reks-<UTC YYYYMMDDTHHMMSSmmmZ>-<reason>.sqlite`. Written as a hidden
+    `.partial` file, verified, then renamed, so a half-written or failed
+    snapshot never sits among the good ones.
+  - **When:** on app start if the newest snapshot is over 24 h old; before a
+    migration changes a library that has data (inside `Library::open`, with
+    the pre-migration schema); before a rekordbox XML import, a convert with
+    Replace and a play history import (the Tauri commands call
+    `Library::snapshot(reason)`; future bulk edit and merge do the same); on
+    "Back up now"; and before a restore. Reasons are the `BackupReason` enum.
+  - **Verified:** every snapshot gets `PRAGMA integrity_check` on its copy;
+    listings use `quick_check`. A failed snapshot is deleted, logged and kept
+    as `BackupStatus.last_failure` (cleared by the next success). It never
+    blocks start-up, a migration or a bulk operation; the UI warns with a
+    toast at start-up and in Settings → Library → Backups. Whether to
+    continue after a failed pre-operation snapshot is the caller's call;
+    today all three carry on.
+  - **Retention** (pure, `backup::retention`): the newest N (setting
+    `backup.keep`, default 10, 1–100) plus the newest snapshot of each of the
+    last 8 calendar weeks (Monday to Sunday, UTC). Pruned after each
+    successful snapshot. Files that are not ours are never touched.
+  - **Restore** (`Library::restore_backup`): the file is opened read-only and
+    must pass `integrity_check`, be a reks library (`user_version` > 0 with
+    `track` and `playlist` tables) and not come from a newer schema than the
+    app knows (`Error::BackupTooNew`, listed as "Newer reks", never
+    restorable). Then a `before-restore` snapshot of the current library is
+    taken (if it fails, the restore is refused), then the snapshot is loaded
+    into the live connection with the backup API (all or nothing; WAL mode
+    and pragmas stay) and migrated if older. The command refuses while a
+    scan, import, export or conversion runs, and the UI then restarts the
+    app: the decks, analysis queue and loaded track ids belong to the replaced
+    library, and a restart is the one way to be sure none survives.
+  - Settings: `backup.keep`. UI: Settings → Library → Backups (list with date,
+    reason, tracks, playlists, size; Restore…; Back up now; Show in folder;
+    keep count).
+- Rationale: the cheapest protection against the failure DJs complain about
+  most. Time-based names and a pure retention function keep it testable
+  without clocks or a device.
+- Rejected: copying the file (WAL); `VACUUM INTO` (needs SQLite 3.27+, fine
+  here, but the backup API also restores in place and is what rusqlite
+  wraps); replacing the DB file and reconnecting at restore (leaves the
+  analysis queue and mixer holding stale ids and needs a connection swap
+  behind `Arc<Library>`); backups in the cache dir (D19); a separate
+  "backups" plan tier (not a paywalled feature here).
+- Risks: a backup lives on the same disk as the library, so it does not
+  protect against a dead disk; the user can copy the folder (Show in folder)
+  and a configurable location is a later option. Restoring needs the
+  destination and source page sizes to match (both are SQLite's default; a
+  mismatch makes the restore fail whole, with the library untouched).
+  Restoring an older snapshot loses what happened after it, by design; the
+  `before-restore` snapshot is the way back.
+
 ## D37. Relocating missing files: content decides, names only suggest
 
 - Date: 2026-10-24. Status: accepted (maintainer request). Task:

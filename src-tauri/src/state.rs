@@ -108,6 +108,12 @@ impl AppState {
             Ok(dir) => tracing::info!(cache = %dir.display(), "cache dir"),
             Err(err) => tracing::warn!(%err, "stored cache dir unusable, using the default"),
         }
+        // At most one a day; a failure is recorded for Settings and never stops start-up.
+        match library.snapshot_if_due() {
+            Ok(Some(info)) => tracing::info!(backup = %info.name, "library backed up"),
+            Ok(None) => {}
+            Err(err) => tracing::warn!(%err, "start-up library backup failed"),
+        }
         let library = Arc::new(library);
         let analysis = Analysis::start(&library, model_dir);
         Ok(Self {

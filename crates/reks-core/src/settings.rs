@@ -13,6 +13,7 @@ use rusqlite::{Connection, OptionalExtension};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::backup::{DEFAULT_KEEP, KEEP_RANGE};
 use crate::db::create_dir;
 use crate::error::{Error, Result};
 use crate::fileinfo::library_path;
@@ -47,6 +48,8 @@ pub const CACHE_DIR: &str = "storage.cache_dir";
 pub const UI_STATE: &str = "ui.state";
 /// [`AnlzPreference`]: where USB exports take a track's analysis from.
 pub const ANLZ_PREFERENCE: &str = "export.anlz_preference";
+/// How many recent library backups to keep (`backup` module).
+pub const BACKUP_KEEP: &str = "backup.keep";
 
 /// Where a USB export takes a track's ANLZ files (waveforms, beatgrid, cues)
 /// from when both rekordbox's local analysis cache and reks's own analysis
@@ -191,6 +194,8 @@ pub struct Settings {
     pub cache_dir: PathBuf,
     pub ui: UiState,
     pub anlz_preference: AnlzPreference,
+    /// Recent library backups kept; one per week for 8 weeks stays besides.
+    pub backup_keep: u32,
     /// This build has the OneLibrary key built in ([`crate::secret::builtin`]).
     pub onelibrary_key_builtin: bool,
 }
@@ -276,6 +281,8 @@ pub struct SettingsPatch {
     pub mixer_eq: Option<MixerEq>,
     pub ui: Option<UiState>,
     pub anlz_preference: Option<AnlzPreference>,
+    /// Clamped to [`crate::backup::KEEP_RANGE`].
+    pub backup_keep: Option<u32>,
 }
 
 /// Lets `null` mean "set to none" rather than "absent".
@@ -316,6 +323,7 @@ impl Library {
             cache_dir: self.cache_dir(),
             ui: get(&conn, UI_STATE)?.unwrap_or_default(),
             anlz_preference: get(&conn, ANLZ_PREFERENCE)?.unwrap_or_default(),
+            backup_keep: backup_keep(&conn),
             onelibrary_key_builtin: crate::secret::builtin::present(),
         })
     }
@@ -364,6 +372,10 @@ impl Library {
             }
             if let Some(p) = patch.anlz_preference {
                 put(&tx, ANLZ_PREFERENCE, Some(&p))?;
+            }
+            if let Some(n) = patch.backup_keep {
+                let keep = n.clamp(*KEEP_RANGE.start(), *KEEP_RANGE.end());
+                put(&tx, BACKUP_KEEP, Some(&keep))?;
             }
             tx.commit()?;
         }
@@ -515,6 +527,17 @@ impl Library {
         }
         Ok(())
     }
+}
+
+/// The `backup.keep` setting; reads that fail fall back to the default so a
+/// backup is never skipped over a settings problem.
+pub(crate) fn backup_keep(conn: &Connection) -> u32 {
+    get::<u32>(conn, BACKUP_KEEP)
+        .ok()
+        .flatten()
+        .map_or(DEFAULT_KEEP, |n| {
+            n.clamp(*KEEP_RANGE.start(), *KEEP_RANGE.end())
+        })
 }
 
 fn get<T: DeserializeOwned>(conn: &Connection, key: &str) -> Result<Option<T>> {
@@ -708,6 +731,7 @@ mod tests {
             mixer_eq: Some(MixerEq::ThreeBand),
             ui: Some(ui.clone()),
             anlz_preference: Some(AnlzPreference::ReksFirst),
+            backup_keep: Some(20),
         })
         .unwrap();
         let s = lib
@@ -735,6 +759,7 @@ mod tests {
         assert_eq!(s.mixer_eq, MixerEq::ThreeBand);
         assert_eq!(s.ui, ui);
         assert_eq!(s.anlz_preference, AnlzPreference::ReksFirst);
+        assert_eq!(s.backup_keep, 20);
         assert_eq!(lib.settings().unwrap(), s);
 
         let s = lib

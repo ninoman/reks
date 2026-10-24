@@ -1047,6 +1047,8 @@ export interface Settings {
   ui: UiState;
   /** Whose analysis a USB export writes when rekordbox and reks both have a track. */
   anlzPreference: AnlzPreference;
+  /** Recent library backups kept (1..=100); one per week for 8 weeks stays besides. */
+  backupKeep: number;
   /** This build has the OneLibrary key built in; the key itself never leaves Rust. */
   onelibraryKeyBuiltin: boolean;
 }
@@ -1066,6 +1068,7 @@ export interface SettingsPatch {
   mixerFilters?: MixerFilters;
   ui?: UiState;
   anlzPreference?: AnlzPreference;
+  backupKeep?: number;
 }
 
 export interface LibraryRoot {
@@ -1237,6 +1240,84 @@ export function remapApply(rootId: number, folder: string): Promise<RemapReport>
 /** Moves the cache (artwork, waveforms) to `path` and returns the new settings. */
 export function cacheDirMove(path: string): Promise<Settings> {
   return invoke("cache_dir_move", { path });
+}
+
+/** `backups_*`, `backup_*` (reks-core `backup`, D36). Why a library snapshot was taken. */
+export type BackupReason =
+  | "startup"
+  | "migration"
+  | "manual"
+  | "beforeRestore"
+  | "xmlImport"
+  | "convertReplace"
+  | "historyImport";
+
+export interface BackupContents {
+  schemaVersion: number;
+  tracks: number;
+  /** Not counting folders. */
+  playlists: number;
+}
+
+/** One snapshot in the backup folder. */
+export interface BackupInfo {
+  /** File name; what `backupRestore` takes. */
+  name: string;
+  /** UTC ISO-8601. */
+  takenAt: string;
+  reason: BackupReason;
+  sizeBytes: number;
+  /** `null` when `problem` is set. */
+  contents: BackupContents | null;
+  /** Why it cannot be restored (failed its integrity check); `null` if it can. */
+  problem: string | null;
+  /** Made by a newer reks than this one: listed, not restorable. */
+  tooNew: boolean;
+}
+
+export interface BackupFailure {
+  reason: BackupReason;
+  /** UTC ISO-8601. */
+  at: string;
+  message: string;
+}
+
+export interface BackupStatus {
+  dir: string | null;
+  /** The newest backup that failed, until one succeeds again. */
+  lastFailure: BackupFailure | null;
+}
+
+/** The snapshots, newest first. */
+export function backupsList(): Promise<BackupInfo[]> {
+  return invoke("backups_list");
+}
+
+export function backupStatus(): Promise<BackupStatus> {
+  return invoke("backup_status");
+}
+
+/** "Back up now". */
+export function backupNow(): Promise<BackupInfo> {
+  return invoke("backup_now");
+}
+
+/**
+ * Replaces the library with the snapshot, after snapshotting the current one.
+ * Follow with `backupRestart`: loaded state belongs to the replaced library.
+ */
+export function backupRestore(name: string): Promise<void> {
+  return invoke("backup_restore", { name });
+}
+
+/** Restarts the app on the restored library. */
+export function backupRestart(): Promise<void> {
+  return invoke("backup_restart");
+}
+
+/** Opens the backup folder in the system file manager. */
+export function backupShowFolder(): Promise<void> {
+  return invoke("backup_show_folder");
 }
 
 /** File system of a volume (`device::FsKind`). The planner turns it into warnings. */

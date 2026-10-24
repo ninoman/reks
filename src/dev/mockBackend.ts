@@ -40,6 +40,7 @@ import type {
   TrackRow,
 } from "../lib/ipc";
 import { mockAdopt } from "./mockAdopt";
+import { createMockBackups } from "./mockBackups";
 import { mockBrowse } from "./mockBrowse";
 import { mockGrid } from "./mockGrid";
 import { mockHistory } from "./mockHistory";
@@ -155,6 +156,7 @@ for (const t of TRACKS) {
 const history = mockHistory(TRACKS);
 const tags = createMockTags(TRACKS.length);
 const presets = createMockPresets();
+const backups = createMockBackups();
 
 /** A row as the backend returns it: with its current tags. */
 const tagged = (r: TrackRow): TrackRow => ({ ...r, tags: tags.tagsOf(r.id) });
@@ -289,6 +291,7 @@ let settings: Settings = {
   mixerFilters: "show",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
+  backupKeep: 10,
   // Like a release build.
   onelibraryKeyBuiltin: true,
   ui: {
@@ -1255,6 +1258,7 @@ mockIPC((cmd, payload) => {
         mockGrid(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
         mockMix(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
         mockReport(cmd, args) ??
+        backups(cmd, args) ??
         null
       );
   }

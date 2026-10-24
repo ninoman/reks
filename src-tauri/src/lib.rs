@@ -3,6 +3,7 @@
 
 mod adopt;
 mod analysis;
+mod backup;
 mod browse;
 mod commands;
 mod grid;
@@ -115,6 +116,12 @@ pub fn run() {
             commands::library_root_add,
             commands::library_root_remove,
             commands::cache_dir_move,
+            backup::backups_list,
+            backup::backup_status,
+            backup::backup_now,
+            backup::backup_restore,
+            backup::backup_restart,
+            backup::backup_show_folder,
             commands::devices_list,
             commands::device_eject,
             browse::device_library,

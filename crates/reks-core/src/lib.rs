@@ -5,6 +5,7 @@
 pub mod adopt;
 pub mod analysis;
 pub mod artwork;
+pub mod backup;
 pub mod beatgrid;
 pub mod bulk_edit;
 pub mod convert;
@@ -35,6 +36,7 @@ pub mod track;
 
 pub use analysis::{AnalysisAnchor, AnalysisJob, AnalysisRecord, MappingCandidate, StoreOutcome};
 pub use artwork::ArtworkId;
+pub use backup::{BackupContents, BackupFailure, BackupInfo, BackupReason, BackupStatus};
 pub use beatgrid::{BeatMark, Beatgrid, GridAnchor, GridEdit};
 pub use bulk_edit::{BulkOutcome, BulkPatch, CommentEdit};
 pub use cue::{HOT_CUE_PALETTE, HOT_CUE_SLOTS, MAX_CUE_NAME_CHARS};

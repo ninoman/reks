@@ -29,6 +29,42 @@ pub fn today_utc() -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// Inverse of [`iso8601_utc`]: Unix milliseconds of `YYYY-MM-DDTHH:MM:SS.mmmZ`.
+/// `None` for anything else.
+pub fn parse_iso8601_utc(s: &str) -> Option<i64> {
+    let b = s.as_bytes();
+    let shape = b"0000-00-00T00:00:00.000Z";
+    if b.len() != shape.len()
+        || !b.iter().zip(shape).all(|(c, s)| {
+            if *s == b'0' {
+                c.is_ascii_digit()
+            } else {
+                c == s
+            }
+        })
+    {
+        return None;
+    }
+    let n = |r: std::ops::Range<usize>| s[r].parse::<i64>().ok();
+    let (y, m, d) = (n(0..4)?, n(5..7)?, n(8..10)?);
+    let (hh, mm, ss, ms) = (n(11..13)?, n(14..16)?, n(17..19)?, n(20..23)?);
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) || hh > 23 || mm > 59 || ss > 60 {
+        return None;
+    }
+    let days = days_from_civil(y, m, d);
+    Some(((days * 24 + hh) * 60 + mm) * 60_000 + ss * 1000 + ms)
+}
+
+/// (year, month, day) → days since 1970-01-01 (Hinnant's `days_from_civil`).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = y - i64::from(m <= 2);
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
 fn unix_millis(t: SystemTime) -> i64 {
     let ms = |d: std::time::Duration| i64::try_from(d.as_millis()).unwrap_or(i64::MAX);
     match t.duration_since(UNIX_EPOCH) {
@@ -79,6 +115,16 @@ mod tests {
             iso8601_utc(at(4_107_542_399_000)),
             "2100-02-28T23:59:59.000Z"
         );
+    }
+
+    #[test]
+    fn parse_inverts_format() {
+        for ms in [0, 951_782_400_000, 1_792_411_384_567, 4_107_542_399_000] {
+            assert_eq!(parse_iso8601_utc(&iso8601_utc(at(ms))), Some(ms));
+        }
+        assert_eq!(parse_iso8601_utc("2026-10-19"), None);
+        assert_eq!(parse_iso8601_utc("2026-13-19T12:03:04.567Z"), None);
+        assert_eq!(parse_iso8601_utc("2026-10-19T12:03:04.567+"), None);
     }
 
     #[test]

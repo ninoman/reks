@@ -1,6 +1,6 @@
 /**
  * Settings (phase 1 task 13), one tab per group in a sidebar: Library
- * (library folders, cache folder), Playback (output device, sample rate,
+ * (library folders, cache folder, library backups), Playback (output device, sample rate,
  * buffer, headphone cue: `OutputSettings`), Display (theme, key notation),
  * Decks (the waveform style of the player deck and the Mix view, what SYNC
  * aligns), Mixer (the EQ layout and which mixer controls the Mix view shows).
@@ -17,6 +17,7 @@ import { type SettingsTab, useSettings } from "../store/settings";
 import { ErrorMessage } from "./ErrorMessage";
 import { OutputSettings } from "./OutputSettings";
 import { changeLibraryFolder, findMissingFiles } from "./relocateActions";
+import { BackupSettings } from "./settings/BackupSettings";
 import { DeckSettings } from "./settings/DeckSettings";
 import { DisplaySettings } from "./settings/DisplaySettings";
 import { MixerSettings } from "./settings/MixerSettings";
@@ -135,6 +136,7 @@ function SettingsBody({
         <Panel value="library">
           <LibraryFolders />
           {settings !== null && <CacheFolder cacheDir={settings.cacheDir} />}
+          {settings !== null && <BackupSettings keep={settings.backupKeep} />}
         </Panel>
         {settings !== null && (
           <>

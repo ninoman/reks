@@ -9,7 +9,7 @@ use reks_core::history::{
     self, HistoryImportPlan, ImportChoices, ImportReport, SessionDetail, SessionId, SessionPatch,
     SessionQuery, SessionRef, SessionRow,
 };
-use reks_core::{OneLibraryKey, TrackId};
+use reks_core::{BackupReason, OneLibraryKey, TrackId};
 use reks_export_onelibrary::history::{read_both, OneLibraryStatus};
 use reks_export_rb::device::{self, DeviceInfo};
 use reks_export_rb::history::{HistoryReadOptions, HistorySource, BACKUP_MANIFEST};
@@ -17,6 +17,7 @@ use reks_export_rb::onelibrary::resolve_key;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::backup;
 use crate::commands::{blocking, CmdError, CmdResult};
 use crate::state::AppState;
 
@@ -180,5 +181,9 @@ pub async fn history_import(
             }
         }
     };
-    blocking(&state, move |lib| history::import(&plan, &choices, lib)).await
+    blocking(&state, move |lib| {
+        backup::before_bulk(lib, BackupReason::HistoryImport);
+        history::import(&plan, &choices, lib)
+    })
+    .await
 }
