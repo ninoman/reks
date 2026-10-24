@@ -171,9 +171,9 @@ describe("pads", () => {
       ["FINE", "1/8", "1/4", "1/2", "1", "2", "4", "8"],
       ["1", "2", "4", "8", "16", "32", "64", "128"],
     ]);
-    expect(LOOP_PAGES.map((p) => p.map(formatBeats))).toEqual([
-      ["1/8", "1/4", "1/2", "1", "2", "4", "8", "16"],
-      ["1/4", "1/2", "1", "2", "4", "8", "16", "32"],
+    expect(LOOP_PAGES.map((p) => p.map(formatLoopBeats))).toEqual([
+      ["1/64", "1/32", "1/16", "1/8", "1/4", "1/2", "1", "2"],
+      ["4", "8", "16", "32", "64", "128", "256", "512"],
     ]);
     expect(JUMP_PAGES[0]?.[0]).toBe(1 / 32);
   });
@@ -221,14 +221,14 @@ describe("tempoForBpm", () => {
 });
 
 describe("loop size", () => {
-  it("halves and doubles within 1/32 … 512", () => {
+  it("halves and doubles within 1/64 … 512", () => {
     expect(stepLoopSize(4, false)).toBe(2);
     expect(stepLoopSize(4, true)).toBe(8);
     expect(stepLoopSize(1, false)).toBe(1 / 2);
     expect(stepLoopSize(LOOP_SIZE_MIN, false)).toBe(LOOP_SIZE_MIN);
     expect(stepLoopSize(LOOP_SIZE_MAX, true)).toBe(LOOP_SIZE_MAX);
     expect(stepLoopSize(256, true)).toBe(512);
-    expect(stepLoopSize(1 / 16, false)).toBe(1 / 32);
+    expect(stepLoopSize(1 / 32, false)).toBe(1 / 64);
   });
 
   it("reads as beats, fractions, or two decimals for an unquantised manual loop", () => {

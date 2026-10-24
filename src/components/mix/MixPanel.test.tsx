@@ -69,6 +69,7 @@ const state = (over: Partial<MixState> = {}): MixState => ({
   xruns: 0,
   masterDeck: null,
   decks: [idleDeck, idleDeck, idleDeck, idleDeck],
+  preview: idleDeck,
   meters: Array.from({ length: 4 }, () => ({ level: 0, clip: false })),
   masterMeter: { level: 0, clip: false },
   ...over,

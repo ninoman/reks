@@ -52,7 +52,7 @@ pub const LOOP_XFADE_MS: u32 = 4;
 pub const FINE_JUMP_MS: u32 = 10;
 
 /// Shortest and longest beat loop (halve/double stop here).
-pub const LOOP_MIN_BEATS: f64 = 1.0 / 32.0;
+pub const LOOP_MIN_BEATS: f64 = 1.0 / 64.0;
 pub const LOOP_MAX_BEATS: f64 = 512.0;
 
 /// A loop, in the deck's source frames.

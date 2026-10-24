@@ -82,17 +82,25 @@ function css([r, g, b]: [number, number, number]): string {
 }
 
 /**
- * The band colours weighted by the band levels, brightened so the strongest
- * channel is full: the hue says which bands dominate, the height says how loud.
+ * Band levels are raised to this power before mixing so the dominant band sets
+ * the hue; a linear mix of three similar levels washes out towards white.
+ */
+const MIX_SHARPNESS = 3;
+/** The strongest channel's level after mixing (0..255), below full to keep it from glaring. */
+const MIX_PEAK = 217;
+
+/**
+ * The band colours weighted by the band levels, scaled so the strongest
+ * channel is `MIX_PEAK`: the hue says which bands dominate, the height says how loud.
  */
 export function mixColour(colours: [number, number, number][], weights: number[]): string {
   const rgb: [number, number, number] = [0, 0, 0];
   colours.forEach((c, i) => {
-    const w = weights[i] ?? 0;
+    const w = (weights[i] ?? 0) ** MIX_SHARPNESS;
     for (let k = 0; k < 3; k++) rgb[k] = (rgb[k] ?? 0) + w * (c[k] ?? 0);
   });
   const top = Math.max(...rgb);
-  return css(top > 0 ? (rgb.map((v) => (v * 255) / top) as [number, number, number]) : rgb);
+  return css(top > 0 ? (rgb.map((v) => (v * MIX_PEAK) / top) as [number, number, number]) : rgb);
 }
 
 /** `a` towards `b` by `t` (0..1). */

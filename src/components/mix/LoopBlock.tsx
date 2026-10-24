@@ -7,6 +7,7 @@
  * reads EXIT while looping. What can't act yet is disabled, not hidden. IN, OUT and
  * RELOOP need no grid; the size and ‹ › of the next size do.
  */
+import { Fragment } from "react";
 import type { DeckAction } from "../../lib/mixKeys";
 import type { LoopBlockState, LoopPage } from "../../lib/mixView";
 import { Button } from "../ui/Button";
@@ -66,8 +67,9 @@ export function LoopBlock({ deck, state, loaded, page, onPage, keyFor, actions }
           </Segment>
         ))}
       </SegmentedControl>
+      {/* Keyed so a page switch mounts fresh buttons instead of fading one page's styles into the other's. */}
       {page === "beat" ? (
-        <>
+        <Fragment key="beat">
           <Button
             size="xs"
             variant="control"
@@ -105,9 +107,9 @@ export function LoopBlock({ deck, state, loaded, page, onPage, keyFor, actions }
           >
             ›
           </Button>
-        </>
+        </Fragment>
       ) : (
-        <>
+        <Fragment key="manual">
           <Button
             size="xs"
             variant="control"
@@ -146,7 +148,7 @@ export function LoopBlock({ deck, state, loaded, page, onPage, keyFor, actions }
           >
             {state.looping ? "EXIT" : "RELOOP"}
           </Button>
-        </>
+        </Fragment>
       )}
     </fieldset>
   );

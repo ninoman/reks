@@ -53,7 +53,7 @@ Pain points, from the code and the measurements above.
    mode the only sign of a loop is the band on the waveform.
 2. There is no loop length readout. The pads cover 1/8…32
    ([`mixView.ts:179`](../../src/lib/mixView.ts)), but the engine resizes to
-   1/32…512 (`LOOP_MIN_BEATS` / `LOOP_MAX_BEATS`,
+   1/64…512 (`LOOP_MIN_BEATS` / `LOOP_MAX_BEATS`,
    [`graph.rs:46`](../../crates/reks-mix/src/graph.rs)). A loop doubled past
    32 lights no pad ([`DeckPads.tsx:381`](../../src/components/mix/DeckPads.tsx)).
    An AUTO memory loop entered on a grid-less deck reports 0 beats
@@ -361,7 +361,7 @@ visible, as on the rest of the deck.
 |---|---|---|
 | IN | Sets a pending loop-in at the playhead (nearest beat with Q), drawn as a mark on both waveforms; lit while pending | Moves the loop's start to the playhead (nearest beat with Q), end kept; ignored if it would leave a loop under 8 ms |
 | OUT | With a pending IN behind the head: loop IN → playhead (nearest beat with Q), looping at once. Disabled without a pending IN | Moves the loop's end to the playhead (nearest beat with Q), start kept |
-| ½ / 2× | Halve or double the size LOOP uses next (`DeckMeta.lastLoop`, 1/32 … 512); the readout dims | Halve or double the loop, start kept (`LoopResize`) |
+| ½ / 2× | Halve or double the size LOOP uses next (`DeckMeta.lastLoop`, 1/64 … 512); the readout dims | Halve or double the loop, start kept (`LoopResize`) |
 | Size readout | The next size, dimmed ("4 beats") | The active loop's length: beats ("1/16", "64", "3.87" for an unquantised manual loop), or seconds without a grid |
 | LOOP | Loop of the shown size from the playhead (`BeatLoop`; quantised start as today) | Leaves the loop, keeping it for RELOOP. Lit while any loop plays: beat, manual, memory or AUTO |
 | RELOOP | Jumps back into the last loop (or a memory loop just called) and loops. Disabled when there is none | Same as LOOP: leaves it, keeping it |

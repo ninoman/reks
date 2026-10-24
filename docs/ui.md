@@ -536,7 +536,8 @@ Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light g
   - BEAT JUMP: page 1 FINE (1/32 beat), 1/8, 1/4, 1/2, 1, 2, 4, 8; page 2
     1 … 128. Split pads: left half ◀ back, right half ▶ forward. Jumps keep
     the beat phase while playing.
-  - BEAT LOOP: page 1 1/8 … 16, page 2 1/4 … 32. A pad sets a loop from the
+  - BEAT LOOP (rekordbox's sizes): page 1 1/64 … 2, page 2 4 … 512 (opens on
+    page 2, where the default 4 is). A pad sets a loop from the
     playhead (quantised) or resizes the active one (halved / doubled to the
     size, start kept: `loopPadControls`); the active size is lit and pressing
     it again exits.
@@ -635,7 +636,7 @@ waveform and the pads on the player deck.
 | Page | Control | Not looping | Looping (lit) |
 |---|---|---|---|
 | BEAT | size | the next size (`DeckMeta.lastLoop`); click loops that size (needs a grid) | the loop's length (`64`, `1/16`, `3.87`, or `1.25s` without a grid); click leaves it |
-| BEAT | ‹ › | halve / double the next size (1/32 … 512; needs a grid) | resize the loop (by time without a grid) |
+| BEAT | ‹ › | halve / double the next size (1/64 … 512; needs a grid) | resize the loop (by time without a grid); a beat loop's new size stays the next size after EXIT |
 | IN/OUT | IN | pending loop IN at the playhead; lit, and drawn on both waveforms (`deck-loop-in`) | moves the loop's start |
 | IN/OUT | OUT | loops from a pending IN to the playhead; disabled until the head is past IN | moves the loop's end |
 | IN/OUT | RELOOP / EXIT | RELOOP: back into the last loop; disabled when there is none | EXIT: leaves it, keeping it |

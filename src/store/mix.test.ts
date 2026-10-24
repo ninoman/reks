@@ -24,30 +24,6 @@ vi.mock("../lib/ipc", () => ({
 const ipc = await import("../lib/ipc");
 const { libraryId, useMix } = await import("./mix");
 
-const running: MixState = {
-  device: "Out",
-  sampleRate: 44_100,
-  channels: 2,
-  bufferFrames: null,
-  deviceLost: false,
-  xruns: 0,
-  masterDeck: null,
-  decks: [],
-  meters: Array.from({ length: 4 }, () => ({ level: 0, clip: false })),
-  masterMeter: { level: 0, clip: false },
-};
-
-const outputs4: CueRouting = { type: "outputs", master: [0, 1], cue: [2, 3] };
-const options = (channels: number) => ({
-  rates: [48_000],
-  defaultRate: 48_000,
-  channels,
-  defaultCue: channels >= 4 ? outputs4 : ({ type: "off" } satisfies CueRouting),
-  bufferFrames: null,
-});
-
-const initial = useMix.getState();
-
 const deckView = (over: Partial<DeckView> = {}): DeckView => ({
   trackId: null,
   loaded: false,
@@ -72,6 +48,31 @@ const deckView = (over: Partial<DeckView> = {}): DeckView => ({
   master: false,
   ...over,
 });
+
+const running: MixState = {
+  device: "Out",
+  sampleRate: 44_100,
+  channels: 2,
+  bufferFrames: null,
+  deviceLost: false,
+  xruns: 0,
+  masterDeck: null,
+  decks: [],
+  preview: deckView(),
+  meters: Array.from({ length: 4 }, () => ({ level: 0, clip: false })),
+  masterMeter: { level: 0, clip: false },
+};
+
+const outputs4: CueRouting = { type: "outputs", master: [0, 1], cue: [2, 3] };
+const options = (channels: number) => ({
+  rates: [48_000],
+  defaultRate: 48_000,
+  channels,
+  defaultCue: channels >= 4 ? outputs4 : ({ type: "off" } satisfies CueRouting),
+  bufferFrames: null,
+});
+
+const initial = useMix.getState();
 
 const sent = () => vi.mocked(ipc.mixControl).mock.calls.map((c) => c[0]);
 
@@ -428,6 +429,19 @@ describe("mix store", () => {
     ]);
   });
 
+  it("resizing a playing beat loop keeps the new size for the next loop", () => {
+    useMix.setState({
+      status: "running",
+      live: {
+        ...running,
+        decks: [deckView({ loaded: true, loopRegion: { startMs: 0, endMs: 1, beats: 4 } })],
+      },
+    });
+    useMix.getState().loopResize(0, true);
+    expect(sent()).toEqual([{ type: "loopResize", deck: 0, double: true }]);
+    expect(useMix.getState().decks[0]?.lastLoop).toBe(8);
+  });
+
   it("cues: a pad jumps or sets; edits go to the library and the deck takes the result", async () => {
     const track = {
       kind: "library" as const,
@@ -491,7 +505,7 @@ describe("mix store", () => {
     mix.unload(2);
     expect(useMix.getState().decks[2]).toMatchObject({
       padMode: "hotCue",
-      padPage: { beatJump: 1, beatLoop: 0 },
+      padPage: { beatJump: 1, beatLoop: 1 },
       lastJump: 16,
       loopPage: "manual",
       track: null,

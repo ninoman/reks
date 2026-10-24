@@ -365,8 +365,8 @@ describe("DeckStrip", () => {
     expect(four.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(four);
     expect(a.loopPad).toHaveBeenLastCalledWith(4);
-    fireEvent.click(screen.getByRole("button", { name: "Deck 2 loop 1/8 beats" }));
-    expect(a.loopPad).toHaveBeenLastCalledWith(1 / 8);
+    fireEvent.click(screen.getByRole("button", { name: "Deck 2 loop 512 beats" }));
+    expect(a.loopPad).toHaveBeenLastCalledWith(512);
   });
 
   it("switches pad mode; every mode shows page arrows", () => {

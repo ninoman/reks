@@ -20,6 +20,7 @@ import type { DeckAction } from "../../lib/mixKeys";
 import {
   formatBeats,
   formatClock,
+  formatLoopBeats,
   HOT_CUE_PADS,
   JUMP_PAGES,
   LOOP_PAGES,
@@ -57,6 +58,8 @@ const PAGES: Record<PagedPadMode, readonly (readonly number[])[]> = {
 
 const beatsWord = (b: number) =>
   b === 1 / 32 ? "FINE (1/32 beat)" : `${formatBeats(b)} beat${b === 1 ? "" : "s"}`;
+/** Loop pads have no FINE: 1/32 is a size like the others. */
+const loopWord = (b: number) => `${formatLoopBeats(b)} beat${b === 1 ? "" : "s"}`;
 
 export interface DeckPadsProps {
   deck: number;
@@ -388,13 +391,13 @@ function LoopPads({
         marked={b === lastLoop}
         disabled={!loaded || !grid}
         aria-pressed={active}
-        aria-label={`Deck ${n} loop ${beatsWord(b)}`}
-        hint={active ? "Leave the loop" : `Loop ${beatsWord(b)}`}
+        aria-label={`Deck ${n} loop ${loopWord(b)}`}
+        hint={active ? "Leave the loop" : `Loop ${loopWord(b)}`}
         shortcut={b === lastLoop ? keyFor({ type: "loop" }) : undefined}
         className="font-mono"
         onClick={() => onLoop(b)}
       >
-        {formatBeats(b)}
+        {formatLoopBeats(b)}
       </Pad>
     );
   });
