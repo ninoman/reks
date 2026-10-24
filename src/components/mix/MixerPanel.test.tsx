@@ -132,13 +132,13 @@ describe("MixerPanel", () => {
 
   it("a click picks one filter mode, Shift+click combines them", () => {
     const p = setup();
-    // Y starts on HP: picking BP alone turns HP off.
+    // Both start on HP: picking BP alone turns HP off.
     fireEvent.click(screen.getByRole("button", { name: "Filter Y band-pass" }));
     expect(p.onFilter).toHaveBeenCalledWith("y", "bandPass", true);
     expect(p.onFilter).toHaveBeenCalledWith("y", "highPass", false);
     vi.mocked(p.onFilter).mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Filter X high-pass" }), { shiftKey: true });
-    expect(vi.mocked(p.onFilter).mock.calls).toEqual([["x", "highPass", true]]);
+    fireEvent.click(screen.getByRole("button", { name: "Filter X low-pass" }), { shiftKey: true });
+    expect(vi.mocked(p.onFilter).mock.calls).toEqual([["x", "lowPass", true]]);
   });
 
   it("a click cues one channel alone, Shift+click adds it", () => {

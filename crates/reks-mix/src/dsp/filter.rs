@@ -37,17 +37,17 @@ pub struct Filter {
 }
 
 impl Filter {
-    /// Off, FREQ fully open, resonance at MILD, LP selected.
+    /// Off, FREQ at its minimum (HP fully open), resonance at MILD, HP selected.
     pub fn new(sample_rate: u32) -> Self {
         let fs = f64::from(sample_rate);
         let s = |v: f32| Smoother::new(v, sample_rate);
         let mut f = Self {
             sample_rate: fs,
-            freq: s(1.0),
+            freq: s(0.0),
             resonance: s(0.0),
-            lp: s(1.0),
+            lp: s(0.0),
             bp: s(0.0),
-            hp: s(0.0),
+            hp: s(1.0),
             none: s(0.0),
             wet: s(0.0),
             coeffs: SvfCoeffs::new(1_000.0, 1.0, fs),

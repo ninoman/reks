@@ -356,11 +356,11 @@ export const DEFAULT_MASTER: MasterValues = {
 export const DEFAULT_FX: FxValues = { kind: "filter", parameter: 0.5 };
 
 const DEFAULT_FILTER: FilterValues = {
-  freq: 0.5,
+  freq: 0,
   resonance: 0,
-  highPass: false,
+  highPass: true,
   bandPass: false,
-  lowPass: true,
+  lowPass: false,
   on: false,
 };
 
@@ -546,7 +546,7 @@ export const useMix = create<MixStore>((set, get) => {
       ...DEFAULT_CHANNEL,
       filterAssign: ch < 2 ? ("x" as const) : ("y" as const),
     })),
-    filters: { x: { ...DEFAULT_FILTER }, y: { ...DEFAULT_FILTER, lowPass: false, highPass: true } },
+    filters: { x: { ...DEFAULT_FILTER }, y: { ...DEFAULT_FILTER } },
     crossfader: { pos: 0.5, curve: 0 },
     fx: DEFAULT_FX,
     look: DEFAULT_LOOK,
