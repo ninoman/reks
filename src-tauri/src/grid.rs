@@ -33,10 +33,8 @@ pub async fn beatgrid_edit(
             let found = track_transients(lib, id).map_err(|e| e.to_string())?;
             *at = transients::snap(&found, *at);
         }
-        lib.edit_beatgrid_with(id, edit, || {
-            reks_analysis::pipeline::cached_grid(lib, id)
-        })
-        .map_err(|e| e.to_string())
+        lib.edit_beatgrid_with(id, edit, || reks_analysis::pipeline::cached_grid(lib, id))
+            .map_err(|e| e.to_string())
     })
     .await
 }
