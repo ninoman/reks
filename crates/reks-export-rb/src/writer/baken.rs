@@ -341,7 +341,7 @@ fn reconcile(
         };
         bt.anlz = match &t.anlz_source {
             AnlzSource::RekordboxCache { dat } => Some(entry(dat)),
-            AnlzSource::Reks => match reks_anlz.get(&t.track_id) {
+            AnlzSource::Reks | AnlzSource::ReksGrid { .. } => match reks_anlz.get(&t.track_id) {
                 Some(dat) => Some(entry(dat)),
                 None => {
                     return Err(mismatch(

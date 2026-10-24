@@ -426,8 +426,7 @@ Grid editing with tempo sections (added 2026-10-24, maintainer's call; D10
     user-owned grids. Tests: unit tests per edit, property tests (valid
     grids give strictly increasing beats; XML round trip of anchors).
 16. [ ] **Export**: `PQTZ` from `grid_beats`; `anchors_from_pqtz` for stick
-    reads (round trip of the beat list exact, of anchors exact for
-    canonical grids); `AnlzSource::ReksGrid` so a user-owned grid reaches
+    reads (beat list back within 1 ms, anchors exact for canonical grids); `AnlzSource::ReksGrid` so a user-owned grid reaches
     the stick under `rekordboxFirst` without reks analysis; validator
     checks `PQTZ` order (exists) — test it on a stick. Tests: property
     round trip through `PQTZ`, our reader and rekordcrate; XML writes every

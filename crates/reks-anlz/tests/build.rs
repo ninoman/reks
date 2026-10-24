@@ -191,6 +191,17 @@ fn validator_catches_damage() {
         validate_file(FileKind::Dat, &dat, expect)[..],
         [Issue::Beat { index: 1, .. }]
     ));
+    // Beat 3's time set to 0: the beats go back in time (D10, "Grid editing").
+    let mut dat = set.dat.clone();
+    dat[pqtz + 24 + 16 + 4..pqtz + 24 + 16 + 8].copy_from_slice(&0u32.to_be_bytes());
+    assert!(matches!(
+        validate_file(FileKind::Dat, &dat, expect)[..],
+        [Issue::Beat {
+            index: 2,
+            what: "not after the previous beat",
+            ..
+        }]
+    ));
     // Truncated file.
     assert!(matches!(
         validate_file(FileKind::Dat, &set.dat[..100], expect)[..],

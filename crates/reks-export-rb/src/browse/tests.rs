@@ -240,7 +240,7 @@ mod anlz_tests {
             beat(4, 12400, 1100),
             beat(1, 12400, 1584),
         ];
-        let a = anchors(&beats);
+        let a = reks_anlz::grid::anchors_from_pqtz(&beats);
         assert_eq!(a.len(), 2);
         assert_eq!(
             (a[0].position_ms, a[0].bpm_x100, a[0].beat_in_bar),

@@ -598,7 +598,7 @@ fn check_tracks(
             });
         }
 
-        if t.anlz_source == AnlzSource::Reks {
+        if t.anlz_source.reks_built() {
             check_reks_set(root, track_id, &row.analyze_path, &row.file_path, findings)?;
         }
 

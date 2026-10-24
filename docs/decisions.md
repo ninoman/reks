@@ -169,7 +169,10 @@ Date of decisions: 2026-10-18.
   owns (locked or edited, `Library::grid_is_user_owned`) takes reks's
   analysis under `rekordboxFirst` too when reks has one, since rekordbox's
   cached `PQTZ` is copied as it is and the edit would be lost;
-  `rekordboxOnly` still never writes reks's.
+  `rekordboxOnly` still never writes reks's. Since 2026-10-24 (D10, "Grid
+  editing") also when reks has no analysis: rekordbox's cached waveforms
+  are rebuilt with the library's grid (`AnlzSource::ReksGrid`), under
+  `reksFirst` too.
   A track mapped from rekordbox (D10, "rekordbox mapping") counts as reks
   analysis here: its reks-built set holds rekordbox's waveform bytes with
   the library's grid.
@@ -401,8 +404,9 @@ Date of decisions: 2026-10-18.
     jump, loops and quantise use the beats the editor and the stick show.
   - **Export**: `PQTZ` from the beat rule, tempo = the section's; a stick
     `PQTZ` reads back into anchors (new anchor where tempo, bar phase or
-    the expected time changes), and that round-trips the beat list
-    exactly. A user-owned grid now reaches the stick under
+    the expected time changes by over 1 ms; rekordbox 7's own `PQTZ` times
+    sit up to 1 ms off its tempo), which gives the beat list back within
+    1 ms. A user-owned grid now reaches the stick under
     `rekordboxFirst` even when reks has no analysis of the track:
     rekordbox's cached waveforms are rebuilt with the library's grid
     (`AnlzSource::ReksGrid`) instead of rekordbox's `PQTZ` being copied.

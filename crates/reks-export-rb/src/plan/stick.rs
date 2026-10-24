@@ -277,6 +277,13 @@ pub fn anlz_dir(usb_path: &str) -> String {
 }
 
 /// Bytes of an ANLZ set: the `.DAT` plus `.EXT`/`.2EX` beside it, if present.
+/// The `.DAT` has its `.EXT` and `.2EX` beside it.
+pub(crate) fn has_full_set(dat: &Path) -> bool {
+    ANLZ_EXTS
+        .iter()
+        .all(|ext| dat.with_extension(ext).is_file())
+}
+
 pub(crate) fn anlz_set_bytes(dat: &Path) -> u64 {
     ANLZ_EXTS
         .iter()

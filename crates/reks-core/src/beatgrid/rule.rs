@@ -40,17 +40,17 @@ pub struct GridBeat {
 
 impl GridAnchor {
     /// Milliseconds per beat.
-    pub(crate) fn period_ms(&self) -> f64 {
+    pub fn period_ms(&self) -> f64 {
         MS_X100_PER_MINUTE as f64 / self.bpm_x100 as f64
     }
 
     /// Position of the beat `n` beats after this anchor.
-    pub(crate) fn beat_ms(&self, n: i64) -> f64 {
+    pub fn beat_ms(&self, n: i64) -> f64 {
         self.position_ms as f64 + n as f64 * self.period_ms()
     }
 
     /// Bar position of the beat `n` beats after this anchor, 1-based.
-    pub(crate) fn beat_in_bar_after(&self, n: i64) -> u8 {
+    pub fn beat_in_bar_after(&self, n: i64) -> u8 {
         let bpb = i64::from(self.beats_per_bar.max(1));
         ((i64::from(self.beat_in_bar) - 1 + n).rem_euclid(bpb) + 1) as u8
     }

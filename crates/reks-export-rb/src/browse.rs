@@ -195,7 +195,7 @@ pub fn deck_audio(root: &Path, id: u32, sample_rate: u32) -> Result<DeckAudio, B
 pub fn beatgrid(root: &Path, id: u32) -> Result<Beatgrid, BrowseError> {
     let track = stick_track(root, id)?;
     let analysis = read_analysis(root, &track)?;
-    let end_ms = analysis.last_beat_ms.max(i64::from(track.duration) * 1000);
+    let end_ms = (analysis.last_beat_ms + 1).max(i64::from(track.duration) * 1000);
     Ok(Beatgrid {
         beats: beat_marks(&analysis.anchors, end_ms),
         anchors: analysis.anchors,
