@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use reks_core::convert::ConvertPlan;
 use reks_core::history::HistoryImportPlan;
+use reks_core::relocate::RelocatePlan;
 use reks_core::{CancelToken, Library};
 use reks_export_rb::adopt::AdoptPlan;
 use reks_export_rb::devices::DeviceId;
@@ -36,6 +37,10 @@ pub struct AppState {
     pub shown_history: Mutex<ShownHistory>,
     /// The adopt plan the adopt dialog's dry run shows; Adopt applies exactly it.
     pub shown_adopt: Mutex<ShownAdopt>,
+    /// Cancels the running relocate (dry run or apply), if any.
+    pub relocate_cancel: Mutex<Option<CancelToken>>,
+    /// The relocate plan the dialog's dry run shows; Apply relinks exactly it.
+    pub shown_relocate: Mutex<ShownRelocate>,
     /// App data dir (D19): stick backups go under it.
     pub data_dir: PathBuf,
     /// The audio engine: the player deck and the mixer (D30).
@@ -81,6 +86,15 @@ pub struct ShownAdopt {
     pub plan: Option<(u64, AdoptPlan)>,
 }
 
+/// The last relocate plan returned to the UI, under the id the UI sends back.
+#[derive(Debug, Default)]
+pub struct ShownRelocate {
+    /// Id of the newest `relocate_plan` call; ids only grow.
+    pub last_id: u64,
+    /// `(id, plan)` of the newest plan that finished; read by `relocate_apply`.
+    pub plan: Option<(u64, RelocatePlan)>,
+}
+
 impl AppState {
     /// Opens (creating and migrating) the library in `data_dir`, with
     /// derived files under `cache_dir`, and starts the analysis queue with
@@ -106,6 +120,8 @@ impl AppState {
             shown_convert: Mutex::new(ShownConvert::default()),
             shown_history: Mutex::new(ShownHistory::default()),
             shown_adopt: Mutex::new(ShownAdopt::default()),
+            relocate_cancel: Mutex::new(None),
+            shown_relocate: Mutex::new(ShownRelocate::default()),
             data_dir: data_dir.to_path_buf(),
             mix: Mix::default(),
             analysis,

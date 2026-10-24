@@ -1096,6 +1096,144 @@ export function libraryRootRemove(id: number): Promise<void> {
   return invoke("library_root_remove", { id });
 }
 
+// ---------------------------------------------------------------------------
+// Relocate missing files, change a library folder (phase 1 task 15, D37;
+// `reks_core::relocate`).
+// ---------------------------------------------------------------------------
+
+/** Which missing tracks to look for: the missing ones among `ids`, or all. */
+export type RelocateScope = { kind: "tracks"; ids: number[] } | { kind: "allMissing" };
+
+/** Progress while planning (`walking`, `hashing`, `reading`) or applying. */
+export type RelocateEvent =
+  | { type: "walking"; found: number }
+  | { type: "hashing"; done: number; total: number }
+  | { type: "reading"; done: number; total: number }
+  | { type: "applying"; done: number; total: number };
+
+export interface RelocateTrack {
+  id: number;
+  /** Where the library last had the file. */
+  path: string;
+  /** `Artist – Title`, or the file name. */
+  label: string;
+}
+
+export interface FoundFile {
+  path: string;
+  size: number;
+  durationMs: number | null;
+  /** Same byte size as the missing file. */
+  sameSize: boolean;
+}
+
+export interface SureMatch {
+  track: RelocateTrack;
+  file: FoundFile;
+}
+
+/** `sameContent`: identical copies, pick one. `possible`: name or tags and length only, never relinked unless picked. */
+export type ReviewBasis = "sameContent" | "possible";
+
+export interface ReviewItem {
+  track: RelocateTrack;
+  basis: ReviewBasis;
+  /** Best first. */
+  candidates: FoundFile[];
+}
+
+export interface RelocatePlan {
+  folder: string;
+  /** Inside a library folder, so the scan keeps it current. */
+  insideRoot: boolean;
+  lookedFor: number;
+  filesSeen: number;
+  sure: SureMatch[];
+  review: ReviewItem[];
+  notFound: RelocateTrack[];
+  problems: { path: string; message: string }[];
+  cancelled: boolean;
+}
+
+/** The dry run, kept in Rust under `planId` for `relocateApply`. */
+export interface RelocateScan {
+  planId: number;
+  plan: RelocatePlan;
+}
+
+export interface RelocateChoices {
+  /** Track id → the candidate path picked; review tracks left out are skipped. */
+  picks: Record<number, string>;
+  addRoot: boolean;
+}
+
+export interface RelocateReport {
+  relinked: number;
+  skipped: { track: RelocateTrack; reason: string }[];
+  /** Set when the folder was added as a library folder. */
+  root: LibraryRoot | null;
+  /** Cancelled before anything was written. */
+  cancelled: boolean;
+}
+
+/** Looks for the missing tracks in `folder`; writes nothing. */
+export function relocatePlan(
+  scope: RelocateScope,
+  folder: string,
+  onEvent: (e: RelocateEvent) => void,
+): Promise<RelocateScan> {
+  const channel = new Channel<RelocateEvent>();
+  channel.onmessage = onEvent;
+  return invoke("relocate_plan", { scope, folder, onEvent: channel });
+}
+
+/** Relinks the dry run `planId` showed, with the user's picks. */
+export function relocateApply(
+  planId: number,
+  choices: RelocateChoices,
+  onEvent: (e: RelocateEvent) => void,
+): Promise<RelocateReport> {
+  const channel = new Channel<RelocateEvent>();
+  channel.onmessage = onEvent;
+  return invoke("relocate_apply", { planId, choices, onEvent: channel });
+}
+
+/** Stops the running relocate; nothing is written. */
+export function relocateCancel(): Promise<void> {
+  return invoke("relocate_cancel");
+}
+
+export interface RemapPlan {
+  rootId: number;
+  oldPath: string;
+  newPath: string;
+  /** Tracks whose path changes. */
+  tracks: number;
+  /** Library folders inside this one that move with it. */
+  nestedRoots: number;
+  examples: { from: string; to: string }[];
+  /** Files looked for at the new place, and how many exist there. */
+  sampled: number;
+  sampleFound: number;
+  /** New paths another track already has; the change is refused then. */
+  collisions: number;
+}
+
+export interface RemapReport {
+  tracks: number;
+  roots: number;
+}
+
+/** What changing library folder `rootId` to `folder` would do; writes nothing. */
+export function remapPlan(rootId: number, folder: string): Promise<RemapPlan> {
+  return invoke("remap_plan", { rootId, folder });
+}
+
+/** Changes library folder `rootId` to `folder`, rewriting its tracks' paths in one step. */
+export function remapApply(rootId: number, folder: string): Promise<RemapReport> {
+  return invoke("remap_apply", { rootId, folder });
+}
+
 /** Moves the cache (artwork, waveforms) to `path` and returns the new settings. */
 export function cacheDirMove(path: string): Promise<Settings> {
   return invoke("cache_dir_move", { path });

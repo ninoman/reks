@@ -13,6 +13,8 @@ every stick as untested.
 
 - Keeps your own library: folder scan, tags, artwork, a searchable, filterable
   track table, playlists.
+- Finds tracks that went missing after you reorganised folders, by content
+  rather than file name, and can point a whole library folder at its new place.
 - Imports an existing rekordbox collection via `collection.xml` (beatgrids,
   cues, loops, keys, playlists) and writes one back.
 - Exports a USB stick in the legacy rekordbox format (`export.pdb` + ANLZ

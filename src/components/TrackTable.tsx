@@ -43,6 +43,7 @@ import { useTags } from "../store/tags";
 import type { ColumnSpec } from "./columns";
 import { DividerLabel } from "./DividerLabel";
 import { useLibraryStore } from "./libraryStoreContext";
+import { findMissingFiles } from "./relocateActions";
 import { TagSubmenu } from "./TagSubmenu";
 import { fitColumnWidths, ROW_HEIGHTS } from "./trackTableModel";
 import {
@@ -451,6 +452,12 @@ export function TrackTable({ columns: visible }: { columns: ColumnSpec[] }) {
           onSelect={() => useConverter.getState().open(selectedTrackIds())}
         >
           Convert…
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={selectedTrackIds().length === 0}
+          onSelect={() => void findMissingFiles({ kind: "tracks", ids: selectedTrackIds() })}
+        >
+          Find missing files in…
         </ContextMenuItem>
         <ContextMenuItem
           disabled={selectedTrackIds().length === 0}

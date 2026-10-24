@@ -45,6 +45,7 @@ import { mockGrid } from "./mockGrid";
 import { mockHistory } from "./mockHistory";
 import { mockMix } from "./mockMix";
 import { createMockPresets } from "./mockPresets";
+import { mockRelocate } from "./mockRelocate";
 import { mockReport } from "./mockReport";
 import { createMockSmart } from "./mockSmart";
 import { createMockTags } from "./mockTags";
@@ -1249,6 +1250,7 @@ mockIPC((cmd, payload) => {
       return (
         history(cmd, args) ??
         mockAdopt(cmd, args) ??
+        mockRelocate(cmd, args) ??
         mockBrowse(cmd, args, TRACKS) ??
         mockGrid(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
         mockMix(cmd, args, (id) => TRACKS[id - 1]?.needsAnalysis === false) ??
