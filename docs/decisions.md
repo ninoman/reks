@@ -1186,7 +1186,7 @@ Date of decisions: 2026-10-18.
   field · operator · value rows (needs ~380px); saved filters in settings
   (the core owns library data, and presets reference tags and playlists).
 
-## D36. Relocating missing files: content decides, names only suggest
+## D37. Relocating missing files: content decides, names only suggest
 
 - Date: 2026-10-24. Status: accepted (maintainer request). Task:
   [`phases/phase-1.md`](phases/phase-1.md) "Relocate missing files and change

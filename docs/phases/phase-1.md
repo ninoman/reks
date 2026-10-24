@@ -596,7 +596,7 @@ there, the `player_*` commands, polling and transport bar are gone.
 mix engine's deck 2 and `audio_devices` in D30), `artwork_get(artwork_id) -> Response(bytes)`, `overview_waveform(id) ->
 Response(bytes)`, `settings_get`, `settings_set(patch)`, `library_roots`, `library_root_add(path)`,
 `library_root_remove(id)`, `cache_dir_move(path)`,
-`relocate_plan` / `relocate_apply` (progress via Channel) / `relocate_cancel`, `remap_plan` / `remap_apply` (D36).
+`relocate_plan` / `relocate_apply` (progress via Channel) / `relocate_cancel`, `remap_plan` / `remap_apply` (D37).
 
 ## Tasks (each sized for one coding session)
 
@@ -702,7 +702,7 @@ per task; 6 and 7 can run in parallel, 8 needs 7, 9 needs 6 and 7.
    Update / Revert, one **Save…** (saved filter or smart playlist; the smart
    path saves the whole drawer), toolbar Filters button menu.
 
-### Relocate missing files and change a library folder (D36)
+### Relocate missing files and change a library folder (D37)
 
 Added 2026-10-24 (maintainer request, outside the original plan). Rekordbox's
 Relocate relinks the first name match; reks matches by content and asks

@@ -1,5 +1,5 @@
 //! Relocate missing files and change a library folder (Phase 1 task 15,
-//! D36): the dry runs and their applies. Logic lives in `reks_core::relocate`.
+//! D37): the dry runs and their applies. Logic lives in `reks_core::relocate`.
 
 use std::path::PathBuf;
 

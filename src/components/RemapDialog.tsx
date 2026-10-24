@@ -1,5 +1,5 @@
 /**
- * Change a library folder (phase 1 task 15, D36): the music folder moved, so
+ * Change a library folder (phase 1 task 15, D37): the music folder moved, so
  * every track path under it gets the new prefix. The dry run shows counts,
  * a few examples and whether a sample of the files exists at the new place.
  */

@@ -1,5 +1,5 @@
 /**
- * Change a library folder (phase 1 task 15, D36): the new folder was picked →
+ * Change a library folder (phase 1 task 15, D37): the new folder was picked →
  * dry run (counts, examples, a sample of files at the new place) → apply →
  * report. The check and the rewrite are Rust's; the apply re-checks.
  */

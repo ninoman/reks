@@ -1056,7 +1056,7 @@ export function libraryRootRemove(id: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Relocate missing files, change a library folder (phase 1 task 15, D36;
+// Relocate missing files, change a library folder (phase 1 task 15, D37;
 // `reks_core::relocate`).
 // ---------------------------------------------------------------------------
 

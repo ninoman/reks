@@ -1,5 +1,5 @@
 /**
- * Relocate missing files (phase 1 task 15, D36): the folder was picked →
+ * Relocate missing files (phase 1 task 15, D37): the folder was picked →
  * planning (a dry run in Rust, progress, cancellable) → the user's picks →
  * applying → report. Matching and the checks are Rust's; this keeps the
  * step, the picks and the dry run's id.
