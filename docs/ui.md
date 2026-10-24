@@ -314,7 +314,7 @@ read-only.
   Problems), library files with their players (UNVERIFIED badge), then the
   findings by section, each group's tracks folded in a `<details>`. States:
   "Checking every track on the stick…", error with "Try again", "Nothing to
-  report". All wording comes from `device_check` (D36); the report store is
+  report". All wording comes from `device_check` (D38); the report store is
   [`stickCheck.ts`](../src/store/stickCheck.ts), what the main area shows is
   `deviceBrowser.checking`.
 - Selecting anything in the playlist tree or a library history session closes

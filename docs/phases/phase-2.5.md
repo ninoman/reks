@@ -397,7 +397,7 @@ Divider rules
     the Foreign case in DevicesDialog.test.tsx.
 
 13. [x] **Check a stick** (extra task, maintainer request 2026-10-24, outside
-    the original plan; D36): a read-only report for any mounted drive, from
+    the original plan; D38): a read-only report for any mounted drive, from
     rekordbox, reks or another tool, run before a gig. Done in
     [`reks_export_rb::check`](../../crates/reks-export-rb/src/check/mod.rs)
     (`check_stick(device, opts, onelibrary_reader, library)`, never fails):

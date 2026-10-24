@@ -2,7 +2,7 @@
 
 reks reads a plugged-in USB stick and tells you what could go wrong on the
 players, whoever made the stick: rekordbox, reks, Lexicon, djay or another
-tool. It only reads: nothing on the stick changes. Decision: D36 in
+tool. It only reads: nothing on the stick changes. Decision: D38 in
 [`decisions.md`](decisions.md).
 
 **In the app:** sidebar → Devices → hover a drive → the clipboard button

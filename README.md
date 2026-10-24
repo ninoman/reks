@@ -67,7 +67,7 @@ player has to confirm is marked UNVERIFIED. Open work is tracked on the
 | [`docs/decisions.md`](docs/decisions.md) | Architecture and product decisions, with status |
 | [`docs/phases/`](docs/phases/) | Phase 1–6 plans (plus 2.5 and 2.6) with task checklists |
 | [`docs/stick-profiles.md`](docs/stick-profiles.md) | Stick profiles and adopting foreign sticks (spec, D27) |
-| [`docs/check-a-stick.md`](docs/check-a-stick.md) | Check a stick before a gig: what the report checks (user guide, D36) |
+| [`docs/check-a-stick.md`](docs/check-a-stick.md) | Check a stick before a gig: what the report checks (user guide, D38) |
 | [`docs/research.md`](docs/research.md) | Evidence and sources behind the decisions |
 | [`docs/research/`](docs/research/) | Raw research notes per topic |
 | [`docs/analysis-parity.md`](docs/analysis-parity.md) | reks analysis vs rekordbox on the maintainer's library: method, numbers, tuning plan |

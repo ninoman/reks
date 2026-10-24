@@ -1186,7 +1186,7 @@ Date of decisions: 2026-10-18.
   field · operator · value rows (needs ~380px); saved filters in settings
   (the core owns library data, and presets reference tags and playlists).
 
-## D36. Check a stick: a read-only report worded in Rust
+## D38. Check a stick: a read-only report worded in Rust
 
 - Date: 2026-10-24 (maintainer's request; outside the phase plan). Task:
   [`phases/phase-2.5.md`](phases/phase-2.5.md) task 13. User guide:
