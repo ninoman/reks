@@ -11,7 +11,9 @@ import { centreLineColour, type WavePalette, waveBars } from "./waveDraw";
 /** Device pixels per tile. */
 export const TILE_PX = 512;
 /** Tiles kept per strip: the view plus some either side. */
-const MAX_TILES = 16;
+const MAX_TILES = 24;
+/** Tiles [`WaveStrip.prefetch`] keeps ready past each edge of the view. */
+const AHEAD_TILES = 2;
 /** Top of a column's mono byte (`waveformColumns`). */
 const MONO_MAX = 31;
 
@@ -104,6 +106,22 @@ export class WaveStrip {
     for (let i = first; i <= last; i++) {
       const tile = this.tile(i);
       if (tile !== null) ctx.drawImage(tile, i * TILE_PX - left, 0);
+    }
+  }
+
+  /**
+   * Builds at most one missing tile just outside the view. Zoomed in, the
+   * view crosses a tile every few frames; building it on the frame it comes
+   * into view costs that frame (a dropped frame shows as a stutter), so the
+   * frame loop calls this to build them ahead, one per frame.
+   */
+  prefetch(left: number, width: number) {
+    const first = Math.floor(left / TILE_PX);
+    const last = Math.floor((left + width - 1) / TILE_PX);
+    for (let d = 1; d <= AHEAD_TILES; d++) {
+      for (const i of [last + d, first - d]) {
+        if (!this.tiles.has(i) && this.tile(i) !== null) return;
+      }
     }
   }
 

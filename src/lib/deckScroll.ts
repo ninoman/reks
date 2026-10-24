@@ -7,8 +7,8 @@
  */
 
 /** Seconds across the view, widest first; zoom is an index into this. */
-export const DECK_ZOOM_S = [32, 16, 8, 4, 2] as const;
-export const DEFAULT_DECK_ZOOM = 2;
+export const DECK_ZOOM_S = [32, 16, 8, 4, 2, 1, 0.5] as const;
+export const DEFAULT_DECK_ZOOM = 3;
 
 /** The next zoom index in `dir` (1 = in, closer), clamped to the ends. */
 export function stepZoom(zoom: number, dir: -1 | 1): number {
