@@ -320,6 +320,23 @@ fn edited_grid_prefers_reks_over_rekordbox() {
         w.sources(&w.plan(AnlzPreference::RekordboxFirst))["a.mp3"],
         rb
     );
+    // With rekordbox's whole set, its waveforms get the library's grid.
+    let AnlzSource::RekordboxCache { dat } = &rb else {
+        unreachable!()
+    };
+    for ext in ["EXT", "2EX"] {
+        fs::write(dat.with_extension(ext), b"stand-in").unwrap();
+    }
+    for pref in [AnlzPreference::RekordboxFirst, AnlzPreference::ReksFirst] {
+        assert_eq!(
+            w.sources(&w.plan(pref))["a.mp3"],
+            AnlzSource::ReksGrid { dat: dat.clone() }
+        );
+    }
+    assert_eq!(
+        w.sources(&w.plan(AnlzPreference::RekordboxOnly))["a.mp3"],
+        rb
+    );
 }
 
 #[test]

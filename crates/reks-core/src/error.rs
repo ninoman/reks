@@ -167,9 +167,16 @@ pub enum Error {
     #[error("track {0} has no beatgrid")]
     NoGrid(crate::scan::TrackId),
 
-    /// The grid edit needs a constant grid (one tempo anchor).
-    #[error("track {0} has a dynamic beatgrid; only nudge applies")]
-    DynamicGrid(crate::scan::TrackId),
+    /// The edit would leave a degenerate grid (D10, "Grid editing").
+    #[error("beatgrid of track {track}: {problem}")]
+    InvalidGrid {
+        track: crate::scan::TrackId,
+        problem: crate::beatgrid::GridProblem,
+    },
+
+    /// Reset found no grid from before the first edit, and no analysis.
+    #[error("track {0} has no analysed grid to reset to")]
+    NoGridBase(crate::scan::TrackId),
 
     /// The track's grid is locked; unlock it to edit.
     #[error("the beatgrid of track {0} is locked")]

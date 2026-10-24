@@ -15,6 +15,7 @@
 use std::io::{Seek, Write};
 
 pub mod bars;
+pub mod tempo;
 
 /// Samples per second.
 pub const SAMPLE_RATE: u32 = 44_100;

@@ -171,6 +171,7 @@ impl World {
             contents_path: "/Contents/Demo Track 1.mp3",
             // Not Mp3: the stand-in has no MP3 frames to count for PVBR.
             kind: Kind::Flac,
+            rekordbox_dat: None,
         };
         reksanlz::build(&self.lib, &t, AnlzTarget::Cdj3000).unwrap()
     }
@@ -274,4 +275,52 @@ fn built_anlz_has_rekordbox_waveforms_and_the_library_grid() {
     let edited = w.build(demo1);
     assert_eq!(pqtz_times(&edited.dat)[0], theirs[0] + 10);
     assert_eq!(section(&edited.ext, PWV5), section(&ext, PWV5));
+}
+
+#[test]
+fn an_edited_grid_without_reks_analysis_rebuilds_rekordbox_files() {
+    // Not mapped (and not analysed): only rekordbox's own cache has the
+    // track, as for a grid edited before the queue reached it (D10).
+    let w = World::new();
+    let demo1 = w.id("Demo Track 1.mp3");
+    w.lib
+        .edit_beatgrid(demo1, GridEdit::AddMarker { at_ms: 60_000 })
+        .unwrap();
+    let g = w
+        .lib
+        .edit_beatgrid(
+            demo1,
+            GridEdit::SetSectionBpm {
+                section: 1,
+                bpm_x100: 13_000,
+            },
+        )
+        .unwrap();
+    assert_eq!(g.anchors.len(), 2);
+    let src = w.music.join("Demo Track 1.mp3");
+    let dat = w.rb_root.join(format!("{DEMO1}.DAT"));
+    let t = ReksTrack {
+        track_id: demo1,
+        src: &src,
+        contents_path: "/Contents/Demo Track 1.mp3",
+        kind: Kind::Flac,
+        rekordbox_dat: Some(&dat),
+    };
+    let set = reksanlz::build(&w.lib, &t, AnlzTarget::Cdj3000).unwrap();
+    // rekordbox's waveforms, the library's two-tempo grid.
+    assert_eq!(section(&set.ext, PWV5), section(&ref_file("EXT"), PWV5));
+    let s = read::sections(&set.dat).unwrap();
+    let beats = read::pqtz_beats(s.iter().find(|s| s.tag == PQTZ).unwrap()).unwrap();
+    let marker = beats
+        .iter()
+        .position(|b| i64::from(b.time_ms) == g.anchors[1].position_ms)
+        .unwrap();
+    assert_eq!(beats[marker - 1].tempo, 12_800);
+    assert!(beats[marker..].iter().all(|b| b.tempo == 13_000));
+    // Without the rekordbox files there is nothing to build from.
+    let none = ReksTrack {
+        rekordbox_dat: None,
+        ..t
+    };
+    assert!(reksanlz::build(&w.lib, &none, AnlzTarget::Cdj3000).is_err());
 }

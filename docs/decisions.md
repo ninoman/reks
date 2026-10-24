@@ -169,7 +169,10 @@ Date of decisions: 2026-10-18.
   owns (locked or edited, `Library::grid_is_user_owned`) takes reks's
   analysis under `rekordboxFirst` too when reks has one, since rekordbox's
   cached `PQTZ` is copied as it is and the edit would be lost;
-  `rekordboxOnly` still never writes reks's.
+  `rekordboxOnly` still never writes reks's. Since 2026-10-24 (D10, "Grid
+  editing") also when reks has no analysis: rekordbox's cached waveforms
+  are rebuilt with the library's grid (`AnlzSource::ReksGrid`), under
+  `reksFirst` too.
   A track mapped from rekordbox (D10, "rekordbox mapping") counts as reks
   analysis here: its reks-built set holds rekordbox's waveform bytes with
   the library's grid.
@@ -351,6 +354,69 @@ Date of decisions: 2026-10-18.
   and grid phase unchanged; phrase cues from the kick curve (re-entry
   after a breakdown, per-position accent) added nothing, and the full
   Beat This! model stays a later option rather than a requirement.
+- Grid editing with tempo sections (status: **accepted**, maintainer's
+  call 2026-10-24; changes phase 3's non-goal "dynamic-grid editing beyond
+  anchor nudge"; phase 3 tasks 15–18). Variable-tempo music (140 → 174,
+  live drummers, DnB breakdowns) is a confirmed rekordbox pain point
+  (`docs/research/rekordbox-pain-points.md`, PR #75), so the editor edits
+  any grid section by section:
+  - **Model unchanged**: a grid is its `beatgrid` anchors (whole ms,
+    `bpm_x100`, beat in bar, beats per bar), which is exactly an XML
+    `TEMPO` row (`Inizio` 3 decimals, `Bpm` 2 decimals, `Battito`,
+    `Metro`), so XML round-trips anchors exactly. A **section** runs from
+    one anchor (marker) to the next at the anchor's tempo; the first also
+    runs back to 0 ms. Positions stay whole ms (the rule above).
+  - **Beat rule** (one function,
+    [`beatgrid::grid_beats`](../crates/reks-core/src/beatgrid/rule.rs), used by
+    the editor, `PQTZ` and the decks): a section's beats are `anchor + n ×
+    period` while a beat is at least half a period before the next marker,
+    so a section holds round(gap / period) beats and every interval at a
+    boundary is ½–1½ beats. Was: beats up to the next marker, exclusive.
+    Finding (2026-10-24, the maintainer's `collection.xml`): of 8,157
+    marker pairs in 983 rekordbox-edited grids, 8,151 keep the tempo and
+    sit within ±2 ms of a whole beat, 5,279 of them *after* the predicted
+    beat, which the old rule emitted 1 ms before the marker: a doubled beat
+    line in the editor and in every `PQTZ` reks built for such a track
+    (rekordbox's own `PQTZ`, copied under `rekordboxFirst`, was not
+    affected). How rekordbox itself reads an XML section boundary that is
+    not on a beat is UNVERIFIED.
+  - **Degenerate grids are refused in `reks-core`** (`validate_anchors`)
+    on every edit: positions ≥ 0 and strictly increasing, tempo
+    30–300 BPM, beat in bar within the bar, and each marker at least half a
+    beat of the previous section after it (so every section has a beat).
+    The `PQTZ` writer keeps beats strictly increasing for any input, and
+    the stick validator checks it.
+  - **Edits** (`GridEdit`): shift the grid; add, move or delete a marker;
+    set a section's BPM (typed or tapped); stretch a section so one of its
+    beats lands on a chosen time; set the downbeat in a section; halve or
+    double a section or all; reset a section or the whole grid. Positions
+    can snap to the track's transients (computed from the audio,
+    [`reks-analysis::transients`](../crates/reks-analysis/src/transients.rs)).
+    Undo/redo lives in the editor session (it stores the previous anchors).
+  - **Ownership**: an edit stores `manual` rows, which the lock rule
+    (`Library::grid_is_user_owned`) already protects from analysis. The
+    grid from before the first edit is kept (`beatgrid_base`, migration
+    0013) so Reset can bring it back with its source; a track edited before
+    0013 resets to reks's cached analysis. An XML re-import no longer adds
+    rekordbox rows beside a user-owned grid (it used to mix them).
+  - **Decks**: `reks-mix`'s `BeatMap` takes the beat list of the beat rule
+    (was: anchors, stretching each section to whole beats), so sync, beat
+    jump, loops and quantise use the beats the editor and the stick show.
+  - **Export**: `PQTZ` from the beat rule, tempo = the section's; a stick
+    `PQTZ` reads back into anchors (new anchor where tempo, bar phase or
+    the expected time changes by over 1 ms; rekordbox 7's own `PQTZ` times
+    sit up to 1 ms off its tempo), which gives the beat list back within
+    1 ms. A user-owned grid now reaches the stick under
+    `rekordboxFirst` even when reks has no analysis of the track:
+    rekordbox's cached waveforms are rebuilt with the library's grid
+    (`AnlzSource::ReksGrid`) instead of rekordbox's `PQTZ` being copied.
+    No `PQT2` (D9): players without rekordbox's extended grid read `PQTZ`;
+    whether a CDJ needs `PQT2` for multi-tempo grids is UNVERIFIED (phase 3
+    checklist item 7).
+  Rejected: markers that hold a whole number of beats with a derived tempo
+  (Serato-style flex grids): the tempo would not survive XML's 2 decimals;
+  per-beat storage (rows per beat): no format needs it, and XML would grow
+  a `TEMPO` per beat.
 
 ## D11. rekordbox XML reader/writer: own implementation on `quick-xml`
 

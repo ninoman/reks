@@ -618,7 +618,7 @@ export function audioDevices(): Promise<string[]> {
   return invoke("audio_devices");
 }
 
-/** `beatgrid_*`, `waveform_columns`: the grid editor (reks-core `beatgrid.rs`, src-tauri `grid.rs`). */
+/** `beatgrid_*`, `waveform_columns`: the grid editor (reks-core `beatgrid/`, src-tauri `grid.rs`). */
 export interface GridAnchor {
   positionMs: number;
   bpmX100: number;
@@ -635,32 +635,52 @@ export interface BeatMark {
 }
 
 export interface Beatgrid {
-  /** Empty: no grid yet. More than one: a dynamic grid (only nudge and lock apply). */
+  /** Markers, sorted; each starts a tempo section. Empty: no grid yet. */
   anchors: GridAnchor[];
   /** "rekordbox" | "analysis" | "manual"; null without a grid. */
   source: string | null;
   locked: boolean;
-  /** Every beat line from the first anchor to the end of the track. */
+  /** Every beat line to the end of the track (Rust's beat rule). */
   beats: BeatMark[];
 }
 
-/** One editor edit; the grid maths are in Rust. */
+/**
+ * One editor edit; the grid maths are in Rust (`reks-core` `beatgrid`).
+ * `section` is a marker's index; `null` for halve/double/reset means all.
+ */
 export type GridEdit =
+  /** Shift the whole grid. */
   | { op: "nudge"; deltaMs: number }
-  /** The beat nearest `atMs` becomes beat 1; beats do not move. */
+  /** The beat nearest `atMs` becomes beat 1, in its section; beats do not move. */
   | { op: "setDownbeat"; atMs: number }
-  | { op: "double" }
-  | { op: "halve" }
-  /** `anchorMs` places beat 1 only when the track has no grid yet. */
+  | { op: "double"; section: number | null }
+  | { op: "halve"; section: number | null }
+  /** The section at `anchorMs`; with no grid, creates one with beat 1 there. */
   | { op: "setBpm"; bpmX100: number; anchorMs: number }
+  | { op: "setSectionBpm"; section: number; bpmX100: number }
+  | { op: "addMarker"; atMs: number }
+  | { op: "moveMarker"; section: number; toMs: number }
+  | { op: "deleteMarker"; section: number }
+  /** Retempo `section` so its beat nearest `beatMs` lands on `toMs`. */
+  | { op: "stretch"; section: number; beatMs: number; toMs: number }
+  /** Back to the grid from before the first edit. */
+  | { op: "reset"; section: number | null }
+  /** Undo and redo: replace the markers. */
+  | { op: "setAnchors"; anchors: GridAnchor[] }
   | { op: "setLocked"; locked: boolean };
 
 export function beatgridGet(id: number): Promise<Beatgrid> {
   return invoke("beatgrid_get", { id });
 }
 
-export function beatgridEdit(id: number, edit: GridEdit): Promise<Beatgrid> {
-  return invoke("beatgrid_edit", { id, edit });
+/** With `snap`, the position the edit places moves to the nearest transient. */
+export function beatgridEdit(id: number, edit: GridEdit, snap = false): Promise<Beatgrid> {
+  return invoke("beatgrid_edit", { id, edit, snap });
+}
+
+/** The track's transients in ms (snap marks); computed from the audio on first use. */
+export function waveformTransients(id: number): Promise<number[]> {
+  return invoke("waveform_transients", { id });
 }
 
 /** Tempo × 100 of the newest run of taps (ms timestamps, oldest first); null below two taps. */

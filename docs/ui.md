@@ -68,7 +68,8 @@ canvas and accent, for the theme picker). The grid editor and the decks draw
 on the `deck`, the theme's darkest panel (Paper's is light, so its
 `waveform-high`, `waveform-blue-high`, `led-hot` and `grid-beat` are dark):
 `deck`, `deck-fg`, `waveform-low/mid/high` (3-band), `grid-beat`,
-`grid-downbeat`, `grid-cursor` (the accent); the mixer's decks add
+`grid-downbeat`, `grid-cursor` (the accent), `grid-marker`, `grid-section` (the
+selected section's band) and `grid-transient` (snap marks); the mixer's decks add
 `deck-cue`, `deck-hotcue`, `deck-memory`, `deck-loop`, `deck-loop-in` (the pending loop IN), `deck-auto-loop` and the other waveform styles' `waveform-rgb-*` and
 `waveform-blue(-high)`. The mark colours are the same in every theme.
 
@@ -881,6 +882,41 @@ and loading / error-with-Retry / empty states). All but `RuleBuilder` and
   run notes that they are written as fixed lists.
 - Dev: `mockSmart.ts` evaluates rules and smart lists like the core;
   `mockPresets.ts` keeps saved filters like `filter_preset.rs`.
+
+## Grid editor (phase 3 tasks 13, 18)
+
+Opened from the track info panel's Beatgrid section
+([`GridEditor.tsx`](../src/components/GridEditor.tsx), parts in
+[`components/grid/`](../src/components/grid/)). The grid maths, the beat rule
+and validation are in Rust (D10, "Grid editing"); the editor draws and
+forwards edits (`beatgrid_edit`, with `snap`).
+
+- **View**: the 3-band waveform from the columns on the `deck` panel,
+  zoomable (25–600 px/s) and scrolled by wheel or slider. Beat lines,
+  downbeats in red, a marker per tempo section with its BPM on a flag, the
+  selected section's band, the player's playhead and the cursor.
+- **Sections**: with more than one, a row of buttons (BPM and start) selects
+  one; a click on the waveform places the cursor and selects the section
+  there. The selected section's row: BPM (double-click or Enter to type),
+  Tap and Use tapped BPM, ½ and ×2, Downbeat at cursor, Stretch to cursor
+  (its beat nearest the cursor lands on the cursor), Reset section (edited
+  grids), Delete marker.
+- **Grid row**: Shift grid ±1/±10 ms, Add marker at cursor, Undo / Redo (the
+  session's, through Rust's `setAnchors`), Reset grid (back to the grid
+  from before the first edit).
+- **Pointer**: drag a marker to move it; Alt-drag a beat line to stretch its
+  section so that beat lands where it is let go.
+- **Snap**: positions an edit places (add, move, stretch) move to the
+  nearest transient within 40 ms (`waveform_transients`, computed from the
+  audio on first use); the transients show as ticks along the bottom.
+- **Keys** (the dialog's own; listed under the editor): ← → shift 1 ms
+  (Shift 10), Alt ← → move the selected marker, M add marker, Del delete
+  marker, D downbeat, T tap, / * halve / double, [ ] previous / next
+  section, − + zoom, S snap, ⌘Z / ⇧⌘Z undo / redo. Text fields keep their
+  keys.
+- **States**: computing the waveform, no grid (tap to create one), locked
+  (edits off until unlocked), errors from Rust (a degenerate grid is
+  refused) under the controls.
 
 ## Adding a component or variant
 

@@ -41,7 +41,7 @@ pub use beatgrid::{BeatMark, Beatgrid, GridAnchor, GridEdit};
 pub use bulk_edit::{BulkOutcome, BulkPatch, CommentEdit};
 pub use cue::{HOT_CUE_PALETTE, HOT_CUE_SLOTS, MAX_CUE_NAME_CHARS};
 pub use db::Library;
-pub use deck::{CueMark, DeckAnchor, DeckAudio};
+pub use deck::{CueMark, DeckAudio, DeckBeat};
 pub use device::{Device, DeviceId, NewDevice, SyncedPlaylist, SyncedRecord};
 pub use error::{Error, Result};
 pub use filter_preset::{FilterPreset, FilterPresetId, FilterPresetOp, FilterPresetOutcome};

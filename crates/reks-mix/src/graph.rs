@@ -887,8 +887,8 @@ mod tests {
                 [v, -v]
             })
             .collect();
-        let grid = [crate::GridAnchor {
-            frame: 0,
+        let grid = [crate::GridBeat {
+            frame: 0.0,
             bpm: 120.0,
             beat_in_bar: 1,
             beats_per_bar: 4,
@@ -1438,20 +1438,16 @@ mod tests {
     #[test]
     fn quantised_beat_jumps_follow_a_dynamic_grid() {
         // 4 beats at 120 BPM, then 100 BPM (28,800 frames a beat).
-        let grid = [
-            crate::GridAnchor {
-                frame: 0,
-                bpm: 120.0,
-                beat_in_bar: 1,
-                beats_per_bar: 4,
-            },
-            crate::GridAnchor {
-                frame: 96_000,
-                bpm: 100.0,
-                beat_in_bar: 1,
-                beats_per_bar: 4,
-            },
-        ];
+        let beat = |k: u8, frame: f64, bpm: f64| crate::GridBeat {
+            frame,
+            bpm,
+            beat_in_bar: k % 4 + 1,
+            beats_per_bar: 4,
+        };
+        let grid: Vec<_> = (0..4)
+            .map(|k| beat(k, f64::from(k) * 24_000.0, 120.0))
+            .chain((0..30).map(|k| beat(k, 96_000.0 + f64::from(k) * 28_800.0, 100.0)))
+            .collect();
         let src = Arc::new(DeckSource::new(vec![0; 960_000], RATE).with_grid(&grid));
         let mut g = Graph::new(RATE).unwrap();
         load(&mut g, src);
@@ -1479,8 +1475,8 @@ mod tests {
 
     /// `gridded`, with an active memory loop over beats 2–4.
     fn with_auto_loop(frames: i64) -> Arc<DeckSource> {
-        let grid = [crate::GridAnchor {
-            frame: 0,
+        let grid = [crate::GridBeat {
+            frame: 0.0,
             bpm: 120.0,
             beat_in_bar: 1,
             beats_per_bar: 4,
@@ -1667,8 +1663,8 @@ mod tests {
                 [v as i16, v as i16]
             })
             .collect();
-        let grid = [crate::GridAnchor {
-            frame: 0,
+        let grid = [crate::GridBeat {
+            frame: 0.0,
             bpm: 120.0,
             beat_in_bar: 1,
             beats_per_bar: 4,

@@ -20,5 +20,7 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 reks-audio = { workspace = true }
+# The library's beat rule, for the tempo-section tests (tests/sections.rs).
+reks-core = { workspace = true }
 reks-fixtures-gen = { workspace = true }
 tempfile = { workspace = true }

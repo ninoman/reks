@@ -175,6 +175,7 @@ fn from_library(
         src: &src,
         contents_path: &contents,
         kind,
+        rekordbox_dat: None,
     };
     let set = reksanlz::build(&lib, &track, target).with_context(|| {
         format!(

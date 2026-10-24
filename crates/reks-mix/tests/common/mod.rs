@@ -9,7 +9,7 @@
 
 use std::sync::Arc;
 
-use reks_mix::{render, DeckSource, Graph, GridAnchor};
+use reks_mix::{render, DeckSource, Graph, GridBeat};
 
 /// Downbeat click peak (full scale = 1).
 pub const LOUD: f64 = 0.8;
@@ -44,31 +44,23 @@ pub struct Fixture {
 }
 
 /// Clicks on every beat of `sections` (4/4, first beat a downbeat), starting
-/// `lead_ms` into the track. With `per_beat_grid` every beat is a grid anchor
-/// (a dynamic grid as rekordbox writes it); otherwise one anchor per section.
-pub fn click_track(
-    rate: u32,
-    side: Side,
-    lead_ms: f64,
-    sections: &[Section],
-    per_beat_grid: bool,
-) -> Fixture {
+/// `lead_ms` into the track; the grid is every beat, as the library's beat
+/// rule gives it.
+pub fn click_track(rate: u32, side: Side, lead_ms: f64, sections: &[Section]) -> Fixture {
     let fr = f64::from(rate);
     let mut beats = Vec::new();
-    let mut anchors = Vec::new();
+    let mut grid = Vec::new();
     let mut t = lead_ms * fr / 1000.0;
     for s in sections {
         let period = 60.0 * fr / s.bpm;
-        for b in 0..s.beats {
+        for _ in 0..s.beats {
             let n = beats.len();
-            if b == 0 || per_beat_grid {
-                anchors.push(GridAnchor {
-                    frame: t.round() as i64,
-                    bpm: s.bpm,
-                    beat_in_bar: (n % 4) as u8 + 1,
-                    beats_per_bar: 4,
-                });
-            }
+            grid.push(GridBeat {
+                frame: t.round(),
+                bpm: s.bpm,
+                beat_in_bar: (n % 4) as u8 + 1,
+                beats_per_bar: 4,
+            });
             beats.push(t);
             t += period;
         }
@@ -96,7 +88,7 @@ pub fn click_track(
     Fixture {
         src: Arc::new(
             DeckSource::new(pcm, rate)
-                .with_grid(&anchors)
+                .with_grid(&grid)
                 .with_hot_cues(vec![]),
         ),
         beats,

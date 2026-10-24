@@ -645,8 +645,8 @@ mod tests {
         // Varispeed, nudge, cue, hot cue and quantised jumps.
         let gridded = Arc::new(
             DeckSource::new(vec![500; RATE as usize * 4], 44_100)
-                .with_grid(&[crate::GridAnchor {
-                    frame: 0,
+                .with_grid(&[crate::GridBeat {
+                    frame: 0.0,
                     bpm: 128.0,
                     beat_in_bar: 1,
                     beats_per_bar: 4,
@@ -759,8 +759,8 @@ mod tests {
         // Sync: deck 2 leads (it starts first), deck 1 follows with bar
         // sync (a phase jump, then bending), then a chosen leader.
         let other = Arc::new(
-            DeckSource::new(vec![700; RATE as usize * 4], RATE).with_grid(&[crate::GridAnchor {
-                frame: 3_000,
+            DeckSource::new(vec![700; RATE as usize * 4], RATE).with_grid(&[crate::GridBeat {
+                frame: 3_000.0,
                 bpm: 124.0,
                 beat_in_bar: 1,
                 beats_per_bar: 4,

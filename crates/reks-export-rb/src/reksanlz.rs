@@ -146,6 +146,9 @@ pub struct ReksTrack<'a> {
     /// `/Contents/...` on the stick.
     pub contents_path: &'a str,
     pub kind: Kind,
+    /// rekordbox's cached `.DAT` whose waveforms to use when the cache has
+    /// no entry ([`AnlzSource::ReksGrid`]).
+    pub rekordbox_dat: Option<&'a Path>,
 }
 
 impl<'a> From<&'a PlannedTrack> for ReksTrack<'a> {
@@ -155,6 +158,10 @@ impl<'a> From<&'a PlannedTrack> for ReksTrack<'a> {
             src: &t.src,
             contents_path: &t.dst_rel,
             kind: t.kind,
+            rekordbox_dat: match &t.anlz_source {
+                AnlzSource::ReksGrid { dat } => Some(dat),
+                _ => None,
+            },
         }
     }
 }
@@ -178,6 +185,22 @@ pub fn build(
             (analysis.duration_ms, w)
         } else if let Some(rb) = cache::load_rekordbox(&cache_dir, track.track_id, &hash) {
             (rb.duration_ms, read_waveforms(&rb.dat, &rb.ext, &rb.ex2)?)
+        } else if let Some(dat) = track.rekordbox_dat {
+            let read = |path: PathBuf| {
+                std::fs::read(&path).map_err(|source| ReksAnlzError::Io { path, source })
+            };
+            let w = read_waveforms(
+                &read(dat.to_path_buf())?,
+                &read(dat.with_extension("EXT"))?,
+                &read(dat.with_extension("2EX"))?,
+            )?;
+            let duration_ms = lib
+                .track(track.track_id)?
+                .track
+                .row
+                .duration_ms
+                .unwrap_or(0);
+            (u64::try_from(duration_ms).unwrap_or(0), w)
         } else {
             return Err(ReksAnlzError::Stale);
         };
@@ -214,7 +237,8 @@ pub fn write_set(dir: &Path, set: &AnlzSet) -> Result<PathBuf, ReksAnlzError> {
     Ok(dat)
 }
 
-/// Builds the set of every [`AnlzSource::Reks`] track of `plan` into
+/// Builds the set of every track of `plan` reks builds
+/// ([`AnlzSource::reks_built`]) into
 /// `dir/<track_id>/` (a scratch folder, never the stick). Returns each
 /// track's `.DAT`; the first failure stops it.
 pub fn write_all(
@@ -224,11 +248,7 @@ pub fn write_all(
 ) -> Result<HashMap<TrackId, PathBuf>, TrackBuildError> {
     let target = anlz_target(plan.options.target);
     let mut out = HashMap::new();
-    for t in plan
-        .tracks
-        .iter()
-        .filter(|t| t.anlz_source == AnlzSource::Reks)
-    {
+    for t in plan.tracks.iter().filter(|t| t.anlz_source.reks_built()) {
         let built = build(lib, &ReksTrack::from(t), target)
             .and_then(|set| write_set(&dir.join(t.track_id.to_string()), &set));
         match built {

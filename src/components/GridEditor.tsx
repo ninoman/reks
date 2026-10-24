@@ -1,31 +1,32 @@
 /**
- * Grid editor (Phase 3 task 13): the track's 3-band waveform from our own
- * columns (150/s, zoomable), its beat lines, and the edits: nudge ±1/±10 ms,
- * set the downbeat at the cursor, double/halve, tap tempo, lock. Every edit
- * goes to Rust (`beatgrid_edit`), which does the maths and stores the grid
- * as `manual`; this component only draws and forwards clicks.
+ * Grid editor (phase 3 tasks 13, 18; D10 "Grid editing with tempo
+ * sections"): the track's 3-band waveform from our own columns (150/s,
+ * zoomable), its beat lines and tempo section markers, and the edits: shift
+ * the grid, add/move/delete markers, a section's BPM typed or tapped, ½ and
+ * ×2, beat 1 at the cursor, stretch a section onto a beat, reset, snap to
+ * transients, undo/redo, lock. Every edit goes to Rust (`beatgrid_edit`),
+ * which does the maths, refuses degenerate grids and stores the grid as
+ * `manual`; this component draws and forwards.
  */
-import { useCallback, useEffect, useState } from "react";
+import { type KeyboardEvent, useCallback, useState } from "react";
 
 import { formatBpm, formatPosition } from "../lib/format";
+import { GRID_SHORTCUTS, gridKey } from "../lib/gridKeys";
 import {
-  bandPeaks,
   columnsDurationMs,
   DEFAULT_ZOOM,
-  visibleBeats,
+  sectionAt,
+  sectionViews,
   ZOOM_PX_PER_S,
 } from "../lib/gridView";
-import {
-  type Beatgrid,
-  beatgridEdit,
-  beatgridGet,
-  beatgridTapTempo,
-  type GridEdit,
-  waveformColumns,
-} from "../lib/ipc";
+import type { GridEdit } from "../lib/ipc";
 import { usePlayerPosition } from "../store/player";
-import { useTheme } from "../store/settings";
 import { ErrorMessage } from "./ErrorMessage";
+import { GridCanvas } from "./grid/GridCanvas";
+import { SectionControls } from "./grid/SectionControls";
+import { SectionList } from "./grid/SectionList";
+import { useGridEditor } from "./grid/useGridEditor";
+import { useTap } from "./grid/useTap";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import {
@@ -37,11 +38,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/Dialog";
+import { Kbd } from "./ui/Kbd";
 import { Slider } from "./ui/Slider";
 import { Switch } from "./ui/Switch";
-
-/** Taps kept for the tempo (Rust uses the newest run of these). */
-const MAX_TAPS = 16;
 
 export function GridEditorDialog({
   trackId,
@@ -55,179 +54,132 @@ export function GridEditorDialog({
   /** After every stored edit, so the caller can refresh its summary. */
   onChanged: () => void;
 }) {
-  const [grid, setGrid] = useState<Beatgrid | null>(null);
-  const [columns, setColumns] = useState<Uint8Array | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const ed = useGridEditor(trackId, onChanged);
+  const { bpmX100: tapBpm, tap } = useTap();
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [startMs, setStartMs] = useState(0);
   const [cursorMs, setCursorMs] = useState<number | null>(null);
-  const [taps, setTaps] = useState<number[]>([]);
-  const [tapBpm, setTapBpm] = useState<number | null>(null);
   const [width, setWidth] = useState(0);
-  // A state ref: the dialog portals its content in after the first render.
-  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
 
+  const { grid, selected } = ed;
+  const anchors = grid?.anchors ?? [];
   const pxPerS = ZOOM_PX_PER_S[zoom] ?? 100;
-  const durationMs = columns === null ? 0 : columnsDurationMs(columns);
+  const durationMs = ed.columns === null ? 0 : columnsDurationMs(ed.columns);
   const viewMs = width > 0 ? (width / pxPerS) * 1000 : 0;
   const maxStart = Math.max(0, durationMs - viewMs);
+  const start = Math.min(startMs, maxStart);
   const playheadMs = usePlayerPosition(trackId);
+  const sections = sectionViews(anchors, durationMs);
+  const hasGrid = anchors.length > 0;
+  const locked = grid?.locked ?? false;
+  const canEdit = grid !== null && !locked && !ed.busy;
+  const section = selected === null ? undefined : anchors[selected];
 
-  useEffect(() => {
-    let live = true;
-    beatgridGet(trackId).then(
-      (g) => live && setGrid(g),
-      (e) => live && setError(String(e)),
-    );
-    // Computed on demand the first time (a few seconds for a long track).
-    waveformColumns(trackId).then(
-      (b) => live && setColumns(new Uint8Array(b)),
-      (e) => live && setError(String(e)),
-    );
-    return () => {
-      live = false;
-    };
-  }, [trackId]);
-
-  const apply = useCallback(
-    async (edit: GridEdit) => {
-      setBusy(true);
-      setError(null);
-      try {
-        setGrid(await beatgridEdit(trackId, edit));
-        onChanged();
-      } catch (e) {
-        setError(String(e));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [trackId, onChanged],
-  );
-
-  async function tap() {
-    const next = [...taps, performance.now()].slice(-MAX_TAPS);
-    setTaps(next);
-    setTapBpm(await beatgridTapTempo(next));
-  }
+  const edit = (e: GridEdit) => void ed.apply(e);
 
   function zoomTo(next: number) {
     const z = Math.min(ZOOM_PX_PER_S.length - 1, Math.max(0, next));
     const pps = ZOOM_PX_PER_S[z] ?? pxPerS;
     // Keep the cursor (or the middle of the view) where it is on screen.
-    const focus = cursorMs ?? startMs + viewMs / 2;
-    const offsetPx = ((focus - startMs) * pxPerS) / 1000;
+    const focus = cursorMs ?? start + viewMs / 2;
+    const offsetPx = ((focus - start) * pxPerS) / 1000;
     setZoom(z);
     setStartMs(Math.max(0, focus - (offsetPx / pps) * 1000));
   }
 
-  // Width of the canvas in CSS px.
-  useEffect(() => {
-    if (canvas === null) return;
-    const observer = new ResizeObserver(([entry]) =>
-      setWidth(Math.floor(entry?.contentRect.width ?? 0)),
-    );
-    observer.observe(canvas);
-    return () => observer.disconnect();
-  }, [canvas]);
+  function selectSection(i: number) {
+    ed.select(i);
+    // Bring its start into view.
+    const s = sections[i];
+    if (s !== undefined && (s.startMs < start || s.startMs > start + viewMs)) {
+      setStartMs(Math.max(0, s.startMs - viewMs / 8));
+    }
+  }
 
-  // Wheel scrolls the view (native listener: React's is passive).
-  useEffect(() => {
-    if (canvas === null) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-      setStartMs((s) => Math.min(maxStart, Math.max(0, s + (delta / pxPerS) * 1000)));
-    };
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    return () => canvas.removeEventListener("wheel", onWheel);
-  }, [canvas, maxStart, pxPerS]);
+  const onScroll = useCallback(
+    (deltaMs: number) => setStartMs((s) => Math.min(maxStart, Math.max(0, s + deltaMs))),
+    [maxStart],
+  );
 
-  const start = Math.min(startMs, maxStart);
-  const theme = useTheme();
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `theme` redraws in the new colours.
-  useEffect(() => {
-    if (canvas === null || width === 0) return;
-    const ctx = canvas.getContext("2d");
-    if (ctx === null) return;
-    const dpr = window.devicePixelRatio || 1;
-    const height = canvas.clientHeight;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-    // Colours from tokens.css (the canvas can't use classes).
-    const style = getComputedStyle(canvas);
-    const token = (name: string) => style.getPropertyValue(name).trim();
-    const mid = height / 2;
-    const xOf = (ms: number) => ((ms - start) * pxPerS) / 1000;
-
-    if (columns !== null) {
-      const peaks = bandPeaks(columns, start, pxPerS, width);
-      const bands: [number, string][] = [
-        [0, token("--color-waveform-low")],
-        [1, token("--color-waveform-mid")],
-        [2, token("--color-waveform-high")],
-      ];
-      for (const [band, colour] of bands) {
-        ctx.fillStyle = colour;
-        for (let x = 0; x < width; x++) {
-          const h = (peaks[3 * x + band] ?? 0) * mid * (band === 2 ? 0.6 : 1);
-          if (h > 0.5) ctx.fillRect(x, mid - h, 1, 2 * h);
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    const action = gridKey(e);
+    if (action === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const at = cursorMs;
+    switch (action.type) {
+      case "undo":
+        void ed.undo();
+        return;
+      case "redo":
+        void ed.redo();
+        return;
+      case "zoom":
+        zoomTo(zoom + action.step);
+        return;
+      case "snap":
+        ed.setSnap(!ed.snap);
+        return;
+      case "tap":
+        if (!locked) void tap();
+        return;
+      case "select":
+        if (selected !== null) {
+          selectSection(Math.min(anchors.length - 1, Math.max(0, selected + action.step)));
         }
-      }
+        return;
     }
-    if (grid !== null) {
-      const beat = token("--color-grid-beat");
-      const downbeat = token("--color-grid-downbeat");
-      for (const b of visibleBeats(grid.beats, start, pxPerS, width)) {
-        ctx.fillStyle = b.downbeat ? downbeat : beat;
-        ctx.fillRect(Math.round(b.x), 0, b.downbeat ? 2 : 1, height);
-      }
+    if (!canEdit || !hasGrid) return;
+    switch (action.type) {
+      case "nudge":
+        edit({ op: "nudge", deltaMs: action.deltaMs });
+        break;
+      case "moveMarker":
+        if (section !== undefined && selected !== null) {
+          edit({ op: "moveMarker", section: selected, toMs: section.positionMs + action.deltaMs });
+        }
+        break;
+      case "addMarker":
+        if (at !== null) edit({ op: "addMarker", atMs: at });
+        break;
+      case "deleteMarker":
+        if (selected !== null && anchors.length > 1)
+          edit({ op: "deleteMarker", section: selected });
+        break;
+      case "setDownbeat":
+        if (at !== null) edit({ op: "setDownbeat", atMs: at });
+        break;
+      case "halve":
+      case "double":
+        if (selected !== null) edit({ op: action.type, section: selected });
+        break;
     }
-    if (playheadMs !== null) {
-      ctx.fillStyle = token("--color-deck-fg");
-      ctx.fillRect(Math.round(xOf(playheadMs)), 0, 1, height);
-    }
-    if (cursorMs !== null) {
-      ctx.fillStyle = token("--color-grid-cursor");
-      ctx.fillRect(Math.round(xOf(cursorMs)) - 1, 0, 2, height);
-    }
-  }, [canvas, columns, grid, start, pxPerS, width, cursorMs, playheadMs, theme]);
-
-  const anchor = grid?.anchors[0] ?? null;
-  const hasGrid = anchor !== null;
-  const dynamic = (grid?.anchors.length ?? 0) > 1;
-  const locked = grid?.locked ?? false;
-  const canEdit = grid !== null && !locked && !busy;
-  const canConst = canEdit && hasGrid && !dynamic;
+  }
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent size="xl">
+      <DialogContent size="xl" onKeyDown={onKeyDown}>
         <DialogHeader>
           <DialogTitle>Beatgrid · {title}</DialogTitle>
           <DialogDescription>
-            Click the waveform to place the cursor. Edits are saved as a manual grid, which
-            re-analysis keeps.
+            Click the waveform to place the cursor; drag a marker to move it, Alt-drag a beat line
+            to stretch its section. Edits are saved as a manual grid, which analysis keeps.
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-lg font-semibold tabular-nums" data-testid="grid-bpm">
-              {hasGrid
-                ? dynamic
-                  ? `${formatBpm(anchor.bpmX100)}+`
-                  : formatBpm(anchor.bpmX100)
-                : "No grid"}
+              {section !== undefined
+                ? formatBpm(section.bpmX100)
+                : hasGrid || grid === null
+                  ? ""
+                  : "No grid"}
             </span>
-            <span className="text-xs text-fg-muted">BPM</span>
+            {hasGrid && <span className="text-xs text-fg-muted">BPM</span>}
             {grid?.source != null && (
               <Badge variant={grid.source === "manual" ? "accent" : "neutral"}>{grid.source}</Badge>
             )}
-            {dynamic && <Badge variant="muted">dynamic: nudge only</Badge>}
+            {anchors.length > 1 && <Badge variant="muted">{anchors.length} sections</Badge>}
             <span className="flex-1" />
             <span className="text-xs text-fg-muted tabular-nums">
               {cursorMs === null ? "No cursor" : `Cursor ${formatPosition(cursorMs)}`}
@@ -251,24 +203,48 @@ export function GridEditorDialog({
             {/* biome-ignore lint/a11y/noLabelWithoutControl: the Switch inside is the control. */}
             <label className="flex items-center gap-1.5 text-xs">
               <Switch
+                checked={ed.snap}
+                onCheckedChange={ed.setSnap}
+                aria-label="Snap to transients"
+              />
+              Snap
+            </label>
+            {/* biome-ignore lint/a11y/noLabelWithoutControl: the Switch inside is the control. */}
+            <label className="flex items-center gap-1.5 text-xs">
+              <Switch
                 checked={locked}
-                disabled={grid === null || busy}
-                onCheckedChange={(on) => void apply({ op: "setLocked", locked: on })}
+                disabled={grid === null || ed.busy}
+                onCheckedChange={(on) => edit({ op: "setLocked", locked: on })}
                 aria-label="Lock grid"
               />
               Lock grid
             </label>
           </div>
 
-          <canvas
-            ref={setCanvas}
-            className="h-40 w-full cursor-crosshair rounded-md bg-deck"
-            role="img"
-            aria-label="Waveform and beatgrid"
-            onPointerDown={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setCursorMs(Math.round(start + ((e.clientX - rect.left) / pxPerS) * 1000));
+          {sections.length > 1 && (
+            <SectionList sections={sections} selected={selected} onSelect={selectSection} />
+          )}
+
+          <GridCanvas
+            columns={ed.columns}
+            grid={grid}
+            durationMs={durationMs}
+            selected={selected}
+            startMs={start}
+            pxPerS={pxPerS}
+            cursorMs={cursorMs}
+            playheadMs={playheadMs}
+            transients={ed.snap ? ed.transients : null}
+            editable={canEdit}
+            onWidth={setWidth}
+            onScroll={onScroll}
+            onPick={(ms) => {
+              setCursorMs(ms);
+              const s = sectionAt(anchors, ms);
+              if (s !== null) ed.select(s);
             }}
+            onMoveMarker={(s, toMs) => edit({ op: "moveMarker", section: s, toMs })}
+            onStretch={(s, beatMs, toMs) => edit({ op: "stretch", section: s, beatMs, toMs })}
           />
           <Slider
             aria-label="Scroll"
@@ -279,19 +255,19 @@ export function GridEditorDialog({
             onValueChange={setStartMs}
             disabled={maxStart === 0}
           />
-          {columns === null && error === null && (
+          {ed.columns === null && ed.error === null && (
             <p className="m-0 text-xs text-fg-muted">Computing the waveform…</p>
           )}
 
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-0.5 text-xs text-fg-muted">Nudge</span>
+            <span className="mr-0.5 text-xs text-fg-muted">Shift grid</span>
             {[-10, -1, 1, 10].map((d) => (
               <Button
                 key={d}
                 size="sm"
                 variant="outline"
                 disabled={!canEdit || !hasGrid}
-                onClick={() => void apply({ op: "nudge", deltaMs: d })}
+                onClick={() => edit({ op: "nudge", deltaMs: d })}
               >
                 {d > 0 ? `+${d}` : `−${-d}`} ms
               </Button>
@@ -300,47 +276,83 @@ export function GridEditorDialog({
             <Button
               size="sm"
               variant="outline"
-              disabled={!canConst || cursorMs === null}
-              onClick={() => cursorMs !== null && void apply({ op: "setDownbeat", atMs: cursorMs })}
+              disabled={!canEdit || !hasGrid || cursorMs === null}
+              onClick={() => cursorMs !== null && edit({ op: "addMarker", atMs: cursorMs })}
             >
-              Set downbeat at cursor
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!canConst}
-              onClick={() => void apply({ op: "halve" })}
-            >
-              Halve BPM
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!canConst}
-              onClick={() => void apply({ op: "double" })}
-            >
-              Double BPM
+              Add marker at cursor
             </Button>
             <span className="mx-1 h-4 w-px bg-border" />
-            <Button size="sm" variant="secondary" onClick={() => void tap()} disabled={locked}>
-              Tap
-            </Button>
-            <span className="min-w-14 text-xs tabular-nums" data-testid="tap-bpm">
-              {tapBpm === null ? "–" : formatBpm(tapBpm)}
-            </span>
             <Button
               size="sm"
               variant="outline"
-              disabled={tapBpm === null || !canEdit || dynamic}
-              onClick={() =>
-                tapBpm !== null &&
-                void apply({ op: "setBpm", bpmX100: tapBpm, anchorMs: cursorMs ?? 0 })
-              }
+              disabled={!ed.canUndo || ed.busy}
+              onClick={() => void ed.undo()}
             >
-              {hasGrid ? "Use tapped BPM" : "Create grid"}
+              Undo
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!ed.canRedo || ed.busy}
+              onClick={() => void ed.redo()}
+            >
+              Redo
+            </Button>
+            <span className="flex-1" />
+            <Button
+              size="sm"
+              variant="quiet"
+              disabled={!canEdit || grid?.source !== "manual"}
+              onClick={() => edit({ op: "reset", section: null })}
+            >
+              Reset grid
             </Button>
           </div>
-          {error !== null && <ErrorMessage message={error} />}
+
+          {section !== undefined && selected !== null ? (
+            <SectionControls
+              section={selected}
+              count={anchors.length}
+              bpmX100={section.bpmX100}
+              cursorMs={cursorMs}
+              tapBpmX100={tapBpm}
+              disabled={!canEdit}
+              resettable={grid?.source === "manual"}
+              onEdit={edit}
+              onTap={() => void tap()}
+            />
+          ) : (
+            grid !== null && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button size="sm" variant="secondary" onClick={() => void tap()} disabled={locked}>
+                  Tap
+                </Button>
+                <span className="min-w-12 text-xs tabular-nums" data-testid="tap-bpm">
+                  {tapBpm === null ? "–" : formatBpm(tapBpm)}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={tapBpm === null || !canEdit}
+                  onClick={() =>
+                    tapBpm !== null &&
+                    edit({ op: "setBpm", bpmX100: tapBpm, anchorMs: cursorMs ?? 0 })
+                  }
+                >
+                  Create grid
+                </Button>
+              </div>
+            )
+          )}
+          {ed.error !== null && <ErrorMessage message={ed.error} />}
+          <ul className="m-0 flex list-none flex-wrap gap-x-3 gap-y-1 p-0 text-2xs text-fg-muted">
+            {GRID_SHORTCUTS.map(([keys, what]) => (
+              <li key={keys} className="flex items-center gap-1">
+                <Kbd>{keys}</Kbd>
+                {what}
+              </li>
+            ))}
+          </ul>
         </DialogBody>
         <DialogFooter>
           <Button variant="primary" onClick={onClose}>

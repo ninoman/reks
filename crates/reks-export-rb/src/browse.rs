@@ -17,7 +17,7 @@ use reks_analysis::waveform::WaveformColumns;
 use reks_anlz::WaveformCalibration;
 use reks_audio::StereoPcm;
 use reks_core::beatgrid::beat_marks;
-use reks_core::deck::{cue_marks, deck_anchors, hot_cue_frames};
+use reks_core::deck::{cue_marks, deck_beats, hot_cue_frames};
 use reks_core::{Beatgrid, DeckAudio, Key};
 use serde::Serialize;
 
@@ -183,8 +183,8 @@ pub fn deck_audio(root: &Path, id: u32, sample_rate: u32) -> Result<DeckAudio, B
     let pcm: StereoPcm = reks_audio::decode_stereo(&audio, Some(sample_rate))?.pcm;
     let analysis = read_analysis(root, &track)?;
     Ok(DeckAudio {
+        beats: deck_beats(&analysis.anchors, sample_rate, pcm.frames()),
         pcm,
-        anchors: deck_anchors(&analysis.anchors, sample_rate),
         hot_cues: hot_cue_frames(&analysis.cues, sample_rate),
         marks: cue_marks(&analysis.cues, sample_rate),
     })
@@ -195,7 +195,7 @@ pub fn deck_audio(root: &Path, id: u32, sample_rate: u32) -> Result<DeckAudio, B
 pub fn beatgrid(root: &Path, id: u32) -> Result<Beatgrid, BrowseError> {
     let track = stick_track(root, id)?;
     let analysis = read_analysis(root, &track)?;
-    let end_ms = analysis.last_beat_ms.max(i64::from(track.duration) * 1000);
+    let end_ms = (analysis.last_beat_ms + 1).max(i64::from(track.duration) * 1000);
     Ok(Beatgrid {
         beats: beat_marks(&analysis.anchors, end_ms),
         anchors: analysis.anchors,

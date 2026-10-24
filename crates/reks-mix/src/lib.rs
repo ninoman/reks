@@ -23,7 +23,7 @@ mod sync;
 pub mod taper;
 mod varispeed;
 
-pub use beatmap::{BeatMap, GridAnchor};
+pub use beatmap::{BeatMap, GridBeat};
 pub use control::{
     ChannelParam, Control, CueRouting, FilterParam, FilterUnit, FxKind, MasterParam,
 };
