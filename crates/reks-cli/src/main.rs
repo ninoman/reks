@@ -16,6 +16,8 @@
 //!                               read the stick back against a fresh plan
 //! reks rb history <stick> [--json]
 //!                               list the play history players left on the stick
+//! reks rb check <stick> [--target <target>] [--library <library.sqlite>] [--json]
+//!                               read-only report on a stick before a gig
 //! reks rb diff <ours-stick> <reference-stick> [--json]
 //!                               compare two sticks (PDB, playlists, ANLZ, bytes)
 //! reks history scan <stick|backup> --library <library.sqlite> [--hist1-dates] [--json]
@@ -41,6 +43,7 @@
 mod adopt;
 mod analyse;
 mod anlz;
+mod check;
 mod convert;
 mod history;
 mod keylock;
@@ -99,7 +102,7 @@ fn main() -> anyhow::Result<()> {
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
              | columns <audio> <out.bin> \
              | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run] \
-             | rb plan|export|validate <stick> ... | rb history <stick> [--json] \
+             | rb plan|export|validate <stick> ... | rb history|check <stick> [--json] \
              | rb diff <ours-stick> <reference-stick> [--json] \
              | onelibrary dump|diff|validate ... \
              | history scan|import <stick|backup> --library <library.sqlite> ... \

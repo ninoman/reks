@@ -127,6 +127,7 @@ pub fn run() {
             browse::device_library,
             browse::device_beatgrid,
             browse::device_waveform_columns,
+            browse::device_check,
             commands::profiles_list,
             commands::profile_identify,
             commands::profile_create,
