@@ -196,8 +196,11 @@ fn restore_migrates_an_older_snapshot() {
     {
         // What a snapshot from before migration 12 looks like.
         let c = Connection::open(&path).unwrap();
-        c.execute_batch("DROP TABLE filter_preset; PRAGMA user_version = 11;")
-            .unwrap();
+        c.execute_batch(
+            "DROP TABLE filter_preset; ALTER TABLE track DROP COLUMN grid_base;
+             PRAGMA user_version = 11;",
+        )
+        .unwrap();
     }
     assert_eq!(
         f.lib.backups().unwrap()[0].contents.unwrap().schema_version,

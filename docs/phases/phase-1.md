@@ -721,7 +721,7 @@ per task; 6 and 7 can run in parallel, 8 needs 7, 9 needs 6 and 7.
 Added 2026-10-24 at the maintainer's request, outside the original plan. User
 notes: [`../backups.md`](../backups.md).
 
-10. [x] **Library backups and restore**: `reks-core::backup` (online-backup
+17. [x] **Library backups and restore**: `reks-core::backup` (online-backup
     snapshots into `app_data_dir/library-backups/`, verified, named by UTC time
     and reason; retention newest N plus one per week for 8 weeks; restore with
     a `before-restore` snapshot, refusal of damaged, foreign and newer-schema
