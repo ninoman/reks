@@ -297,7 +297,8 @@ export interface MixStore {
 const DEFAULT_PREFS: DeckPrefs = {
   tempoRange: DEFAULT_TEMPO_RANGE,
   padMode: "hotCue",
-  padPage: { beatJump: 0, beatLoop: 0 },
+  // LOOP opens on the page with `DEFAULT_PAD_BEATS` (4).
+  padPage: { beatJump: 0, beatLoop: 1 },
   lastJump: DEFAULT_PAD_BEATS,
   lastLoop: DEFAULT_PAD_BEATS,
   loopPage: "beat",
@@ -814,8 +815,11 @@ export const useMix = create<MixStore>((set, get) => {
     },
 
     loopResize(deck, double) {
-      if (deckView(deck)?.loopRegion != null) {
+      const loop = deckView(deck)?.loopRegion ?? null;
+      if (loop !== null) {
         get().send({ type: "loopResize", deck, double });
+        // The size button keeps the resized beat loop's size after the loop is left.
+        if (loop.beats !== null) patchDeck(deck, { lastLoop: stepLoopSize(loop.beats, double) });
       } else {
         patchDeck(deck, { lastLoop: stepLoopSize(prefs(deck).lastLoop, double) });
       }

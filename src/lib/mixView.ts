@@ -184,10 +184,10 @@ export const JUMP_PAGES: readonly (readonly number[])[] = [
   [1, 2, 4, 8, 16, 32, 64, 128],
 ];
 
-/** Beat loop sizes per page, in beats. */
+/** Beat loop sizes per page, in beats, as rekordbox's (maintainer, 2026-10-24). */
 export const LOOP_PAGES: readonly (readonly number[])[] = [
-  [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16],
-  [1 / 4, 1 / 2, 1, 2, 4, 8, 16, 32],
+  [1 / 64, 1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2],
+  [4, 8, 16, 32, 64, 128, 256, 512],
 ];
 
 /** The jump and loop size a deck starts with, and the keys use until a pad is pressed. */
@@ -268,8 +268,8 @@ export function adjacentCue(
   return before;
 }
 
-/** The sizes LOOP can take: 1/32 … 512 beats, powers of two. */
-export const LOOP_SIZE_MIN = 1 / 32;
+/** The sizes LOOP can take: 1/64 … 512 beats, powers of two. */
+export const LOOP_SIZE_MIN = 1 / 64;
 export const LOOP_SIZE_MAX = 512;
 
 /** `size` halved or doubled, kept within `LOOP_SIZE_MIN` … `LOOP_SIZE_MAX`. */

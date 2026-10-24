@@ -429,6 +429,19 @@ describe("mix store", () => {
     ]);
   });
 
+  it("resizing a playing beat loop keeps the new size for the next loop", () => {
+    useMix.setState({
+      status: "running",
+      live: {
+        ...running,
+        decks: [deckView({ loaded: true, loopRegion: { startMs: 0, endMs: 1, beats: 4 } })],
+      },
+    });
+    useMix.getState().loopResize(0, true);
+    expect(sent()).toEqual([{ type: "loopResize", deck: 0, double: true }]);
+    expect(useMix.getState().decks[0]?.lastLoop).toBe(8);
+  });
+
   it("cues: a pad jumps or sets; edits go to the library and the deck takes the result", async () => {
     const track = {
       kind: "library" as const,
@@ -492,7 +505,7 @@ describe("mix store", () => {
     mix.unload(2);
     expect(useMix.getState().decks[2]).toMatchObject({
       padMode: "hotCue",
-      padPage: { beatJump: 1, beatLoop: 0 },
+      padPage: { beatJump: 1, beatLoop: 1 },
       lastJump: 16,
       loopPage: "manual",
       track: null,
