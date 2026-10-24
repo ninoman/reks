@@ -1,5 +1,6 @@
 /**
- * Track info panel (right of the table) for the primary selected track:
+ * Track info panel (right of the table) for the primary selected track (the
+ * bulk form, `BulkEditPanel.tsx`, takes over from 2 selected):
  * artwork, editable metadata, "Played in" (play history), the read-only cue
  * listing, and the beatgrid summary with its editor (`GridEditor.tsx`).
  * `TrackDetailPanel` is mounted with `key={trackId}` so switching tracks
@@ -8,7 +9,6 @@
 import {
   type FormEvent,
   type KeyboardEvent,
-  type ReactNode,
   useCallback,
   useEffect,
   useRef,
@@ -26,12 +26,13 @@ import {
 import { type Cue, libraryTrack, libraryUpdateTrack, type TrackDetail } from "../lib/ipc";
 import { rowAt, useLibrary } from "../store/library";
 import { useMix } from "../store/mix";
-import { usePanels } from "../store/panels";
 import { replaceRowEverywhere } from "../store/panes";
 import { primaryIndex } from "../store/selection";
 import { useKeyLabel } from "../store/settings";
+import { BulkEditPanel } from "./BulkEditPanel";
 import { ErrorMessage } from "./ErrorMessage";
 import { GridEditorDialog } from "./GridEditor";
+import { InfoPanel, infoMuted as muted } from "./InfoPanel";
 import { PlayedIn } from "./PlayedIn";
 import { TrackTags } from "./TrackTags";
 import {
@@ -46,44 +47,28 @@ import { Artwork } from "./ui/Artwork";
 import { Button } from "./ui/Button";
 import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
-import { ScrollArea } from "./ui/ScrollArea";
 import { Select } from "./ui/Select";
-import { SheetHeader } from "./ui/Sheet";
 import { Swatch } from "./ui/Swatch";
 import { Textarea } from "./ui/Textarea";
 
-/** The panel: a fixed head, then everything else scrolls. */
-function Panel({ children }: { children: ReactNode }) {
-  const toggleInfo = usePanels((s) => s.toggleInfo);
-  return (
-    <aside className="flex min-h-0 flex-1 flex-col" aria-label="Track details">
-      <div className="px-3 pt-2">
-        <SheetHeader title="Track info" closeLabel="Close track info" onClose={toggleInfo} />
-      </div>
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-2.5 px-3 pt-1 pb-3">{children}</div>
-      </ScrollArea>
-    </aside>
-  );
-}
-
-const muted = "m-0 text-fg-muted";
 const sectionTitle = "mt-0 mb-1 text-sm font-semibold";
 const facts = "m-0 grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 [&_dt]:text-fg-muted [&_dd]:m-0";
 
 const NO_COLOURS: string[] = [];
 
-/** The info panel for the primary selected track, or a hint when none is. */
+/** The info panel: the bulk form for 2+ selected tracks, else the primary track, or a hint. */
 export function TrackInfoPanel() {
+  const several = useLibrary((s) => s.selection.selected.size >= 2);
   const primaryId = useLibrary((s) => {
     const i = primaryIndex(s.selection);
     return i === null ? null : (rowAt(s, i)?.id ?? null);
   });
+  if (several) return <BulkEditPanel />;
   if (primaryId === null) {
     return (
-      <Panel>
+      <InfoPanel>
         <p className={muted}>Select a track to see and edit its details.</p>
-      </Panel>
+      </InfoPanel>
     );
   }
   return <TrackDetailPanel key={primaryId} trackId={primaryId} />;
@@ -152,9 +137,9 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
 
   if (detail === null || initial === null || form === null) {
     return (
-      <Panel>
+      <InfoPanel>
         {error !== null ? <ErrorMessage message={error} /> : <p className={muted}>Loading…</p>}
-      </Panel>
+      </InfoPanel>
     );
   }
 
@@ -203,7 +188,7 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
   }
 
   return (
-    <Panel>
+    <InfoPanel>
       <Artwork artworkId={t.artwork?.id ?? null} mime={t.artwork?.mime ?? ""} />
       <div className="text-xs text-fg-muted">
         <div>
@@ -340,7 +325,7 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
           </table>
         )}
       </section>
-    </Panel>
+    </InfoPanel>
   );
 }
 

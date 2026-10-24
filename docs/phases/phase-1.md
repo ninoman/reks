@@ -587,7 +587,7 @@ there, the `player_*` commands, polling and transport bar are gone.
 
 ### Tauri commands (`src-tauri`)
 
-`library_query`, `library_facets`, `library_track`, `library_update_track`, `playlists_get`, `tags_get`, `tags_mutate`,
+`library_query`, `library_facets`, `library_track`, `library_update_track`, `library_bulk_update_tracks`, `playlists_get`, `tags_get`, `tags_mutate`,
 `filter_presets_get`, `filter_presets_mutate`,
 `playlists_mutate`, `playlist_rule`, `scan_start` (progress via `Channel<ScanEvent>`), `scan_cancel`,
 `rbxml_preview(path, remap)`, `rbxml_import_start` (progress via Channel), `rbxml_import_cancel`, `rbxml_export`,
@@ -648,6 +648,19 @@ Response(bytes)`, `settings_get`, `settings_set(patch)`, `library_roots`, `libra
 14. [x] **Polish + release pipeline**: app icon, window state persistence, unsigned
     dev builds via `tauri-action` on tags (signing is Phase 2+ concern; see
     decisions.md).
+15. [x] **Bulk metadata edit** (maintainer request 2026-10-24, outside the
+    original plan): with 2+ tracks selected the info panel is one form for
+    artist, album, genre, label, year, rating, colour, key, comment and My
+    Tags; fields where the tracks differ show "Mixed" and stay untouched.
+    `Library::bulk_update_tracks` ([`bulk_edit.rs`](../../crates/reks-core/src/bulk_edit.rs))
+    applies one `BulkPatch` to every track in a single transaction (any
+    error changes nothing), reusing the single-track validation; comment is
+    replaced or appended (one space after the existing text); tags are added
+    or removed, never replaced. Title, BPM, grid, cues and path are not
+    offered (the patch refuses them). No undo; a selection of 20+ asks first.
+    UI: [`BulkEditPanel`](../../src/components/BulkEditPanel.tsx), pure model
+    in `bulkEditForm.ts`. Not yet: a `Library::snapshot` before large edits
+    (backups session).
 
 ### My Tags, advanced filtering and smart playlists (D29)
 

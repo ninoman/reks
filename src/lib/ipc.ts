@@ -472,6 +472,47 @@ export function libraryUpdateTrack(id: number, patch: TrackPatch): Promise<Track
   return invoke("library_update_track", { id, patch });
 }
 
+/** How a bulk comment edit treats each track's existing comment. */
+export type CommentEdit =
+  | { mode: "replace"; text: string | null }
+  /** Added after each track's comment, one space between. */
+  | { mode: "append"; text: string };
+
+/**
+ * A bulk edit (`bulk_edit.rs`): an absent field is unchanged, `null` clears
+ * it. Only fields that are safe on many tracks at once exist here.
+ */
+export interface BulkPatch {
+  artist?: string | null;
+  album?: string | null;
+  genre?: string | null;
+  label?: string | null;
+  year?: number | null;
+  rating?: number;
+  color?: string | null;
+  /** Any notation; stored canonical. */
+  key?: string | null;
+  comment?: CommentEdit;
+  /** Linked to every track; existing links are kept. */
+  addTags?: number[];
+  removeTags?: number[];
+}
+
+export interface BulkOutcome {
+  /** The edited tracks as the table shows them. */
+  rows: TrackRow[];
+  tagsAdded: number;
+  tagsRemoved: number;
+}
+
+/** One transaction for all tracks: all change or none does. */
+export function libraryBulkUpdateTracks(
+  trackIds: number[],
+  patch: BulkPatch,
+): Promise<BulkOutcome> {
+  return invoke("library_bulk_update_tracks", { trackIds, patch });
+}
+
 /** Small JPEG of an artwork for lists (raw `ipc::Response`), cached on disk by the core. */
 export function artworkThumb(id: number): Promise<ArrayBuffer> {
   return invoke("artwork_thumb", { id });

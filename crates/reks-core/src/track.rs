@@ -146,7 +146,7 @@ pub struct TrackPatch {
 }
 
 /// Present-but-null → `Some(None)`; absent → `None` (via `#[serde(default)]`).
-fn nullable<'de, D, T>(d: D) -> std::result::Result<Option<Option<T>>, D::Error>
+pub(crate) fn nullable<'de, D, T>(d: D) -> std::result::Result<Option<Option<T>>, D::Error>
 where
     D: Deserializer<'de>,
     T: Deserialize<'de>,
@@ -291,7 +291,7 @@ fn detail(conn: &Connection, id: TrackId) -> Result<TrackDetail> {
 }
 
 /// Checks every field of `patch` and returns the `(column, value)` pairs to set.
-fn validate(p: &TrackPatch) -> Result<Vec<(&'static str, Value)>> {
+pub(crate) fn validate(p: &TrackPatch) -> Result<Vec<(&'static str, Value)>> {
     let mut sets = Vec::new();
     let texts = [
         ("title", &p.title),

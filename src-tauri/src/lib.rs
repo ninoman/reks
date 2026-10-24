@@ -80,6 +80,7 @@ pub fn run() {
             commands::library_facets,
             commands::library_track,
             commands::library_update_track,
+            commands::library_bulk_update_tracks,
             commands::playlists_get,
             commands::playlists_mutate,
             commands::playlist_rule,

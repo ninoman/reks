@@ -9,10 +9,10 @@ use reks_core::rbxml::{
     self, ImportEvent, ImportOptions, ImportPreview, ImportReport, PrefixRemap,
 };
 use reks_core::{
-    ArtworkId, CancelToken, Facets, FilterPreset, FilterPresetOp, FilterPresetOutcome, Library,
-    LibraryRoot, PlaylistId, PlaylistOp, PlaylistOutcome, PlaylistTree, RuleNode, ScanEvent,
-    ScanReport, Settings, SettingsPatch, TagOp, TagOutcome, TagTree, TrackDetail, TrackId,
-    TrackPage, TrackPatch, TrackQuery,
+    ArtworkId, BulkOutcome, BulkPatch, CancelToken, Facets, FilterPreset, FilterPresetOp,
+    FilterPresetOutcome, Library, LibraryRoot, PlaylistId, PlaylistOp, PlaylistOutcome,
+    PlaylistTree, RuleNode, ScanEvent, ScanReport, Settings, SettingsPatch, TagOp, TagOutcome,
+    TagTree, TrackDetail, TrackId, TrackPage, TrackPatch, TrackQuery,
 };
 use reks_export_onelibrary::{OneLibraryWriter, RbVersion};
 use reks_export_rb::device::{self, DeviceInfo};
@@ -87,6 +87,19 @@ pub async fn library_update_track(
     patch: TrackPatch,
 ) -> CmdResult<TrackDetail> {
     blocking(&state, move |lib| lib.update_track(id, &patch)).await
+}
+
+/// Applies one metadata edit to many tracks in a single transaction.
+#[tauri::command]
+pub async fn library_bulk_update_tracks(
+    state: State<'_, AppState>,
+    track_ids: Vec<TrackId>,
+    patch: BulkPatch,
+) -> CmdResult<BulkOutcome> {
+    blocking(&state, move |lib| {
+        lib.bulk_update_tracks(&track_ids, &patch)
+    })
+    .await
 }
 
 /// The playlist tree.

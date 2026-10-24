@@ -278,7 +278,8 @@ pub(crate) fn assign(c: &Connection, track_ids: &[TrackId], tag_ids: &[TagId]) -
     Ok(to_u32(added))
 }
 
-fn unassign(c: &Connection, track_ids: &[TrackId], tag_ids: &[TagId]) -> Result<u32> {
+/// Unlinks every track from every tag; returns the links removed.
+pub(crate) fn unassign(c: &Connection, track_ids: &[TrackId], tag_ids: &[TagId]) -> Result<u32> {
     let (tracks, tags) = valid_links(c, track_ids, tag_ids)?;
     let mut stmt = c.prepare_cached("DELETE FROM track_tag WHERE track_id = ?1 AND tag_id = ?2")?;
     let mut removed = 0;
