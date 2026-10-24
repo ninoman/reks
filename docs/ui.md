@@ -374,8 +374,8 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   is cached in tiles on a pixel grid fixed to the track (`lib/waveStrip.ts`)
   and copied at whole-pixel offsets; the playhead runs on between engine
   states (`lib/deckScroll.ts`). Zoom is one level for every deck (so they
-  compare at a glance; `MixStore.waveZoom`): 32/16/8/4/2/1/0.5 s across, 4 s by
-  default, with − / + on a view, the − / + keys (anywhere outside text
+  compare at a glance; `MixStore.waveZoom`): 32/16/8/4/2/1/0.5 s across, 8 s by
+  default and remembered across launches (`lib/deckZoomMemory.ts`), with − / + on a view, the − / + keys (anywhere outside text
   fields, dialogs and menus, Mix panel open or not; `waveZoomKey` in
   `lib/keys.ts`), or Cmd/Ctrl + scroll.
 - Marks (`lib/deckMarks.ts`), on both views: hot cues are a flag with the

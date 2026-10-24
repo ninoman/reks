@@ -13,7 +13,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
-import { DEFAULT_DECK_ZOOM, stepZoom } from "../lib/deckScroll";
+import { stepZoom } from "../lib/deckScroll";
+import { loadDeckZoom, saveDeckZoom } from "../lib/deckZoomMemory";
 import {
   analysisReanalyse,
   audioDevices,
@@ -539,7 +540,7 @@ export const useMix = create<MixStore>((set, get) => {
     devices: [],
     options: null,
     deckCount: 2,
-    waveZoom: DEFAULT_DECK_ZOOM,
+    waveZoom: loadDeckZoom(),
     decks: Array.from({ length: DECKS }, emptyDeck),
     // Channels 1–2 on filter X (left), 3–4 on Y (right), as in reks-mix.
     channels: Array.from({ length: DECKS }, (_, ch) => ({
@@ -902,7 +903,9 @@ export const useMix = create<MixStore>((set, get) => {
     },
 
     zoom(dir) {
-      set({ waveZoom: stepZoom(get().waveZoom, dir) });
+      const waveZoom = stepZoom(get().waveZoom, dir);
+      saveDeckZoom(waveZoom);
+      set({ waveZoom });
     },
 
     setTempoRange(deck, range) {

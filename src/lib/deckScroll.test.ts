@@ -15,7 +15,7 @@ import {
 
 describe("zoom", () => {
   it("steps between the levels and stops at the ends", () => {
-    expect(zoomSeconds(DEFAULT_DECK_ZOOM)).toBe(4);
+    expect(zoomSeconds(DEFAULT_DECK_ZOOM)).toBe(8);
     expect(stepZoom(DEFAULT_DECK_ZOOM, 1)).toBe(DEFAULT_DECK_ZOOM + 1);
     expect(stepZoom(0, -1)).toBe(0);
     expect(stepZoom(DECK_ZOOM_S.length - 1, 1)).toBe(DECK_ZOOM_S.length - 1);
