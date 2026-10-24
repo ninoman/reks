@@ -48,7 +48,7 @@ export function ResizeHandle({
   min: number;
   max: number;
   /** The current width, when the caller knows it (else the parent is measured). */
-  value?: number;
+  value?: number | undefined;
   onResize: (width: number) => void;
   onReset: () => void;
   className?: string;
