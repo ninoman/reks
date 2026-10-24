@@ -416,8 +416,10 @@ Notes (task 10, [`playlist.rs`](../../crates/reks-core/src/playlist.rs), [`Playl
 - Not checked yet in the running app (`cargo tauri dev`); covered by reks-core and Vitest tests.
 
 Notes (task 12, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs), [`ImportWizard`](../../src/components/ImportWizard.tsx))
-- "Import rekordbox XML…" picks the file and opens the wizard. Its steps are
-  review → importing → report (`src/store/importWizard.ts`).
+- "Import rekordbox XML…" opens the wizard. Its steps are choose → review →
+  importing → report (`src/store/importWizard.ts`). Choose says how to export the
+  XML from rekordbox (`File > Export Collection in xml format`, the menu used with
+  rekordbox 6.8.6; not checked on 7) and opens the file picker.
 - Review shows `rbxml::preview`. The preview writes nothing and reads no files beyond
   one `stat` per track (after the remap). It counts:
   - tracks, files found / not found, and entries that won't be stored (no

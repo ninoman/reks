@@ -1,5 +1,6 @@
 /**
- * The rekordbox XML import wizard (phase 1 task 12): review the counts and
+ * The rekordbox XML import wizard (phase 1 task 12): say how to export the
+ * XML from rekordbox and pick it, review the counts and
  * map a moved music folder before anything is written, follow the import,
  * then read the report. All counting and matching happens in Rust; this only
  * shows `ImportPreview` / `ImportReport`. When comments carry rekordbox's My
@@ -46,10 +47,18 @@ async function pickFolder(from: string): Promise<string | null> {
   return typeof to === "string" ? to : null;
 }
 
+async function pickXml(): Promise<string | null> {
+  const path = await open({
+    title: "Import rekordbox collection.xml",
+    filters: [{ name: "rekordbox XML", extensions: ["xml"] }],
+  });
+  return typeof path === "string" ? path : null;
+}
+
 export function ImportWizard() {
   const step = useImportWizard((s) => s.step);
   const path = useImportWizard((s) => s.path);
-  if (step === "closed" || path === null) return null;
+  if (step === "closed" || (step !== "choose" && path === null)) return null;
   return (
     <Dialog
       open
@@ -60,13 +69,58 @@ export function ImportWizard() {
       <DialogContent size="lg" className="select-text">
         <DialogHeader>
           <DialogTitle>Import rekordbox XML</DialogTitle>
-          <DialogDescription title={path}>{fileName(path)}</DialogDescription>
+          {path === null ? (
+            <DialogDescription>
+              Bring over tracks, cues, beatgrids and playlists from rekordbox.
+            </DialogDescription>
+          ) : (
+            <DialogDescription title={path}>{fileName(path)}</DialogDescription>
+          )}
         </DialogHeader>
+        {step === "choose" && <Choose />}
         {step === "review" && <Review />}
         {step === "importing" && <Importing />}
         {step === "report" && <Report />}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function Choose() {
+  const { open: openXml, close } = useImportWizard.getState();
+
+  async function choose() {
+    const path = await pickXml();
+    if (path !== null) await openXml(path);
+  }
+
+  return (
+    <>
+      <DialogBody>
+        <p className="m-0 mb-2">First export your collection from rekordbox:</p>
+        <ol className="m-0 mb-3 list-decimal space-y-1 pl-5">
+          <li>
+            Optional: to bring My Tags along, turn on{" "}
+            <span className="font-medium">Add My Tag to Comments</span> in rekordbox first.
+          </li>
+          <li>
+            In rekordbox, choose{" "}
+            <span className="font-medium">File › Export Collection in xml format</span>.
+          </li>
+          <li>Save the file (for example as collection.xml), then choose it below.</li>
+        </ol>
+        <p className="m-0 text-fg-muted">
+          Nothing is imported until you have reviewed the counts. Your rekordbox library and music
+          files are not changed.
+        </p>
+      </DialogBody>
+      <DialogFooter>
+        <Button variant="primary" onClick={() => void choose()}>
+          Choose file…
+        </Button>
+        <Button onClick={close}>Cancel</Button>
+      </DialogFooter>
+    </>
   );
 }
 
