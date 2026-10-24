@@ -5,7 +5,7 @@
  * `cargo run -p reks-cli -- columns fixtures/audio/sine-click-128.wav src/dev/fixtures/sine-click-128.columns.bin`.
  * Analysed tracks start with a 128 BPM grid 12 ms late, so nudging has
  * something to fix. The edits are a rough stand-in for `reks-core`
- * `beatgrid.rs`, which is the real (tested) implementation.
+ * `beatgrid/`, which is the real (tested) implementation.
  */
 
 import type { Beatgrid, BeatMark, GridAnchor, GridEdit } from "../lib/ipc";
@@ -32,16 +32,24 @@ function initial(analysed: boolean): MockGrid {
     : { anchors: [], source: null, locked: false };
 }
 
+const mod = (n: number, bpb: number) => (((n % bpb) + bpb) % bpb) + 1;
+
+/** Rough stand-in for Rust's beat rule: a section stops half a beat before the next marker. */
 function beats(anchors: GridAnchor[]): BeatMark[] {
   const out: BeatMark[] = [];
-  const a = anchors[0];
-  if (a === undefined) return out;
-  const period = 6_000_000_000 / a.bpmX100;
-  for (let n = 0; ; n++) {
-    const pos = a.positionMs * 1000 + Math.round(n * period);
-    if (pos > DURATION_MS * 1000) break;
-    out.push({ positionUs: pos, beatInBar: ((a.beatInBar - 1 + n) % a.beatsPerBar) + 1 });
-  }
+  anchors.forEach((a, i) => {
+    const period = 6_000_000 / a.bpmX100;
+    const next = anchors[i + 1]?.positionMs ?? Infinity;
+    const first = i === 0 ? -Math.floor(a.positionMs / period) : 0;
+    for (let n = first; ; n++) {
+      const ms = a.positionMs + n * period;
+      if (ms > DURATION_MS || next - ms < period / 2) break;
+      out.push({
+        positionUs: Math.round(ms * 1000),
+        beatInBar: mod(a.beatInBar - 1 + n, a.beatsPerBar),
+      });
+    }
+  });
   return out;
 }
 
@@ -49,36 +57,79 @@ function view(g: MockGrid): Beatgrid {
   return { ...g, beats: beats(g.anchors) };
 }
 
+/** The section holding `ms` and the beat number in it nearest `ms`. */
+function nearest(anchors: GridAnchor[], ms: number): [number, number] {
+  let i = 0;
+  while (i + 1 < anchors.length && (anchors[i + 1]?.positionMs ?? Infinity) <= ms) i++;
+  const a = anchors[i] as GridAnchor;
+  return [i, Math.round((ms - a.positionMs) / (6_000_000 / a.bpmX100))];
+}
+
 function edit(g: MockGrid, e: GridEdit): MockGrid {
   if (e.op === "setLocked") return { ...g, locked: e.locked };
   if (g.locked) throw new Error("the beatgrid is locked");
-  const a = g.anchors[0];
-  if (a === undefined) {
+  if (g.anchors.length === 0) {
     if (e.op !== "setBpm") throw new Error("track has no beatgrid");
     const anchors = [{ positionMs: e.anchorMs, bpmX100: e.bpmX100, beatInBar: 1, beatsPerBar: 4 }];
     return { ...g, anchors, source: "manual" };
   }
-  const period = 6_000_000 / a.bpmX100;
-  const mod = (n: number) => (((n % 4) + 4) % 4) + 1;
-  let next: GridAnchor;
+  const anchors = g.anchors.map((a) => ({ ...a }));
+  const at = (i: number) => anchors[i] as GridAnchor;
+  const each = (s: number | null) => (s === null ? anchors.map((_, i) => i) : [s]);
   switch (e.op) {
     case "nudge":
-      next = { ...a, positionMs: a.positionMs + e.deltaMs };
+      for (const a of anchors) a.positionMs += e.deltaMs;
       break;
-    case "setDownbeat":
-      next = { ...a, beatInBar: mod(-Math.round((e.atMs - a.positionMs) / period)) };
+    case "setDownbeat": {
+      const [i, n] = nearest(anchors, e.atMs);
+      at(i).beatInBar = mod(-n, at(i).beatsPerBar);
       break;
+    }
     case "double":
-      next = { ...a, bpmX100: a.bpmX100 * 2, beatInBar: mod(2 * (a.beatInBar - 1)) };
+      for (const i of each(e.section)) {
+        at(i).bpmX100 *= 2;
+        at(i).beatInBar = mod(2 * (at(i).beatInBar - 1), at(i).beatsPerBar);
+      }
       break;
     case "halve":
-      next = { ...a, bpmX100: Math.round(a.bpmX100 / 2) };
+      for (const i of each(e.section)) at(i).bpmX100 = Math.round(at(i).bpmX100 / 2);
       break;
     case "setBpm":
-      next = { ...a, bpmX100: e.bpmX100 };
+      at(nearest(anchors, e.anchorMs)[0]).bpmX100 = e.bpmX100;
       break;
+    case "setSectionBpm":
+      at(e.section).bpmX100 = e.bpmX100;
+      break;
+    case "addMarker": {
+      const [i, n] = nearest(anchors, e.atMs);
+      const a = at(i);
+      anchors.splice(i + 1, 0, {
+        ...a,
+        positionMs: e.atMs,
+        beatInBar: mod(a.beatInBar - 1 + n, a.beatsPerBar),
+      });
+      break;
+    }
+    case "moveMarker":
+      at(e.section).positionMs = e.toMs;
+      break;
+    case "deleteMarker":
+      if (anchors.length < 2) throw new Error("a grid keeps at least one marker");
+      anchors.splice(e.section, 1);
+      break;
+    case "stretch": {
+      const a = at(e.section);
+      const n = Math.round((e.beatMs - a.positionMs) / (6_000_000 / a.bpmX100));
+      if (n === 0) throw new Error("pick a beat other than the marker");
+      a.bpmX100 = Math.round((n * 6_000_000) / (e.toMs - a.positionMs));
+      break;
+    }
+    case "reset":
+      return initial(true);
+    case "setAnchors":
+      return { ...g, anchors: e.anchors, source: "manual" };
   }
-  return { ...g, anchors: [next], source: "manual" };
+  return { ...g, anchors, source: "manual" };
 }
 
 export function mockGrid(
@@ -106,6 +157,9 @@ export function mockGrid(
       const last = taps[taps.length - 1] ?? 0;
       return Math.round(6_000_000 / ((last - first) / (taps.length - 1)));
     }
+    // The fixture's clicks: one on every beat at 128 BPM from 0 ms.
+    case "waveform_transients":
+      return Array.from({ length: 64 }, (_, n) => Math.round(n * 468.75));
     case "waveform_columns":
     case "device_waveform_columns":
       columns ??= fetch(columnsUrl).then((r) => r.arrayBuffer());

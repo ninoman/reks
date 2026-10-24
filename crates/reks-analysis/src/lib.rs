@@ -13,6 +13,7 @@ pub mod key;
 pub mod onset;
 pub mod pipeline;
 pub mod queue;
+pub mod transients;
 pub mod waveform;
 
 pub use beats::{

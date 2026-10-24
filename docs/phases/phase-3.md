@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–11, 11b and 13 done; 12 measured, tuning (12a) in progress: BPM and downbeat met; key port verified, mode kept, tonic next; grid editing with tempo sections, tasks 15–18, added 2026-10-24). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–11, 11b and 13 done; 12 measured, tuning (12a) in progress: BPM and downbeat met; key port verified, mode kept, tonic next; grid editing with tempo sections, tasks 15–18, added and done 2026-10-24; its hardware check, item 7, UNVERIFIED). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -388,7 +388,7 @@ rekordbox keys (D10, "Queue"). A track rekordbox analysed has a rekordbox entry 
     double/halve, lock grid; edits write `beatgrid` rows with `source =
     manual` and are preserved on re-analysis.
     Done: maths and storage in
-    [beatgrid.rs](../../crates/reks-core/src/beatgrid.rs) (`GridEdit`,
+    [beatgrid/](../../crates/reks-core/src/beatgrid/mod.rs) (`GridEdit`,
     `tap_tempo` = least-squares slope of the newest tap run, `beat_marks`;
     positions whole ms, tempo `bpm_x100`). Set-downbeat re-phases the bar
     without moving beats; double/halve keep downbeats (halve keeps every
@@ -411,7 +411,7 @@ rekordbox keys (D10, "Queue"). A track rekordbox analysed has a rekordbox entry 
 Grid editing with tempo sections (added 2026-10-24, maintainer's call; D10
 "Grid editing with tempo sections" has the model and the rules):
 
-15. [ ] **Section model and edits** (`reks-core::beatgrid`): one beat rule
+15. [x] **Section model and edits** (`reks-core::beatgrid`): one beat rule
     (`grid_beats`: a section's beats stop half a beat before the next
     marker; the first section runs back to 0); `validate_anchors` refuses
     degenerate grids on every edit; new `GridEdit`s, each a pure function
@@ -425,21 +425,42 @@ Grid editing with tempo sections (added 2026-10-24, maintainer's call; D10
     `manual` rows (user-owned, analysis keeps them); XML re-import skips
     user-owned grids. Tests: unit tests per edit, property tests (valid
     grids give strictly increasing beats; XML round trip of anchors).
-16. [ ] **Export**: `PQTZ` from `grid_beats`; `anchors_from_pqtz` for stick
+    Done: [`beatgrid/`](../../crates/reks-core/src/beatgrid/mod.rs)
+    (`rule.rs` beat rule and validation, `edit.rs` edits, `tap.rs`),
+    migration 0013 (`track.grid_base`); tests in the module,
+    [tests/beatgrid.rs](../../crates/reks-core/tests/beatgrid.rs) and
+    [tests/rbxml_grid.rs](../../crates/reks-core/tests/rbxml_grid.rs).
+16. [x] **Export**: `PQTZ` from `grid_beats`; `anchors_from_pqtz` for stick
     reads (beat list back within 1 ms, anchors exact for canonical grids); `AnlzSource::ReksGrid` so a user-owned grid reaches
     the stick under `rekordboxFirst` without reks analysis; validator
     checks `PQTZ` order (exists) — test it on a stick. Tests: property
     round trip through `PQTZ`, our reader and rekordcrate; XML writes every
-    section.
-17. [ ] **Decks** (`reks-mix`): `BeatMap` from the beat list; sync, beat
+    section. Done: [`reks-anlz::grid`](../../crates/reks-anlz/src/grid.rs)
+    (`pqtz_beats_from_anchors`, `anchors_from_pqtz`), `AnlzSource::ReksGrid`
+    in the planner and [reksanlz.rs](../../crates/reks-export-rb/src/reksanlz.rs);
+    tests in [tests/sections.rs](../../crates/reks-anlz/tests/sections.rs),
+    `tests/build.rs`, `tests/reks_anlz.rs` and `tests/rbmap.rs`.
+17. [x] **Decks** (`reks-mix`): `BeatMap` from the beat list; sync, beat
     jump, beat loops and quantise on a two-tempo fixture (140 → 174 BPM
-    click track, `fixtures/gen`).
-18. [ ] **Editor UI**: section markers on a zoomable waveform, select a
+    click track, `fixtures/gen`). Done: `BeatMap` takes `GridBeat`s
+    ([beatmap.rs](../../crates/reks-mix/src/beatmap.rs)) from
+    `reks_core::deck::deck_beats`; fixture
+    [tempo.rs](../../fixtures/gen/src/tempo.rs); render tests in
+    [tests/sections.rs](../../crates/reks-mix/tests/sections.rs) (beat jumps
+    and a beat loop over the change land within a frame of the clicks; a
+    synced 128 BPM deck stays within 0.08 ms through it).
+18. [x] **Editor UI**: section markers on a zoomable waveform, select a
     section, drag a marker (move) or Alt-drag a beat (stretch), add/delete
     marker, typed or tapped BPM per section, set downbeat, ½/×2, reset
     section/all, shift, snap to transients (`waveform_transients`),
     keyboard shortcuts, undo/redo. Tests: component tests for each
-    operation, history reducer.
+    operation, history reducer. Done:
+    [GridEditor.tsx](../../src/components/GridEditor.tsx) and
+    [components/grid/](../../src/components/grid/), helpers in
+    `lib/gridView.ts`, `lib/gridHistory.ts`, `lib/gridKeys.ts`; transients in
+    [`reks-analysis::transients`](../../crates/reks-analysis/src/transients.rs)
+    (`waveform_transients`). Checked in the browser preview (mock backend);
+    layout in [ui.md](../ui.md#grid-editor-phase-3-tasks-13-18).
 
 ## Acceptance criteria
 

@@ -106,6 +106,7 @@ pub fn run() {
             grid::beatgrid_edit,
             grid::beatgrid_tap_tempo,
             grid::waveform_columns,
+            grid::waveform_transients,
             grid::waveform_overview,
             commands::settings_get,
             commands::settings_set,

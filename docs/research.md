@@ -468,7 +468,12 @@ Verified against pyrekordbox's format page (which mirrors Pioneer's XML spec):
   `0x0000FF`, Violet `0x660099`; pyrekordbox format page, fetched 2026-10-19.
   A real rekordbox 6.8.6 export uses exactly the Red/Green/Turquoise/Blue values).
 - `TEMPO` children: Inizio (s), Bpm, Metro ("4/4"), Battito (beat in bar
-  1–4). Multiple per track for dynamic grids.
+  1–4). Multiple per track for dynamic grids. The maintainer's rekordbox 6
+  `collection.xml` (2026-10-24): 983 tracks with several `TEMPO`; of their
+  8,157 consecutive pairs, 8,151 keep the tempo and the later `Inizio` is
+  within ±2 ms of a whole beat of the earlier (median 43 beats apart),
+  i.e. rekordbox's edits re-anchor sections; how rekordbox ends a section
+  that is not on a beat is not documented (D10, "Grid editing").
 - `POSITION_MARK` children: Name, Type (0 cue, 1 fade-in, 2 fade-out, 3
   load, 4 loop), Start (s), End (s, loops), Num (−1 memory, 0..7 hot cue
   A..H); rekordbox 6+ also writes Red/Green/Blue (seen in the wild; not on

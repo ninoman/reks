@@ -367,7 +367,7 @@ Date of decisions: 2026-10-18.
     one anchor (marker) to the next at the anchor's tempo; the first also
     runs back to 0 ms. Positions stay whole ms (the rule above).
   - **Beat rule** (one function,
-    [`beatgrid::grid_beats`](../crates/reks-core/src/beatgrid.rs), used by
+    [`beatgrid::grid_beats`](../crates/reks-core/src/beatgrid/rule.rs), used by
     the editor, `PQTZ` and the decks): a section's beats are `anchor + n ×
     period` while a beat is at least half a period before the next marker,
     so a section holds round(gap / period) beats and every interval at a

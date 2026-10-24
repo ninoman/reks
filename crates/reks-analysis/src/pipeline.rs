@@ -8,7 +8,8 @@
 
 use std::path::Path;
 
-use reks_core::{AnalysisAnchor, AnalysisRecord};
+use reks_core::analysis::file_content_hash;
+use reks_core::{AnalysisAnchor, AnalysisRecord, GridAnchor, Library, TrackId};
 
 use crate::beats::{BeatError, BeatList, BeatTracker};
 use crate::grid::{self, build_grid_with_pulse, Grid, GridError, GridOptions, TrackedBeat};
@@ -138,6 +139,25 @@ fn whole_ms(samples: f64) -> i64 {
 
 fn bpm_x100(beat_len_samples: f64) -> i64 {
     (60.0 * f64::from(ANALYSIS_RATE) / beat_len_samples * 100.0).round() as i64
+}
+
+/// The grid of track `id`'s current analysis cache entry as library
+/// anchors (4/4); `None` without a current entry or a grid. The grid
+/// editor's Reset falls back to it for grids edited before migration 0013.
+pub fn cached_grid(lib: &Library, id: TrackId) -> Option<Vec<GridAnchor>> {
+    let (path, _) = lib.track_file_key(id).ok()?;
+    let hash = file_content_hash(&path).ok()?;
+    let analysis = crate::cache::load_valid(&lib.cache_dir(), id, &hash)?;
+    let anchors = grid_anchors(analysis.grid.as_ref()?)
+        .into_iter()
+        .map(|a| GridAnchor {
+            position_ms: a.position_ms,
+            bpm_x100: a.bpm_x100,
+            beat_in_bar: a.beat_in_bar,
+            beats_per_bar: 4,
+        })
+        .collect();
+    Some(anchors)
 }
 
 /// `beatgrid` rows for `grid`: one for a constant grid; for a dynamic grid a

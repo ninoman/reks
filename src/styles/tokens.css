@@ -223,6 +223,10 @@
   --color-grid-beat: rgb(235 235 240 / 38%);
   --color-grid-downbeat: var(--red-500);
   --color-grid-cursor: var(--color-accent);
+  /* Grid editor: tempo section markers, the selected section's band, transients. */
+  --color-grid-marker: var(--amber-500);
+  --color-grid-section: rgb(212 154 69 / 14%);
+  --color-grid-transient: var(--color-deck-fg);
   /* Deck markers: cue point and hot cues. */
   --color-deck-cue: var(--amber-500);
   --color-deck-hotcue: var(--green-500);
