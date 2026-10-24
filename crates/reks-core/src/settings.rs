@@ -5,7 +5,8 @@
 //! means the default (an unreadable one is logged), so a bad row never stops
 //! the app. Keys: [`AUDIO_DEVICE`], [`AUDIO_SAMPLE_RATE`],
 //! [`AUDIO_BUFFER_FRAMES`], [`AUDIO_CUE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`THEME`],
-//! [`SYNC_ALIGN`], [`MIXER_VIEW`], [`MIXER_FILTERS`], [`MIXER_EQ`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`].
+//! [`SYNC_ALIGN`], [`MIXER_VIEW`], [`MIXER_FILTERS`], [`MIXER_EQ`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`],
+//! [`TAGS_IN_COMMENTS`].
 
 use std::path::{Path, PathBuf};
 
@@ -47,6 +48,9 @@ pub const CACHE_DIR: &str = "storage.cache_dir";
 pub const UI_STATE: &str = "ui.state";
 /// [`AnlzPreference`]: where USB exports take a track's analysis from.
 pub const ANLZ_PREFERENCE: &str = "export.anlz_preference";
+/// `bool`: keep each track's My Tags in its comment as rekordbox's
+/// `/* A / B */` block (rekordbox's "Add My Tag to Comments"; D36). Off by default.
+pub const TAGS_IN_COMMENTS: &str = "tags.write_to_comments";
 
 /// Where a USB export takes a track's ANLZ files (waveforms, beatgrid, cues)
 /// from when both rekordbox's local analysis cache and reks's own analysis
@@ -191,6 +195,8 @@ pub struct Settings {
     pub cache_dir: PathBuf,
     pub ui: UiState,
     pub anlz_preference: AnlzPreference,
+    /// Tag edits rewrite the track's comment tag block ([`TAGS_IN_COMMENTS`]).
+    pub tags_in_comments: bool,
     /// This build has the OneLibrary key built in ([`crate::secret::builtin`]).
     pub onelibrary_key_builtin: bool,
 }
@@ -276,6 +282,9 @@ pub struct SettingsPatch {
     pub mixer_eq: Option<MixerEq>,
     pub ui: Option<UiState>,
     pub anlz_preference: Option<AnlzPreference>,
+    /// Turning it on rewrites nothing by itself; see
+    /// [`Library::comment_tags_sync_all`].
+    pub tags_in_comments: Option<bool>,
 }
 
 /// Lets `null` mean "set to none" rather than "absent".
@@ -316,6 +325,7 @@ impl Library {
             cache_dir: self.cache_dir(),
             ui: get(&conn, UI_STATE)?.unwrap_or_default(),
             anlz_preference: get(&conn, ANLZ_PREFERENCE)?.unwrap_or_default(),
+            tags_in_comments: tags_in_comments(&conn)?,
             onelibrary_key_builtin: crate::secret::builtin::present(),
         })
     }
@@ -364,6 +374,9 @@ impl Library {
             }
             if let Some(p) = patch.anlz_preference {
                 put(&tx, ANLZ_PREFERENCE, Some(&p))?;
+            }
+            if let Some(on) = patch.tags_in_comments {
+                put(&tx, TAGS_IN_COMMENTS, Some(&on))?;
             }
             tx.commit()?;
         }
@@ -515,6 +528,11 @@ impl Library {
         }
         Ok(())
     }
+}
+
+/// [`TAGS_IN_COMMENTS`], read inside the caller's transaction.
+pub(crate) fn tags_in_comments(conn: &Connection) -> Result<bool> {
+    Ok(get(conn, TAGS_IN_COMMENTS)?.unwrap_or(false))
 }
 
 fn get<T: DeserializeOwned>(conn: &Connection, key: &str) -> Result<Option<T>> {
@@ -708,6 +726,7 @@ mod tests {
             mixer_eq: Some(MixerEq::ThreeBand),
             ui: Some(ui.clone()),
             anlz_preference: Some(AnlzPreference::ReksFirst),
+            tags_in_comments: Some(true),
         })
         .unwrap();
         let s = lib
@@ -735,6 +754,7 @@ mod tests {
         assert_eq!(s.mixer_eq, MixerEq::ThreeBand);
         assert_eq!(s.ui, ui);
         assert_eq!(s.anlz_preference, AnlzPreference::ReksFirst);
+        assert!(s.tags_in_comments);
         assert_eq!(lib.settings().unwrap(), s);
 
         let s = lib

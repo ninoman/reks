@@ -38,6 +38,7 @@ const settings: Settings = {
   mixerFilters: "show",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
+  tagsInComments: false,
   onelibraryKeyBuiltin: false,
   ui: {
     hiddenColumns: null,

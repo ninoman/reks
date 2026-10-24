@@ -187,6 +187,10 @@ impl Library {
             params.push(Value::Integer(id));
             tx.execute(&sql, params_from_iter(&params))?;
         }
+        if patch.comment.is_some() {
+            // The tag block is the tags', not the user's text (D36).
+            crate::tag_comments::sync_tagged(&tx, Some(&[id]))?;
+        }
         let out = detail(&tx, id)?;
         tx.commit()?;
         Ok(out)

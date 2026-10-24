@@ -138,8 +138,25 @@ export function createMockTags(trackCount: number) {
         }
         break;
       }
+      case "merge": {
+        checkTags([...op.ids, op.into]);
+        if (op.ids.length === 0 || op.ids.includes(op.into))
+          throw new Error("pick at least one tag other than the one kept");
+        const into = links.get(op.into) ?? new Set<number>();
+        for (const id of op.ids) {
+          for (const t of links.get(id) ?? []) {
+            if (!into.has(t)) changed++;
+            into.add(t);
+          }
+          links.delete(id);
+          const loc = tagLoc(id);
+          loc?.cat.tags.splice(loc.index, 1);
+        }
+        links.set(op.into, into);
+        break;
+      }
     }
-    return { createdId, changed };
+    return { createdId, changed, commentsUpdated: 0 };
   }
 
   function tree(): TagTree {
@@ -162,6 +179,17 @@ export function createMockTags(trackCount: number) {
     return ids.some((id) => links.get(id)?.has(trackId));
   }
 
+  /** Like `tag.rs` `duplicate_groups`: case, spaces and punctuation ignored. */
+  function duplicates(): TagId[][] {
+    const groups = new Map<string, TagId[]>();
+    for (const c of cats)
+      for (const t of c.tags) {
+        const key = t.name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+        if (key !== "") groups.set(key, [...(groups.get(key) ?? []), t.id]);
+      }
+    return [...groups.values()].filter((g) => g.length > 1);
+  }
+
   // A few tags and assignments so the UI is demoable.
   const add = (cat: number, name: string) => mutate({ type: "createTag", categoryId: cat, name });
   const house = add(1, "House").createdId as TagId;
@@ -170,13 +198,25 @@ export function createMockTags(trackCount: number) {
   const dub = add(2, "Dub").createdId as TagId;
   const peak = add(3, "Peak time").createdId as TagId;
   const warm = add(3, "Warm-up").createdId as TagId;
+  // What a "Read from Comments" leaves behind: one flat list with near-duplicates.
+  const imported = mutate({ type: "createCategory", name: "Imported" }).createdId as TagId;
+  const importedIds = [
+    "Prog Trance",
+    "prog-trance",
+    "Deep house",
+    "Peak Time",
+    "Closing",
+    "G 3",
+  ].map((name) => add(imported, name).createdId as TagId);
   for (let id = 1; id <= trackCount; id++) {
     const pick = [house, techno][id % 2] as TagId;
+    if (id % 5 === 0)
+      mutate({ type: "assign", trackIds: [id], tagIds: [importedIds[id % 6] as TagId] });
     mutate({ type: "assign", trackIds: [id], tagIds: [pick] });
     if (id % 3 === 0) mutate({ type: "assign", trackIds: [id], tagIds: [vocal] });
     if (id % 7 === 0) mutate({ type: "assign", trackIds: [id], tagIds: [dub, peak] });
     if (id % 11 === 0) mutate({ type: "assign", trackIds: [id], tagIds: [warm] });
   }
 
-  return { mutate, tree, tagsOf, hasAny };
+  return { mutate, tree, tagsOf, hasAny, duplicates, importedIds };
 }

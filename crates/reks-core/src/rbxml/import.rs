@@ -33,14 +33,13 @@ use crate::fileinfo::{self, kind_from_extension, library_path, probe_cols, FileI
 use crate::keys::Key;
 use crate::playlist::{self, Entry};
 use crate::scan::{CancelToken, TrackId};
-use crate::tag::{self, TagId};
+use crate::tag_comments::{self, CommentTagsPreview, CommentTagsReport};
 use crate::timefmt;
 
 /// Grid and cue rows written by this import carry this `source`.
 const SOURCE: &str = "rekordbox";
 
-/// The category that tags read from Comments are created in.
-pub const IMPORTED_TAG_CATEGORY: &str = "Imported";
+pub use crate::tag_comments::IMPORTED_TAG_CATEGORY;
 
 /// Replace a path prefix in every `Location` (the music folder moved since
 /// rekordbox exported the XML). Compared component-wise.
@@ -58,6 +57,9 @@ pub struct ImportOptions {
     /// Checked between tracks while files are read. Once the database
     /// stage starts (one transaction) the import runs to the end.
     pub cancel: Option<CancelToken>,
+    /// Read My Tags from the `/* … */` block of each written track's comment
+    /// (D29, D36). Off: no tag is created or assigned.
+    pub comment_tags: bool,
 }
 
 /// Which pass a [`ImportEvent::Progress`] belongs to.
@@ -149,11 +151,9 @@ pub struct ImportReport {
     pub playlist_entries: usize,
     /// Playlist entries whose track has no library row.
     pub playlist_entries_skipped: usize,
-    /// My Tags created from `/* … */` in Comments (D29), in the
-    /// [`IMPORTED_TAG_CATEGORY`] category.
-    pub tags_created: usize,
-    /// Track–tag links added from Comments.
-    pub tags_assigned: usize,
+    /// My Tags read from Comments; `None` when [`ImportOptions::comment_tags`]
+    /// was off.
+    pub comment_tags: Option<CommentTagsReport>,
     /// Deepest folder containing every file not found, if that is deeper than
     /// a filesystem root: the `from` to suggest for a [`PrefixRemap`] when the
     /// music folder has moved.
@@ -195,6 +195,8 @@ pub struct ImportPreview {
     pub missing_root: Option<String>,
     /// Up to [`PREVIEW_SAMPLE`] paths of files not found, in XML order.
     pub not_found_sample: Vec<String>,
+    /// Tag blocks in the comments of the tracks that will be stored.
+    pub comment_tags: CommentTagsPreview,
 }
 
 /// How many not-found paths [`preview`] lists.
@@ -210,6 +212,7 @@ pub fn preview(c: &Collection, lib: &Library, opts: &ImportOptions) -> Result<Im
     };
     count_nodes(&c.playlists, &mut p, true);
     let mut not_found: Vec<String> = Vec::new();
+    let mut comments: Vec<&str> = Vec::new();
     for t in &c.tracks {
         p.with_grid += usize::from(!t.tempos.is_empty());
         p.with_cues += usize::from(!t.position_marks.is_empty());
@@ -233,6 +236,7 @@ pub fn preview(c: &Collection, lib: &Library, opts: &ImportOptions) -> Result<Im
                 .as_ref()
                 .is_some_and(|l| ex.by_location.contains_key(l));
         p.in_library += usize::from(known);
+        comments.extend(t.comments.as_deref());
         if Path::new(&path).exists() {
             p.files_found += 1;
         } else {
@@ -241,6 +245,7 @@ pub fn preview(c: &Collection, lib: &Library, opts: &ImportOptions) -> Result<Im
         }
     }
     p.missing_root = missing_root(not_found.iter().map(String::as_str));
+    p.comment_tags = tag_comments::preview(&*lib.conn()?, comments.into_iter())?;
     not_found.truncate(PREVIEW_SAMPLE);
     p.not_found_sample = not_found;
     Ok(p)
@@ -270,6 +275,7 @@ pub fn import(
     progress: impl Fn(&ImportEvent),
 ) -> Result<ImportReport> {
     let started = Instant::now();
+    let comment_tags = opts.comment_tags;
     let mut imp = Import {
         lib,
         remap: prepare_remap(&opts.remap),
@@ -314,12 +320,16 @@ pub fn import(
         by_location: row_of_location,
     };
     imp.write_playlists(&tx, &c.playlists, &rows)?;
-    imp.write_comment_tags(&tx, &c.tracks, &rows.by_xml)?;
-    // The baseline is frozen (D23): PlayCount and LastPlayed set it only
-    // for tracks this import created; every written track's cache follows.
     let mut written: Vec<TrackId> = rows.by_xml.values().copied().collect();
     written.sort_unstable();
     written.dedup();
+    if comment_tags {
+        imp.report.comment_tags = Some(tag_comments::import_tags(&tx, Some(&written))?);
+    }
+    // The XML's comments replaced reks's tag blocks; put them back (D36).
+    tag_comments::sync_tagged(&tx, Some(&written))?;
+    // The baseline is frozen (D23): PlayCount and LastPlayed set it only
+    // for tracks this import created; every written track's cache follows.
     crate::history::recompute(&tx, &crate::history::TrackSet::Some(written))?;
     tx.commit()?;
     drop(conn);
@@ -779,51 +789,6 @@ impl Import<'_> {
             ":artwork_id": info.and_then(|i| i.artwork_id),
             ":rb_track_id": t.track_id, ":rb_location": t.location, ":now": now,
         })?;
-        Ok(())
-    }
-
-    /// Tags named in each track's Comments: an existing tag of that name
-    /// (any category) or a new one under [`IMPORTED_TAG_CATEGORY`]. The
-    /// comment itself is stored as it is.
-    fn write_comment_tags(
-        &mut self,
-        tx: &Transaction<'_>,
-        tracks: &[XmlTrack],
-        rows: &HashMap<u32, TrackId>,
-    ) -> Result<()> {
-        let now = timefmt::now_utc();
-        let mut category: Option<TagId> = None;
-        for t in tracks {
-            let Some(&id) = rows.get(&t.track_id) else {
-                continue;
-            };
-            let names = tag::parse_comment_tags(t.comments.as_deref().unwrap_or(""));
-            let mut ids = Vec::with_capacity(names.len());
-            for name in &names {
-                let found = tag::find_by_name(tx, name)?;
-                let tag_id = match found {
-                    Some(g) => g,
-                    None => {
-                        let cat = match category {
-                            Some(c) => c,
-                            None => {
-                                let c =
-                                    tag::find_or_create_category(tx, IMPORTED_TAG_CATEGORY, &now)?;
-                                category = Some(c);
-                                c
-                            }
-                        };
-                        self.report.tags_created += 1;
-                        tag::create_tag(tx, cat, name, &now)?
-                    }
-                };
-                ids.push(tag_id);
-            }
-            if !ids.is_empty() {
-                self.report.tags_assigned +=
-                    usize::try_from(tag::assign(tx, &[id], &ids)?).unwrap_or(0);
-            }
-        }
         Ok(())
     }
 

@@ -3,8 +3,9 @@
  * is open, and every edit through `tags_mutate`. Naming and uniqueness rules
  * live in reks-core; this forwards what the user did and shows what came
  * back. Assigning updates the loaded rows in place (selection and scroll stay
- * put, so several tags can be ticked in a row); deleting a tag re-queries,
- * since it may be part of the active filter.
+ * put, so several tags can be ticked in a row); deleting or merging a tag
+ * re-queries, since it may be part of the active filter, and so does any edit
+ * that rewrote comments (write-to-Comments on, D36).
  */
 import { create } from "zustand";
 
@@ -17,7 +18,7 @@ import {
   tagsMutate,
 } from "../lib/ipc";
 import { usePanels } from "./panels";
-import { allLibraries } from "./panes";
+import { allLibraries, refreshAll } from "./panes";
 import { applyTags } from "./tagModel";
 
 export type TagsStatus = "loading" | "ready" | "error";
@@ -58,7 +59,7 @@ export const useTags = create<TagsState>()((set, get) => {
 
   async function change(op: Extract<TagOp, { type: "assign" | "unassign" }>) {
     if (op.trackIds.length === 0 || op.tagIds.length === 0) return;
-    await edit(op, (tree) => {
+    const outcome = await edit(op, (tree) => {
       for (const lib of allLibraries())
         lib
           .getState()
@@ -66,6 +67,7 @@ export const useTags = create<TagsState>()((set, get) => {
             applyTags(tree, tags, op.tagIds, op.type === "assign"),
           );
     });
+    if ((outcome?.commentsUpdated ?? 0) > 0) refreshAll(true);
   }
 
   return {
@@ -81,12 +83,12 @@ export const useTags = create<TagsState>()((set, get) => {
         set({ status: "error", error: String(e) });
       }
     },
-    mutate(op) {
-      return edit(op, () => {
-        if (op.type !== "delete") return;
-        // The deleted id is on loaded rows; the Filters drawer drops it from its rows (`rules.ts`).
-        for (const lib of allLibraries()) lib.getState().refresh(true);
-      });
+    async mutate(op) {
+      const outcome = await edit(op);
+      // A deleted or merged id is on loaded rows; the Filters drawer drops it from its rows (`rules.ts`).
+      const stale = op.type === "delete" || op.type === "merge";
+      if (outcome !== null && (stale || outcome.commentsUpdated > 0)) refreshAll(true);
+      return outcome;
     },
     assign: (trackIds, tagIds) => change({ type: "assign", trackIds, tagIds }),
     unassign: (trackIds, tagIds) => change({ type: "unassign", trackIds, tagIds }),

@@ -35,7 +35,7 @@ const row = (id: number, tags: number[]) => ({ id, tags }) as TrackRow;
 beforeEach(() => {
   vi.clearAllMocks();
   tagsGet.mockResolvedValue(tree);
-  tagsMutate.mockResolvedValue({ createdId: null, changed: 1 });
+  tagsMutate.mockResolvedValue({ createdId: null, changed: 1, commentsUpdated: 0 });
   vi.mocked(ipc.libraryQuery).mockResolvedValue({
     rows: [],
     total: 0,
@@ -95,7 +95,7 @@ describe("tags store", () => {
   });
 
   it("createAndAssign creates the tag, then puts it on the tracks", async () => {
-    tagsMutate.mockResolvedValueOnce({ createdId: 12, changed: 0 });
+    tagsMutate.mockResolvedValueOnce({ createdId: 12, changed: 0, commentsUpdated: 0 });
     tagsGet.mockResolvedValue({
       categories: [
         {

@@ -288,6 +288,7 @@ let settings: Settings = {
   mixerFilters: "show",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
+  tagsInComments: false,
   // Like a release build.
   onelibraryKeyBuiltin: true,
   ui: {
@@ -487,6 +488,7 @@ const PREVIEW: ImportPreview = {
     "/Volumes/OldDrive/Music/House/track01.mp3",
     "/Volumes/OldDrive/Music/House/track02.mp3",
   ],
+  commentTags: { tracks: 2562, names: 87, newNames: 81 },
 };
 const REPORT: ImportReport = {
   total: 3112,
@@ -503,8 +505,7 @@ const REPORT: ImportReport = {
   playlistsMatched: 0,
   playlistEntries: 2210,
   playlistEntriesSkipped: 0,
-  tagsCreated: 4,
-  tagsAssigned: 310,
+  commentTags: { tracks: 2562, created: 81, assigned: 5120, tagIds: [] },
   missingRoot: "/Volumes/OldDrive/Music",
   elapsedMs: 8400,
   cancelled: false,
@@ -1150,6 +1151,14 @@ mockIPC((cmd, payload) => {
       return tags.tree();
     case "tags_mutate":
       return tags.mutate(args.op as TagOp);
+    case "tags_duplicates":
+      return tags.duplicates();
+    case "comment_tags_preview":
+      return { tracks: 120, names: 6, newNames: 0 };
+    case "comment_tags_import":
+      return { tracks: 120, created: 0, assigned: 0, tagIds: tags.importedIds };
+    case "comment_tags_sync_all":
+      return 0;
     case "filter_presets_get":
       return presets.list();
     case "filter_presets_mutate":
@@ -1166,7 +1175,10 @@ mockIPC((cmd, payload) => {
     case "rbxml_preview":
       return PREVIEW;
     case "rbxml_import_start":
-      return REPORT;
+      return {
+        ...REPORT,
+        commentTags: args.commentTags ? { ...REPORT.commentTags, tagIds: tags.importedIds } : null,
+      };
     case "devices_list":
       return devices;
     case "device_eject":

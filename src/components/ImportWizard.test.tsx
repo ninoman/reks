@@ -11,6 +11,8 @@ vi.mock("../lib/ipc", () => ({
   playlistsGet: vi.fn(),
   libraryFacets: vi.fn(),
   libraryQuery: vi.fn(),
+  tagsGet: vi.fn(),
+  tagsDuplicates: vi.fn(),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
@@ -34,6 +36,7 @@ const preview: ImportPreview = {
   inLibrary: 0,
   missingRoot: "/Music/old",
   notFoundSample: ["/Music/old/a.mp3"],
+  commentTags: { tracks: 2562, names: 87, newNames: 81 },
 };
 
 const report: ImportReport = {
@@ -63,8 +66,7 @@ const report: ImportReport = {
   beatgridRows: 3,
   cueRows: 10,
   playlistsCreated: 2,
-  tagsCreated: 0,
-  tagsAssigned: 0,
+  commentTags: null,
   playlistsMatched: 0,
   playlistEntries: 4,
   playlistEntriesSkipped: 0,
@@ -120,6 +122,47 @@ describe("ImportWizard", () => {
     expect(screen.getByText("Not a local file (skipped): 1")).toBeTruthy();
     expect(screen.getByText("/Music/old/gone.mp3")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Map folder and re-import…" })).toBeTruthy();
+  });
+
+  it("comment tags are offered, on by default, and the choice is sent", async () => {
+    vi.mocked(ipc.rbxmlImportStart).mockResolvedValue(report);
+    render(<ImportWizard />);
+    await useImportWizard.getState().open("/x/collection.xml");
+    const box = await screen.findByRole("checkbox", { name: /Import My Tags from Comments/ });
+    expect(screen.getByText(/2,562 tracks, 87 tags \(81 new\)/)).toBeTruthy();
+    expect((box as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    await vi.waitFor(() =>
+      expect(ipc.rbxmlImportStart).toHaveBeenCalledWith(
+        "/x/collection.xml",
+        [],
+        false,
+        expect.any(Function),
+      ),
+    );
+  });
+
+  it("no comment-tags choice when no comment has a tag block", async () => {
+    vi.mocked(ipc.rbxmlPreview).mockResolvedValue({
+      ...preview,
+      commentTags: { tracks: 0, names: 0, newNames: 0 },
+    });
+    render(<ImportWizard />);
+    await useImportWizard.getState().open("/x/collection.xml");
+    await screen.findByText("3,062");
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("the report offers to organize the tags it read", async () => {
+    render(<ImportWizard />);
+    await useImportWizard.getState().open("/x/collection.xml");
+    useImportWizard.setState({
+      step: "report",
+      report: { ...report, commentTags: { tracks: 2, created: 1, assigned: 3, tagIds: [7, 9] } },
+    });
+    expect(await screen.findByText("My Tags created / assigned")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Organize tags…" })).toBeTruthy();
   });
 
   it("a cancelled import says nothing was imported", async () => {

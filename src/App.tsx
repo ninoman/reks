@@ -37,6 +37,7 @@ import { ReportDialog } from "./components/ReportDialog";
 import { SessionView } from "./components/SessionView";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { StickListView } from "./components/StickListView";
+import { TagOrganizer } from "./components/TagOrganizer";
 import { ToastHost } from "./components/ToastHost";
 import { TrackLists } from "./components/TrackLists";
 import { useTrackTable, visibleColumns } from "./components/trackTableModel";
@@ -159,6 +160,7 @@ export default function App() {
       <DuplicateDialog />
       <DeleteDialog />
       <ImportWizard />
+      <TagOrganizer />
       <SettingsDialog />
       <DevicesDialog />
       <AdoptDialog />

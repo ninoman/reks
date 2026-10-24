@@ -35,6 +35,7 @@ const settingsOf = (ui: Partial<Settings["ui"]> = {}): Settings => ({
   mixerFilters: "show",
   cacheDir: "/cache",
   anlzPreference: "rekordboxFirst",
+  tagsInComments: false,
   onelibraryKeyBuiltin: false,
   ui: {
     hiddenColumns: null,

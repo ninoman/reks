@@ -6,7 +6,7 @@
 //! reks synth-xml <N> <out.xml>  write a synthetic rekordbox XML with N tracks
 //! reks devices                  list audio output devices
 //! reks play <file> [seconds]    play a file on the default output (engine smoke test)
-//! reks import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run]
+//! reks import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--no-comment-tags] [--dry-run]
 //!                               import a rekordbox XML (or, with --dry-run, preview it)
 //! reks rb plan <stick> --library <library.sqlite> --playlist <id|Folder/Name>... [...]
 //!                               dry run of a rekordbox USB export (flags: see `rb.rs`)
@@ -98,7 +98,7 @@ fn main() -> anyhow::Result<()> {
         _ => bail!(
             "usage: reks [synth-xml <tracks> <out.xml> | devices | play <file> [seconds] \
              | columns <audio> <out.bin> \
-             | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--dry-run] \
+             | import-xml <library.sqlite> <collection.xml> [--remap FROM=TO]... [--no-comment-tags] [--dry-run] \
              | rb plan|export|validate <stick> ... | rb history <stick> [--json] \
              | rb diff <ours-stick> <reference-stick> [--json] \
              | onelibrary dump|diff|validate ... \
@@ -125,12 +125,16 @@ fn columns(file: &Path, out: &Path) -> anyhow::Result<()> {
 /// Imports (or previews, with `--dry-run`) `xml` into the library at `db`,
 /// creating it if needed; derived files go to `cache/` next to it.
 fn import_xml(db: &Path, xml: &Path, flags: &[String]) -> anyhow::Result<()> {
-    let mut opts = ImportOptions::default();
+    let mut opts = ImportOptions {
+        comment_tags: true,
+        ..ImportOptions::default()
+    };
     let mut dry_run = false;
     let mut flags = flags.iter();
     while let Some(flag) = flags.next() {
         match flag.as_str() {
             "--dry-run" => dry_run = true,
+            "--no-comment-tags" => opts.comment_tags = false,
             "--remap" => {
                 let arg = flags.next().context("--remap needs FROM=TO")?;
                 let (from, to) = arg.split_once('=').context("--remap needs FROM=TO")?;
@@ -171,6 +175,12 @@ fn import_xml(db: &Path, xml: &Path, flags: &[String]) -> anyhow::Result<()> {
         report.warnings.len(),
         report.elapsed_ms
     );
+    if let Some(t) = &report.comment_tags {
+        println!(
+            "My Tags from comments: {} tracks, {} tags created, {} links",
+            t.tracks, t.created, t.assigned
+        );
+    }
     if let Some(root) = &report.missing_root {
         println!("missing files are under {root}");
     }

@@ -9,10 +9,10 @@ use reks_core::rbxml::{
     self, ImportEvent, ImportOptions, ImportPreview, ImportReport, PrefixRemap,
 };
 use reks_core::{
-    ArtworkId, CancelToken, Facets, FilterPreset, FilterPresetOp, FilterPresetOutcome, Library,
-    LibraryRoot, PlaylistId, PlaylistOp, PlaylistOutcome, PlaylistTree, RuleNode, ScanEvent,
-    ScanReport, Settings, SettingsPatch, TagOp, TagOutcome, TagTree, TrackDetail, TrackId,
-    TrackPage, TrackPatch, TrackQuery,
+    ArtworkId, CancelToken, CommentTagsPreview, CommentTagsReport, Facets, FilterPreset,
+    FilterPresetOp, FilterPresetOutcome, Library, LibraryRoot, PlaylistId, PlaylistOp,
+    PlaylistOutcome, PlaylistTree, RuleNode, ScanEvent, ScanReport, Settings, SettingsPatch, TagId,
+    TagOp, TagOutcome, TagTree, TrackDetail, TrackId, TrackPage, TrackPatch, TrackQuery,
 };
 use reks_export_onelibrary::{OneLibraryWriter, RbVersion};
 use reks_export_rb::device::{self, DeviceInfo};
@@ -123,6 +123,31 @@ pub async fn tags_mutate(state: State<'_, AppState>, op: TagOp) -> CmdResult<Tag
     blocking(&state, move |lib| lib.tag_mutate(op)).await
 }
 
+/// Groups of tags whose names differ only in case, spacing or punctuation.
+#[tauri::command]
+pub async fn tags_duplicates(state: State<'_, AppState>) -> CmdResult<Vec<Vec<TagId>>> {
+    blocking(&state, |lib| lib.tag_duplicates()).await
+}
+
+/// What reading My Tags from the library's comments would do (D36).
+#[tauri::command]
+pub async fn comment_tags_preview(state: State<'_, AppState>) -> CmdResult<CommentTagsPreview> {
+    blocking(&state, |lib| lib.comment_tags_preview()).await
+}
+
+/// Reads My Tags from the library's comments (D36).
+#[tauri::command]
+pub async fn comment_tags_import(state: State<'_, AppState>) -> CmdResult<CommentTagsReport> {
+    blocking(&state, |lib| lib.comment_tags_import()).await
+}
+
+/// Rewrites (or with `apply` false, counts) the tag block of every tagged
+/// track's comment.
+#[tauri::command]
+pub async fn comment_tags_sync_all(state: State<'_, AppState>, apply: bool) -> CmdResult<u32> {
+    blocking(&state, move |lib| lib.comment_tags_sync_all(apply)).await
+}
+
 /// Saved filters (D35), in display order.
 #[tauri::command]
 pub async fn filter_presets_get(state: State<'_, AppState>) -> CmdResult<Vec<FilterPreset>> {
@@ -230,6 +255,7 @@ pub async fn rbxml_import_start(
     state: State<'_, AppState>,
     path: PathBuf,
     remap: Vec<PrefixRemap>,
+    comment_tags: bool,
     on_event: Channel<ImportEvent>,
 ) -> CmdResult<ImportReport> {
     let cancel = CancelToken::new();
@@ -248,6 +274,7 @@ pub async fn rbxml_import_start(
         let opts = ImportOptions {
             remap,
             cancel: Some(cancel),
+            comment_tags,
         };
         rbxml::import(&collection, lib, opts, |e| {
             if let Err(err) = on_event.send(e.clone()) {

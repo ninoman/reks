@@ -944,6 +944,7 @@ Date of decisions: 2026-10-18.
     a block, 25 of them after other text, none with text after it. Comments
     carry no category, so a name that exists in any category is reused and a
     new one goes under "Imported". The comment itself is kept as it is.
+    Made optional, repeatable over the library and writable back: D36.
   - **Filters** become a rule tree (`reks-core::rule::RuleNode`,
     `TrackQuery::rule`, ANDed with the filter bar): nested all/any groups,
     and every rule or group can be negated. An empty "all" group matches
@@ -1185,6 +1186,46 @@ Date of decisions: 2026-10-18.
 - Rejected: a query as chips (every edit is a popover); Notion-style
   field · operator · value rows (needs ~380px); saved filters in settings
   (the core owns library data, and presets reference tags and playlists).
+
+## D36. My Tags ↔ Comments: opt-in import, organizer, write-back
+
+- Date: 2026-10-24 (maintainer's call). Extends D29's XML import of tags.
+  Tasks: [`phases/phase-1.md`](phases/phase-1.md) "My Tags from Comments".
+- Decision:
+  - **Reading tags is a choice.** The XML import wizard shows how many
+    tracks carry a `/* … */` block, how many names and how many are new, with
+    a checkbox (on by default; `ImportOptions::comment_tags`). The same read
+    runs later over the comments already in the library ("Read from
+    Comments…" in the My Tags drawer, `Library::comment_tags_import`), so a
+    collection imported without tags, or tags in file-tag comments, can be
+    read any time. Both are in `reks-core::tag_comments`; names are
+    NFC-normalised so decomposed names from file tags don't duplicate.
+  - **Organizing** happens after the read, on real tags: the organizer
+    (`TagOrganizer`) shows the run's tags (or all, from "Clean up…"), moves
+    them to categories (a new one too), renames, deletes, and merges
+    (`TagOp::Merge`: the kept tag gets every track of the others, which are
+    deleted). `Library::tag_duplicates` suggests merge groups: names equal
+    after NFKC, lowercase and dropping everything but letters and digits.
+  - **Write-back** (`settings::TAGS_IN_COMMENTS`, off by default) is
+    rekordbox's "Add My Tag to Comments": every tag op rewrites the comment
+    block of the tracks it touched, in rekordbox's format (`"{text} /* A / B
+    */"`, a leading space when there is no text), tags in display order
+    (category, then tag). A track left with no tags loses its block. Turning
+    it on rewrites nothing; Settings offers "Update now" with a dry-run
+    count, over tagged tracks only, so blocks never read into tags are not
+    lost. Editing a tagged track's comment puts the block back from its tags;
+    an XML import puts back the blocks of tagged tracks it overwrote.
+  - Comments are otherwise kept as they are; reading tags never strips the
+    block.
+- Rejected: a staging step that categorises names before any tag exists
+  (two UIs for one job); remembering merged or deleted names across imports
+  (an alias table): with write-back on, the comments carry the cleaned-up
+  names.
+- Risks: write-back's tag order and format beyond rekordbox 6.8.6 are
+  UNVERIFIED; re-importing an old `collection.xml` brings back names merged
+  or deleted since (its comments still carry them); a comment that ends in a
+  `/* … */` that is not tags is read as tags and, with write-back on and the
+  track tagged, replaced.
 
 ## Open risks (cross-cutting)
 
