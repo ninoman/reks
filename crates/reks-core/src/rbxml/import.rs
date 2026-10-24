@@ -27,6 +27,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use super::colour::colour_name;
 use super::{location_to_path, Collection, NodeKind, Tempo, XmlNode, XmlTrack};
+use crate::beatgrid::USER_OWNED;
 use crate::db::Library;
 use crate::error::Result;
 use crate::fileinfo::{self, kind_from_extension, library_path, probe_cols, FileInfo};
@@ -828,6 +829,22 @@ impl Import<'_> {
     }
 
     fn write_grid(&mut self, tx: &Transaction<'_>, id: TrackId, t: &XmlTrack) -> Result<()> {
+        // A grid edited or locked in reks stays (D10, "Grid editing"):
+        // rekordbox rows beside manual ones would mix two grids.
+        let owned: bool = tx.query_row(
+            &format!("SELECT {USER_OWNED} FROM track WHERE id = ?1"),
+            [id],
+            |r| r.get(0),
+        )?;
+        if owned {
+            if !t.tempos.is_empty() {
+                self.warn(
+                    Some(t.track_id),
+                    "beatgrid edited or locked in reks; the XML's TEMPO rows are left out".into(),
+                );
+            }
+            return Ok(());
+        }
         let mut rows = Vec::with_capacity(t.tempos.len());
         for tempo in &t.tempos {
             let Some(row) = grid_row(tempo) else {

@@ -27,6 +27,7 @@ const MIGRATION_LIST: &[M<'static>] = &[
     M::up(include_str!("../migrations/0010_smart_playlists.sql")),
     M::up(include_str!("../migrations/0011_cue_active_loop.sql")),
     M::up(include_str!("../migrations/0012_filter_presets.sql")),
+    M::up(include_str!("../migrations/0013_grid_base.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 
