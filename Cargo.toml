@@ -15,22 +15,22 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 publish = false
 
 [workspace.dependencies]
 # Internal crates. Explicit versions keep cargo-deny's wildcard check happy.
-reks-core = { version = "0.1.0", path = "crates/reks-core" }
-reks-audio = { version = "0.1.0", path = "crates/reks-audio" }
-reks-mix = { version = "0.1.0", path = "crates/reks-mix" }
-reks-analysis = { version = "0.1.0", path = "crates/reks-analysis" }
-reks-anlz = { version = "0.1.0", path = "crates/reks-anlz" }
-reks-export-rb = { version = "0.1.0", path = "crates/reks-export-rb" }
-reks-export-onelibrary = { version = "0.1.0", path = "crates/reks-export-onelibrary" }
-reks-export-engine = { version = "0.1.0", path = "crates/reks-export-engine" }
-reks-fixtures-gen = { version = "0.1.0", path = "fixtures/gen" }
+reks-core = { version = "0.2.0", path = "crates/reks-core" }
+reks-audio = { version = "0.2.0", path = "crates/reks-audio" }
+reks-mix = { version = "0.2.0", path = "crates/reks-mix" }
+reks-analysis = { version = "0.2.0", path = "crates/reks-analysis" }
+reks-anlz = { version = "0.2.0", path = "crates/reks-anlz" }
+reks-export-rb = { version = "0.2.0", path = "crates/reks-export-rb" }
+reks-export-onelibrary = { version = "0.2.0", path = "crates/reks-export-onelibrary" }
+reks-export-engine = { version = "0.2.0", path = "crates/reks-export-engine" }
+reks-fixtures-gen = { version = "0.2.0", path = "fixtures/gen" }
 
 # Shared external dependencies (pin here, reference with `workspace = true`).
 anyhow = "1"
