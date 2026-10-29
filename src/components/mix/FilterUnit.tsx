@@ -40,7 +40,7 @@ export function FilterUnit({ unit, side, values, onChange }: FilterUnitProps) {
   };
   const mirror = side === "right" && "flex-row-reverse";
   return (
-    <section aria-label={name} className={cn("flex items-end gap-2", mirror)}>
+    <section aria-label={name} className={cn("flex items-end gap-(--mixer-filter-gap)", mirror)}>
       {/* mb-1: the knobs' caps sit ~4 px above their boxes' bottom edge; lamps line up with the caps. */}
       <div className="mb-1 flex flex-col items-center gap-1">
         <Caption tone="default" aria-hidden="true">

@@ -16,10 +16,12 @@ function setup(
   cues: boolean[] = [false, false, false, false],
   look: MixerLook = ADVANCED,
   fxKind: FxKind = "filter",
+  shown: readonly number[] = [0, 1, 2, 3],
 ) {
   const s = useMix.getState();
   const props: MixerPanelProps = {
     channels: s.channels.map((c, i) => ({ ...c, cue: cues[i] ?? false })),
+    shown,
     active: [true, false, false, false],
     filters: s.filters,
     crossfader: s.crossfader,
@@ -59,6 +61,25 @@ describe("MixerPanel", () => {
     expect(screen.getByRole("slider", { name: "Crossfader" })).toBeTruthy();
     expect(screen.queryByText("VCF")).toBeNull();
     expect(screen.queryByText("Link")).toBeNull();
+  });
+
+  it("with 2 decks draws channels 2 and 3 only, and keeps the master, filters and crossfader", () => {
+    const p = setup([false, false, false, true], ADVANCED, "filter", [1, 2]);
+    const strips = screen
+      .getAllByRole("region", { name: /^Channel \d$/ })
+      .map((el) => el.getAttribute("aria-label"));
+    expect(strips).toEqual(["Channel 2", "Channel 3"]);
+    expect(screen.queryByRole("slider", { name: "Channel 1 fader" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Master" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Filter X" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Filter Y" })).toBeTruthy();
+    expect(screen.getByRole("slider", { name: "Crossfader" })).toBeTruthy();
+    // Strips keep their channel index; cueing one alone also clears a hidden channel's cue.
+    fireEvent.click(screen.getByRole("button", { name: "Channel 3 cue" }));
+    expect(vi.mocked(p.onChannel).mock.calls).toEqual([
+      [2, "cue", true],
+      [3, "cue", false],
+    ]);
   });
 
   it("keeps every control in order: strips, master, filter row, crossfader row", () => {
@@ -308,6 +329,7 @@ describe("MixerPanel", () => {
       render(
         <MixerPanel
           channels={channels}
+          shown={[0, 1, 2, 3]}
           active={[false, false, false, false]}
           filters={s.filters}
           crossfader={s.crossfader}

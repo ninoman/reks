@@ -1,5 +1,6 @@
 /**
- * The mixer as laid out on the hardware: four channel strips and the master
+ * The mixer as laid out on the hardware: a strip per shown deck (four, or
+ * channels 2 and 3 with two decks; the hidden ones keep their positions) and the master
  * section (3-band: the FX select and PARAMETER in the legend), then filter X
  * and Y (4-band), and the crossfader across the mixer with its curve at the
  * right end. Spare height (4 decks) spreads the strips' rows.
@@ -21,6 +22,8 @@ import { MasterSection } from "./MasterSection";
 
 export interface MixerPanelProps {
   channels: ChannelValues[];
+  /** The channels drawn, by index: the shown decks'. */
+  shown: readonly number[];
   /** Which channels' decks have a track. */
   active: boolean[];
   filters: Record<Unit, FilterValues>;
@@ -59,18 +62,21 @@ export function MixerPanel(p: MixerPanelProps) {
           <GearIcon size={14} />
         </IconButton>
         <ChannelLegend parts={parts} fx={{ values: p.fx, onChange: p.onFx }} />
-        {p.channels.map((values, ch) => (
-          <ChannelStrip
-            // biome-ignore lint/suspicious/noArrayIndexKey: channels are fixed slots
-            key={ch}
-            ch={ch}
-            values={values}
-            active={p.active[ch] ?? false}
-            parts={parts}
-            onChange={(param, value) => p.onChannel(ch, param, value)}
-            onCue={(additive) => cue(ch, additive)}
-          />
-        ))}
+        {p.shown.map((ch) => {
+          const values = p.channels[ch];
+          if (values === undefined) return null;
+          return (
+            <ChannelStrip
+              key={ch}
+              ch={ch}
+              values={values}
+              active={p.active[ch] ?? false}
+              parts={parts}
+              onChange={(param, value) => p.onChannel(ch, param, value)}
+              onCue={(additive) => cue(ch, additive)}
+            />
+          );
+        })}
         <MasterSection values={p.master} compact={!parts.filterAssigns} onChange={p.onMaster} />
       </div>
       {parts.filterRow && (

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DeckView, MixState } from "../../lib/ipc";
@@ -164,8 +164,17 @@ describe("MixPanel", () => {
     expect(panel.className).toContain("max-h-(--mix-panel-max-h)");
     expect(screen.getByRole("region", { name: "Deck 2" }).className).toContain("h-(--deck-h)");
     expect(screen.getByRole("region", { name: "Deck 2" }).className).not.toContain("compact");
+    // Two decks, two channel strips; data-decks narrows the mixer (--mixer-w-two).
+    const strips = () =>
+      within(screen.getByRole("region", { name: "Mixer" }))
+        .getAllByRole("region", { name: /^Channel \d$/ })
+        .map((el) => el.getAttribute("aria-label"));
+    expect(panel.dataset.decks).toBe("2");
+    expect(strips()).toEqual(["Channel 2", "Channel 3"]);
 
     fireEvent.click(screen.getByRole("radio", { name: "4 decks" }));
+    expect(panel.dataset.decks).toBe("4");
+    expect(strips()).toEqual(["Channel 1", "Channel 2", "Channel 3", "Channel 4"]);
     for (const n of [1, 2, 3, 4])
       expect(screen.getByRole("region", { name: `Deck ${n}` }).className).toContain(
         "h-(--deck-h-compact)",

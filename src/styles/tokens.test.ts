@@ -44,6 +44,12 @@ describe("tokens.css mirrors", () => {
     expect(token("--library-min-h")).toBe("246px");
   });
 
+  it("narrows the mixer to two strips with 2 decks", () => {
+    expect(token("--mixer-w")).toBe("344px");
+    expect(token("--mixer-w-two")).toBe("264px");
+    expect(css).toMatch(/\[data-decks="2"\] \{[^}]*--mixer-w: var\(--mixer-w-two\)/);
+  });
+
   it("keeps raw colours out of the semantic layer", () => {
     const theme = css.slice(css.indexOf("@theme static {"));
     const hex = theme.match(/#[0-9a-f]{3,8}\b/gi) ?? [];

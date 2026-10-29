@@ -796,6 +796,39 @@ nothing; 25 needs 22–24.
     Tests: `detail.rs` (sine min/max, asymmetry, bands, range = whole build),
     `deckDetail.test.ts`, `waveDraw.test.ts` (`detailBars`),
     `waveStrip.test.ts` (detail tiles, fallback and redraw).
+30. [x] **Two-channel mixer in 2-deck mode** (maintainer request,
+    2026-10-29). Wireframe:
+    [`wireframes/two-channel-mixer.html`](../wireframes/two-channel-mixer.html),
+    layout A. UI only: the engine keeps four channels, and the store keeps
+    channels 1 and 4's positions.
+    - [x] `MixerPanel` draws the shown decks' channels only
+      (`shownDecks(deckCount)`: 2 and 3 with 2 decks, all four with 4).
+      Same rows, order and components as today; the legend, master and cue
+      section, filter X / Y row and crossfader are unchanged.
+    - [x] Width: `--mixer-w-two` (≈ 240 = 344 − 2 × `--mixer-strip-w`),
+      picked by `[data-decks="2"]` beside the `data-mixer` heights. Heights
+      unchanged in every view. The decks are `flex-1`, so each gains ≈ 52 px
+      (448 → 500 at 1280 px).
+    - [x] Filter row at 240: X and Y keep every control; tighten the
+      `FilterUnit` gaps (a token, not a one-off size) until the two units
+      fit with a visible gap between their HP / BP / LP columns.
+    - [x] A hidden channel is not lost: the "Deck 1 playing" chip (task 19)
+      still shows 4 decks on click, which brings its strip back.
+    - [x] Checked in the dev mock at 1280 × 800 and 1440 × 900: 4-band and
+      3-band, Simple (filters shown and hidden) and Advanced, 2 and 4 decks.
+    - [x] Docs: [`../ui.md`](../ui.md) Mix panel (strip count per mode) and
+      sizes.
+    - [ ] Screenshots `img/mixer-2-decks-*.jpg` retaken (maintainer; the
+      current ones still show the 4-strip Advanced mixer from task 22).
+    Tests: `MixerPanel.test.tsx` (2 decks: only channels 2 and 3 by role and
+    name, CUE on channel 3 still sets channel index 2; 4 decks: all four),
+    `MixPanel.test.tsx` (`data-decks` and the shown strips follow the deck
+    count), `tokens.test.ts` if `--mixer-w-two` is mirrored.
+    Done 2026-10-29. Deviation: the mixer is 264 px, not 240. Filter X and Y
+    need 107 px each without gaps, so at 240 they overlap; at 264 with
+    `--mixer-filter-gap` 4 px they fit 8 px apart. Each deck gains 40 px
+    (448 → 488 at 1280 px). Heights unchanged in every view (356 / 440 /
+    333 / 393 measured).
 
 ## Acceptance criteria
 

@@ -351,14 +351,19 @@ decks and mixer only, shown whether the output runs or not (2026-10-22; it
 had a start form before the output opened). `MixPanel` is the only part that reads the store
 ([`src/store/mix.ts`](../src/store/mix.ts)); `DeckStrip`, `DeckWaveform`,
 `MixerPanel`, `ChannelStrip`, `FilterUnit`, `MasterSection` and `SyncPhase`
-take props. The mixer follows the hardware: four channel strips (level, HI,
+take props. The mixer follows the hardware: a channel strip per shown deck (level, HI,
 HM (HI MID), LM (LO MID), LO, filter assign X/off/Y, cue, fader, crossfader assign) with
 one caption column (it also holds the one dB scale for the channel meters),
 the master and cue section, then one row with filter X and Y and a crossfader
 across the mixer with its curve at the right end (task 22, 2026-10-23). The
 channel numbers are lit badges like the decks'. Decks 1 and 2 sit left of it, 3 and 4 right. Two decks by
 default, and they are decks 2 and 3, the centre channels, as with two CDJs
-on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
+on a 4-channel mixer; 4 with the toggle. With 2 decks the mixer draws
+channels 2 and 3 only (task 30, 2026-10-29; `MixerPanel` `shown`, from
+`shownDecks`) and is `--mixer-w-two` (264) wide; channels 1 and 4 keep their
+positions and still play, and the "Deck 1 playing" chip brings them back with 4
+decks. Wireframe: [two-channel-mixer.html](wireframes/two-channel-mixer.html) (A).
+Decks are one size in both modes
 (two stacked fit beside the mixer); the deck itself is described under
 [Deck layout](#deck-layout-task-16).
 
@@ -489,8 +494,8 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   mixer stays 440 and its faders (`--fader-len`) and the master meter take
   the difference, 60 px at most (`--fader-bonus`; 47 in 3-band Advanced). In Simple the master
   meter has no dB labels and fills the row.
-- Sizes (mixer 344 × 440, `--mixer-w` × `--mixer-h`; strips 52, rows 26, faders 96,
-  filter FREQ `--knob-lg` 32; ![Mixer, dark](img/mixer-2-decks-dark.jpg) ![Mixer, light](img/mixer-2-decks-light.jpg)):
+- Sizes (mixer 344 × 440, `--mixer-w` × `--mixer-h`, 264 wide with 2 decks; strips 52, rows 26, faders 96,
+  filter FREQ `--knob-lg` 32, filter unit gaps `--mixer-filter-gap` 8, 4 with 2 decks; ![Mixer, dark](img/mixer-2-decks-dark.jpg) ![Mixer, light](img/mixer-2-decks-light.jpg)):
   `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-*`, `--pad-h`,
   `--mixer-*`, `--mix-panel-max-h` (window height − `--app-chrome-h` − `--library-min-h`, so the library keeps 4+ rows and the panel does not scroll at 1280 × 800).
 
@@ -503,8 +508,8 @@ Modelled on rekordbox's 2Deck Horizontal. Approved wireframe:
 **Size** (task 23). 2 decks: `--deck-h` = `--mixer-h` (440 px in Advanced; 356 / 292 in the Simple views, so the decks follow the mixer); the waveform takes the spare height (`--deck-wave-min-h` 60 is the floor). 4 decks (`compact`): `--deck-h-compact` 216 px, two stacked make the mixer's
 440; header 30 (artwork 24), overview 14, waveform 60. Both have the same controls row (below). The panel is capped by
 `--mix-panel-max-h` = window height − `--app-chrome-h` (82) − `--library-min-h` (246: toolbar and filters 116, column
-header, 4 rows). Width is what's left on each side: 448 px at a 1280 px window (minimum `--deck-min-w` 440),
-528 at 1440, 768 at 1920.
+header, 4 rows). Width is what's left on each side: with 4 decks 448 px at a 1280 px window (minimum `--deck-min-w` 440),
+528 at 1440, 768 at 1920; with 2 decks (narrower mixer) 488, 568 and 808.
 
 **Controls row** (2026-10-23), left to right: Q over CUE and PLAY · pad mode tabs over the 2 × 4 pads · the quick-loop
 block (BEAT | IN/OUT tabs over one page) · MASTER over SYNC. One CSS grid (`--deck-ctl-cols`); every column has the
