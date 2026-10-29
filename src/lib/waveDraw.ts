@@ -3,15 +3,7 @@
  * tokens.css through the canvas's computed style: a canvas can't use classes.
  */
 
-import { bandPeaks, monoPeaks, visibleBeats } from "./gridView";
-import type { BeatMark, DeckWaveform } from "./ipc";
-
-export interface WaveView {
-  startMs: number;
-  pxPerS: number;
-  width: number;
-  height: number;
-}
+import type { DeckWaveform } from "./ipc";
 
 /** Sizes the canvas for the device pixel ratio and returns its context and token reader. */
 export function prepare(
@@ -221,49 +213,4 @@ export function detailBars(
 export function centreLineColour(style: DeckWaveform, palette: WavePalette): string {
   if (style === "threeBand") return palette.mid;
   return style === "rgb" ? palette.rgbMid : palette.blue;
-}
-
-/** The waveform in `style`, mirrored round the middle of the view. */
-export function drawWave(
-  ctx: CanvasRenderingContext2D,
-  palette: WavePalette,
-  style: DeckWaveform,
-  columns: Uint8Array,
-  v: WaveView,
-) {
-  const bands = bandPeaks(columns, v.startMs, v.pxPerS, v.width);
-  const mono = monoPeaks(columns, v.startMs, v.pxPerS, v.width);
-  const mid = v.height / 2;
-  for (const bar of waveBars(style, bands, mono, v.height, palette)) {
-    ctx.fillStyle = bar.colour;
-    ctx.fillRect(bar.x, mid - bar.half, 1, 2 * bar.half);
-  }
-}
-
-export function drawBeats(
-  ctx: CanvasRenderingContext2D,
-  token: (name: string) => string,
-  beats: BeatMark[],
-  v: WaveView,
-) {
-  const beat = token("--color-grid-beat");
-  const downbeat = token("--color-grid-downbeat");
-  for (const b of visibleBeats(beats, v.startMs, v.pxPerS, v.width)) {
-    ctx.fillStyle = b.downbeat ? downbeat : beat;
-    ctx.fillRect(Math.round(b.x), 0, b.downbeat ? 2 : 1, v.height);
-  }
-}
-
-/** A vertical line at `ms` in `colour`, `w` px wide. */
-export function drawMarker(
-  ctx: CanvasRenderingContext2D,
-  colour: string,
-  ms: number,
-  v: WaveView,
-  w = 1,
-) {
-  const x = Math.round(((ms - v.startMs) * v.pxPerS) / 1000);
-  if (x < -w || x > v.width + w) return;
-  ctx.fillStyle = colour;
-  ctx.fillRect(x - Math.floor(w / 2), 0, w, v.height);
 }

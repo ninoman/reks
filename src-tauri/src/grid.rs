@@ -4,7 +4,7 @@
 //! `reks_analysis::transients` (snapping).
 
 use reks_analysis::transients::{self, track_transients};
-use reks_core::{beatgrid, Beatgrid, GridEdit, TrackId};
+use reks_core::{beatgrid, Beatgrid, GridEdit, Library, TrackId};
 use tauri::ipc::Response;
 use tauri::State;
 
@@ -29,14 +29,27 @@ pub async fn beatgrid_edit(
     snap: Option<bool>,
 ) -> CmdResult<Beatgrid> {
     blocking(&state, move |lib| {
-        if let (Some(true), Some(at)) = (snap, edit.snap_target()) {
-            let found = track_transients(lib, id).map_err(|e| e.to_string())?;
-            *at = transients::snap(&found, *at);
-        }
-        lib.edit_beatgrid_with(id, edit, || reks_analysis::pipeline::cached_grid(lib, id))
-            .map_err(|e| e.to_string())
+        apply_edit(lib, id, &mut edit, snap == Some(true))
     })
     .await
+}
+
+/// One grid edit on track `id`, snapped first with `snap` (shared by the
+/// deck's grid mode, `mix_grid_edit`).
+pub(crate) fn apply_edit(
+    lib: &Library,
+    id: TrackId,
+    edit: &mut GridEdit,
+    snap: bool,
+) -> Result<Beatgrid, String> {
+    if let (true, Some(at)) = (snap, edit.snap_target()) {
+        let found = track_transients(lib, id).map_err(|e| e.to_string())?;
+        *at = transients::snap(&found, *at);
+    }
+    lib.edit_beatgrid_with(id, edit.clone(), || {
+        reks_analysis::pipeline::cached_grid(lib, id)
+    })
+    .map_err(|e| e.to_string())
 }
 
 /// Track `id`'s transients (ms), for the editor's snap marks. Computed and

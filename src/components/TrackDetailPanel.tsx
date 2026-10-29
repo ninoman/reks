@@ -2,7 +2,7 @@
  * Track info panel (right of the table) for the primary selected track (the
  * bulk form, `BulkEditPanel.tsx`, takes over from 2 selected):
  * artwork, editable metadata, "Played in" (play history), the read-only cue
- * listing, and the beatgrid summary with its editor (`GridEditor.tsx`).
+ * listing, and the beatgrid summary ("Edit on deck" opens grid mode).
  * `TrackDetailPanel` is mounted with `key={trackId}` so switching tracks
  * starts from a fresh form (unsaved edits are dropped).
  */
@@ -24,14 +24,15 @@ import {
   hotCueLabel,
 } from "../lib/format";
 import { type Cue, libraryTrack, libraryUpdateTrack, type TrackDetail } from "../lib/ipc";
+import { useDeckGrid } from "../store/deckGrid";
 import { rowAt, useLibrary } from "../store/library";
 import { useMix } from "../store/mix";
 import { replaceRowEverywhere } from "../store/panes";
+import { editGridOnDeck } from "../store/player";
 import { primaryIndex } from "../store/selection";
 import { useKeyLabel } from "../store/settings";
 import { BulkEditPanel } from "./BulkEditPanel";
 import { ErrorMessage } from "./ErrorMessage";
-import { GridEditorDialog } from "./GridEditor";
 import { InfoPanel, infoMuted as muted } from "./InfoPanel";
 import { PlayedIn } from "./PlayedIn";
 import { findMissingFiles } from "./relocateActions";
@@ -85,7 +86,6 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
   const [badInput, setBadInput] = useState<ReadonlySet<EditField>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [editingGrid, setEditingGrid] = useState(false);
 
   // Latest label without reloading the form when the notation changes.
   const label = useKeyLabel();
@@ -125,16 +125,23 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
     };
   }, [trackId, cueRevision]);
 
-  // A grid edit changes the summary and the track's BPM, not the form.
-  const gridChanged = useCallback(() => {
+  // A grid edit on a deck changes the summary and the track's BPM, not the form.
+  const gridRevision = useDeckGrid((s) => s.revisions[trackId] ?? 0);
+  useEffect(() => {
+    if (gridRevision === 0) return;
+    let live = true;
     libraryTrack(trackId).then(
       (d) => {
+        if (!live) return;
         setDetail((cur) => (cur === null ? d : { ...cur, beatgrid: d.beatgrid, track: d.track }));
         replaceRowEverywhere(d.track);
       },
-      (e: unknown) => setError(String(e)),
+      (e: unknown) => live && setError(String(e)),
     );
-  }, [trackId]);
+    return () => {
+      live = false;
+    };
+  }, [trackId, gridRevision]);
 
   if (detail === null || initial === null || form === null) {
     return (
@@ -292,18 +299,17 @@ export function TrackDetailPanel({ trackId }: { trackId: number }) {
       <section>
         <div className="mb-1 flex items-center justify-between">
           <h3 className={`${sectionTitle} mb-0`}>Beatgrid</h3>
-          <Button size="xs" variant="outline" onClick={() => setEditingGrid(true)}>
-            Edit grid
+          <Button
+            size="xs"
+            variant="outline"
+            title="Adjust the grid in grid mode on a deck"
+            onClick={() =>
+              void editGridOnDeck({ kind: "library", id: t.id, title: t.title, artist: t.artist })
+            }
+          >
+            Edit on deck
           </Button>
         </div>
-        {editingGrid && (
-          <GridEditorDialog
-            trackId={trackId}
-            title={t.title ?? "Untitled"}
-            onClose={() => setEditingGrid(false)}
-            onChanged={gridChanged}
-          />
-        )}
         {detail.beatgrid === null ? (
           <p className={muted}>No beatgrid (needs analysis)</p>
         ) : (

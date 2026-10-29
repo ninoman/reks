@@ -110,6 +110,7 @@ pub fn run() {
             mix::mix_waveform_detail,
             mix::mix_control,
             mix::mix_cue_edit,
+            mix::mix_grid_edit,
             grid::beatgrid_get,
             grid::beatgrid_edit,
             grid::beatgrid_tap_tempo,

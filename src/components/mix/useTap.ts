@@ -1,4 +1,4 @@
-/** Tap tempo for the grid editor: the newest taps go to Rust, which fits the tempo. */
+/** Tap tempo for grid mode: the newest taps go to Rust, which fits the tempo. */
 import { useCallback, useState } from "react";
 
 import { beatgridTapTempo } from "../../lib/ipc";

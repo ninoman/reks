@@ -50,6 +50,7 @@ import { keepsSpace, PLAYER_PLAY_KEY, waveZoomKey } from "./lib/keys";
 import { dismissSplash } from "./lib/splash";
 import { useAnalysis } from "./store/analysis";
 import { offerBackupWarning } from "./store/backups";
+import { useDeckGridShortcuts } from "./store/deckGridShortcuts";
 import { useDeviceBrowser } from "./store/deviceBrowser";
 import { useFilterPresets } from "./store/filterPresets";
 import { useHistory } from "./store/history";
@@ -75,6 +76,7 @@ export default function App() {
   const mixOpen = usePanels((s) => s.mixOpen);
   const panelWidths = usePanelWidthVars();
   useMixShortcuts();
+  useDeckGridShortcuts();
 
   useEffect(() => {
     dismissSplash();

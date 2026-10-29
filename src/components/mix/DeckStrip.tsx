@@ -11,6 +11,11 @@
  * them, so the deck is one row shorter; no MASTER or SYNC (nothing to sync
  * to), and no mixer keys.
  *
+ * Grid mode (`gridMode`, D10) puts its pads in the hot cue pads' cells and
+ * its BPM in the loop block's, so nothing else moves; Q's cell is left
+ * empty, MASTER and SYNC stay. A press on a section marker drags it; the
+ * deck has the focus ring while the grid keys reach it.
+ *
  * Layout and state selection only; each row is its own component.
  */
 import { type DragEvent, type ReactNode, useState } from "react";
@@ -23,6 +28,7 @@ import { PLAYER_PLAY_KEY, WAVE_ZOOM_KEY } from "../../lib/keys";
 import { type DeckAction, deckKeyHint } from "../../lib/mixKeys";
 import { type LoopPage, loopBlockState, type PadMode, type TempoRange } from "../../lib/mixView";
 import type { DeckMeta, PagedPadMode } from "../../store/mix";
+import { DeckGridPanel } from "./DeckGridPanel";
 import { DeckHeader } from "./DeckHeader";
 import { DeckPads } from "./DeckPads";
 import { DeckSlot, type DeckSlotState } from "./DeckSlot";
@@ -33,7 +39,9 @@ import { DeckWaveform } from "./DeckWaveform";
 import { DeckWaveformRow } from "./DeckWaveformRow";
 import { LoopBlock } from "./LoopBlock";
 import { useDeckDetail } from "./useDeckDetail";
+import type { DeckGridMode } from "./useDeckGridModes";
 import { useDeckScrub } from "./useDeckScrub";
+import { useMarkerDrag } from "./useMarkerDrag";
 
 export interface DeckActions {
   togglePlay: () => void;
@@ -70,7 +78,8 @@ export interface DeckActions {
   setBpm: (bpm: number) => void;
   /** Zooms every deck's scrolling waveform in (1) or out (-1). */
   zoom: (dir: -1 | 1) => void;
-  seek: (ms: number) => void;
+  /** `exact`: without quantise (grid mode). */
+  seek: (ms: number, exact?: boolean) => void;
   eject: () => void;
   drop: (trackId: number) => void;
   /** Loads the track that failed again, or fetches the waveform again. */
@@ -93,6 +102,8 @@ export interface DeckStripProps {
   compact?: boolean;
   /** Shown in the header after the title (the player's "mixer not at default" chip). */
   notice?: ReactNode;
+  /** The GRID toggle and, while it is on, the grid panel and marks. */
+  gridMode?: DeckGridMode;
   actions: DeckActions;
 }
 
@@ -128,6 +139,7 @@ export function DeckStrip({
   solo = false,
   compact = false,
   notice,
+  gridMode,
   actions,
 }: DeckStripProps) {
   const [dropping, setDropping] = useState(false);
@@ -139,12 +151,14 @@ export function DeckStrip({
   const playKey = [keyFor({ type: "play" }), deck === 1 ? PLAYER_PLAY_KEY.label : undefined]
     .filter((k) => k !== undefined)
     .join(" / ");
+  // Grid mode places the playhead between beats, Q or not.
+  const seek = gridMode?.on === true ? (ms: number) => actions.seek(ms, true) : actions.seek;
   const scrub = useDeckScrub({
     positionMs: view?.positionMs ?? 0,
     durationMs: view?.durationMs ?? 0,
     playing: view?.playing ?? false,
     viewS: zoomSeconds(zoom),
-    seek: actions.seek,
+    seek,
     play: actions.play,
     pause: actions.pause,
   });
@@ -155,6 +169,13 @@ export function DeckStrip({
     view?.positionMs ?? 0,
   );
   const slot = slotState(meta, loaded);
+  const gridPanel = gridMode?.on === true ? gridMode.panel : null;
+  const drag = useMarkerDrag(
+    gridMode?.overlay ?? null,
+    view?.positionMs ?? 0,
+    zoomSeconds(zoom),
+    scrub,
+  );
 
   const viewsBody =
     slot !== null || view === undefined ? (
@@ -166,12 +187,13 @@ export function DeckStrip({
         onEject={actions.eject}
       />
     ) : (
-      <div {...scrub} className="flex min-h-0 flex-1 cursor-ew-resize touch-none flex-col">
+      <div {...drag.handlers} className="flex min-h-0 flex-1 cursor-ew-resize touch-none flex-col">
         <DeckWaveform
           deck={deck}
           columns={meta.columns}
           detail={detail}
           beats={meta.beats}
+          grid={drag.marks}
           positionMs={view.positionMs}
           durationMs={view.durationMs}
           playing={view.playing}
@@ -182,7 +204,7 @@ export function DeckStrip({
           loop={view.loopRegion}
           loopInMs={view.loopIn}
           zoom={zoom}
-          onSeek={actions.seek}
+          onSeek={seek}
           onZoom={actions.zoom}
           overlay={
             <DeckWaveformRow
@@ -209,6 +231,7 @@ export function DeckStrip({
       playKey={playKey === "" ? undefined : playKey}
       grid={grid}
       quantise={loaded && (view?.quantise ?? false)}
+      showQuantise={gridPanel === null}
       onCue={actions.cue}
       onTogglePlay={actions.togglePlay}
       onQuantise={actions.toggleQuantise}
@@ -262,6 +285,8 @@ export function DeckStrip({
     />
   );
 
+  const panel = gridPanel === null ? null : <DeckGridPanel {...gridPanel} />;
+
   const views = (
     <div
       className={cn("flex min-h-0 flex-col", solo ? "h-(--deck-views-h) min-w-0 flex-1" : "flex-1")}
@@ -289,12 +314,14 @@ export function DeckStrip({
     <section
       aria-label={`Deck ${deck + 1}`}
       data-deck-size={solo ? "solo" : compact ? "compact" : "mix"}
+      data-deck={deck}
       data-dropping={dropping || undefined}
+      data-grid-focus={gridMode?.focused || undefined}
       onDragOver={onDragOver}
       onDragLeave={() => setDropping(false)}
       onDrop={onDrop}
       className={cn(
-        "@container flex min-w-(--deck-min-w) shrink-0 gap-2 rounded-md border border-border bg-surface p-2 data-[dropping]:border-dashed data-[dropping]:border-accent",
+        "@container flex min-w-(--deck-min-w) shrink-0 gap-2 rounded-md border border-border bg-surface p-2 data-[dropping]:border-dashed data-[dropping]:border-accent data-[grid-focus]:border-accent",
         solo ? "h-(--deck-solo-h)" : compact ? "h-(--deck-h-compact)" : "h-(--deck-h)",
       )}
     >
@@ -315,43 +342,63 @@ export function DeckStrip({
           onBpm={actions.setBpm}
           onEject={actions.eject}
           notice={notice}
+          grid={
+            gridMode === undefined
+              ? undefined
+              : { available: gridMode.available, on: gridMode.on, onToggle: gridMode.toggle }
+          }
         />
 
         {solo ? (
           <div className="flex min-h-0 flex-1 gap-2">
             {transport}
             {views}
-            {loopBlock}
-            <div className="flex w-(--deck-pads-max-w) shrink-0">{pads}</div>
+            {panel === null ? (
+              <>
+                {loopBlock}
+                <div className="flex w-(--deck-pads-max-w) shrink-0">{pads}</div>
+              </>
+            ) : (
+              <div className="flex w-(--deck-grid-w) shrink-0 flex-col">{panel}</div>
+            )}
           </div>
         ) : (
           <>
             {views}
             <div className="grid h-(--deck-controls-h) shrink-0 grid-cols-(--deck-ctl-cols) gap-x-(--deck-gap)">
               {transport}
-              {pads}
-              {loopBlock}
-              {sync}
+              {panel === null ? (
+                <>
+                  {pads}
+                  {loopBlock}
+                  {sync}
+                </>
+              ) : (
+                <div className="col-span-3 grid min-w-0">{panel}</div>
+              )}
             </div>
           </>
         )}
       </div>
 
-      <DeckTempo
-        deck={deck}
-        loaded={loaded}
-        tempo={tempo}
-        range={meta.tempoRange}
-        masterTempo={loaded && (view?.masterTempo ?? false)}
-        // The 2-deck fader is about twice as long as the player deck's; the 4-deck one is about as long.
-        ticks={solo || compact ? 7 : 13}
-        slowerKey={keyFor({ type: "nudge", dir: -1 })}
-        fasterKey={keyFor({ type: "nudge", dir: 1 })}
-        onTempo={actions.setTempo}
-        onRange={actions.setTempoRange}
-        onMasterTempo={actions.toggleMasterTempo}
-        onNudge={actions.nudge}
-      />
+      {/* Hidden in grid mode, its space kept so the waveform doesn't move. */}
+      <div className={cn("flex", gridPanel !== null && "invisible")} inert={gridPanel !== null}>
+        <DeckTempo
+          deck={deck}
+          loaded={loaded}
+          tempo={tempo}
+          range={meta.tempoRange}
+          masterTempo={loaded && (view?.masterTempo ?? false)}
+          // The 2-deck fader is about twice as long as the player deck's; the 4-deck one is about as long.
+          ticks={solo || compact ? 7 : 13}
+          slowerKey={keyFor({ type: "nudge", dir: -1 })}
+          fasterKey={keyFor({ type: "nudge", dir: 1 })}
+          onTempo={actions.setTempo}
+          onRange={actions.setTempoRange}
+          onMasterTempo={actions.toggleMasterTempo}
+          onNudge={actions.nudge}
+        />
+      </div>
     </section>
   );
 }

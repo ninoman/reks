@@ -283,7 +283,7 @@ impl Graph {
         match self.decks.get_mut(usize::from(deck)) {
             Some(d) => d.apply(c, self.clock),
             None => match c {
-                Control::Load { src, .. } => Some(src),
+                Control::Load { src, .. } | Control::SetGrid { src, .. } => Some(src),
                 _ => None,
             },
         }
@@ -537,6 +537,43 @@ mod tests {
             assert_eq!(sample(out[2 * f + 1]), -(f as i32), "frame {f}");
         }
         assert_eq!(g.state().decks[0].position, (1_000 + lat) as i64);
+    }
+
+    #[test]
+    fn set_grid_swaps_the_grid_in_place() {
+        let beat = |bpm| crate::GridBeat {
+            frame: 0.0,
+            bpm,
+            beat_in_bar: 1,
+            beats_per_bar: 4,
+        };
+        let mut g = Graph::new(RATE).unwrap();
+        let src = Arc::new(ramp_source(48_000).with_new_grid(&[beat(120.0)]));
+        g.apply(Control::Load {
+            deck: 0,
+            src: Arc::clone(&src),
+        });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 1_000);
+        let before = g.state().decks[0];
+        assert_eq!(before.bpm, Some(120.0));
+        let old = g.apply(Control::SetGrid {
+            deck: 0,
+            src: Arc::new(src.with_new_grid(&[beat(125.0)])),
+        });
+        // The old source comes back to be dropped off the audio thread.
+        assert!(old.is_some_and(|o| Arc::ptr_eq(&o, &src)));
+        let after = g.state().decks[0];
+        assert_eq!(after.bpm, Some(125.0));
+        assert!(after.playing);
+        assert_eq!(after.position, before.position);
+        // Nothing loaded: the new source comes straight back.
+        assert!(g
+            .apply(Control::SetGrid {
+                deck: 1,
+                src: ramp_source(10),
+            })
+            .is_some());
     }
 
     #[test]
@@ -1027,6 +1064,12 @@ mod tests {
             frame: 59_000,
         });
         assert_eq!(g.state().decks[0].position, 48_000);
+        // Grid mode's seek ignores quantise.
+        g.apply(Control::SeekExact {
+            deck: 0,
+            frame: 59_000,
+        });
+        assert_eq!(g.state().decks[0].position, 59_000);
     }
 
     #[test]

@@ -222,11 +222,13 @@
   --color-waveform-blue-high: var(--wave-blue-high);
   --color-grid-beat: rgb(235 235 240 / 38%);
   --color-grid-downbeat: var(--red-500);
-  --color-grid-cursor: var(--color-accent);
-  /* Grid editor: tempo section markers, the selected section's band, transients. */
+  /* Grid mode's two points (PIN's thin lines): pin 1 red (the pinned
+     downbeat, also on the waveform), pin 2 white (the theme's text colour,
+     so it shows on Paper). */
+  --color-grid-pin-1: var(--color-grid-downbeat);
+  --color-grid-pin-2: var(--color-fg);
+  /* Grid mode: tempo section markers. */
   --color-grid-marker: var(--amber-500);
-  --color-grid-section: rgb(212 154 69 / 14%);
-  --color-grid-transient: var(--color-deck-fg);
   /* Deck markers: cue point and hot cues. */
   --color-deck-cue: var(--amber-500);
   --color-deck-hotcue: var(--green-500);
@@ -608,6 +610,8 @@
   --loop-block-w: clamp(100px, 21cqw, 148px);
   --deck-sync-w: clamp(52px, 11cqw, 88px);
   --deck-ctl-cols: var(--deck-transport-w) minmax(0, 1fr) var(--loop-block-w) var(--deck-sync-w);
+  /* The solo deck's grid panel: the loop block, the gap after it and the pads. */
+  --deck-grid-w: calc(var(--loop-block-w) + var(--spacing) * 2 + var(--deck-pads-max-w));
 }
 [data-deck-size="compact"] {
   --deck-controls-h: var(--deck-controls-h-compact);

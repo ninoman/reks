@@ -55,8 +55,8 @@ speakers. It is a preparation tool. Nothing here is meant for playing a gig.
   outputs, effects other than the filters, DVS, streaming services.
 - Key lock in the first cut (task 10 evaluates it).
 - Master and cue on two separate audio devices (clock drift). Windows ASIO.
-- Editing grids from a deck (grid editor is Phase 3 task 13). Cue editing
-  on the decks was added by task 17 (maintainer's request, 2026-10-22).
+- Cue editing on the decks was added by task 17 (maintainer's request,
+  2026-10-22); grid editing on the decks by task 30 (2026-10-29).
 - Analogue sound emulation. The target is the documented response:
   frequencies, slopes, ranges, curves.
 - Saving mixer state or transitions in the library DB.
@@ -796,6 +796,24 @@ nothing; 25 needs 22–24.
     Tests: `detail.rs` (sine min/max, asymmetry, bands, range = whole build),
     `deckDetail.test.ts`, `waveDraw.test.ts` (`detailBars`),
     `waveStrip.test.ts` (detail tiles, fallback and redraw).
+30. [x] **Grid mode on the deck** (maintainer request, 2026-10-29; D10
+    "Editing on the deck"). Replaces Phase 3's grid editor dialog.
+    - [x] `reks-core` edits: `Nudge` of one section, `BeatOneAt`,
+      `Retempo` and `StretchTo` about a pivot (`beatgrid/edit.rs`).
+    - [x] `reks-mix` `Control::SetGrid` and `DeckSource::with_new_grid`;
+      `Control::SeekExact` (scrubbing in grid mode ignores quantise);
+      `mix_grid_edit` stores the edit and swaps the grid into the deck.
+    - [x] UI: grid mode toggle after the deck title, `DeckGridPanel` in every deck size
+      in the pads', loop block's and SYNC's space (no layout shift),
+      `store/deckGrid.ts` (queue, merged holds, undo / redo, pin),
+      `store/deckGridShortcuts.ts` (focused deck, keys), marker drag
+      (`useMarkerDrag`), markers and pin on the waveform; Track info's
+      **Edit on deck**; dev mock. The dialog and `components/grid/` are gone.
+    - [x] Docs: [`../ui.md`](../ui.md#deck-grid-mode-phase-5-task-30-d10), D10.
+    Tests: `beatgrid/tests.rs` (new edits, proptest), `graph.rs`
+    (`set_grid_swaps_the_grid_in_place`), `gridMode.test.ts`,
+    `deckGrid.test.ts`. Checked in the browser preview (mock backend) at
+    1, 2 and 4 decks; not on the real engine yet.
 
 ## Acceptance criteria
 
@@ -835,7 +853,7 @@ Record machine, OS, audio device, date and outcome in a "Mixer" table in
 - **Real-time discipline**: one allocation or lock in the callback can drop
   out. Mitigation: allocation guard, offline render tests, soak test.
 - **Sync depends on the grid**: a wrong grid makes sync drift or sit off-beat.
-  Mitigation: Phase 3 grid editor first; show sync phase on the deck.
+  Mitigation: grid mode on the deck (task 30); show sync phase on the deck.
 - **Model fidelity**: figures come from the original Xone:92 user guide,
   the EQ from the Xone:96 guide (R§9.1). The filter slope is not documented
   (UNVERIFIED); we use a 2-pole SVF.

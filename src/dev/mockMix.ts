@@ -20,6 +20,7 @@ import type {
   DeckCues,
   DeckLoaded,
   DeckView,
+  GridEdit,
   LoopView,
   MemoryCueView,
   MeterView,
@@ -28,6 +29,7 @@ import type {
   MixState,
 } from "../lib/ipc";
 import { mockDetail } from "./mockDetail";
+import { mockDeckGridEdit } from "./mockGrid";
 
 const DURATION_MS = 30_000;
 const FIRST_BEAT_MS = 12;
@@ -493,7 +495,10 @@ function control(c: MixControl) {
       }
       break;
     case "seek":
-      v.positionMs = Math.min(v.durationMs, Math.max(0, v.playing ? c.ms : snap(d, c.ms)));
+      v.positionMs = Math.min(
+        v.durationMs,
+        Math.max(0, v.playing || c.exact === true ? c.ms : snap(d, c.ms)),
+      );
       leaveLoopUnless(v, v.positionMs);
       break;
     case "callCue": {
@@ -630,6 +635,15 @@ export function mockMix(
           : mockDetail(args.first as number, args.count as number, d.view.durationMs);
       // Building a chunk takes a moment.
       return new Promise((resolve) => setTimeout(() => resolve(bytes), 30));
+    }
+    case "mix_grid_edit": {
+      const d = decks[args.deck as number];
+      const id = d?.view.trackId;
+      if (d?.view.loaded === true && id === null) {
+        throw new Error("The grid of a track on a stick can't be changed here.");
+      }
+      if (d === undefined || id == null) throw new Error("the deck is empty");
+      return mockDeckGridEdit(id, args.edit as GridEdit, analysed(id));
     }
     case "mix_cue_edit": {
       const d = decks[args.deck as number];

@@ -2,7 +2,7 @@
  * A deck's Q (quantise, lit when on; needs a grid) beside the pad mode tabs,
  * over CUE (held: preview on the cue point) and PLAY, round like a CDJ's,
  * one beside each pad row (`--deck-ctl-rows`). They fill the column, so they
- * grow and shrink with the deck.
+ * grow and shrink with the deck. Grid mode leaves Q out.
  */
 import { PauseIcon, PlayIcon } from "../icons";
 import { Button } from "../ui/Button";
@@ -16,6 +16,8 @@ export interface DeckTransportProps {
   /** The engine has a grid: Q can act. */
   grid: boolean;
   quantise: boolean;
+  /** False in grid mode: the row keeps its height without Q. */
+  showQuantise?: boolean;
   cueKey: string | undefined;
   playKey: string | undefined;
   onCue: (down: boolean) => void;
@@ -29,6 +31,7 @@ export function DeckTransport({
   playing,
   grid,
   quantise,
+  showQuantise = true,
   cueKey,
   playKey,
   onCue,
@@ -38,18 +41,22 @@ export function DeckTransport({
   const n = deck + 1;
   return (
     <div className="grid w-(--deck-transport-w) shrink-0 grid-rows-(--deck-ctl-rows) justify-items-center gap-y-1">
-      <Button
-        size="xs"
-        variant="control"
-        disabled={!loaded || !grid}
-        aria-pressed={quantise}
-        aria-label={`Deck ${n} quantise`}
-        hint="Quantise"
-        className="w-(--ctl-h-xs) px-0"
-        onClick={onQuantise}
-      >
-        Q
-      </Button>
+      {showQuantise ? (
+        <Button
+          size="xs"
+          variant="control"
+          disabled={!loaded || !grid}
+          aria-pressed={quantise}
+          aria-label={`Deck ${n} quantise`}
+          hint="Quantise"
+          className="w-(--ctl-h-xs) px-0"
+          onClick={onQuantise}
+        >
+          Q
+        </Button>
+      ) : (
+        <span />
+      )}
       <IconButton
         size="lg"
         shape="round"

@@ -130,6 +130,69 @@ export function MoreIcon() {
   );
 }
 
+/** A padlock, shut or open (`open`): a grid's lock. */
+export function LockIcon({ open = false }: { open?: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d={open ? "M5 7V5a3 3 0 0 1 5.8-1" : "M5 7V5a3 3 0 0 1 6 0v2"}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <rect x="3.5" y="7" width="9" height="6.5" rx="1.2" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** A circular arrow, counterclockwise: undo. */
+export function UndoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M3.67 6A5 5 0 1 1 3.67 11M6.1 5.1 3.67 6l-.45-2.56"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** A circular arrow, clockwise: redo. */
+export function RedoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M12.33 6A5 5 0 1 0 12.33 11M9.9 5.1l2.43.9.45-2.56"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Beat lines, the middle one a heavy downbeat: grid mode. */
+export function GridModeIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M2.5 5v6M5 4v8M11 4v8M13.5 5v6"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <rect x="7" y="2" width="2" height="12" rx="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function PlusIcon() {
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">

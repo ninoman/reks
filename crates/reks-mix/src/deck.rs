@@ -312,10 +312,11 @@ impl Deck {
                 }
                 None
             }
-            Control::Seek { frame, .. } => {
+            Control::Seek { frame, .. } | Control::SeekExact { frame, .. } => {
+                let exact = matches!(c, Control::SeekExact { .. });
                 // Counted even when ignored, so the control side stays in step.
                 self.seeks = self.seeks.wrapping_add(1);
-                self.seek(frame as f64);
+                self.seek(frame as f64, exact);
                 None
             }
             Control::HotCue { slot, .. } => {
@@ -333,6 +334,12 @@ impl Deck {
                     *c = frame.map(|f| f.clamp(0, frames));
                 }
                 None
+            }
+            Control::SetGrid { src, .. } => {
+                if matches!(self.pending, Pending::Load(_)) || self.src.is_none() {
+                    return Some(src);
+                }
+                self.src.replace(src)
             }
             Control::AutoLoop { index, region, .. } => {
                 let loading = matches!(self.pending, Pending::Load(_));
@@ -525,16 +532,19 @@ impl Deck {
         }
     }
 
-    /// Moves the head to `to`, clamped to the track. With quantise, a jump
-    /// while playing keeps the beat phase and one while paused lands on the
-    /// nearest beat. Ignored while a load is pending: it is for the old track.
-    fn seek(&mut self, to: f64) {
+    /// Moves the head to `to`, clamped to the track. With quantise (and not
+    /// `exact`), a jump while playing keeps the beat phase and one while
+    /// paused lands on the nearest beat. Ignored while a load is pending: it
+    /// is for the old track.
+    fn seek(&mut self, to: f64, exact: bool) {
         if matches!(self.pending, Pending::Load(_)) {
             return;
         }
         let to = match self.src.as_ref() {
-            Some(s) if self.quantise && self.playing => s.beats().keep_phase(self.position(), to),
-            Some(s) if self.quantise => s.beats().snap(to),
+            Some(s) if self.quantise && !exact && self.playing => {
+                s.beats().keep_phase(self.position(), to)
+            }
+            Some(s) if self.quantise && !exact => s.beats().snap(to),
             _ => to,
         };
         let to = to.clamp(0.0, self.frames() as f64);

@@ -5,7 +5,9 @@
  * `Swatch`; else `deck-hotcue`),
  * `empty` (dashed), `lit` (the active one). `marked` is a heavy outline
  * (the size used last). They fill their grid cell, at least `--pad-h` tall.
- * A `Pad` with a `hint` or `shortcut` shows them in a tooltip. `remove`
+ * A `Pad` with a `hint` or `shortcut` shows them in a tooltip. A `SplitPad`
+ * half can show another glyph and take props of its own (a held half's
+ * pointer handlers, instead of a click). `remove`
  * adds a small × in its corner, shown on hover and focus and reachable
  * with Tab after the pad (deleting a hot cue).
  */
@@ -117,8 +119,14 @@ export interface SplitPadProps extends PadStyle {
   forwardLabel: string;
   backShortcut?: string | undefined;
   forwardShortcut?: string | undefined;
-  onBack: () => void;
-  onForward: () => void;
+  onBack?: () => void;
+  onForward?: () => void;
+  /** Instead of ◀ / ▶. */
+  backGlyph?: ReactNode;
+  forwardGlyph?: ReactNode;
+  /** More props for a half, e.g. hold handlers. */
+  backProps?: ComponentProps<"button">;
+  forwardProps?: ComponentProps<"button">;
   disabled?: boolean;
   className?: string;
 }
@@ -134,15 +142,25 @@ export function SplitPad({
   forwardShortcut,
   onBack,
   onForward,
+  backGlyph = "◀",
+  forwardGlyph = "▶",
+  backProps,
+  forwardProps,
   disabled,
   tone,
   marked,
   color,
   className,
 }: SplitPadProps) {
+  // Disabled as a whole, it fades like a disabled `Pad`; a half alone fades itself.
+  const halfDisabled = disabled ? "disabled:cursor-default" : disabledState;
   return (
     <div
-      className={cn(padVariants({ tone, marked }), "grid grid-cols-2 gap-0 p-0", className)}
+      className={cn(
+        padVariants({ tone, marked }),
+        "grid grid-cols-2 gap-0 p-0 data-[disabled]:opacity-45",
+        className,
+      )}
       style={padStyle(color)}
       data-disabled={disabled || undefined}
     >
@@ -152,9 +170,10 @@ export function SplitPad({
           aria-label={backLabel}
           disabled={disabled}
           onClick={onBack}
-          className={cn(half, "justify-start", focusRing, disabledState)}
+          className={cn(half, "justify-start", focusRing, halfDisabled)}
+          {...backProps}
         >
-          ◀
+          {backGlyph}
         </button>
       </ShortcutTooltip>
       <ShortcutTooltip shortcut={forwardShortcut} hint={forwardLabel}>
@@ -163,15 +182,15 @@ export function SplitPad({
           aria-label={forwardLabel}
           disabled={disabled}
           onClick={onForward}
-          className={cn(half, "justify-end", focusRing, disabledState)}
+          className={cn(half, "justify-end", focusRing, halfDisabled)}
+          {...forwardProps}
         >
-          ▶
+          {forwardGlyph}
         </button>
       </ShortcutTooltip>
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 font-mono data-[disabled]:opacity-45"
-        data-disabled={disabled || undefined}
+        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 font-mono"
       >
         {label}
       </span>

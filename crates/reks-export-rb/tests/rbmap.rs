@@ -270,7 +270,13 @@ fn built_anlz_has_rekordbox_waveforms_and_the_library_grid() {
 
     // A grid edit reaches the built files; the waveforms stay rekordbox's.
     w.lib
-        .edit_beatgrid(demo1, GridEdit::Nudge { delta_ms: 10 })
+        .edit_beatgrid(
+            demo1,
+            GridEdit::Nudge {
+                delta_ms: 10,
+                section: None,
+            },
+        )
         .unwrap();
     let edited = w.build(demo1);
     assert_eq!(pqtz_times(&edited.dat)[0], theirs[0] + 10);

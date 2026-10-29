@@ -690,12 +690,14 @@ export interface Beatgrid {
 }
 
 /**
- * One editor edit; the grid maths are in Rust (`reks-core` `beatgrid`).
- * `section` is a marker's index; `null` for halve/double/reset means all.
+ * One grid edit; the grid maths are in Rust (`reks-core` `beatgrid`).
+ * `section` is a marker's index; `null` for nudge/halve/double/reset means all.
  */
 export type GridEdit =
-  /** Shift the whole grid. */
-  | { op: "nudge"; deltaMs: number }
+  /** Shift the whole grid, or only `section`. */
+  | { op: "nudge"; deltaMs: number; section: number | null }
+  /** The beat nearest `atMs` moves onto it and becomes beat 1; its section shifts with it. */
+  | { op: "beatOneAt"; atMs: number }
   /** The beat nearest `atMs` becomes beat 1, in its section; beats do not move. */
   | { op: "setDownbeat"; atMs: number }
   | { op: "double"; section: number | null }
@@ -703,11 +705,15 @@ export type GridEdit =
   /** The section at `anchorMs`; with no grid, creates one with beat 1 there. */
   | { op: "setBpm"; bpmX100: number; anchorMs: number }
   | { op: "setSectionBpm"; section: number; bpmX100: number }
+  /** The section at `atMs` at a new tempo; its beat nearest `pivotMs` stays put. */
+  | { op: "retempo"; atMs: number; pivotMs: number; bpmX100: number }
   | { op: "addMarker"; atMs: number }
   | { op: "moveMarker"; section: number; toMs: number }
   | { op: "deleteMarker"; section: number }
   /** Retempo `section` so its beat nearest `beatMs` lands on `toMs`. */
   | { op: "stretch"; section: number; beatMs: number; toMs: number }
+  /** Retempo the section at `toMs` about its beat nearest `pivotMs` so the beat nearest `toMs` lands on it. */
+  | { op: "stretchTo"; pivotMs: number; toMs: number }
   /** Back to the grid from before the first edit. */
   | { op: "reset"; section: number | null }
   /** Undo and redo: replace the markers. */
@@ -964,7 +970,8 @@ export type MixControl =
   | { type: "cue"; deck: number }
   /** CUE let go: ends a cue preview. */
   | { type: "cueRelease"; deck: number }
-  | { type: "seek"; deck: number; ms: number }
+  /** With quantise, lands on the beat (paused); `exact` (grid mode) goes exactly to `ms`. */
+  | { type: "seek"; deck: number; ms: number; exact?: boolean }
   | { type: "hotCue"; deck: number; slot: number }
   /**
    * Memory cue call: the cue point and playhead move to `ms` exactly; a playing deck plays on.
@@ -1065,6 +1072,15 @@ export function mixControl(control: MixControl): Promise<void> {
 /** Edits the cues of the track on `deck`; resolves to the deck's cues after it. */
 export function mixCueEdit(deck: number, edit: CueEdit): Promise<DeckCues> {
   return invoke("mix_cue_edit", { deck, edit });
+}
+
+/**
+ * A grid edit on the library track on `deck` (its grid mode), stored like
+ * `beatgridEdit`; the deck plays on with the new grid. With `snap`, the
+ * position the edit places moves to the nearest transient.
+ */
+export function mixGridEdit(deck: number, edit: GridEdit, snap: boolean): Promise<Beatgrid> {
+  return invoke("mix_grid_edit", { deck, edit, snap });
 }
 
 /** `settings_*`, `library_root*`, `cache_dir_move` (reks-core `settings.rs`). */

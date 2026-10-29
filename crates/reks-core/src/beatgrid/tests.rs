@@ -40,13 +40,131 @@ fn invalid(r: Result<Vec<GridAnchor>>) -> GridProblem {
 
 #[test]
 fn nudge_moves_every_marker() {
-    let out = edit(&two_tempo(), GridEdit::Nudge { delta_ms: -10 }).unwrap();
+    let out = edit(
+        &two_tempo(),
+        GridEdit::Nudge {
+            delta_ms: -10,
+            section: None,
+        },
+    )
+    .unwrap();
     // The first marker would be before 0: it steps a beat forward.
     assert_eq!(out[0].position_ms, 419);
     assert_eq!(out[0].beat_in_bar, 2);
     assert_eq!(out[1].position_ms, 59_990);
-    let out = edit(&out, GridEdit::Nudge { delta_ms: 1 }).unwrap();
+    let out = edit(
+        &out,
+        GridEdit::Nudge {
+            delta_ms: 1,
+            section: None,
+        },
+    )
+    .unwrap();
     assert_eq!(out[1].position_ms, 59_991);
+}
+
+#[test]
+fn nudge_can_move_one_section() {
+    let out = edit(
+        &two_tempo(),
+        GridEdit::Nudge {
+            delta_ms: -10,
+            section: Some(1),
+        },
+    )
+    .unwrap();
+    assert_eq!(out[0], two_tempo()[0]);
+    assert_eq!(out[1].position_ms, 59_990);
+}
+
+/// Position of section `s`'s beat `n`, as the rule emits it.
+fn beat_at(anchors: &[GridAnchor], s: usize, n: i64) -> f64 {
+    grid_beats(anchors, 200_000.0)
+        .iter()
+        .find(|b| b.section == s && b.n == n)
+        .map(|b| b.position_ms)
+        .unwrap()
+}
+
+#[test]
+fn beat_one_at_moves_the_nearest_beat_onto_the_time() {
+    // 120 BPM from 100 ms: beat 2 (1100 ms) moves to 1110 ms as beat 1.
+    let a = one(edit(&grid(100, 12000, 1), GridEdit::BeatOneAt { at_ms: 1110 }).unwrap());
+    assert_eq!((a.position_ms, a.beat_in_bar, a.bpm_x100), (1110, 1, 12000));
+    assert_eq!(downbeats(&[a], 4_000.0), [1110, 3110]);
+    // A later section shifts its marker; the first stays.
+    let out = edit(&two_tempo(), GridEdit::BeatOneAt { at_ms: 61_040 }).unwrap();
+    assert_eq!(out[0], two_tempo()[0]);
+    assert_eq!(out[1].position_ms, 60_006);
+    assert_eq!(out[1].beat_in_bar, 2);
+    assert!((beat_at(&out, 1, 3) - 61_040.0).abs() <= 1.0);
+}
+
+#[test]
+fn retempo_keeps_the_pivot_beat() {
+    // The first section re-anchors on the pivot (beat 16, a downbeat).
+    let a = one(edit(
+        &grid(0, 12000, 1),
+        GridEdit::Retempo {
+            at_ms: 8_000,
+            pivot_ms: 8_010,
+            bpm_x100: 12100,
+        },
+    )
+    .unwrap());
+    assert_eq!(
+        (a.position_ms, a.bpm_x100, a.beat_in_bar),
+        (8_000, 12100, 1)
+    );
+    // A later section moves its marker so the pivot (its beat 8) stays.
+    let before = beat_at(&two_tempo(), 1, 8);
+    let out = edit(
+        &two_tempo(),
+        GridEdit::Retempo {
+            at_ms: 62_000,
+            pivot_ms: before.round() as i64,
+            bpm_x100: 17500,
+        },
+    )
+    .unwrap();
+    assert_eq!(out[0], two_tempo()[0]);
+    assert_eq!(out[1].bpm_x100, 17500);
+    assert!((beat_at(&out, 1, 8) - before).abs() <= 1.0);
+}
+
+#[test]
+fn stretch_to_lands_a_beat_with_the_pivot_fixed() {
+    // Pinned at 0 ms; beat 60 (30 000 ms) onto 30 100 ms.
+    let a = one(edit(
+        &grid(0, 12000, 1),
+        GridEdit::StretchTo {
+            pivot_ms: 0,
+            to_ms: 30_100,
+        },
+    )
+    .unwrap());
+    assert_eq!((a.position_ms, a.bpm_x100), (0, 11960));
+    assert!((beat_at(&[a], 0, 60) - 30_100.0).abs() <= 1.0);
+    // Under half a beat from the pin there is nothing to stretch.
+    assert!(edit(
+        &grid(0, 12000, 1),
+        GridEdit::StretchTo {
+            pivot_ms: 0,
+            to_ms: 200,
+        },
+    )
+    .is_err());
+    // A pin in another section falls back to the section's marker.
+    let out = edit(
+        &two_tempo(),
+        GridEdit::StretchTo {
+            pivot_ms: 1_000,
+            to_ms: 61_400,
+        },
+    )
+    .unwrap();
+    assert_eq!(out[1].position_ms, 60_000);
+    assert_eq!(out[1].bpm_x100, 17143);
 }
 
 #[test]
@@ -353,7 +471,10 @@ fn serde_shapes_match_ipc_ts() {
     for (json, edit) in [
         (
             r#"{"op":"nudge","deltaMs":-10}"#,
-            GridEdit::Nudge { delta_ms: -10 },
+            GridEdit::Nudge {
+                delta_ms: -10,
+                section: None,
+            },
         ),
         (
             r#"{"op":"setBpm","bpmX100":12800,"anchorMs":5}"#,
@@ -456,7 +577,10 @@ fn beat_marks_follow_the_rule() {
 fn any_edit() -> impl Strategy<Value = GridEdit> {
     let pos = 0i64..120_000;
     prop_oneof![
-        (-500i64..500).prop_map(|d| GridEdit::Nudge { delta_ms: d }),
+        (-500i64..500).prop_map(|d| GridEdit::Nudge {
+            delta_ms: d,
+            section: None
+        }),
         pos.clone().prop_map(|t| GridEdit::SetDownbeat { at_ms: t }),
         (0usize..6).prop_map(|s| GridEdit::Double { section: Some(s) }),
         (0usize..6).prop_map(|s| GridEdit::Halve { section: Some(s) }),
@@ -470,9 +594,23 @@ fn any_edit() -> impl Strategy<Value = GridEdit> {
             to_ms: t
         }),
         (0usize..6).prop_map(|s| GridEdit::DeleteMarker { section: s }),
-        (0usize..6, pos.clone(), pos).prop_map(|(s, b, t)| GridEdit::Stretch {
+        (0usize..6, pos.clone(), pos.clone()).prop_map(|(s, b, t)| GridEdit::Stretch {
             section: s,
             beat_ms: b,
+            to_ms: t
+        }),
+        (-500i64..500, 0usize..6).prop_map(|(d, s)| GridEdit::Nudge {
+            delta_ms: d,
+            section: Some(s)
+        }),
+        pos.clone().prop_map(|t| GridEdit::BeatOneAt { at_ms: t }),
+        (pos.clone(), pos.clone(), 2_000i64..40_000).prop_map(|(a, p, b)| GridEdit::Retempo {
+            at_ms: a,
+            pivot_ms: p,
+            bpm_x100: b
+        }),
+        (pos.clone(), pos).prop_map(|(p, t)| GridEdit::StretchTo {
+            pivot_ms: p,
             to_ms: t
         }),
     ]

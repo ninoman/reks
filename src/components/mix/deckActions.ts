@@ -33,7 +33,7 @@ export function deckActions(mix: MixStore, deck: number): DeckActions {
     setTempoRange: (range) => mix.setTempoRange(deck, range),
     setBpm: (bpm) => mix.setBpm(deck, bpm),
     zoom: (dir) => mix.zoom(dir),
-    seek: (ms) => mix.send({ type: "seek", deck, ms }),
+    seek: (ms, exact = false) => mix.send({ type: "seek", deck, ms, exact }),
     eject: () => mix.unload(deck),
     // A drop onto a playing deck keeps the deck playing with the new track.
     drop: (id) => void mix.load(deck, id, mix.live?.decks[deck]?.playing === true),
