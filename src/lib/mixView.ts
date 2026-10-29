@@ -36,12 +36,16 @@ export function nextTempoRange(r: TempoRange): TempoRange {
   return TEMPO_RANGES[(TEMPO_RANGES.indexOf(r) + 1) % TEMPO_RANGES.length] ?? DEFAULT_TEMPO_RANGE;
 }
 
+const FOUR_DECKS: readonly number[] = [0, 1, 2, 3];
+const TWO_DECKS: readonly number[] = [1, 2];
+
 /**
  * Decks on screen, by index. With two shown they are decks 2 and 3, the
- * centre channels of a 4-channel mixer, as with two CDJs on a DJM.
+ * centre channels of a 4-channel mixer, as with two CDJs on a DJM. The same
+ * array every call, so a memoised mixer that takes it skips re-renders.
  */
-export function shownDecks(count: 2 | 4): number[] {
-  return count === 4 ? [0, 1, 2, 3] : [1, 2];
+export function shownDecks(count: 2 | 4): readonly number[] {
+  return count === 4 ? FOUR_DECKS : TWO_DECKS;
 }
 
 /** Decks 1 and 2 sit left of the mixer, 3 and 4 right. */
