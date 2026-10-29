@@ -68,6 +68,7 @@ beforeEach(() => {
   vi.mocked(ipc.mixControl).mockResolvedValue(undefined);
   vi.mocked(ipc.mixLoad).mockResolvedValue({
     deck: 1,
+    load: 1,
     trackId: 7,
     durationMs: 1,
     hotCues: [],

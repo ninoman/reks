@@ -19,6 +19,7 @@ const live = (preview: DeckView) => ({ decks: [], preview }) as unknown as MixSt
 beforeEach(() => {
   vi.mocked(ipc.mixLoad).mockReset().mockResolvedValue({
     deck: 4,
+    load: 1,
     trackId: 7,
     durationMs: 1000,
     hotCues: [],
