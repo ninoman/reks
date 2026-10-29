@@ -1,15 +1,19 @@
 name: Release
 
-# Unsigned developer builds (docs/decisions.md D17). `npm run release -- X.Y.Z` bumps
-# the version and tags it (docs/releasing.md); pushing the tag `vX.Y.Z` runs the full
-# checks on all three OSes (D31), then builds the app on every platform and attaches the
-# bundles to a draft GitHub release, which the maintainer reviews and publishes by hand.
-# Signing, notarisation and the updater (`latest.json`) come later; until then these
-# builds are for developers only.
+# Unsigned developer builds (docs/decisions.md D17). `npm run release -- X.Y.Z` (or the
+# Cut release workflow) bumps the version, writes CHANGELOG.md and tags it
+# (docs/releasing.md, D41). Pushing the tag `vX.Y.Z`, or dispatching this workflow on it,
+# runs the full checks on all three OSes (D31), then builds the app on every platform and
+# attaches the bundles to a draft GitHub release, which the maintainer reviews and
+# publishes by hand. Signing, notarisation and the updater (`latest.json`) come later;
+# until then these builds are for developers only.
 
 on:
   push:
     tags: ["v*"]
+  # Used by cut-release.yml, whose GITHUB_TOKEN tag push starts no workflow. Run it on a
+  # tag, not a branch; the version check refuses a branch.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,6 +27,9 @@ jobs:
     name: tag matches app version
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      notes: ${{ steps.notes.outputs.notes }}
+      build: ${{ steps.mode.outputs.build }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +38,7 @@ jobs:
       - name: Check tag matches app version
         shell: bash
         run: |
+          [ "$GITHUB_REF_TYPE" = tag ] || { echo "::error::run Release on a vX.Y.Z tag, not a branch"; exit 1; }
           tag="${GITHUB_REF_NAME#v}"
           conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
           pkg=$(node -p "require('./package.json').version")
@@ -38,18 +46,64 @@ jobs:
           echo "tag=$tag tauri.conf=$conf package.json=$pkg Cargo.toml=$cargo"
           [ "$tag" = "$conf" ] && [ "$tag" = "$pkg" ] && [ "$tag" = "$cargo" ]
 
+      # The release commit's CHANGELOG.md section for this version (D41), from its
+      # "## X.Y.Z (date)" heading to the next version's heading.
+      - name: Release notes from CHANGELOG.md
+        id: notes
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          grep -q "^## $tag " CHANGELOG.md || { echo "::error::CHANGELOG.md has no section for $tag; tag with npm run release"; exit 1; }
+          notes=$(awk -v h="## $tag " 'index($0, h) == 1 { f = 1; next } f && /^## / { exit } f' CHANGELOG.md)
+          [ -n "$(echo "$notes" | tr -d '[:space:]')" ] || notes="No user-facing changes."
+          { echo "notes<<REKS_NOTES_EOF"; echo "$notes"; echo "REKS_NOTES_EOF"; } >> "$GITHUB_OUTPUT"
+
+      # `npm run release -- X.Y.Z --notes-only` puts "[notes only]" in the annotated tag's
+      # message: no checks or builds, just a release with the notes (D41).
+      - name: Notes only or full build
+        id: mode
+        shell: bash
+        run: |
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          message=$(git for-each-ref --format='%(contents)' "refs/tags/$GITHUB_REF_NAME")
+          if [[ "$message" == *"[notes only]"* ]]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "Notes-only release: checks and builds are skipped."
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  notes-only:
+    needs: version
+    if: needs.version.outputs.build == 'false'
+    name: notes-only release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Draft release with the notes, no bundles
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ needs.version.outputs.notes }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --draft --prerelease --title "reks $GITHUB_REF_NAME (notes only)" \
+            --notes "$(printf 'Notes-only release: no installers were built for this version.\n\n%s\n' "$NOTES")"
+
   checks:
     needs: version
+    if: needs.version.outputs.build == 'true'
     uses: ./.github/workflows/ci.yml
     with:
       all_os: true
 
   licenses:
     needs: version
+    if: needs.version.outputs.build == 'true'
     uses: ./.github/workflows/licenses.yml
 
   build:
-    needs: [checks, licenses]
+    needs: [version, checks, licenses]
+    if: needs.version.outputs.build == 'true'
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -128,6 +182,8 @@ jobs:
             Unsigned developer build. Not notarised or code-signed: macOS Gatekeeper and
             Windows SmartScreen will warn, and there is no auto-update yet.
             Not tested on CDJs; see docs/hw-test-log.md.
+
+            ${{ needs.version.outputs.notes }}
           releaseDraft: true
           prerelease: true
 

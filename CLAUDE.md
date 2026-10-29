@@ -100,7 +100,10 @@ TypeScript / React
   colours or one-off sizes in feature components.
 
 Git
-- Conventional Commits (`feat(core): ...`, `fix(export-rb): ...`).
+- Conventional Commits (`feat(core): ...`, `fix(export-rb): ...`). Subjects of
+  `feat`/`fix`/`perf` commits become the changelog, so write them for users. Mark a
+  breaking change with `!` (`feat(core)!: ...`); any schema migration is one
+  (`docs/releasing.md#versioning`, D41).
 - Small PRs; one phase task per PR where possible. Update the phase doc's task
   checklist in the same PR.
 
