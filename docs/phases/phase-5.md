@@ -829,6 +829,37 @@ nothing; 25 needs 22–24.
     `--mixer-filter-gap` 4 px they fit 8 px apart. Each deck gains 40 px
     (448 → 488 at 1280 px). Heights unchanged in every view (356 / 440 /
     333 / 393 measured).
+31. [x] **One-channel mixer in 1-deck mode** (maintainer request,
+    2026-10-29). Wireframe:
+    [`wireframes/one-channel-mixer.html`](../wireframes/one-channel-mixer.html),
+    layout A. UI only; the engine and store are unchanged.
+    - [x] `SoloMixer` right of the player deck, as tall as it
+      (`--deck-solo-h`): the legend captions and channel 2's LEVEL and EQ
+      knobs (4-band HI / HM / LM / LO, 3-band HI / MID / LOW), then a column
+      on the right. No badge, CUE, fader, meter, master, cue section or
+      crossfader.
+    - [x] Right column, 4-band: FILTER, then (Advanced) channel 2's X / · / Y
+      assign, then that unit's ON, FREQ, RES and HP / BP / LP in two
+      columns (`FilterUnit` `stacked`). Simple uses X; with filters hidden
+      (Settings → Mixer) or the assign off, no unit. 3-band: the FX select,
+      then channel 2's FX knob over PARAMETER.
+    - [x] Rows stretch to fill the height (at least `--mixer-row-h` each);
+      the column spreads to match.
+    - [x] The deck-header chip (task 19) lists only what the mixer does not
+      show: channel 2's fader and the master level.
+    - [x] Checked in the dev mock at 1280 × 800: 4-band and 3-band, Simple
+      (filters shown and hidden) and Advanced; library rows unchanged.
+    - [x] Docs: [`../ui.md`](../ui.md) player deck.
+    Tests: `SoloMixer.test.tsx` (4-band and 3-band controls by name, a knob
+    and the filter set channel index 1, Advanced assign, assign off),
+    `mixDeviations` (chip reasons in 1-deck mode), `PlayerDeck.test.tsx`
+    (mixer beside the deck).
+    Done 2026-10-29. Measured at 1280 × 800: 215 × 162 in 4-band and
+    3-band whatever the effect (the column is a fixed
+    `--solo-mixer-column-w`, so picking REVERB does not move the deck),
+    117 × 162 with filters hidden; no overflow,
+    deck height and library rows unchanged. The LEVEL / EQ knob rows moved
+    to `lib/mixView` (`knobRows`) so both mixers share them.
 
 ## Acceptance criteria
 

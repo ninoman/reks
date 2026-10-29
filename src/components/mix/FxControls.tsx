@@ -3,6 +3,7 @@
  * caption is the FX select (one effect for every channel's FX knob), and
  * PARAMETER sits under it, captioned by what it sets for that effect.
  */
+import { cn } from "../../lib/cn";
 import { FX_KINDS, fxName, fxParameterCaption, fxParameterName } from "../../lib/mixView";
 import type { FxValues } from "../../store/mix";
 import { Caption } from "../ui/Caption";
@@ -33,9 +34,13 @@ export function FxSelect({ values, onChange }: FxControlProps) {
   );
 }
 
-export function FxParameter({ values, onChange }: FxControlProps) {
+export function FxParameter({
+  values,
+  onChange,
+  className,
+}: FxControlProps & { className?: string }) {
   return (
-    <div className="flex flex-col items-end gap-0.5">
+    <div className={cn("flex flex-col items-end gap-0.5", className)}>
       <Caption aria-hidden="true">{fxParameterCaption(values.kind)}</Caption>
       <Knob
         size="sm"

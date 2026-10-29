@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_CHANNEL, DEFAULT_MASTER, type FilterValues } from "../store/mix";
+import { DEFAULT_CHANNEL, DEFAULT_MASTER } from "../store/mix";
 import { hiddenPlaying, hiddenPlayingLabel, mixerDeviations } from "./mixHidden";
 
 describe("hiddenPlaying", () => {
@@ -24,46 +24,22 @@ describe("hiddenPlaying", () => {
 });
 
 describe("mixerDeviations", () => {
-  const filter: FilterValues = {
-    freq: 0.5,
-    resonance: 0,
-    highPass: false,
-    bandPass: false,
-    lowPass: true,
-    on: false,
-  };
-  const filters = { x: filter, y: filter };
   const reference = { channel: DEFAULT_CHANNEL, master: DEFAULT_MASTER };
-  const run = (channel = DEFAULT_CHANNEL, master = DEFAULT_MASTER, f = filters) =>
-    mixerDeviations(channel, f, master, reference);
+  const run = (channel = DEFAULT_CHANNEL, master = DEFAULT_MASTER) =>
+    mixerDeviations(channel, master, reference);
 
-  it("is empty at the defaults, whatever the filter assign", () => {
-    expect(run({ ...DEFAULT_CHANNEL, filterAssign: "x" })).toEqual([]);
+  it("is empty at the defaults", () => {
+    expect(run()).toEqual([]);
   });
 
-  it("names what is off, the fader first", () => {
-    expect(run({ ...DEFAULT_CHANNEL, eqLo: 0, fader: 0.4 })).toEqual([
+  it("names the fader, then the master level", () => {
+    expect(run({ ...DEFAULT_CHANNEL, fader: 0.4 }, { ...DEFAULT_MASTER, level: 0.5 })).toEqual([
       "Channel 2 fader not up",
-      "Channel 2 EQ not flat",
-    ]);
-    expect(run({ ...DEFAULT_CHANNEL, trim: 0.7 })).toEqual(["Channel 2 trim not centred"]);
-    expect(run(DEFAULT_CHANNEL, { ...DEFAULT_MASTER, level: 0.5 })).toEqual([
       "Master level changed",
     ]);
   });
 
-  it("counts the 3-band EQ and the FX knob outside its dead zone", () => {
-    expect(run({ ...DEFAULT_CHANNEL, eq3Mid: 0.3 })).toEqual(["Channel 2 EQ not flat"]);
-    expect(run({ ...DEFAULT_CHANNEL, fx: 0.51 })).toEqual([]);
-    expect(run({ ...DEFAULT_CHANNEL, fx: 0.2 })).toEqual(["Channel 2 FX on"]);
-  });
-
-  it("counts the filter only when it is assigned and on", () => {
-    const on = { x: { ...filter, on: true }, y: filter };
-    expect(run({ ...DEFAULT_CHANNEL, filterAssign: "x" }, DEFAULT_MASTER, on)).toEqual([
-      "Channel 2 filter on",
-    ]);
-    expect(run({ ...DEFAULT_CHANNEL, filterAssign: "y" }, DEFAULT_MASTER, on)).toEqual([]);
-    expect(run({ ...DEFAULT_CHANNEL, filterAssign: "off" }, DEFAULT_MASTER, on)).toEqual([]);
+  it("leaves out what the one-channel mixer shows", () => {
+    expect(run({ ...DEFAULT_CHANNEL, eqLo: 0, trim: 0.7, fx: 0.2, filterAssign: "y" })).toEqual([]);
   });
 });

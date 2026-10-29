@@ -8,7 +8,13 @@
 import { Fragment } from "react";
 
 import { cn } from "../../lib/cn";
-import { FX_DEAD_ZONE, type MixerParts, offCentre } from "../../lib/mixView";
+import {
+  FX_DEAD_ZONE,
+  type KnobParam,
+  knobRows,
+  type MixerParts,
+  offCentre,
+} from "../../lib/mixView";
 import type { ChannelValues } from "../../store/mix";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -21,41 +27,39 @@ import { AssignSwitch } from "./AssignSwitch";
 import { type FxControlProps, FxParameter, FxSelect } from "./FxControls";
 import { LiveMeter } from "./LiveMeter";
 
-type KnobParam =
-  | "trim"
-  | "eqHi"
-  | "eqMid1"
-  | "eqMid2"
-  | "eqLo"
-  | "eq3Hi"
-  | "eq3Mid"
-  | "eq3Lo"
-  | "fx";
-
-/** `[param, caption]` per knob row; the FX row's caption is the FX select. */
-const FOUR_BAND: [KnobParam, string][] = [
-  ["trim", "Level"],
-  ["eqHi", "Hi"],
-  ["eqMid1", "HM"],
-  ["eqMid2", "LM"],
-  ["eqLo", "Lo"],
-];
-const THREE_BAND: [KnobParam, string][] = [
-  ["trim", "Level"],
-  ["eq3Hi", "Hi"],
-  ["eq3Mid", "Mid"],
-  ["eq3Lo", "Low"],
-  ["fx", "FX"],
-];
-
-function knobRows(parts: MixerParts): [KnobParam, string][] {
-  return parts.threeBand ? THREE_BAND : FOUR_BAND;
-}
-
 function ariaName(param: KnobParam, caption: string): string {
   if (param === "trim") return "level";
   if (param === "fx") return "FX";
   return `EQ ${caption}`;
+}
+
+/** One of a channel's knobs: LEVEL, an EQ band or FX; lit off centre. */
+export function ChannelKnob({
+  ch,
+  param,
+  caption,
+  values,
+  onChange,
+}: {
+  ch: number;
+  param: KnobParam;
+  caption: string;
+  values: ChannelValues;
+  onChange: (param: KnobParam, value: number) => void;
+}) {
+  const fx = param === "fx";
+  return (
+    <Knob
+      size={param === "trim" ? "sm" : "md"}
+      bipolar
+      defaultValue={0.5}
+      {...(fx && { detent: 0.5 })}
+      lit={offCentre(values[param], fx ? FX_DEAD_ZONE : 0)}
+      value={values[param]}
+      onValueChange={(v) => onChange(param, v)}
+      aria-label={`Channel ${ch + 1} ${ariaName(param, caption)}`}
+    />
+  );
 }
 
 const row = "flex h-(--mixer-row-h) items-center justify-center";
@@ -84,22 +88,18 @@ export function ChannelStrip({ ch, values, active, parts, onChange, onCue }: Cha
         {n}
       </Badge>
       {knobRows(parts).map(([param, caption]) => {
-        const fx = param === "fx";
         return (
           <Fragment key={param}>
             <div className={row}>
-              <Knob
-                size={param === "trim" ? "sm" : "md"}
-                bipolar
-                defaultValue={0.5}
-                {...(fx && { detent: 0.5 })}
-                lit={offCentre(values[param], fx ? FX_DEAD_ZONE : 0)}
-                value={values[param]}
-                onValueChange={(v) => onChange(param, v)}
-                aria-label={`Channel ${n} ${ariaName(param, caption)}`}
+              <ChannelKnob
+                ch={ch}
+                param={param}
+                caption={caption}
+                values={values}
+                onChange={onChange}
               />
             </div>
-            {fx && <div className={paramRow} />}
+            {param === "fx" && <div className={paramRow} />}
           </Fragment>
         );
       })}
