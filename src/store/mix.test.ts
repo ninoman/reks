@@ -224,7 +224,14 @@ describe("mix store", () => {
     let first: (v: Awaited<ReturnType<typeof ipc.mixLoad>>) => void = () => {};
     vi.mocked(ipc.mixLoad)
       .mockImplementationOnce(() => new Promise((r) => (first = r)))
-      .mockResolvedValueOnce({ deck: 0, load: 1, trackId: 2, durationMs: 1, hotCues: [], memoryCues: [] });
+      .mockResolvedValueOnce({
+        deck: 0,
+        load: 1,
+        trackId: 2,
+        durationMs: 1,
+        hotCues: [],
+        memoryCues: [],
+      });
     useMix.setState({ status: "running", live: running });
     const a = useMix.getState().load(0, { kind: "library", id: 1, title: "A", artist: null });
     await useMix.getState().load(0, { kind: "library", id: 2, title: "B", artist: null });

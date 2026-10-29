@@ -44,6 +44,18 @@ impl DeckSource {
         self
     }
 
+    /// The same audio, hot cues and memory loops with `beats` as the grid
+    /// (a grid edited while the track is on a deck). The PCM is shared.
+    pub fn with_new_grid(&self, beats: &[GridBeat]) -> Self {
+        Self {
+            pcm: Arc::clone(&self.pcm),
+            sample_rate: self.sample_rate,
+            beats: BeatMap::new(beats, self.sample_rate),
+            hot_cues: self.hot_cues.clone(),
+            auto_loops: self.auto_loops.clone(),
+        }
+    }
+
     /// Adds hot cues as `(slot, frame)`; a repeated slot keeps the first.
     pub fn with_hot_cues(mut self, mut cues: Vec<(u8, i64)>) -> Self {
         cues.sort_by_key(|c| c.0);

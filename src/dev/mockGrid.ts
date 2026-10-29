@@ -78,8 +78,34 @@ function edit(g: MockGrid, e: GridEdit): MockGrid {
   const each = (s: number | null) => (s === null ? anchors.map((_, i) => i) : [s]);
   switch (e.op) {
     case "nudge":
-      for (const a of anchors) a.positionMs += e.deltaMs;
+      for (const i of each(e.section)) at(i).positionMs += e.deltaMs;
       break;
+    case "beatOneAt": {
+      const [i, n] = nearest(anchors, e.atMs);
+      const a = at(i);
+      a.positionMs += e.atMs - (a.positionMs + n * (6_000_000 / a.bpmX100));
+      a.beatInBar = mod(-n, a.beatsPerBar);
+      break;
+    }
+    case "retempo":
+    case "stretchTo": {
+      const target = e.op === "retempo" ? e.atMs : e.toMs;
+      const i = nearest(anchors, target)[0];
+      const a = at(i);
+      const [pi, pn] = nearest(anchors, e.pivotMs);
+      const n = pi === i ? pn : 0;
+      const pivot = a.positionMs + n * (6_000_000 / a.bpmX100);
+      let bpm = e.op === "retempo" ? e.bpmX100 : 0;
+      if (e.op === "stretchTo") {
+        const beats = Math.round((e.toMs - pivot) / (6_000_000 / a.bpmX100));
+        if (beats === 0)
+          throw new Error("move the playhead at least a beat away from the pinned downbeat");
+        bpm = Math.round((beats * 6_000_000) / (e.toMs - pivot));
+      }
+      a.bpmX100 = bpm;
+      a.positionMs = Math.round(pivot - n * (6_000_000 / bpm));
+      break;
+    }
     case "setDownbeat": {
       const [i, n] = nearest(anchors, e.atMs);
       at(i).beatInBar = mod(-n, at(i).beatsPerBar);
@@ -130,6 +156,13 @@ function edit(g: MockGrid, e: GridEdit): MockGrid {
       return { ...g, anchors: e.anchors, source: "manual" };
   }
   return { ...g, anchors, source: "manual" };
+}
+
+/** `mix_grid_edit`: the same edit on the track on the deck. */
+export function mockDeckGridEdit(id: number, e: GridEdit, analysed: boolean): Beatgrid {
+  const g = edit(grids.get(id) ?? initial(analysed), e);
+  grids.set(id, g);
+  return view(g);
 }
 
 export function mockGrid(

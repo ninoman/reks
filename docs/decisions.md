@@ -393,6 +393,25 @@ Date of decisions: 2026-10-18.
     can snap to the track's transients (computed from the audio,
     [`reks-analysis::transients`](../crates/reks-analysis/src/transients.rs)).
     Undo/redo lives in the editor session (it stores the previous anchors).
+    Added 2026-10-29 for deck grid mode (below): shift one section only;
+    beat 1 at a time (the nearest beat moves onto it); retempo a section
+    about one of its beats (the pivot stays); stretch from a pivot so the
+    beat nearest a time lands on it (`BeatOneAt`, `Retempo`, `StretchTo`).
+    A pivot outside the section falls back to the section's marker.
+  - **Editing on the deck** (status: **accepted**, maintainer's call
+    2026-10-29; phase 5 task 32): the grid is adjusted on a deck in grid
+    mode, not in a dialog, which is removed. The playhead is the cursor
+    (the waveform scrubs as in play mode, but exactly: quantise does not
+    snap it to a beat, `Control::SeekExact`); stretch and BPM edits pivot on
+    a pinned downbeat (set by "beat 1 here"), as rekordbox's grid edit
+    keeps its anchor while the interval changes. Edits go through
+    `mix_grid_edit`, which stores the grid and swaps it into the loaded
+    deck (`reks_mix::Control::SetGrid`: the same PCM with a new `BeatMap`,
+    position and playback kept; the old source is dropped off the audio
+    thread), so sync, beat jump, loops and quantise follow at once. Was:
+    the engine took a grid only at load. Rejected: four rekordbox-style
+    interval buttons (stretch to the playhead does it in one press) and a
+    metronome for now.
   - **Ownership**: an edit stores `manual` rows, which the lock rule
     (`Library::grid_is_user_owned`) already protects from analysis. The
     grid from before the first edit is kept (`beatgrid_base`, migration

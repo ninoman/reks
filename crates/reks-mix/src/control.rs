@@ -44,6 +44,12 @@ pub enum Control {
         deck: u8,
         frame: i64,
     },
+    /// [`Control::Seek`] without quantise: the head goes exactly to `frame`
+    /// (grid mode places it between beats to set the grid there).
+    SeekExact {
+        deck: u8,
+        frame: i64,
+    },
     /// Jumps to hot cue `slot` and plays. Ignored when the slot is empty.
     HotCue {
         deck: u8,
@@ -57,6 +63,14 @@ pub enum Control {
         deck: u8,
         slot: u8,
         frame: Option<i64>,
+    },
+    /// Replaces the loaded track's source with `src`, the same audio with
+    /// an edited grid ([`DeckSource::with_new_grid`]): position, playback
+    /// and loops stay. Ignored while a load is pending (the new track brings
+    /// its own grid).
+    SetGrid {
+        deck: u8,
+        src: Arc<DeckSource>,
     },
     /// Sets active memory loop slot `index` (0..[`crate::AUTO_LOOP_SLOTS`])
     /// of the loaded track to `(start, end)` frames, or clears it: the app
@@ -211,8 +225,10 @@ impl Control {
             | Self::Cue { deck }
             | Self::CueRelease { deck }
             | Self::Seek { deck, .. }
+            | Self::SeekExact { deck, .. }
             | Self::HotCue { deck, .. }
             | Self::SetHotCue { deck, .. }
+            | Self::SetGrid { deck, .. }
             | Self::CallCue { deck, .. }
             | Self::AutoLoop { deck, .. }
             | Self::Tempo { deck, .. }

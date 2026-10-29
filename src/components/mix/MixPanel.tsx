@@ -15,6 +15,7 @@ import { useKeyLabel } from "../../store/settings";
 import { DeckStrip } from "./DeckStrip";
 import { deckActions } from "./deckActions";
 import { MixerPanel } from "./MixerPanel";
+import { useDeckGridModes } from "./useDeckGridModes";
 
 /** The mixer does not depend on the 60 Hz engine state: skip those renders. */
 const Mixer = memo(MixerPanel);
@@ -24,6 +25,7 @@ export function MixPanel() {
   const { live, deckCount } = mix;
   const shown = shownDecks(deckCount);
   const keyLabel = useKeyLabel();
+  const gridMode = useDeckGridModes();
   const activeKey = mix.decks.map((d) => (d.track === null ? 0 : 1)).join("");
   // Recomputed only when a deck loads or empties.
   const active = useMemo(() => [...activeKey].map((c) => c === "1"), [activeKey]);
@@ -50,6 +52,7 @@ export function MixPanel() {
         keyText={key === null ? null : keyLabel(key)}
         phase={phase}
         compact={deckCount === 4}
+        gridMode={gridMode(deck, view, meta)}
         actions={deckActions(mix, deck)}
       />
     );

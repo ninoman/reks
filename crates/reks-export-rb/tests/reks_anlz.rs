@@ -298,7 +298,13 @@ fn edited_grid_prefers_reks_over_rekordbox() {
     // A grid-editor edit on the rekordbox-analysed track: rekordbox's cached
     // PQTZ would lose it, so the default takes reks's set (the library grid).
     w.lib
-        .edit_beatgrid(a, GridEdit::Nudge { delta_ms: 10 })
+        .edit_beatgrid(
+            a,
+            GridEdit::Nudge {
+                delta_ms: 10,
+                section: None,
+            },
+        )
         .unwrap();
     assert_eq!(
         w.sources(&w.plan(AnlzPreference::RekordboxFirst))["a.mp3"],

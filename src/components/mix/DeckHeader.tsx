@@ -1,18 +1,21 @@
 /**
  * A deck's header row: deck number (lit when loaded), artwork (eject on
  * hover or focus), title and artist, key (a readout, KEY under it), BPM (double-click to type one)
- * with the tempo under it, and remaining over elapsed time.
+ * with the tempo under it, and remaining over elapsed time. The grid mode
+ * toggle (beat lines icon, lit when on; a library track only) sits right
+ * after the title.
  */
 import type { ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
 import { formatClock, formatTempo } from "../../lib/mixView";
 import type { DeckTrack, TrackRef } from "../../store/mix";
-import { EjectIcon } from "../icons";
+import { EjectIcon, GridModeIcon } from "../icons";
 import { Artwork } from "../ui/Artwork";
 import { Badge } from "../ui/Badge";
 import { IconButton } from "../ui/IconButton";
 import { InlineNumber } from "../ui/InlineNumber";
+import { Tooltip } from "../ui/Tooltip";
 
 export interface DeckHeaderProps {
   deck: number;
@@ -32,6 +35,8 @@ export interface DeckHeaderProps {
   onEject: () => void;
   /** Extra content between the title and the key readout. */
   notice?: ReactNode;
+  /** The GRID toggle; left out where grid mode can't open. */
+  grid?: { available: boolean; on: boolean; onToggle: () => void } | undefined;
 }
 
 export function DeckHeader({
@@ -48,6 +53,7 @@ export function DeckHeader({
   onBpm,
   onEject,
   notice,
+  grid,
 }: DeckHeaderProps) {
   const n = deck + 1;
   const shown = track ?? loading;
@@ -87,6 +93,31 @@ export function DeckHeader({
           {shown === null ? `Deck ${n}` : (shown.artist ?? "")}
         </span>
       </div>
+      {grid !== undefined && (
+        <Tooltip
+          content={
+            grid.available
+              ? grid.on
+                ? "Leave grid mode"
+                : "Grid mode: adjust this track's beatgrid on the deck"
+              : "Load a library track to adjust its grid"
+          }
+        >
+          {/* A disabled button gets no pointer events: the span keeps the tooltip. */}
+          <span className="inline-flex">
+            <IconButton
+              size="xs"
+              variant="control"
+              aria-pressed={grid.on}
+              aria-label={`Deck ${n} grid mode`}
+              disabled={!grid.available}
+              onClick={grid.onToggle}
+            >
+              <GridModeIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
+      )}
       {notice}
       {/* A readout like BPM and time, not a pill: it can't be pressed. */}
       <div className="flex min-w-8 shrink-0 flex-col items-end gap-0.5 font-mono tabular-nums">

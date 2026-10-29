@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use reks_core::{CueMark, DeckAudio, Library, TrackId};
+use reks_core::{Beatgrid, CueMark, DeckAudio, DeckBeat, GridEdit, Library, TrackId};
 use reks_mix::{DeckSource, DeckState, Engine, EngineConfig, DECKS, PREVIEW_DECK};
 use serde::{Deserialize, Serialize};
 use tauri::ipc::{Channel, Response};
@@ -428,9 +428,8 @@ pub struct DeckCues {
     pub memory_cues: Vec<MemoryCueView>,
 }
 
-fn deck_source(audio: DeckAudio) -> DeckSource {
-    let beats: Vec<reks_mix::GridBeat> = audio
-        .beats
+fn mix_beats(beats: &[DeckBeat]) -> Vec<reks_mix::GridBeat> {
+    beats
         .iter()
         .map(|b| reks_mix::GridBeat {
             frame: b.frame,
@@ -438,9 +437,12 @@ fn deck_source(audio: DeckAudio) -> DeckSource {
             beat_in_bar: b.beat_in_bar,
             beats_per_bar: b.beats_per_bar,
         })
-        .collect();
+        .collect()
+}
+
+fn deck_source(audio: DeckAudio) -> DeckSource {
     DeckSource::new(audio.pcm.samples, audio.pcm.sample_rate)
-        .with_grid(&beats)
+        .with_grid(&mix_beats(&audio.beats))
         .with_hot_cues(audio.hot_cues)
         .with_auto_loops(reks_core::deck::auto_loops(&audio.marks))
 }
@@ -725,6 +727,57 @@ pub async fn mix_cue_edit(
     Ok(cues)
 }
 
+/// One grid edit on the library track on `deck` (the deck's grid mode),
+/// snapped first with `snap`; the deck plays on with the new grid. Stored
+/// like the editor's (`beatgrid_edit`).
+#[tauri::command]
+pub async fn mix_grid_edit(
+    state: State<'_, AppState>,
+    deck: u8,
+    mut edit: GridEdit,
+    snap: Option<bool>,
+) -> CmdResult<Beatgrid> {
+    let i = deck_index(deck)?;
+    let (id, src, generation, rate) = {
+        let mut s = lock(&state.mix)?;
+        let (id, src) = match &s.decks[i] {
+            Some(LoadedDeck {
+                track: DeckTrack::Library(id),
+                src,
+                ..
+            }) => (*id, Arc::clone(src)),
+            Some(_) => {
+                return Err(CmdError::new(
+                    "The grid of a track on a stick can't be changed here.".into(),
+                ))
+            }
+            None => return Err(CmdError::new(format!("deck {} is empty", i + 1))),
+        };
+        let generation = s.generation[i];
+        (id, src, generation, s.engine()?.info().sample_rate)
+    };
+    let (grid, next) = blocking(&state, move |lib| {
+        let grid = crate::grid::apply_edit(lib, id, &mut edit, snap == Some(true))?;
+        let frames = usize::try_from(src.frames()).unwrap_or(0);
+        let beats = reks_core::deck_beats(&grid.anchors, rate, frames);
+        let next = Arc::new(src.with_new_grid(&mix_beats(&beats)));
+        Ok::<_, String>((grid, next))
+    })
+    .await?;
+    let mut s = lock(&state.mix)?;
+    // The deck still holds this load (not reloaded or ejected meanwhile).
+    if s.generation[i] == generation {
+        s.engine()?.send(reks_mix::Control::SetGrid {
+            deck,
+            src: Arc::clone(&next),
+        })?;
+        if let Some(d) = s.decks[i].as_mut() {
+            d.src = next;
+        }
+    }
+    Ok(grid)
+}
+
 /// A channel strip control (`reks_mix::ChannelParam`).
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -810,6 +863,9 @@ pub enum MixControl {
     Seek {
         deck: u8,
         ms: f64,
+        /// Without quantise (grid mode).
+        #[serde(default)]
+        exact: bool,
     },
     HotCue {
         deck: u8,
@@ -917,10 +973,14 @@ impl MixControl {
             Self::Pause { deck } => Control::Pause { deck },
             Self::Cue { deck } => Control::Cue { deck },
             Self::CueRelease { deck } => Control::CueRelease { deck },
-            Self::Seek { deck, ms } => Control::Seek {
-                deck,
-                frame: reks_core::deck::ms_to_frame(ms.max(0.0), rate),
-            },
+            Self::Seek { deck, ms, exact } => {
+                let frame = reks_core::deck::ms_to_frame(ms.max(0.0), rate);
+                if exact {
+                    Control::SeekExact { deck, frame }
+                } else {
+                    Control::Seek { deck, frame }
+                }
+            }
             Self::HotCue { deck, slot } => Control::HotCue { deck, slot },
             Self::CallCue { deck, ms, end_ms } => Control::CallCue {
                 deck,

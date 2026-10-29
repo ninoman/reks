@@ -1,7 +1,7 @@
 /**
  * Drawing one frame of a deck's scrolling view and overview, in device
- * pixels (no transform): loop band, waveform tiles, beat lines, cue marks,
- * playhead. Colours come from tokens.css (a canvas can't use classes).
+ * pixels (no transform): loop band, waveform tiles, beat lines, grid mode's
+ * section markers and pin, cue marks, playhead. Colours come from tokens.css (a canvas can't use classes).
  */
 import { type DeckMark, drawLoop, drawMarks } from "../../lib/deckMarks";
 import { frameMs, frameX, scrollFrame } from "../../lib/deckScroll";
@@ -34,6 +34,8 @@ export function readTokens(el: Element) {
     overlay: token("--color-overlay"),
     beat: token("--color-grid-beat"),
     downbeat: token("--color-grid-downbeat"),
+    marker: token("--color-grid-marker"),
+    pin: token("--color-grid-pin-1"),
     loop: token("--color-deck-loop"),
     marks: {
       hot: token("--color-deck-hotcue"),
@@ -56,10 +58,17 @@ export interface Inputs {
   overviewStrip: WaveStrip | null;
   tokens: Tokens | null;
   beats: BeatMark[] | null;
+  /** Grid mode: section markers (BPM on a flag) and the pinned downbeat. */
+  grid: GridMarks | null;
   marks: DeckMark[];
   loop: Pick<LoopView, "startMs" | "endMs"> | null;
   seconds: number;
   durationMs: number;
+}
+
+export interface GridMarks {
+  markers: { ms: number; label: string }[];
+  pivotMs: number | null;
 }
 
 /** Index of the first beat at or after `us` (beats are sorted). */
@@ -108,6 +117,7 @@ export function drawScroll(
       ctx.fillRect(x, 0, downbeat ? 2 * line : line, height);
     }
   }
+  if (i.grid !== null) drawGrid(ctx, i.grid, xOf, width, height, t, dpr);
   drawMarks(ctx, i.marks, xOf, width, height, {
     dpr,
     flag: FLAG_PX,
@@ -118,6 +128,48 @@ export function drawScroll(
   ctx.fillStyle = t.fg;
   const playhead = 2 * Math.max(1, Math.round(dpr));
   ctx.fillRect(f.mid - playhead / 2, 0, playhead, height);
+}
+
+/**
+ * Section markers as lines with a BPM flag one row under the top (the cue
+ * flags' row); the pin as a triangle at the bottom.
+ */
+function drawGrid(
+  ctx: CanvasRenderingContext2D,
+  g: GridMarks,
+  xOf: (ms: number) => number,
+  width: number,
+  height: number,
+  t: Tokens,
+  dpr: number,
+) {
+  const line = 2 * Math.max(1, Math.round(dpr));
+  const flag = Math.round(FLAG_PX * dpr);
+  ctx.font = `600 ${Math.round(9 * dpr)}px ${t.font}`;
+  ctx.textBaseline = "middle";
+  for (const m of g.markers) {
+    const x = xOf(m.ms);
+    const w = Math.ceil(ctx.measureText(m.label).width) + Math.round(6 * dpr);
+    if (x < -w || x > width) continue;
+    ctx.fillStyle = t.marker;
+    ctx.fillRect(x - line / 2, 0, line, height);
+    ctx.fillRect(x, flag, w, flag);
+    ctx.fillStyle = t.deck;
+    ctx.fillText(m.label, x + Math.round(3 * dpr), flag * 1.5);
+  }
+  if (g.pivotMs !== null) {
+    const x = xOf(g.pivotMs);
+    const s = Math.round(6 * dpr);
+    if (x >= -s && x <= width + s) {
+      ctx.fillStyle = t.pin;
+      ctx.beginPath();
+      ctx.moveTo(x - s, height);
+      ctx.lineTo(x, height - s * 1.5);
+      ctx.lineTo(x + s, height);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
 }
 
 export function drawOverview(

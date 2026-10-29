@@ -237,6 +237,8 @@ export interface MixStore {
   retry: (deck: number) => Promise<void>;
   /** A track's analysis finished (`ok`) or failed: decks waiting on it pick up the grid. */
   analysisDone: (trackId: number, ok: boolean) => void;
+  /** The deck's grid was edited (grid mode): its beat lines are `beats` now. */
+  setDeckBeats: (deck: number, beats: BeatMark[]) => void;
   send: (c: MixControl) => void;
   togglePlay: (deck: number) => void;
   /** CUE pressed (`down`) or let go. */
@@ -741,6 +743,10 @@ export const useMix = create<MixStore>((set, get) => {
       if (meta.track === null) return;
       const seq = loads[deck];
       await fetchViews(deck, meta.track, () => loads[deck] === seq);
+    },
+
+    setDeckBeats(deck, beats) {
+      patchDeck(deck, { beats });
     },
 
     analysisDone(trackId, ok) {

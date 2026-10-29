@@ -12,11 +12,13 @@ import { useKeyLabel } from "../store/settings";
 import { DeckStrip } from "./mix/DeckStrip";
 import { deckActions } from "./mix/deckActions";
 import { SoloMixer } from "./mix/SoloMixer";
+import { useDeckGridModes } from "./mix/useDeckGridModes";
 import { Chip } from "./ui/Chip";
 
 export function PlayerDeck() {
   const mix = useMix();
   const keyLabel = useKeyLabel();
+  const gridMode = useDeckGridModes();
   const deviations = playerDeviations(mix);
   const meta = mix.decks[PLAYER_DECK];
   const channel = mix.channels[PLAYER_DECK];
@@ -34,6 +36,7 @@ export function PlayerDeck() {
           keyText={meta.track?.key == null ? null : keyLabel(meta.track.key)}
           phase={null}
           solo
+          gridMode={gridMode(PLAYER_DECK, view, meta)}
           notice={
             deviations.length > 0 && (
               <Chip

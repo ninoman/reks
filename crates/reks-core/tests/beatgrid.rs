@@ -57,7 +57,13 @@ fn reading_rounds_to_whole_ms_and_lists_beats() {
 fn edits_write_manual_rows() {
     let (dir, lib, id) = setup();
     let g = lib
-        .edit_beatgrid(id, GridEdit::Nudge { delta_ms: 10 })
+        .edit_beatgrid(
+            id,
+            GridEdit::Nudge {
+                delta_ms: 10,
+                section: None,
+            },
+        )
         .unwrap();
     assert_eq!(g.anchors[0].position_ms, 30);
     assert_eq!(g.source.as_deref(), Some("manual"));
@@ -109,7 +115,13 @@ fn tap_creates_a_grid_and_errors_change_nothing() {
     let c = Connection::open(_dir.path().join("reks.sqlite")).unwrap();
     c.execute("DELETE FROM beatgrid", []).unwrap();
     assert!(matches!(
-        lib.edit_beatgrid(id, GridEdit::Nudge { delta_ms: 1 }),
+        lib.edit_beatgrid(
+            id,
+            GridEdit::Nudge {
+                delta_ms: 1,
+                section: None
+            }
+        ),
         Err(Error::NoGrid(_))
     ));
     let g = lib
@@ -212,8 +224,14 @@ fn degenerate_edits_change_nothing() {
 #[test]
 fn reset_brings_back_the_grid_from_before_the_first_edit() {
     let (dir, lib, id) = setup();
-    lib.edit_beatgrid(id, GridEdit::Nudge { delta_ms: 10 })
-        .unwrap();
+    lib.edit_beatgrid(
+        id,
+        GridEdit::Nudge {
+            delta_ms: 10,
+            section: None,
+        },
+    )
+    .unwrap();
     lib.edit_beatgrid(id, GridEdit::Double { section: None })
         .unwrap();
     let g = lib
@@ -224,8 +242,14 @@ fn reset_brings_back_the_grid_from_before_the_first_edit() {
     assert!(!lib.grid_is_user_owned(id).unwrap());
     assert_eq!(track_bpm(&dir, id), (12_000, "analysis".into()));
     // The base went with the reset; the next edit keeps a new one.
-    lib.edit_beatgrid(id, GridEdit::Nudge { delta_ms: 5 })
-        .unwrap();
+    lib.edit_beatgrid(
+        id,
+        GridEdit::Nudge {
+            delta_ms: 5,
+            section: None,
+        },
+    )
+    .unwrap();
     let g = lib
         .edit_beatgrid(id, GridEdit::Reset { section: Some(0) })
         .unwrap();
@@ -272,8 +296,13 @@ fn grids_edited_before_the_base_reset_to_the_analysis() {
     assert_eq!(g.anchors, [anchor(33, 12_100)]);
     assert_eq!(g.source.as_deref(), Some("analysis"));
     // The analysis is only asked for a reset.
-    lib.edit_beatgrid_with(id, GridEdit::Nudge { delta_ms: 1 }, || {
-        panic!("not a reset")
-    })
+    lib.edit_beatgrid_with(
+        id,
+        GridEdit::Nudge {
+            delta_ms: 1,
+            section: None,
+        },
+        || panic!("not a reset"),
+    )
     .unwrap();
 }

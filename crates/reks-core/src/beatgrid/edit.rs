@@ -15,8 +15,16 @@ use crate::scan::TrackId;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "op")]
 pub enum GridEdit {
-    /// Move every marker by `delta_ms` (shift the whole grid).
-    Nudge { delta_ms: i64 },
+    /// Move every marker by `delta_ms` (shift the whole grid), or only
+    /// marker `section` (shift that section).
+    Nudge {
+        delta_ms: i64,
+        #[serde(default)]
+        section: Option<usize>,
+    },
+    /// The beat nearest `at_ms` moves onto it and becomes beat 1; its
+    /// section shifts with it (the deck's "Beat 1 here").
+    BeatOneAt { at_ms: i64 },
     /// Make the beat nearest `at_ms` beat 1 of its bar, in its section only.
     /// Beats do not move.
     SetDownbeat { at_ms: i64 },
@@ -31,6 +39,13 @@ pub enum GridEdit {
     SetBpm { bpm_x100: i64, anchor_ms: i64 },
     /// Set the tempo of `section` (typed or tapped); its marker stays.
     SetSectionBpm { section: usize, bpm_x100: i64 },
+    /// Set the tempo of the section at `at_ms`; its beat nearest `pivot_ms`
+    /// stays where it is (the deck's BPM field and − / +).
+    Retempo {
+        at_ms: i64,
+        pivot_ms: i64,
+        bpm_x100: i64,
+    },
     /// A marker at `at_ms`: the tempo of the section there, and the bar
     /// position of the beat nearest it.
     AddMarker { at_ms: i64 },
@@ -45,6 +60,9 @@ pub enum GridEdit {
         beat_ms: i64,
         to_ms: i64,
     },
+    /// Retempo the section at `to_ms` about its beat nearest `pivot_ms` (the
+    /// deck's pinned downbeat) so the beat nearest `to_ms` lands on it.
+    StretchTo { pivot_ms: i64, to_ms: i64 },
     /// Back to the grid from before the first edit: `section` only, or
     /// all of it with `None`.
     Reset { section: Option<usize> },
@@ -58,8 +76,10 @@ impl GridEdit {
     /// The positions this edit places, for snapping to transients.
     pub fn snap_target(&mut self) -> Option<&mut i64> {
         match self {
-            Self::AddMarker { at_ms } => Some(at_ms),
-            Self::MoveMarker { to_ms, .. } | Self::Stretch { to_ms, .. } => Some(to_ms),
+            Self::AddMarker { at_ms } | Self::BeatOneAt { at_ms } => Some(at_ms),
+            Self::MoveMarker { to_ms, .. }
+            | Self::Stretch { to_ms, .. }
+            | Self::StretchTo { to_ms, .. } => Some(to_ms),
             _ => None,
         }
     }
@@ -94,7 +114,31 @@ pub fn apply_edit(
     };
     let out = match edit {
         GridEdit::SetLocked { .. } => return Ok(anchors.to_vec()),
-        GridEdit::Nudge { delta_ms } => nudge(need_grid()?, *delta_ms),
+        GridEdit::Nudge {
+            delta_ms,
+            section: s,
+        } => nudge(need_grid()?, *delta_ms, s.map(section).transpose()?),
+        GridEdit::BeatOneAt { at_ms } => {
+            let mut g = need_grid()?;
+            let (i, n) = nearest_beat(&g, *at_ms).ok_or(Error::NoGrid(track))?;
+            let a = g[i];
+            g[i] = if i == 0 {
+                // The first section reaches back to 0 ms: re-anchor it here.
+                GridAnchor {
+                    position_ms: *at_ms,
+                    beat_in_bar: 1,
+                    ..a
+                }
+            } else {
+                GridAnchor {
+                    position_ms: (a.position_ms as f64 + *at_ms as f64 - a.beat_ms(n)).round()
+                        as i64,
+                    beat_in_bar: a.beat_in_bar_for(n, 1),
+                    ..a
+                }
+            };
+            g
+        }
         GridEdit::SetDownbeat { at_ms } => {
             let mut g = need_grid()?;
             let (i, n) = nearest_beat(&g, *at_ms).ok_or(Error::NoGrid(track))?;
@@ -131,6 +175,24 @@ pub fn apply_edit(
             section: s,
             bpm_x100,
         } => with_bpm(anchors, section(*s)?, *bpm_x100),
+        GridEdit::Retempo {
+            at_ms,
+            pivot_ms,
+            bpm_x100,
+        } => {
+            let g = need_grid()?;
+            let i = section_at(&g, *at_ms).ok_or(Error::NoGrid(track))?;
+            retempo_about(&g, i, pivot_beat(&g, i, *pivot_ms), *bpm_x100)
+        }
+        GridEdit::StretchTo { pivot_ms, to_ms } => {
+            let g = need_grid()?;
+            let i = section_at(&g, *to_ms).ok_or(Error::NoGrid(track))?;
+            let n = pivot_beat(&g, i, *pivot_ms);
+            stretch_to(&g, i, n, *to_ms).ok_or_else(|| Error::InvalidField {
+                field: "stretch",
+                reason: "move the playhead at least a beat away from the pinned downbeat".into(),
+            })?
+        }
         GridEdit::AddMarker { at_ms } => {
             let mut g = need_grid()?;
             if g.iter().any(|a| a.position_ms == *at_ms) {
@@ -196,11 +258,13 @@ pub fn apply_edit(
     Ok(out)
 }
 
-/// Every anchor moved by `delta_ms`; a first marker before 0 ms steps
-/// forward by whole beats (the beats stay where they are).
-fn nudge(mut g: Vec<GridAnchor>, delta_ms: i64) -> Vec<GridAnchor> {
-    for a in &mut g {
-        a.position_ms += delta_ms;
+/// Every anchor (or only `only`) moved by `delta_ms`; a first marker
+/// before 0 ms steps forward by whole beats (the beats stay where they are).
+fn nudge(mut g: Vec<GridAnchor>, delta_ms: i64, only: Option<usize>) -> Vec<GridAnchor> {
+    for (i, a) in g.iter_mut().enumerate() {
+        if only.is_none_or(|o| o == i) {
+            a.position_ms += delta_ms;
+        }
     }
     if let Some(first) = g.first_mut() {
         if first.position_ms < 0 && first.bpm_x100 > 0 {
@@ -270,6 +334,54 @@ fn stretch(g: &[GridAnchor], i: usize, beat_ms: i64, to_ms: i64) -> Option<Vec<G
     }
     let bpm_x100 = (n as f64 * 6_000_000.0 / span as f64).round() as i64;
     Some(with_bpm(g, i, bpm_x100))
+}
+
+/// `n` of section `i`'s beat nearest `pivot_ms`, or 0 (its marker) when the
+/// pivot is in another section: a pin only holds in its own section.
+fn pivot_beat(g: &[GridAnchor], i: usize, pivot_ms: i64) -> i64 {
+    match nearest_beat(g, pivot_ms) {
+        Some((s, n)) if s == i => n,
+        _ => 0,
+    }
+}
+
+/// Section `i` at `bpm_x100`, its beat `n` kept in place. The first section
+/// is re-anchored on that beat (it reaches back to 0 ms anyway); a later one
+/// keeps its marker as the anchor, which moves so the beat stays.
+fn retempo_about(g: &[GridAnchor], i: usize, n: i64, bpm_x100: i64) -> Vec<GridAnchor> {
+    let a = g[i];
+    let pivot = a.beat_ms(n);
+    let mut out = g.to_vec();
+    out[i] = if i == 0 {
+        GridAnchor {
+            position_ms: pivot.round() as i64,
+            bpm_x100,
+            beat_in_bar: a.beat_in_bar_after(n),
+            ..a
+        }
+    } else {
+        let b = GridAnchor { bpm_x100, ..a };
+        GridAnchor {
+            position_ms: (pivot - n as f64 * b.period_ms()).round() as i64,
+            ..b
+        }
+    };
+    out
+}
+
+/// Section `i` retempoed about its beat `n` so the beat nearest `to_ms`
+/// lands on `to_ms` (as near as 0.01 BPM allows). `None` when that beat is
+/// the pivot itself.
+fn stretch_to(g: &[GridAnchor], i: usize, n: i64, to_ms: i64) -> Option<Vec<GridAnchor>> {
+    let a = g[i];
+    let pivot = a.beat_ms(n);
+    let span = to_ms as f64 - pivot;
+    let beats = (span / a.period_ms()).round() as i64;
+    if beats == 0 {
+        return None;
+    }
+    let bpm_x100 = (beats as f64 * 6_000_000.0 / span).round() as i64;
+    Some(retempo_about(g, i, n, bpm_x100))
 }
 
 /// Section `i` replaced by the base grid over the same span: a marker at

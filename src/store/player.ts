@@ -2,10 +2,12 @@
  * The library's player: one deck of the mix engine (D30), so it has the
  * deck's cue, hot cues, tempo and waveform. Double-click, Space and the
  * history view play on it; the Mix panel shows it with the other decks.
- * While mixing, double-click loads onto a spare deck instead.
+ * While mixing, double-click loads onto a spare deck instead. Track info's
+ * "Edit on deck" opens grid mode the same way (`editGridOnDeck`).
  */
 import { shownDecks } from "../lib/mixView";
 import { spareDeck } from "../lib/spareDeck";
+import { useDeckGrid } from "./deckGrid";
 import { libraryId, sameTrack, type TrackRef, useMix } from "./mix";
 import { usePanels } from "./panels";
 import { useToasts } from "./toasts";
@@ -25,6 +27,12 @@ export function playTrack(track: TrackRef): Promise<void> {
  */
 export function activateTrack(track: TrackRef): Promise<void> {
   if (!usePanels.getState().mixOpen) return playTrack(track);
+  const deck = freeDeck();
+  return deck === null ? Promise.resolve() : useMix.getState().load(deck, track);
+}
+
+/** A spare shown deck while mixing (or says there is none). */
+function freeDeck(): number | null {
   const mix = useMix.getState();
   const deck = spareDeck(
     shownDecks(mix.deckCount).map((d) => ({
@@ -36,9 +44,26 @@ export function activateTrack(track: TrackRef): Promise<void> {
   );
   if (deck === null) {
     useToasts.getState().show("No free deck: stop a deck and close its fader to load onto it.");
-    return Promise.resolve();
   }
-  return mix.load(deck, track);
+  return deck;
+}
+
+/**
+ * Grid mode for library track `track`: on the shown deck that has it, else
+ * loaded paused onto the player deck (no Mix panel) or a spare deck.
+ */
+export async function editGridOnDeck(track: TrackRef & { kind: "library" }): Promise<void> {
+  const mixOpen = usePanels.getState().mixOpen;
+  const shown = mixOpen ? shownDecks(useMix.getState().deckCount) : [PLAYER_DECK];
+  let deck = shown.find((d) => libraryId(useMix.getState().decks[d]?.track) === track.id) ?? null;
+  if (deck === null) {
+    deck = mixOpen ? freeDeck() : PLAYER_DECK;
+    if (deck === null) return;
+    await useMix.getState().load(deck, track, false);
+  }
+  // The load failed or was replaced meanwhile.
+  if (libraryId(useMix.getState().decks[deck]?.track) !== track.id) return;
+  await useDeckGrid.getState().open(deck, track.id);
 }
 
 export function togglePlayer(): void {

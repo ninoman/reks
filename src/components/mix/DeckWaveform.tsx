@@ -5,7 +5,8 @@
  * sync phase and warnings) and the whole track overview under it (click or
  * arrow keys to seek). Both draw in the waveform style chosen in Settings →
  * Decks. Hovering a mark names it (native title: hot cue letter and name,
- * memory cue name).
+ * memory cue name). In grid mode it also draws the tempo section markers
+ * and the pinned downbeat (`grid`).
  *
  * Both canvases draw in device pixels from one animation-frame loop, which
  * runs the playhead on between engine states (`deckScroll.ts`) and copies
@@ -37,7 +38,7 @@ import type { BeatMark, HotCueView, LoopView, MemoryCueView } from "../../lib/ip
 import { WaveStrip } from "../../lib/waveStrip";
 import { useSettings, useTheme } from "../../store/settings";
 import { focusRingInset } from "../ui/control";
-import { drawOverview, drawScroll, type Inputs, readTokens } from "./deckCanvas";
+import { drawOverview, drawScroll, type GridMarks, type Inputs, readTokens } from "./deckCanvas";
 import { useCanvasSize } from "./useCanvasSize";
 
 /** Arrow-key seek step on the overview, ms. */
@@ -53,6 +54,8 @@ export interface DeckWaveformProps {
   /** Close-zoom detail of the deck's load, as far as it has arrived. */
   detail?: DetailChunks | null;
   beats: BeatMark[] | null;
+  /** Grid mode's markers and pin; null outside grid mode. */
+  grid?: GridMarks | null;
   positionMs: number;
   durationMs: number;
   playing: boolean;
@@ -79,6 +82,7 @@ export function DeckWaveform({
   columns,
   detail = null,
   beats,
+  grid = null,
   positionMs,
   durationMs,
   playing,
@@ -154,6 +158,7 @@ export function DeckWaveform({
       overviewStrip,
       tokens,
       beats,
+      grid,
       marks,
       loop: loopStart === null || loopEnd === null ? null : { startMs: loopStart, endMs: loopEnd },
       seconds,
@@ -167,6 +172,7 @@ export function DeckWaveform({
     overviewStrip,
     tokens,
     beats,
+    grid,
     marks,
     loopStart,
     loopEnd,

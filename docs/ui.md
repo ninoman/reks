@@ -54,7 +54,7 @@ Three layers in `tokens.css`:
 3. **The other themes**: the semantic colours redefined under
    `:root[data-theme="…"]`. Components never branch on theme. Canvases read
    their colours with `getComputedStyle`, so they re-read them when
-   `useTheme()` changes (`mix/DeckWaveform`, `GridEditor`).
+   `useTheme()` changes (`mix/DeckWaveform`).
 
 Semantic colours: `bg`, `bg-subtle` (chrome), `row-alt`, `surface`,
 `surface-strong`, `hover`, `selected`/`selected-fg`, `knob`, `fg`,
@@ -64,12 +64,13 @@ filled controls) with `accent-fg` on it, `danger` (+ `-fg`), `success`,
 `warning`, `rating`, `focus-ring`, `overlay`, `lit`/`lit-fg` (a switch that
 is on, with `shadow-lit`), `led-*` (meter LEDs), `waveform-*`, `track-*`
 (rekordbox colours: data, the same in every theme), `theme-*` (each theme's
-canvas and accent, for the theme picker). The grid editor and the decks draw
+canvas and accent, for the theme picker). The decks draw
 on the `deck`, the theme's darkest panel (Paper's is light, so its
 `waveform-high`, `waveform-blue-high`, `led-hot` and `grid-beat` are dark):
 `deck`, `deck-fg`, `waveform-low/mid/high` (3-band), `grid-beat`,
-`grid-downbeat`, `grid-cursor` (the accent), `grid-marker`, `grid-section` (the
-selected section's band) and `grid-transient` (snap marks); the mixer's decks add
+`grid-downbeat`, `grid-pin-1` / `grid-pin-2` (grid mode's two points: red,
+and the text colour) and `grid-marker` (grid mode's tempo section markers);
+the mixer's decks add
 `deck-cue`, `deck-hotcue`, `deck-memory`, `deck-loop`, `deck-loop-in` (the pending loop IN), `deck-auto-loop` and the other waveform styles' `waveform-rgb-*` and
 `waveform-blue(-high)`. The mark colours are the same in every theme.
 
@@ -156,7 +157,7 @@ menu items `--menu-item-h`.
 | `DropdownMenu*` | Content, Item (`variant`: default, danger; `inset` lines it up with checkbox items), CheckboxItem, Group / Label, Separator | Radix DropdownMenu |
 | `ContextMenu*` | Content, Item, CheckboxItem (`checked="indeterminate"` shows a dash), Sub / SubTrigger / SubContent, Group / Label, Separator; wrap the whole area, not each row | Radix ContextMenu |
 | `Popover*` | Content (`align`, `sideOffset`) | Radix Popover |
-| `Dialog*` | Content `size`: sm, md, lg, xl (960 px, the grid editor), `closeOnOutsideClick`; Header, Title, Description, Body, Footer | Radix Dialog |
+| `Dialog*` | Content `size`: sm, md, lg, xl (960 px), `closeOnOutsideClick`; Header, Title, Description, Body, Footer | Radix Dialog |
 | `Sheet` + `SheetHeader` | right-hand slide-over (non-modal, inside its parent) | Web Animations |
 | `ScrollArea` | themed scrollbars; not for the virtualised table | Radix ScrollArea |
 | `ResizeHandle` | drag-to-resize edge of its (positioned) parent: `edge`: right, left; `min`, `max`, `value`; arrow keys step 16 px, double-click resets; reports widths, the caller stores them | own (`role="separator"`) |
@@ -309,8 +310,7 @@ rekordbox and Traktor (2026-10-22; it was along the bottom):
   [Mix panel](#mix-panel-phase-5));
   loading opens the output when it is off. Space plays and pauses deck 2
   wherever focus is (except in text fields, dialogs and menus). The row of
-  the track on deck 2 is marked as loaded; the grid editor draws deck 2's
-  playhead when it shows that track.
+  the track on deck 2 is marked as loaded.
 
 ## Devices (D32)
 
@@ -381,7 +381,7 @@ Decks are one size in both modes
   start), opening, error (failed start, device lost; the decks empty),
   running. Deck states: see
   [Deck layout](#deck-layout-task-16).
-- Waveforms draw on the dark `deck` like the grid editor: a scrolling view
+- Waveforms draw on the dark `deck`: a scrolling view
   with the playhead in the middle and beat lines, and the overview under it,
   which is the keyboard seek slider. Both draw in device pixels from one
   animation-frame loop (`mix/DeckWaveform`, `mix/deckCanvas`): the waveform
@@ -943,40 +943,60 @@ and loading / error-with-Retry / empty states). All but `RuleBuilder` and
 - Dev: `mockSmart.ts` evaluates rules and smart lists like the core;
   `mockPresets.ts` keeps saved filters like `filter_preset.rs`.
 
-## Grid editor (phase 3 tasks 13, 18)
+## Deck grid mode (phase 5 task 32, D10)
 
-Opened from the track info panel's Beatgrid section
-([`GridEditor.tsx`](../src/components/GridEditor.tsx), parts in
-[`components/grid/`](../src/components/grid/)). The grid maths, the beat rule
-and validation are in Rust (D10, "Grid editing"); the editor draws and
-forwards edits (`beatgrid_edit`, with `snap`).
+A deck's grid is adjusted on the deck itself
+([`DeckGridPanel.tsx`](../src/components/mix/DeckGridPanel.tsx), state in
+[`store/deckGrid.ts`](../src/store/deckGrid.ts), keys and focus in
+[`store/deckGridShortcuts.ts`](../src/store/deckGridShortcuts.ts), pure helpers in
+[`lib/gridMode.ts`](../src/lib/gridMode.ts)). The grid maths are in Rust (D10,
+"Grid editing"); every edit goes through `mix_grid_edit`, which stores the
+grid and hands it to the playing deck.
 
-- **View**: the 3-band waveform from the columns on the `deck` panel,
-  zoomable (25–600 px/s) and scrolled by wheel or slider. Beat lines,
-  downbeats in red, a marker per tempo section with its BPM on a flag, the
-  selected section's band, the player's playhead and the cursor.
-- **Sections**: with more than one, a row of buttons (BPM and start) selects
-  one; a click on the waveform places the cursor and selects the section
-  there. The selected section's row: BPM (double-click or Enter to type),
-  Tap and Use tapped BPM, ½ and ×2, Downbeat at cursor, Stretch to cursor
-  (its beat nearest the cursor lands on the cursor), Reset section (edited
-  grids), Delete marker.
-- **Grid row**: Shift grid ±1/±10 ms, Add marker at cursor, Undo / Redo (the
-  session's, through Rust's `setAnchors`), Reset grid (back to the grid
-  from before the first edit).
-- **Pointer**: drag a marker to move it; Alt-drag a beat line to stretch its
-  section so that beat lands where it is let go.
-- **Snap**: positions an edit places (add, move, stretch) move to the
-  nearest transient within 40 ms (`waveform_transients`, computed from the
-  audio on first use); the transients show as ticks along the bottom.
-- **Keys** (the dialog's own; listed under the editor): ← → shift 1 ms
-  (Shift 10), Alt ← → move the selected marker, M add marker, Del delete
-  marker, D downbeat, T tap, / * halve / double, [ ] previous / next
-  section, − + zoom, S snap, ⌘Z / ⇧⌘Z undo / redo. Text fields keep their
-  keys.
-- **States**: computing the waveform, no grid (tap to create one), locked
-  (edits off until unlocked), errors from Rust (a degenerate grid is
-  refused) under the controls.
+- **Entry**: the grid mode toggle right after the track title (a beat lines
+  icon, lit when on; a library track only; a stick
+  track's grid can't be changed). One deck at a time; the toggle on another
+  deck moves grid mode there. Track info's Beatgrid section has **Edit on deck**:
+  the deck that has the track, else the player deck (no Mix panel) or a
+  spare deck, loaded paused. Esc, the toggle again or the ⋯ menu leaves. Grid mode
+  closes when its deck gets another track, empties or is hidden.
+- **Layout**: the same panel in every deck size, in place of the pads, the
+  loop block and MASTER / SYNC, in exactly their space, so the waveform
+  doesn't move (Q is left out and the tempo column is hidden, its space
+  kept; CUE and PLAY stay). Row 1:
+  the playhead's bar.beat and its offset from the nearest beat; the BPM of
+  the section under the playhead with − / + (double-click to type); ⋯
+  (Reset grid, Leave). Then six pads filling the rest of the height, three
+  over three: **1 PIN 2** (a thin red line and 1, 2 and a thin white line)
+  | **◀ SHIFT ▶** | **½ BPM ×2** / **+ Marker** (**− Marker** on a marker)
+  | **HISTORY** (undo / redo, two circular arrows) | **LOCK** (lit when
+  locked).
+- **The playhead is the cursor**: the waveform scrubs as in play mode, but
+  to the exact spot: Q does not snap it to a beat (`seek` with `exact`,
+  `Control::SeekExact`). A press on a section marker's line drags the
+  marker instead.
+- **Two-point fit**: pin 1 moves the nearest beat onto the playhead as beat
+  1 and pins it (the pin moves with SHIFT); pin 2, on a later kick, moves
+  the beat nearest the playhead onto it with pin 1 fixed (a stretch). BPM
+  edits keep pin 1 in place too; without one (or in another section) they
+  keep the section's marker. Pin 1 is a red triangle at the bottom of the
+  waveform; markers are lines with their BPM on a flag.
+- **Sections**: every edit acts on the section under the playhead (SHIFT
+  on the whole grid when it has one section).
+- **Steps and holds**: SHIFT 1 ms a press, 10 ms steps while held or with
+  Shift; BPM − / + 0.01, 0.10 steps while held or with Shift. Steps that
+  arrive while an edit is out add up; a hold is one undo step.
+- **Snap**: pin 1, pin 2, + Marker and a dragged marker snap to the
+  nearest transient within 40 ms; Alt places them exactly.
+- **Keys** (the focused deck only: a press on a deck focuses it, a press
+  elsewhere clears it; the deck in grid mode has an accent outline while
+  focused; never in text fields, dialogs or menus; taken before other
+  keys): ← → shift (Shift: 10 ms), ↑ ↓ BPM (Shift: 0.10), B pin 1, S
+  pin 2, M marker, / * halve / double, ⌘Z / ⇧⌘Z undo / redo, Esc leave.
+  Key repeat takes the hold step. Each pad's tooltip shows its key.
+- **States**: loading the grid; no grid (TAP, then start a grid at the
+  tapped BPM with beat 1 at the playhead); locked (LOCK lit, the other pads
+  off); an error from Rust replaces the readout until the next edit.
 
 ## Adding a component or variant
 
