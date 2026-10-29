@@ -552,6 +552,12 @@
   --fader-detent: 6px;
   /* Mixer (concept A, task 22): 344 x 440, narrower strips, one dB scale in the legend. */
   --mixer-w: 344px;
+  /* 2 decks (task 30): channels 2 and 3 only. Wider than 344 - 2 strips so filter X and Y fit side by side. */
+  --mixer-w-two: 264px;
+  /* Between a filter unit's ON, FREQ, RES and modes; tighter with 2 decks. */
+  --mixer-filter-gap: 8px;
+  /* The 1-deck mixer's right column (border and padding included): fits the stacked filter unit and the widest FX select (REVERB), so switching effect or EQ never moves the deck. */
+  --solo-mixer-column-w: 90px;
   /* Height per view (task 25): Advanced, Simple, Simple with the filters hidden. */
   --mixer-h-advanced: 440px;
   --mixer-h-simple: 356px;
@@ -648,6 +654,10 @@
 [data-mixer="three-advanced"] {
   --mixer-h: var(--mixer-h-three-advanced);
   --deck-h: var(--mixer-h);
+}
+[data-decks="2"] {
+  --mixer-w: var(--mixer-w-two);
+  --mixer-filter-gap: 4px;
 }
 /* With 4 decks every view is 440 px: the faders take up to --fader-bonus, the rows spread over the rest. */
 [data-mixer^="simple"][data-decks="4"],

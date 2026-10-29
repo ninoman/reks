@@ -1,5 +1,5 @@
 /**
- * Deck grid mode (D10, phase 5 task 30): the panel's steps, hold timing and
+ * Deck grid mode (D10, phase 5 task 32): the panel's steps, hold timing and
  * keys, and what it reads off a grid. Pure; the grid maths are in Rust
  * (`reks-core` `beatgrid`).
  */

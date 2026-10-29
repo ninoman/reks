@@ -136,6 +136,7 @@ describe("mix store", () => {
   it("load starts the output, then fetches the waveform and beats", async () => {
     vi.mocked(ipc.mixLoad).mockResolvedValue({
       deck: 1,
+      load: 1,
       trackId: 9,
       durationMs: 1000,
       hotCues: [{ id: 1, slot: 0, positionMs: 10, colorRgb: null, name: null }],
@@ -156,7 +157,7 @@ describe("mix store", () => {
   });
 
   it("a track without a grid is analysed; the deck reloads with the grid once paused", async () => {
-    const loaded = { deck: 1, trackId: 9, durationMs: 1000, hotCues: [], memoryCues: [] };
+    const loaded = { deck: 1, load: 1, trackId: 9, durationMs: 1000, hotCues: [], memoryCues: [] };
     vi.mocked(ipc.mixLoad).mockResolvedValue(loaded);
     vi.mocked(ipc.beatgridGet).mockResolvedValueOnce({
       anchors: [],
@@ -202,6 +203,7 @@ describe("mix store", () => {
   it("analysis that fails leaves the deck without a grid", async () => {
     vi.mocked(ipc.mixLoad).mockResolvedValue({
       deck: 0,
+      load: 1,
       trackId: 4,
       durationMs: 1,
       hotCues: [],
@@ -222,11 +224,18 @@ describe("mix store", () => {
     let first: (v: Awaited<ReturnType<typeof ipc.mixLoad>>) => void = () => {};
     vi.mocked(ipc.mixLoad)
       .mockImplementationOnce(() => new Promise((r) => (first = r)))
-      .mockResolvedValueOnce({ deck: 0, trackId: 2, durationMs: 1, hotCues: [], memoryCues: [] });
+      .mockResolvedValueOnce({
+        deck: 0,
+        load: 1,
+        trackId: 2,
+        durationMs: 1,
+        hotCues: [],
+        memoryCues: [],
+      });
     useMix.setState({ status: "running", live: running });
     const a = useMix.getState().load(0, { kind: "library", id: 1, title: "A", artist: null });
     await useMix.getState().load(0, { kind: "library", id: 2, title: "B", artist: null });
-    first({ deck: 0, trackId: 1, durationMs: 1, hotCues: [], memoryCues: [] });
+    first({ deck: 0, load: 1, trackId: 1, durationMs: 1, hotCues: [], memoryCues: [] });
     await a;
     expect(libraryId(useMix.getState().decks[0]?.track)).toBe(2);
   });
@@ -551,6 +560,7 @@ describe("mix store", () => {
   it("a stick track loads off the stick with the stick's views, and is never analysed", async () => {
     vi.mocked(ipc.mixLoadStick).mockResolvedValue({
       deck: 1,
+      load: 1,
       trackId: null,
       durationMs: 1000,
       hotCues: [],
@@ -591,6 +601,7 @@ describe("mix store", () => {
   it("load with play plays once loaded, and leaves a deck already playing that track", async () => {
     vi.mocked(ipc.mixLoad).mockResolvedValue({
       deck: 1,
+      load: 1,
       trackId: 9,
       durationMs: 1,
       hotCues: [],
@@ -617,6 +628,7 @@ describe("mix store", () => {
     vi.mocked(ipc.mixDeviceOptions).mockResolvedValue(options(2));
     vi.mocked(ipc.mixLoad).mockResolvedValue({
       deck: 1,
+      load: 1,
       trackId: 9,
       durationMs: 1,
       hotCues: [],

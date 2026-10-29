@@ -1,5 +1,5 @@
 /**
- * Deck grid mode (D10, phase 5 task 30): one deck at a time adjusts its
+ * Deck grid mode (D10, phase 5 task 32): one deck at a time adjusts its
  * track's grid on the deck itself. Holds that deck, the focused deck (the
  * grid keys act on it), the grid as Rust returned it, the pinned downbeat
  * and the session's undo / redo. Every edit goes to Rust (`mixGridEdit`),

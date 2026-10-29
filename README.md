@@ -79,7 +79,7 @@ player has to confirm is marked UNVERIFIED. Open work is tracked on the
 | [`docs/analysis-parity/`](docs/analysis-parity/waveforms.md) | Analysis vs rekordbox: waveform calibration (method, error, pictures) |
 | [`docs/ui.md`](docs/ui.md) | UI design system: tokens, size scale, components |
 | [`docs/mixer-dsp.md`](docs/mixer-dsp.md) | Mix-prep mixer DSP: EQ, filter, crossfader and limiter laws, sources, test tolerances |
-| [`docs/releasing.md`](docs/releasing.md) | What CI runs when, and how to cut a release |
+| [`docs/releasing.md`](docs/releasing.md) | What CI runs when, versioning, and how to cut a release |
 | [`docs/feedback.md`](docs/feedback.md) | In-app bug reports and feedback: what is sent, relay setup, triage |
 | [`fixtures/README.md`](fixtures/README.md) | Test fixtures: generated audio signal, ffmpeg commands, sample rekordbox XML |
 

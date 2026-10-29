@@ -1,0 +1,79 @@
+name: Cut release
+
+# The same as running `npm run release -- X.Y.Z --push` locally (docs/releasing.md, D41):
+# bumps every version, writes CHANGELOG.md, commits and tags on main, then starts
+# release.yml on the tag. A tag pushed with GITHUB_TOKEN starts no workflow by itself,
+# but a workflow_dispatch from it does, so the build is started explicitly. With build
+# off the tag is marked notes-only and release.yml only drafts a release with the notes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, X.Y.Z or X.Y.Z-N (no leading v)
+        required: true
+        type: string
+      build:
+        description: Run the 3-OS checks and build installers (about 500–600 billed minutes). Off = notes-only release
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: cut-release
+  cancel-in-progress: false
+
+jobs:
+  cut:
+    name: tag v${{ inputs.version }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Full history and tags: git-cliff reads every commit since the last tag.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # Nothing is compiled; cargo only rewrites the workspace entries in Cargo.lock.
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: false
+
+      - name: npm ci
+        run: npm ci
+
+      # release.mjs updates Cargo.lock offline, which needs the crates' index entries.
+      - name: cargo fetch
+        run: cargo fetch --locked
+
+      - name: Bump, changelog, commit, tag and push
+        env:
+          VERSION: ${{ inputs.version }}
+          NOTES_ONLY: ${{ !inputs.build && '--notes-only' || '' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node scripts/release.mjs "$VERSION" --push $NOTES_ONLY
+
+      - name: Start the release build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          MODE: ${{ inputs.build && 'checks and builds' || 'notes only' }}
+        run: |
+          gh workflow run release.yml --ref "v$VERSION"
+          {
+            echo "Tagged **v$VERSION** and started the Release workflow on it ($MODE)."
+            echo
+            sed -n "/^## $VERSION /,/^## /p" CHANGELOG.md | sed '$ { /^## /d; }'
+          } >> "$GITHUB_STEP_SUMMARY"

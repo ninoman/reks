@@ -399,7 +399,7 @@ Date of decisions: 2026-10-18.
     beat nearest a time lands on it (`BeatOneAt`, `Retempo`, `StretchTo`).
     A pivot outside the section falls back to the section's marker.
   - **Editing on the deck** (status: **accepted**, maintainer's call
-    2026-10-29; phase 5 task 30): the grid is adjusted on a deck in grid
+    2026-10-29; phase 5 task 32): the grid is adjusted on a deck in grid
     mode, not in a dialog, which is removed. The playhead is the cursor
     (the waveform scrubs as in play mode, but exactly: quantise does not
     snap it to a beat, `Control::SeekExact`); stretch and BPM edits pivot on
@@ -1494,6 +1494,52 @@ Date of decisions: 2026-10-18.
   JSON.
 - Risks: a paused deck reloaded for a new grid (`reloadForGrid`) fetches its
   detail again and shows the columns at close zoom for a moment.
+
+## D41. Versioning: one SemVer for the app, changelog from commits
+
+- Date: 2026-10-29 (maintainer decision). Extends D31's release script.
+- Decision:
+  - One version for the whole app: `[workspace.package]` in `Cargo.toml`,
+    `package.json` and `tauri.conf.json`, kept equal by `npm run release`
+    and checked by `release.yml`. Crates are `publish = false`, so they get
+    no versions of their own.
+  - reks is an app, so SemVer tracks what users rely on, not a Rust API.
+    Breaking: an older reks can no longer open the library (any schema
+    migration; older builds refuse a newer `user_version`), or a user-facing
+    feature, CLI command, import or export target is removed. Rules per
+    part: [`releasing.md`](releasing.md#versioning).
+  - Breaking commits carry `!` (`feat(core)!: ...`) or a `BREAKING CHANGE:`
+    footer, so they lead the changelog.
+  - 0.x until the first legacy USB export has a logged CDJ test in
+    [`hw-test-log.md`](hw-test-log.md); while 0.x, breaking changes bump the
+    minor version. 1.0.0 is the first version that may claim CDJ playback.
+  - Pre-releases are `X.Y.Z-N` with a number only: Tauri's MSI bundler
+    rejects anything else and caps the parts at 255.255.65535-65535
+    (`convert_version` in `tauri-bundler/src/bundle/windows/msi/mod.rs`).
+  - `CHANGELOG.md` is written by git-cliff ([`cliff.toml`](../cliff.toml);
+    MIT OR Apache-2.0, an npm dev dependency) from Conventional Commits
+    during `npm run release`, and lands in the release commit. It lists
+    breaking changes, features, fixes and speed-ups only. `release.yml`
+    copies the version's section into the GitHub release.
+  - Releases are cut by hand, locally or with the Cut release workflow
+    (`workflow_dispatch`, same script). Merging to `main` does not release:
+    a release costs ~500–600 billed minutes (D31), unsigned builds have no
+    updater to deliver them (D17), and each release should be a version the
+    maintainer chose to ship. Revisit per-merge pre-release builds if the
+    repo goes public (free minutes).
+  - A release can be notes-only (`--notes-only`, or Cut release with build
+    off): `[notes only]` in the annotated tag message makes `release.yml`
+    skip the checks and builds and draft a release with just the notes.
+    The marker lives on the tag, so both release routes behave the same.
+- Rejected: release-please (opens release PRs and needs extra config for a
+  Cargo workspace plus `tauri.conf.json`, duplicating `scripts/release.mjs`);
+  per-crate versions (nothing is published); a hand-written changelog
+  (drifts); calendar versions (say nothing about compatibility); a release on
+  every merge to `main` (cost, see above).
+- Risks: the changelog is only as good as commit subjects, which are written
+  for developers; edit them in the release commit if a subject reads badly.
+  Merge commits are skipped, so work merged without a Conventional subject
+  on its commits is missing from the changelog.
 
 ## Open risks (cross-cutting)
 

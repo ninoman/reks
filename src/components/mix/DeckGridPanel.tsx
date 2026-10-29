@@ -1,5 +1,5 @@
 /**
- * A deck's grid mode controls (D10, phase 5 task 30), in place of its pads,
+ * A deck's grid mode controls (D10, phase 5 task 32), in place of its pads,
  * loop block and SYNC: a row with the playhead's bar.beat and its offset
  * from the beat, and the BPM of the section there (− / +, double-click to
  * type) and a menu; then six pads, three over three: PIN (a thin red line

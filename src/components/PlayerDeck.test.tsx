@@ -34,22 +34,32 @@ describe("PlayerDeck mixer chip", () => {
     expect(screen.queryByRole("button", { name: /show the mixer/ })).toBeNull();
   });
 
-  it("names a channel 2 EQ that is not flat and opens 2 decks on click", () => {
+  it("sits beside the one-channel mixer, which leaves the EQ to itself", () => {
     useMix.setState({ channels: channel({ eqLo: 0 }) });
     render(<PlayerDeck />);
-    expect(screen.getByText("Channel 2 EQ not flat")).toBeTruthy();
+    expect(screen.getByRole("slider", { name: "Channel 2 EQ Lo" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /show the mixer/ })).toBeNull();
+  });
+
+  it("names a channel 2 fader that is down and opens 2 decks on click", () => {
+    useMix.setState({ channels: channel({ fader: 0.5 }) });
+    render(<PlayerDeck />);
+    expect(screen.getByText("Channel 2 fader not up")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /show the mixer/ }));
     expect(usePanels.getState().mixOpen).toBe(true);
     expect(useMix.getState().deckCount).toBe(2);
   });
 
   it("counts further deviations and follows the store", () => {
-    useMix.setState({ channels: channel({ fader: 0.5, eqHi: 0 }) });
+    useMix.setState({
+      channels: channel({ fader: 0.5 }),
+      master: { ...useMix.getState().master, level: 0.3 },
+    });
     render(<PlayerDeck />);
     expect(screen.getByText("Channel 2 fader not up +1")).toBeTruthy();
     act(() => useMix.setState({ channels: initial.channels }));
-    expect(screen.queryByRole("button", { name: /show the mixer/ })).toBeNull();
-    act(() => useMix.setState({ master: { ...useMix.getState().master, level: 0.3 } }));
     expect(screen.getByText("Master level changed")).toBeTruthy();
+    act(() => useMix.setState({ master: initial.master }));
+    expect(screen.queryByRole("button", { name: /show the mixer/ })).toBeNull();
   });
 });

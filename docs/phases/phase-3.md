@@ -402,7 +402,7 @@ rekordbox keys (D10, "Queue"). A track rekordbox analysed has a rekordbox entry 
     (keyed by path/size/mtime + format version); `reks-cli columns <audio>
     <out.bin>` writes the same payload. UI: a grid editor dialog, opened
     from the track info panel's Beatgrid section (replaced 2026-10-29 by
-    grid mode on the deck, phase 5 task 30); commands in
+    grid mode on the deck, phase 5 task 32); commands in
     [grid.rs](../../src-tauri/src/grid.rs). Checked in the browser preview
     on the `sine-click-128` fixture's real columns (mock backend).
 14. **Hardware check**: export 20 reks-analysed tracks (no rekordbox data)
@@ -455,10 +455,10 @@ Grid editing with tempo sections (added 2026-10-24, maintainer's call; D10
     section/all, shift, snap to transients (`waveform_transients`),
     keyboard shortcuts, undo/redo. Tests: component tests for each
     operation, history reducer. Done in a dialog, since replaced by grid
-    mode on the deck (phase 5 task 30); transients in
+    mode on the deck (phase 5 task 32); transients in
     [`reks-analysis::transients`](../../crates/reks-analysis/src/transients.rs)
     (`waveform_transients`). Checked in the browser preview (mock backend);
-    layout now in [ui.md](../ui.md#deck-grid-mode-phase-5-task-30-d10).
+    layout now in [ui.md](../ui.md#deck-grid-mode-phase-5-task-32-d10).
 
 ## Acceptance criteria
 

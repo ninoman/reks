@@ -1,5 +1,5 @@
 /**
- * Grid mode's keys and focus (D10, phase 5 task 30). A press on a deck
+ * Grid mode's keys and focus (D10, phase 5 task 32). A press on a deck
  * focuses it; a press anywhere else clears the focus. The grid keys
  * (`gridKey`) act only while the deck in grid mode has the focus, and never
  * in text fields, dialogs or menus; they go first (capture), so the

@@ -89,7 +89,7 @@ describe("WaveStrip close-zoom tiles", () => {
       const r = recorder();
       tiles.push(r);
       return r.ctx as unknown as CanvasRenderingContext2D;
-    } as HTMLCanvasElement["getContext"]);
+    } as unknown as HTMLCanvasElement["getContext"]);
   }
 
   /** One second of a wave riding above the centre: every point spans +0.25..+0.75. */

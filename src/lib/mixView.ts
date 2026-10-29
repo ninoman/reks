@@ -36,12 +36,16 @@ export function nextTempoRange(r: TempoRange): TempoRange {
   return TEMPO_RANGES[(TEMPO_RANGES.indexOf(r) + 1) % TEMPO_RANGES.length] ?? DEFAULT_TEMPO_RANGE;
 }
 
+const FOUR_DECKS: readonly number[] = [0, 1, 2, 3];
+const TWO_DECKS: readonly number[] = [1, 2];
+
 /**
  * Decks on screen, by index. With two shown they are decks 2 and 3, the
- * centre channels of a 4-channel mixer, as with two CDJs on a DJM.
+ * centre channels of a 4-channel mixer, as with two CDJs on a DJM. The same
+ * array every call, so a memoised mixer that takes it skips re-renders.
  */
-export function shownDecks(count: 2 | 4): number[] {
-  return count === 4 ? [0, 1, 2, 3] : [1, 2];
+export function shownDecks(count: 2 | 4): readonly number[] {
+  return count === 4 ? FOUR_DECKS : TWO_DECKS;
 }
 
 /** Decks 1 and 2 sit left of the mixer, 3 and 4 right. */
@@ -370,6 +374,38 @@ export function mixerParts(look: MixerLook): MixerParts {
     crossfader: advanced,
     filterRow: !threeBand && (advanced || look.filters === "show"),
   };
+}
+
+export type KnobParam =
+  | "trim"
+  | "eqHi"
+  | "eqMid1"
+  | "eqMid2"
+  | "eqLo"
+  | "eq3Hi"
+  | "eq3Mid"
+  | "eq3Lo"
+  | "fx";
+
+/** `[param, caption]` per knob row; the FX row's caption is the FX select. */
+const FOUR_BAND: [KnobParam, string][] = [
+  ["trim", "Level"],
+  ["eqHi", "Hi"],
+  ["eqMid1", "HM"],
+  ["eqMid2", "LM"],
+  ["eqLo", "Lo"],
+];
+const THREE_BAND: [KnobParam, string][] = [
+  ["trim", "Level"],
+  ["eq3Hi", "Hi"],
+  ["eq3Mid", "Mid"],
+  ["eq3Lo", "Low"],
+  ["fx", "FX"],
+];
+
+/** A channel strip's knob rows, top to bottom, for the EQ layout. */
+export function knobRows(parts: MixerParts): [KnobParam, string][] {
+  return parts.threeBand ? THREE_BAND : FOUR_BAND;
 }
 
 /**

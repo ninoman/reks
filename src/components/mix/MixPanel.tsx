@@ -71,6 +71,7 @@ export function MixPanel() {
         </div>
         <Mixer
           channels={mix.channels}
+          shown={shown}
           active={active}
           filters={mix.filters}
           crossfader={mix.crossfader}

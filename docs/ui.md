@@ -286,10 +286,19 @@ rekordbox and Traktor (2026-10-22; it was along the bottom):
   `solo` (no MASTER, SYNC, phase meter or mixer keys), laid out flat (see
   **Solo** under [Deck layout](#deck-layout-task-16)), with the deck's
   waveforms, cue, pads, nudge, quantise and tempo fader. Empty, it says to
-  double-click a track or drag one onto it. When channel 2 or the master is
-  off its default (fader, EQ, trim, an assigned filter that is on, master
-  level), a `notice` chip in the deck's header names the first ("Channel 2
-  EQ not flat", "+N" for more; `store/mixDeviations`); a click opens 2
+  double-click a track or drag one onto it. On its right, `SoloMixer`
+  (task 31, [wireframe](wireframes/one-channel-mixer.html)): channel 2's
+  LEVEL and EQ knobs with the legend and the gear, then a column with the
+  filter unit (4-band: X in Simple, the assigned one in Advanced with the
+  X / · / Y assign above it, none when off or with filters hidden; ON and
+  FREQ over RES and the modes, `FilterUnit` `stacked`) or the FX (3-band:
+  the select, then the channel FX knob over PARAMETER). As tall as the deck
+  (`--deck-solo-h`); the rows share the height. The column is a fixed
+  `--solo-mixer-column-w`, so a longer effect name or the other EQ layout
+  does not shift the deck. No fader, meter, CUE,
+  master or crossfader. When channel 2's fader or the master level is off
+  its default, a `notice` chip in the deck's header names the first
+  ("Channel 2 fader not up", "+1"; `store/mixDeviations`); a click opens 2
   decks. The deck-2 (left-hand) keys work here too, except SYNC, MASTER and
   the crossfader ([`mixKeys.ts`](../src/lib/mixKeys.ts)). With 2 or 4 decks the Mix panel
   takes its place and shows the same deck among the others; "Load to deck N"
@@ -351,14 +360,19 @@ decks and mixer only, shown whether the output runs or not (2026-10-22; it
 had a start form before the output opened). `MixPanel` is the only part that reads the store
 ([`src/store/mix.ts`](../src/store/mix.ts)); `DeckStrip`, `DeckWaveform`,
 `MixerPanel`, `ChannelStrip`, `FilterUnit`, `MasterSection` and `SyncPhase`
-take props. The mixer follows the hardware: four channel strips (level, HI,
+take props. The mixer follows the hardware: a channel strip per shown deck (level, HI,
 HM (HI MID), LM (LO MID), LO, filter assign X/off/Y, cue, fader, crossfader assign) with
 one caption column (it also holds the one dB scale for the channel meters),
 the master and cue section, then one row with filter X and Y and a crossfader
 across the mixer with its curve at the right end (task 22, 2026-10-23). The
 channel numbers are lit badges like the decks'. Decks 1 and 2 sit left of it, 3 and 4 right. Two decks by
 default, and they are decks 2 and 3, the centre channels, as with two CDJs
-on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
+on a 4-channel mixer; 4 with the toggle. With 2 decks the mixer draws
+channels 2 and 3 only (task 30, 2026-10-29; `MixerPanel` `shown`, from
+`shownDecks`) and is `--mixer-w-two` (264) wide; channels 1 and 4 keep their
+positions and still play, and the "Deck 1 playing" chip brings them back with 4
+decks. Wireframe: [two-channel-mixer.html](wireframes/two-channel-mixer.html) (A).
+Decks are one size in both modes
 (two stacked fit beside the mixer); the deck itself is described under
 [Deck layout](#deck-layout-task-16).
 
@@ -489,8 +503,8 @@ on a 4-channel mixer; 4 with the toggle. Decks are one size in both modes
   mixer stays 440 and its faders (`--fader-len`) and the master meter take
   the difference, 60 px at most (`--fader-bonus`; 47 in 3-band Advanced). In Simple the master
   meter has no dB labels and fills the row.
-- Sizes (mixer 344 × 440, `--mixer-w` × `--mixer-h`; strips 52, rows 26, faders 96,
-  filter FREQ `--knob-lg` 32; ![Mixer, dark](img/mixer-2-decks-dark.jpg) ![Mixer, light](img/mixer-2-decks-light.jpg)):
+- Sizes (mixer 344 × 440, `--mixer-w` × `--mixer-h`, 264 wide with 2 decks; strips 52, rows 26, faders 96,
+  filter FREQ `--knob-lg` 32, filter unit gaps `--mixer-filter-gap` 8, 4 with 2 decks; ![Mixer, dark](img/mixer-2-decks-dark.jpg) ![Mixer, light](img/mixer-2-decks-light.jpg)):
   `--knob-*`, `--fader-*`, `--meter-w`, `--meter-dot`, `--meter-label-*`, `--deck-*`, `--pad-h`,
   `--mixer-*`, `--mix-panel-max-h` (window height − `--app-chrome-h` − `--library-min-h`, so the library keeps 4+ rows and the panel does not scroll at 1280 × 800).
 
@@ -503,8 +517,8 @@ Modelled on rekordbox's 2Deck Horizontal. Approved wireframe:
 **Size** (task 23). 2 decks: `--deck-h` = `--mixer-h` (440 px in Advanced; 356 / 292 in the Simple views, so the decks follow the mixer); the waveform takes the spare height (`--deck-wave-min-h` 60 is the floor). 4 decks (`compact`): `--deck-h-compact` 216 px, two stacked make the mixer's
 440; header 30 (artwork 24), overview 14, waveform 60. Both have the same controls row (below). The panel is capped by
 `--mix-panel-max-h` = window height − `--app-chrome-h` (82) − `--library-min-h` (246: toolbar and filters 116, column
-header, 4 rows). Width is what's left on each side: 448 px at a 1280 px window (minimum `--deck-min-w` 440),
-528 at 1440, 768 at 1920.
+header, 4 rows). Width is what's left on each side: with 4 decks 448 px at a 1280 px window (minimum `--deck-min-w` 440),
+528 at 1440, 768 at 1920; with 2 decks (narrower mixer) 488, 568 and 808.
 
 **Controls row** (2026-10-23), left to right: Q over CUE and PLAY · pad mode tabs over the 2 × 4 pads · the quick-loop
 block (BEAT | IN/OUT tabs over one page) · MASTER over SYNC. One CSS grid (`--deck-ctl-cols`); every column has the
@@ -929,7 +943,7 @@ and loading / error-with-Retry / empty states). All but `RuleBuilder` and
 - Dev: `mockSmart.ts` evaluates rules and smart lists like the core;
   `mockPresets.ts` keeps saved filters like `filter_preset.rs`.
 
-## Deck grid mode (phase 5 task 30, D10)
+## Deck grid mode (phase 5 task 32, D10)
 
 A deck's grid is adjusted on the deck itself
 ([`DeckGridPanel.tsx`](../src/components/mix/DeckGridPanel.tsx), state in

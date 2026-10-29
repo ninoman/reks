@@ -1,0 +1,42 @@
+# git-cliff config: the changelog is built from Conventional Commits (D41,
+# docs/releasing.md). scripts/release.mjs writes CHANGELOG.md with it, and
+# release.yml copies the new version's section into the GitHub release.
+
+[changelog]
+header = """
+# Changelog
+
+User-facing changes to reks, written by `npm run release` from commit messages.
+Versioning rules: [docs/releasing.md](docs/releasing.md#versioning).
+"""
+body = """
+{% if version %}\
+## {{ version | trim_start_matches(pat="v") }} ({{ timestamp | date(format="%Y-%m-%d") }})
+{% else %}\
+## Unreleased
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | upper_first }}\
+{% endfor %}
+{% endfor %}
+"""
+trim = false
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+protect_breaking_commits = true
+tag_pattern = "v[0-9]+\\.[0-9]+\\.[0-9]+.*"
+sort_commits = "oldest"
+# Users read this, so only features, fixes and speed-ups are listed. The HTML
+# comments order the groups and are stripped from the headings.
+commit_parsers = [
+  { message = "^chore\\(release\\)", skip = true },
+  { field = "breaking", pattern = "true", group = "<!-- 0 -->Breaking changes" },
+  { message = "^feat", group = "<!-- 1 -->Features" },
+  { message = "^fix", group = "<!-- 2 -->Fixes" },
+  { message = "^perf", group = "<!-- 3 -->Performance" },
+  { message = ".*", skip = true },
+]
