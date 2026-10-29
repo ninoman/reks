@@ -554,6 +554,8 @@
   --mixer-w-two: 264px;
   /* Between a filter unit's ON, FREQ, RES and modes; tighter with 2 decks. */
   --mixer-filter-gap: 8px;
+  /* The 1-deck mixer's right column (border and padding included): fits the stacked filter unit and the widest FX select (REVERB), so switching effect or EQ never moves the deck. */
+  --solo-mixer-column-w: 90px;
   /* Height per view (task 25): Advanced, Simple, Simple with the filters hidden. */
   --mixer-h-advanced: 440px;
   --mixer-h-simple: 356px;

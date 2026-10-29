@@ -376,6 +376,38 @@ export function mixerParts(look: MixerLook): MixerParts {
   };
 }
 
+export type KnobParam =
+  | "trim"
+  | "eqHi"
+  | "eqMid1"
+  | "eqMid2"
+  | "eqLo"
+  | "eq3Hi"
+  | "eq3Mid"
+  | "eq3Lo"
+  | "fx";
+
+/** `[param, caption]` per knob row; the FX row's caption is the FX select. */
+const FOUR_BAND: [KnobParam, string][] = [
+  ["trim", "Level"],
+  ["eqHi", "Hi"],
+  ["eqMid1", "HM"],
+  ["eqMid2", "LM"],
+  ["eqLo", "Lo"],
+];
+const THREE_BAND: [KnobParam, string][] = [
+  ["trim", "Level"],
+  ["eq3Hi", "Hi"],
+  ["eq3Mid", "Mid"],
+  ["eq3Lo", "Low"],
+  ["fx", "FX"],
+];
+
+/** A channel strip's knob rows, top to bottom, for the EQ layout. */
+export function knobRows(parts: MixerParts): [KnobParam, string][] {
+  return parts.threeBand ? THREE_BAND : FOUR_BAND;
+}
+
 /**
  * The mixer's height class (`--mixer-h` per `data-mixer` in tokens.css): 4-band
  * 440 / 356 / 292 px, 3-band 393 / 333 px.

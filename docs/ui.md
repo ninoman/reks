@@ -285,10 +285,19 @@ rekordbox and Traktor (2026-10-22; it was along the bottom):
   `solo` (no MASTER, SYNC, phase meter or mixer keys), laid out flat (see
   **Solo** under [Deck layout](#deck-layout-task-16)), with the deck's
   waveforms, cue, pads, nudge, quantise and tempo fader. Empty, it says to
-  double-click a track or drag one onto it. When channel 2 or the master is
-  off its default (fader, EQ, trim, an assigned filter that is on, master
-  level), a `notice` chip in the deck's header names the first ("Channel 2
-  EQ not flat", "+N" for more; `store/mixDeviations`); a click opens 2
+  double-click a track or drag one onto it. On its right, `SoloMixer`
+  (task 31, [wireframe](wireframes/one-channel-mixer.html)): channel 2's
+  LEVEL and EQ knobs with the legend and the gear, then a column with the
+  filter unit (4-band: X in Simple, the assigned one in Advanced with the
+  X / · / Y assign above it, none when off or with filters hidden; ON and
+  FREQ over RES and the modes, `FilterUnit` `stacked`) or the FX (3-band:
+  the select, then the channel FX knob over PARAMETER). As tall as the deck
+  (`--deck-solo-h`); the rows share the height. The column is a fixed
+  `--solo-mixer-column-w`, so a longer effect name or the other EQ layout
+  does not shift the deck. No fader, meter, CUE,
+  master or crossfader. When channel 2's fader or the master level is off
+  its default, a `notice` chip in the deck's header names the first
+  ("Channel 2 fader not up", "+1"; `store/mixDeviations`); a click opens 2
   decks. The deck-2 (left-hand) keys work here too, except SYNC, MASTER and
   the crossfader ([`mixKeys.ts`](../src/lib/mixKeys.ts)). With 2 or 4 decks the Mix panel
   takes its place and shows the same deck among the others; "Load to deck N"
