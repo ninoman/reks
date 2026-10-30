@@ -14,7 +14,7 @@ same code is in v4.8.0, the latest release on 2026-10-30).
 - The two-worker cap was a deliberate choice (#160, #170: 352 generated tracks,
   128 s to 54 s). A later comment there says #178 (streaming measure) removed
   the memory reason for the cap; four workers gained 5-10 s on the SSD image
-  (`lib.rs:1015-1020`).
+  (`lib.rs:1015-1021`).
 - Our "writer waits, workers idle" observation therefore means: two workers at
   ~183 ms/track are slower than the writer on a fast target, so the writer
   waits. Raising the cap would help only on fast sticks and fast sources.
@@ -38,7 +38,7 @@ that comes out byte-identical.
 
 Possible change: skip `measure` when the stick already holds the three ANLZ
 files for the track and the source is unchanged. `transcode_on_stick`
-(`lib.rs:1190-1200`) and `newer_than_source` (`:1170`) already apply that idea
+(`lib.rs:1199`) and `newer_than_source` (`:1184`) already apply that idea
 to `--cdjsafe` transcodes, with a margin for FAT time rounding (#231). The
 check for generated sets could be: ANLZ files exist and are newer than the
 source by the same margin, and source size matches the plan's `file_size`. It
