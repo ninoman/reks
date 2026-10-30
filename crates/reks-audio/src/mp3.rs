@@ -8,7 +8,11 @@
 //! Reimplemented here, not copied. Only MPEG-1 Layer III counts: for anything
 //! else (MPEG-2/2.5, other layers) the count is `None` and `PVBR` keeps a zero
 //! trailer, which is UNVERIFIED on players.
+//!
+//! The file is streamed through a small window, never read whole.
 
+use std::fs::File;
+use std::io::{self, Read};
 use std::path::Path;
 
 use crate::{Error, Result};
@@ -23,11 +27,66 @@ const RATES: [u32; 4] = [44_100, 48_000, 32_000, 0];
 /// MPEG audio frames in the MP3 at `path`, without the Xing/Info header
 /// frame; `None` when the file holds no MPEG-1 Layer III frames.
 pub fn mp3_audio_frames(path: &Path) -> Result<Option<u32>> {
-    let data = std::fs::read(path).map_err(|source| Error::Io {
+    let io_err = |source| Error::Io {
         path: path.to_path_buf(),
         source,
-    })?;
-    Ok(count_frames(&data))
+    };
+    let file = File::open(path).map_err(io_err)?;
+    count_frames(file).map_err(io_err)
+}
+
+/// Bytes read from the file at a time.
+const CHUNK: usize = 64 * 1024;
+/// More than the longest frame (1441 bytes).
+const BACK: usize = 4 * 1024;
+
+/// Forward-only view of a stream by absolute offset, keeping only the bytes
+/// from the last requested offset on.
+struct Window<R> {
+    r: R,
+    buf: Vec<u8>,
+    /// Stream offset of `buf[0]`.
+    base: usize,
+    eof: bool,
+}
+
+impl<R: Read> Window<R> {
+    fn new(r: R) -> Self {
+        Self {
+            r,
+            buf: Vec::new(),
+            base: 0,
+            eof: false,
+        }
+    }
+
+    /// Up to `n` bytes at `pos` (fewer only at the end of the stream).
+    /// `pos` never goes below an earlier call's.
+    fn at(&mut self, pos: usize, n: usize) -> io::Result<&[u8]> {
+        // Keep `BACK` bytes before `pos`: the first-frame search steps back
+        // from its look at the next frame.
+        let skip = pos.saturating_sub(self.base + BACK).min(self.buf.len());
+        if skip >= CHUNK {
+            self.buf.drain(..skip);
+            self.base += skip;
+        }
+        while !self.eof && self.base + self.buf.len() < pos + n {
+            let len = self.buf.len();
+            self.buf.resize(len + CHUNK, 0);
+            let read = loop {
+                match self.r.read(&mut self.buf[len..]) {
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    other => break other,
+                }
+            };
+            let read = read.inspect_err(|_| self.buf.truncate(len))?;
+            self.buf.truncate(len + read);
+            self.eof = read == 0;
+        }
+        let from = pos.saturating_sub(self.base).min(self.buf.len());
+        let to = (from + n).min(self.buf.len());
+        Ok(&self.buf[from..to])
+    }
 }
 
 /// One MPEG-1 Layer III frame header at the start of `h`.
@@ -58,9 +117,10 @@ fn header(h: &[u8]) -> Option<Header> {
     })
 }
 
-/// Bytes of the ID3v2 tag at the start of `data` (0 without one).
-fn id3v2_len(data: &[u8]) -> usize {
-    match data.get(..10) {
+/// Bytes of the ID3v2 tag at the start of a file whose first bytes are
+/// `head` (0 without one).
+fn id3v2_len(head: &[u8]) -> usize {
+    match head.get(..10) {
         Some(h) if &h[..3] == b"ID3" => {
             let size = h[6..10]
                 .iter()
@@ -80,17 +140,18 @@ fn is_info_frame(frame: &[u8], h: Header) -> bool {
     matches!(tag(xing_at), Some(b"Xing" | b"Info")) || tag(36) == Some(b"VBRI")
 }
 
-fn count_frames(data: &[u8]) -> Option<u32> {
-    let mut pos = id3v2_len(data);
+fn count_frames(r: impl Read) -> io::Result<Option<u32>> {
+    let mut data = Window::new(r);
+    let mut pos = id3v2_len(data.at(0, 10)?);
     // The first frame: the first header that the next one follows (or the
     // end of the file), so stray sync bytes in junk before it don't count.
     let first = loop {
-        let rest = data.get(pos..)?;
+        let rest = data.at(pos, 4)?;
         if rest.len() < 4 {
-            return None;
+            return Ok(None);
         }
         if let Some(h) = header(rest) {
-            let next = rest.get(h.len..).unwrap_or(&[]);
+            let next = data.at(pos + h.len, 4)?;
             if next.is_empty() || header(next).is_some() {
                 break h;
             }
@@ -98,14 +159,14 @@ fn count_frames(data: &[u8]) -> Option<u32> {
         pos += 1;
     };
     let mut frames = 0u32;
-    if is_info_frame(&data[pos..], first) {
+    if is_info_frame(data.at(pos, 40)?, first) {
         pos += first.len;
     }
-    while let Some(h) = data.get(pos..).and_then(header) {
+    while let Some(h) = header(data.at(pos, 4)?) {
         frames = frames.saturating_add(1);
         pos += h.len;
     }
-    (frames > 0).then_some(frames)
+    Ok((frames > 0).then_some(frames))
 }
 
 #[cfg(test)]
@@ -151,7 +212,7 @@ mod tests {
         }
         data.extend_from_slice(b"TAG");
         data.extend_from_slice(&[0; 125]);
-        assert_eq!(count_frames(&data), Some(5));
+        assert_eq!(count_frames(&data[..]).unwrap(), Some(5));
 
         // Without the Info frame every frame counts; junk before the first
         // frame is skipped.
@@ -159,9 +220,35 @@ mod tests {
         for _ in 0..3 {
             plain.extend(frame());
         }
-        assert_eq!(count_frames(&plain), Some(3));
-        assert_eq!(count_frames(b"not an mp3 at all"), None);
-        assert_eq!(count_frames(&[]), None);
+        assert_eq!(count_frames(&plain[..]).unwrap(), Some(3));
+        assert_eq!(count_frames(&b"not an mp3 at all"[..]).unwrap(), None);
+        assert_eq!(count_frames(&[][..]).unwrap(), None);
+    }
+
+    /// Hands out at most 1000 bytes per read.
+    struct Trickle<'a>(&'a [u8]);
+
+    impl Read for Trickle<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let n = buf.len().min(self.0.len()).min(1000);
+            buf[..n].copy_from_slice(&self.0[..n]);
+            self.0 = &self.0[n..];
+            Ok(n)
+        }
+    }
+
+    #[test]
+    fn streams_past_the_window() {
+        // Junk longer than the window before the first frame, then ~1.2 MB
+        // of frames read in short pieces.
+        let mut data = vec![0x00; 3 * CHUNK + 7];
+        data.extend(info_frame());
+        for _ in 0..3000 {
+            data.extend(frame());
+        }
+        data.extend_from_slice(b"TAG");
+        assert_eq!(count_frames(Trickle(&data)).unwrap(), Some(3000));
+        assert_eq!(count_frames(&data[..]).unwrap(), Some(3000));
     }
 
     #[test]

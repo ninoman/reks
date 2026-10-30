@@ -24,6 +24,7 @@
 //!   unchanged; a run of reks's analyser (Re-analyse) takes over from it
 //!   (`analysis_source` = `reks`).
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use rusqlite::{params, Connection, OptionalExtension};
@@ -100,6 +101,31 @@ pub fn file_content_hash(path: &Path) -> Result<String> {
     })
 }
 
+/// What the library recorded about a track's file when it last hashed it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredFile {
+    pub path: String,
+    pub size: i64,
+    pub mtime: String,
+    pub content_hash: String,
+}
+
+/// [`file_content_hash`] of `path`, taken from `stored` without reading the
+/// file when it is the same path with the same size and mtime. That is the
+/// folder scan's own test for "unchanged", with the same blind spot: an edit
+/// that keeps both size and mtime goes unnoticed.
+pub fn current_content_hash(path: &Path, stored: Option<&StoredFile>) -> Result<String> {
+    if let Some(s) = stored {
+        let unchanged = Path::new(&s.path) == path
+            && fileinfo::stat(&s.path)
+                .is_ok_and(|(size, mtime)| size == s.size && mtime == s.mtime);
+        if unchanged {
+            return Ok(s.content_hash.clone());
+        }
+    }
+    file_content_hash(path)
+}
+
 /// Tracks that need an analyser run: never analysed, analysed by another
 /// analyser version, or whose file changed since (by `content_hash`). A
 /// failed run counts as a run, so failures are not retried until either
@@ -111,6 +137,20 @@ const PENDING_WHERE: &str = "missing = 0
                 AND analysis_hash IS content_hash)
        AND (analysis_version IS NULL OR analysis_version <> ?1
             OR (content_hash IS NOT NULL AND analysis_hash IS NOT content_hash))";
+
+const STORED_FILE: &str = "SELECT id, path, file_size, file_mtime, content_hash FROM track";
+
+fn stored_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<(TrackId, StoredFile)> {
+    Ok((
+        r.get(0)?,
+        StoredFile {
+            path: r.get(1)?,
+            size: r.get(2)?,
+            mtime: r.get(3)?,
+            content_hash: r.get(4)?,
+        },
+    ))
+}
 
 /// Whether the track has a rekordbox grid (SQL on `track`).
 const HAS_RB_GRID: &str = "EXISTS (SELECT 1 FROM beatgrid
@@ -153,6 +193,24 @@ pub struct MappingCandidate {
 }
 
 impl Library {
+    /// Every track's [`StoredFile`] (tracks never hashed have none).
+    pub fn stored_files(&self) -> Result<HashMap<TrackId, StoredFile>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(&format!("{STORED_FILE} WHERE content_hash IS NOT NULL"))?;
+        let rows = stmt.query_map([], stored_file_row)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Track `id`'s [`StoredFile`].
+    pub fn stored_file(&self, id: TrackId) -> Result<Option<StoredFile>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare_cached(&format!(
+            "{STORED_FILE} WHERE id = ?1 AND content_hash IS NOT NULL"
+        ))?;
+        let row = stmt.query_row([id], stored_file_row).optional()?;
+        Ok(row.map(|(_, f)| f))
+    }
+
     /// Tracks needing analysis by analyser `version`, oldest first.
     pub fn analysis_pending(&self, version: u32) -> Result<Vec<AnalysisJob>> {
         let conn = self.conn()?;
@@ -352,6 +410,57 @@ mod tests {
         )
         .unwrap();
         c.last_insert_rowid()
+    }
+
+    #[test]
+    fn stored_hash_is_used_only_while_the_file_matches_its_row() {
+        let (dir, lib) = lib();
+        let file = dir.path().join("a.wav");
+        std::fs::write(&file, b"audio").unwrap();
+        let path = file.to_str().unwrap();
+        let id = insert(&lib, path);
+        let (size, mtime) = fileinfo::stat(path).unwrap();
+        lib.conn()
+            .unwrap()
+            .execute(
+                "UPDATE track SET file_size = ?2, file_mtime = ?3 WHERE id = ?1",
+                params![id, size, mtime],
+            )
+            .unwrap();
+        let stored = lib.stored_file(id).unwrap().unwrap();
+        assert_eq!(lib.stored_files().unwrap().get(&id), Some(&stored));
+
+        // Same path, size and mtime: the row's hash, the file is not read.
+        assert_eq!(current_content_hash(&file, Some(&stored)).unwrap(), "h1");
+        // Any difference, or no row: the file's own hash.
+        let real = file_content_hash(&file).unwrap();
+        let other_size = StoredFile {
+            size: size + 1,
+            ..stored.clone()
+        };
+        let other_path = StoredFile {
+            path: dir.path().join("b.wav").to_string_lossy().into(),
+            ..stored.clone()
+        };
+        for s in [Some(&other_size), Some(&other_path), None] {
+            assert_eq!(current_content_hash(&file, s).unwrap(), real);
+        }
+        let other_mtime = StoredFile {
+            mtime: "2000-01-01T00:00:00Z".into(),
+            ..stored
+        };
+        assert_eq!(
+            current_content_hash(&file, Some(&other_mtime)).unwrap(),
+            real
+        );
+
+        // A track never hashed has no stored file.
+        lib.conn()
+            .unwrap()
+            .execute("UPDATE track SET content_hash = NULL WHERE id = ?1", [id])
+            .unwrap();
+        assert_eq!(lib.stored_file(id).unwrap(), None);
+        assert!(lib.stored_files().unwrap().is_empty());
     }
 
     fn record(hash: &str) -> AnalysisRecord {

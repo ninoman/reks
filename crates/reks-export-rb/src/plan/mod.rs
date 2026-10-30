@@ -576,7 +576,7 @@ pub fn plan(
         divider::expand(&mut sources, &lib.cache_dir().join(divider::DIVIDER_DIR))?;
     }
     let serial = crate::device::volume_serial(dev);
-    let reks = ReksCache::new(lib.cache_dir());
+    let reks = ReksCache::for_library(lib)?;
     let mut plan = plan_sources(sources, dev, serial, opts, anlz, &reks)?;
     guard_history(&mut plan, lib)?;
     Ok(plan)

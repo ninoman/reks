@@ -524,7 +524,7 @@ fn build_plan(
     if opts.dividers {
         divider::expand(&mut sources, &lib.cache_dir().join(divider::DIVIDER_DIR))?;
     }
-    let reks = ReksCache::new(lib.cache_dir());
+    let reks = ReksCache::for_library(&lib)?;
     let mut plan = plan::plan_sources(sources, dev, serial, &opts, &locator, &reks)?;
     plan::guard_history(&mut plan, &lib)?;
     Ok(Planned { lib, sel, plan })
