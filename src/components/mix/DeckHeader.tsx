@@ -1,7 +1,8 @@
 /**
  * A deck's header row: deck number (lit when loaded), artwork (eject on
  * hover or focus), title and artist, key (a readout, KEY under it), BPM (double-click to type one)
- * with the tempo under it, and remaining over elapsed time. The grid mode
+ * with the tempo under it (both tinted while sync holds the deck at the
+ * master's tempo, so the fader reads as inactive), and remaining over elapsed time. The grid mode
  * toggle (beat lines icon, lit when on; a library track only) sits right
  * after the title.
  */
@@ -27,6 +28,8 @@ export interface DeckHeaderProps {
   /** Tempo heard at the playhead; null without a grid. */
   bpm: number | null;
   tempo: number;
+  /** Sync holds the deck at the master's tempo: the tempo fader does nothing. */
+  synced?: boolean;
   /** Why the BPM can't be typed, or null when it can. */
   bpmLocked: string | null;
   positionMs: number;
@@ -47,6 +50,7 @@ export function DeckHeader({
   keyText,
   bpm,
   tempo,
+  synced = false,
   bpmLocked,
   positionMs,
   durationMs,
@@ -128,7 +132,10 @@ export function DeckHeader({
         </span>
         <span className="text-2xs text-fg-muted">KEY</span>
       </div>
-      <div className="flex w-18 shrink-0 flex-col items-end gap-px font-mono tabular-nums">
+      <div
+        data-synced={synced || undefined}
+        className="flex w-18 shrink-0 flex-col items-end gap-px font-mono tabular-nums data-[synced]:text-deck-synced"
+      >
         <InlineNumber
           value={bpm}
           format={(v) => v.toFixed(2)}
@@ -138,7 +145,9 @@ export function DeckHeader({
           title={bpmLocked ?? "Double-click to type a BPM"}
           className="text-lg leading-tight font-bold tracking-tight"
         />
-        <span className="pr-0.5 text-2xs text-fg-muted">{formatTempo(tempo)}</span>
+        <span className={cn("pr-0.5 text-2xs", !synced && "text-fg-muted")}>
+          {formatTempo(tempo)}
+        </span>
       </div>
       <div className="flex w-15 shrink-0 flex-col items-end gap-0.5 font-mono tabular-nums">
         <span className="text-xs font-bold">

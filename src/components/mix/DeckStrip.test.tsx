@@ -416,6 +416,21 @@ describe("DeckStrip", () => {
     );
   });
 
+  it("tints BPM and tempo while sync holds the master's tempo", () => {
+    const synced = () =>
+      screen.getByRole("button", { name: "Deck 2 BPM" }).parentElement?.hasAttribute("data-synced");
+    setup({ view: view({ sync: true, locked: true }), meta: loadedMeta() });
+    expect(synced()).toBe(true);
+    // SYNC lights in the same colour.
+    expect(screen.getByRole("button", { name: "Deck 2 sync" }).getAttribute("data-lit")).toBe(
+      "synced",
+    );
+    cleanup();
+    // SYNC on but not following yet (no master to match): untinted.
+    setup({ view: view({ sync: true }), meta: loadedMeta() });
+    expect(synced()).toBe(false);
+  });
+
   it("shows the key in the chosen notation", () => {
     setup({ view: view(), meta: loadedMeta(), keyText: "8A" });
     expect(screen.getByText("8A")).toBeTruthy();

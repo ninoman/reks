@@ -334,6 +334,7 @@ export function DeckStrip({
           keyText={keyText}
           bpm={grid ? (view?.bpm ?? null) : null}
           tempo={tempo}
+          synced={loaded && view?.sync === true && view.locked}
           bpmLocked={
             !grid ? "Needs a beatgrid" : view?.sync ? "Synced: the BPM follows the master" : null
           }
