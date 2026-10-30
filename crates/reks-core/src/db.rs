@@ -75,7 +75,7 @@ impl Library {
         // NORMAL is durable across application crashes in WAL mode; only a
         // power loss can drop the last commits.
         conn.pragma_update(None, "synchronous", "NORMAL")?;
-        // Snapshots sit next to the DB: the data dir, not the cache (D39).
+        // Snapshots sit next to the DB: the data dir, not the cache (D36).
         let backup_dir = db_path.parent().map(|dir| dir.join(backup::BACKUP_DIR));
         Self::init(conn, cache_dir, backup_dir)
     }

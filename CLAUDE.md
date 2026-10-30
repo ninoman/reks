@@ -57,7 +57,7 @@ reks/
     reks-core/      library model, SQLite schema + migrations, scan/import, tags,
                     artwork, playlists, rekordbox XML import/export, services
     reks-audio/     Symphonia decode, resampling, overview waveform
-    reks-mix/       real-time cpal engine: decks, offline render (player now, mixer Phase 5)
+    reks-mix/       real-time cpal engine: decks, offline render (player, and the D21/D30 mixer)
     reks-analysis/  BPM/beatgrid, key, waveform generation (Phase 3)
     reks-anlz/      Pioneer ANLZ model + writer/reader helpers (Phase 2/3)
     reks-export-rb/ legacy rekordbox USB export (plan/dry-run/write/validate)
@@ -88,7 +88,7 @@ Rust
 - Paths on exported media: ASCII-safe, NFC-normalised, FAT32-legal, `/`
   separators in ANLZ/PDB path strings. Helpers live in `reks-core::fsname`.
 - Timestamps in the DB are UTC ISO-8601 strings. Durations/positions are
-  stored in milliseconds (i64) or samples (i64), never floats of seconds.
+  stored in milliseconds (i64) or samples (i64), never floats of seconds. Exception: `cue.start_ms`/`end_ms` are REAL (f64 ms) by design, to keep analysis sub-ms precision (`docs/phases/phase-1.md`).
 
 TypeScript / React
 - Strict TS, Biome for lint and format (`npm run lint`, `npm run format`; config in
