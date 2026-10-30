@@ -3,7 +3,8 @@
 //! written to a stick.
 //!
 //! [`check`] reads only headers: the WAV `fmt ` chunk, the AIFF `COMM` chunk
-//! and form type, and up to [`MP3_SCAN_BYTES`] of MP3 frames. Sample rate,
+//! and form type, and the first MP3 frame (up to [`MP3_SCAN_BYTES`] of frames
+//! only when it carries no Xing/Info or VBRI header). Sample rate,
 //! channels and the FLAC/ALAC bit depth come from the library's [`Probe`].
 //! Each [`Issue`] has a [`Severity`] for the target: errors block the track,
 //! warnings are shown in the dry run.
@@ -142,6 +143,10 @@ const MAX_CHUNKS: usize = 64;
 pub const MP3_SCAN_BYTES: u64 = 1 << 20;
 /// Bytes after ID3v2 searched for the first frame sync.
 const MP3_SYNC_WINDOW: usize = 64 * 1024;
+/// Bytes read before the seek-header test: the sync window plus the longest
+/// Layer III frame (1441 bytes) and the successor's header, so finding the
+/// first frame sees exactly what it would in the full scan.
+const MP3_HEAD_BYTES: u64 = MP3_SYNC_WINDOW as u64 + 2 * 1024;
 
 const WAVE_FORMAT_PCM: u16 = 0x0001;
 const WAVE_FORMAT_IEEE_FLOAT: u16 = 0x0003;
@@ -437,8 +442,10 @@ fn skip_id3v2<R: Read + Seek>(r: &mut R) -> io::Result<u64> {
 /// frame carries no Xing/Info or VBRI header.
 fn mp3_vbr_without_header<R: Read + Seek>(r: &mut R) -> io::Result<bool> {
     skip_id3v2(r)?;
+    // Most files carry a seek header: decide from the head and read the rest
+    // of the scan only when there is none.
     let mut buf = Vec::new();
-    r.take(MP3_SCAN_BYTES).read_to_end(&mut buf)?;
+    r.take(MP3_HEAD_BYTES).read_to_end(&mut buf)?;
 
     // First sync whose successor is also a frame header (or the end of the
     // scan), so a stray 0xFFE in junk is not taken for a frame.
@@ -463,6 +470,10 @@ fn mp3_vbr_without_header<R: Read + Seek>(r: &mut R) -> io::Result<bool> {
     let tag_at = |off: usize| buf.get(start + off..start + off + 4);
     if matches!(tag_at(4 + side_info), Some(b"Xing" | b"Info")) || tag_at(36) == Some(b"VBRI") {
         return Ok(false);
+    }
+    if buf.len() as u64 == MP3_HEAD_BYTES {
+        r.take(MP3_SCAN_BYTES - MP3_HEAD_BYTES)
+            .read_to_end(&mut buf)?;
     }
 
     let mut pos = start;
@@ -746,6 +757,52 @@ mod tests {
         // A Xing tag at the wrong offset does not count.
         let bytes = mp3(&vbr, Some((40, b"Xing")));
         assert_eq!(run(&bytes, &p, NXS).unwrap(), vec![Issue::VbrNoXing]);
+    }
+
+    /// Counts the bytes read through it.
+    struct Counting<R> {
+        inner: R,
+        read: u64,
+    }
+
+    impl<R: Read> Read for Counting<R> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let n = self.inner.read(buf)?;
+            self.read += n as u64;
+            Ok(n)
+        }
+    }
+
+    impl<R: Seek> Seek for Counting<R> {
+        fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+            self.inner.seek(pos)
+        }
+    }
+
+    fn vbr_check(bytes: Vec<u8>) -> (bool, u64) {
+        let mut r = Counting {
+            inner: io::Cursor::new(bytes),
+            read: 0,
+        };
+        let vbr = mp3_vbr_without_header(&mut r).unwrap();
+        (vbr, r.read)
+    }
+
+    #[test]
+    fn mp3_seek_header_is_found_without_the_full_scan() {
+        // ~830 KB of CBR frames behind an Info header: only the head is read.
+        let (vbr, read) = vbr_check(mp3(&[9; 2000], Some((36, b"Info"))));
+        assert!(!vbr);
+        assert!(read <= 110 + MP3_HEAD_BYTES, "read {read} bytes");
+
+        // Without a header the scan goes on past the head, as before: a rate
+        // change after it is still found.
+        let mut late = [9u8; 2000];
+        late[1500] = 11;
+        let (vbr, read) = vbr_check(mp3(&late, None));
+        assert!(vbr);
+        assert!(read > MP3_HEAD_BYTES);
+        assert!(!vbr_check(mp3(&[9; 2000], None)).0);
     }
 
     #[test]

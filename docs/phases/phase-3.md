@@ -283,7 +283,10 @@ rekordbox keys (D10, "Queue"). A track rekordbox analysed has a rekordbox entry 
     `reks-cli analyse <path>` and `reks-cli anlz build`.
     Done: [reksanlz.rs](../../crates/reks-export-rb/src/reksanlz.rs).
     The planner asks a `ReksLocator` (`ReksCache`: a current analysis cache
-    entry, `cache::has_valid`) beside rekordbox's; `ExportOptions::anlz_preference`
+    entry, `cache::has_valid`) beside rekordbox's; the content hash comes
+    from the track row while path, size and mtime match it
+    (`analysis::current_content_hash`, the folder scan's test and blind
+    spot), so planning and the writer read only files changed since the scan; `ExportOptions::anlz_preference`
     = the app setting `export.anlz_preference` (`AnlzPreference`:
     `rekordboxFirst` default, `reksFirst`, `rekordboxOnly`; picked and saved
     in the export wizard's options step, `--anlz` in `reks rb`); tracks with
