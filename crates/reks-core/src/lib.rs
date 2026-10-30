@@ -49,7 +49,8 @@ pub use filter_preset::{FilterPreset, FilterPresetId, FilterPresetOp, FilterPres
 pub use keys::{Key, KeyNotation, Mode};
 pub use manifest::{ManifestEntry, ManifestItemKind, ManifestRow};
 pub use playlist::{
-    DuplicateMode, PlaylistOp, PlaylistOutcome, PlaylistTree, MAX_DIVIDER_LABEL_CHARS,
+    DuplicateMode, PlaylistEntries, PlaylistOp, PlaylistOutcome, PlaylistTree,
+    MAX_DIVIDER_LABEL_CHARS,
 };
 pub use preview::PreviewAudio;
 pub use query::{
@@ -65,7 +66,9 @@ pub use settings::{
 };
 pub use tag::{TagCategory, TagId, TagInfo, TagOp, TagOutcome, TagTree};
 pub use tag_comments::{CommentTagsPreview, CommentTagsReport};
-pub use track::{ArtworkInfo, BeatgridSummary, Cue, Track, TrackDetail, TrackPatch};
+pub use track::{
+    ArtworkInfo, BeatgridSummary, Cue, ExportTrackFields, Track, TrackDetail, TrackPatch,
+};
 
 /// Crate version, from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

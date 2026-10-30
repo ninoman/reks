@@ -12,7 +12,7 @@
 //! matches, so the entry ops refuse it. Saving a rule, and moving a node,
 //! refuse a smart list that would include itself.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use rusqlite::types::Value;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -20,7 +20,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::Library;
 use crate::error::{Error, Result};
-use crate::query::{playlist_nodes, Filter, PlaylistId, PlaylistNode, Sort, SortColumn};
+use crate::query::{
+    playlist_nodes, DividerRow, Filter, PlaylistId, PlaylistNode, Sort, SortColumn,
+};
 use crate::rule::{Compiler, PlaylistIndex, RuleNode};
 use crate::scan::TrackId;
 use crate::timefmt::now_utc;
@@ -182,6 +184,66 @@ impl PlaylistOutcome {
             added: 0,
             skipped: 0,
         }
+    }
+}
+
+/// Ids per `IN (…)` list, well under SQLite's bound-variable limit.
+const IN_CHUNK: usize = 500;
+
+/// A static playlist's entries as stored: tracks in entry order (duplicates
+/// included) and dividers by entry position.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlaylistEntries {
+    pub track_ids: Vec<TrackId>,
+    pub dividers: Vec<DividerRow>,
+}
+
+impl Library {
+    /// The entries of many static playlists in a few queries, the same as
+    /// `tracks` in playlist order with a `Filter::Playlist` per playlist.
+    /// Folders and smart playlists have no stored entries: they map to empty.
+    pub fn static_playlist_entries(
+        &self,
+        ids: &[PlaylistId],
+    ) -> Result<HashMap<PlaylistId, PlaylistEntries>> {
+        let conn = self.conn()?;
+        let mut out: HashMap<PlaylistId, PlaylistEntries> = HashMap::new();
+        for chunk in ids.chunks(IN_CHUNK) {
+            let marks = vec!["?"; chunk.len()].join(",");
+            // The join drops entries whose track is gone, as the list view does.
+            let mut stmt = conn.prepare(&format!(
+                "SELECT pt.playlist_id, pt.position, pt.track_id, pt.label
+                 FROM playlist_track pt LEFT JOIN track t ON t.id = pt.track_id
+                 WHERE pt.playlist_id IN ({marks})
+                   AND (pt.item_kind = 'divider' OR t.id IS NOT NULL)
+                 ORDER BY pt.playlist_id, pt.position"
+            ))?;
+            let rows = stmt.query_map(rusqlite::params_from_iter(chunk), |r| {
+                Ok((
+                    r.get::<_, PlaylistId>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, Option<TrackId>>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                ))
+            })?;
+            for row in rows {
+                let (playlist, position, track, label) = row?;
+                let entries = out.entry(playlist).or_default();
+                match (track, label) {
+                    (Some(t), _) => entries.track_ids.push(t),
+                    (None, Some(label)) => entries.dividers.push(DividerRow {
+                        position,
+                        ascii: label.is_ascii(),
+                        label,
+                    }),
+                    (None, None) => {}
+                }
+            }
+        }
+        for &id in ids {
+            out.entry(id).or_default();
+        }
+        Ok(out)
     }
 }
 
