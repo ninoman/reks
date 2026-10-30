@@ -227,6 +227,9 @@ pub struct Graph {
     mixer: Mixer,
     /// One block per deck, the mixer's input.
     inputs: [Block; DECKS],
+    /// [`Control::Move`]s waiting for the next block start (and their deck
+    /// to fade out): the deck the track comes from, per deck.
+    moves: [Option<usize>; DECKS],
 }
 
 impl Graph {
@@ -247,6 +250,7 @@ impl Graph {
             clock: 0,
             mixer: Mixer::new(sample_rate),
             inputs: [[0.0; BLOCK * 2]; DECKS],
+            moves: [None; DECKS],
         })
     }
 
@@ -269,7 +273,14 @@ impl Graph {
             }
             return None;
         }
+        if let Control::Move { deck, from } = c {
+            return self.queue_move(usize::from(deck), usize::from(from));
+        }
         let deck = c.deck()?;
+        // A newer control for the deck replaces a move still waiting for it.
+        if let Some(waiting) = self.moves.get_mut(usize::from(deck)) {
+            *waiting = None;
+        }
         if deck == PREVIEW_DECK {
             self.clock += 1;
             return self.preview.apply(c, self.clock);
@@ -286,6 +297,44 @@ impl Graph {
                 Control::Load { src, .. } | Control::SetGrid { src, .. } => Some(src),
                 _ => None,
             },
+        }
+    }
+
+    /// Queues [`Control::Move`] of deck `from`'s track to deck `to`, fading
+    /// `to` out; [`Graph::run_moves`] takes it.
+    fn queue_move(&mut self, to: usize, from: usize) -> Option<Arc<DeckSource>> {
+        if to == from || to >= DECKS || from >= DECKS || self.decks[from].src().is_none() {
+            return None;
+        }
+        self.moves[to] = Some(from);
+        self.decks[to].fade_out()
+    }
+
+    /// Takes the waiting moves whose deck is silent, at a block start so the
+    /// track plays on without a jump, and unloads the decks they left.
+    fn run_moves(&mut self, retire: &mut impl FnMut(Arc<DeckSource>)) {
+        for to in 0..DECKS {
+            let Some(from) = self.moves[to] else {
+                continue;
+            };
+            if self.decks[to].playing() {
+                continue;
+            }
+            self.moves[to] = None;
+            let Some(h) = self.decks[from].hand_over() else {
+                continue;
+            };
+            if self.master == Some(to) || self.master == Some(from) {
+                self.master_unloaded = true;
+            }
+            self.clock += 1;
+            if let Some(old) = self.decks[to].take_over(h, self.clock) {
+                retire(old);
+            }
+            let unload = Control::Unload { deck: from as u8 };
+            if let Some(old) = self.decks[from].apply(unload, self.clock) {
+                retire(old);
+            }
         }
     }
 
@@ -436,6 +485,7 @@ impl Graph {
         mut retire: impl FnMut(Arc<DeckSource>),
     ) {
         for (i, block) in master.chunks_mut(BLOCK * 2).enumerate() {
+            self.run_moves(&mut retire);
             self.plan();
             let n = block.len();
             for (deck, input) in self.decks.iter_mut().zip(&mut self.inputs) {
@@ -2023,5 +2073,106 @@ mod tests {
                 src: ramp_source(1)
             })
             .is_some());
+    }
+
+    /// Deck 0 playing `gridded` at 1.1 in a 4-beat loop.
+    fn looping_at_1_1() -> Graph {
+        let mut g = Graph::new(RATE).unwrap();
+        load(&mut g, gridded(480_000));
+        g.apply(Control::Tempo {
+            deck: 0,
+            ratio: 1.1,
+        });
+        g.apply(Control::Play { deck: 0 });
+        render_frames(&mut g, 10_000);
+        g.apply(Control::BeatLoop {
+            deck: 0,
+            beats: 4.0,
+        });
+        render_frames(&mut g, 5_000);
+        g
+    }
+
+    fn move_1_from_0() -> Control {
+        Control::Move { deck: 1, from: 0 }
+    }
+
+    #[test]
+    fn a_move_plays_on_from_the_other_deck_and_ejects_the_original() {
+        let mut g = looping_at_1_1();
+        let before = g.state().decks[0];
+        assert!(g.apply(move_1_from_0()).is_none());
+        // Taken at the next block start.
+        let frames = RAMP + 2 * BLOCK;
+        render_frames(&mut g, frames);
+        let s = g.state();
+        let b = s.decks[1];
+        assert!(b.playing && b.tempo == 1.1, "{b:?}");
+        assert_eq!((b.frames, b.cue), (before.frames, before.cue));
+        assert_eq!(b.loop_region, before.loop_region);
+        let moved = b.position - before.position;
+        assert!(
+            moved > 0 && moved <= (frames as f64 * 1.1).ceil() as i64,
+            "{moved}"
+        );
+        assert!(!s.decks[0].loaded);
+        // The master role goes with the track.
+        assert_eq!(s.master_deck, Some(1));
+    }
+
+    #[test]
+    fn a_move_onto_a_playing_deck_fades_it_out_first() {
+        let mut g = looping_at_1_1();
+        let other = ramp_source(48_000);
+        g.apply(Control::Load {
+            deck: 1,
+            src: Arc::clone(&other),
+        });
+        g.apply(Control::Play { deck: 1 });
+        render_frames(&mut g, 1_000);
+        assert!(g.apply(move_1_from_0()).is_none());
+        // Still the old track while it fades.
+        assert_eq!(g.state().decks[1].frames, 48_000);
+        let mut retired = Vec::new();
+        let mut out = vec![0.0; (RAMP + 2 * BLOCK) * 2];
+        g.render_with(&mut out, |s| retired.push(s));
+        let s = g.state();
+        assert!(s.decks[1].playing);
+        assert_eq!(s.decks[1].frames, 480_000);
+        // The original fades out as the track comes in on deck 2.
+        render_frames(&mut g, RAMP + BLOCK);
+        assert!(!g.state().decks[0].loaded);
+        // The old source leaves through `retire`, off the audio thread.
+        assert!(retired.iter().any(|s| Arc::ptr_eq(s, &other)));
+    }
+
+    #[test]
+    fn a_newer_control_cancels_a_waiting_move() {
+        let mut g = looping_at_1_1();
+        g.apply(Control::Load {
+            deck: 1,
+            src: ramp_source(48_000),
+        });
+        g.apply(Control::Play { deck: 1 });
+        render_frames(&mut g, 1_000);
+        g.apply(move_1_from_0());
+        g.apply(Control::Play { deck: 1 });
+        render_frames(&mut g, RAMP + 2 * BLOCK);
+        let s = g.state();
+        assert!(s.decks[1].playing);
+        assert_eq!(s.decks[1].frames, 48_000);
+        assert!(s.decks[0].playing);
+    }
+
+    #[test]
+    fn move_ignores_an_empty_deck_itself_and_the_preview_deck() {
+        let mut g = looping_at_1_1();
+        for (deck, from) in [(1, 2), (0, 0), (PREVIEW_DECK, 0)] {
+            g.apply(Control::Move { deck, from });
+        }
+        render_frames(&mut g, RAMP + 2 * BLOCK);
+        let s = g.state();
+        assert!(s.decks[0].playing);
+        assert!(!s.decks[1].loaded && !s.decks[2].loaded && !s.preview.loaded);
     }
 }

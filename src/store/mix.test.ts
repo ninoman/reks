@@ -11,6 +11,7 @@ vi.mock("../lib/ipc", () => ({
   mixStop: vi.fn(),
   mixLoad: vi.fn(),
   mixLoadStick: vi.fn(),
+  mixDeckMove: vi.fn(),
   mixControl: vi.fn(),
   mixCueEdit: vi.fn(),
   libraryTrack: vi.fn(),
@@ -629,6 +630,32 @@ describe("mix store", () => {
     vi.mocked(ipc.mixLoad).mockClear();
     await useMix.getState().load(1, { kind: "library", id: 9, title: "T", artist: null }, true);
     expect(ipc.mixLoad).not.toHaveBeenCalled();
+  });
+
+  it("a deck's track moves to another deck with its views and tempo range", async () => {
+    vi.mocked(ipc.mixLoad).mockResolvedValue({
+      deck: 0,
+      load: 1,
+      trackId: 9,
+      durationMs: 1000,
+      hotCues: [{ id: 1, slot: 0, positionMs: 10, colorRgb: null, name: null }],
+      memoryCues: [],
+    });
+    await useMix.getState().load(0, { kind: "library", id: 9, title: "T", artist: null });
+    useMix.getState().setTempoRange(0, 1);
+    const before = useMix.getState().decks[0];
+    vi.mocked(ipc.mixControl).mockClear();
+    vi.mocked(ipc.mixDeckMove).mockResolvedValue(5);
+
+    await useMix.getState().moveDeck(0, 2);
+    expect(ipc.mixDeckMove).toHaveBeenCalledWith(2, 0);
+    const [a, , b] = useMix.getState().decks;
+    expect(b).toMatchObject({ load: 5, tempoRange: 1, hotCues: before?.hotCues });
+    expect(libraryId(b?.track)).toBe(9);
+    expect(b?.columns).toBe(before?.columns);
+    // The engine ejects the original, so the store sends nothing more.
+    expect(a).toMatchObject({ track: null, load: null, tempoRange: 1 });
+    expect(sent()).toEqual([]);
   });
 
   it("sends the volume with the mixer positions on start", async () => {

@@ -1036,6 +1036,15 @@ export function mixLoad(deck: number, id: number): Promise<DeckLoaded | null> {
 }
 
 /**
+ * Moves deck `from`'s track to `deck` as it plays, without decoding it again: position,
+ * play state, cues, loops and tempo; `from` is unloaded. Resolves to `deck`'s new load
+ * (`DeckLoaded.load`); null when `from` is empty.
+ */
+export function mixDeckMove(deck: number, from: number): Promise<number | null> {
+  return invoke("mix_deck_move", { deck, from });
+}
+
+/**
  * Decodes track `trackId` of the stick at `mountPoint` and loads it on `deck` with the
  * stick's grid and cues (read-only); null when a newer load for the deck won.
  */

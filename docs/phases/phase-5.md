@@ -888,6 +888,28 @@ nothing; 25 needs 22–24.
     (`set_grid_swaps_the_grid_in_place`), `gridMode.test.ts`,
     `deckGrid.test.ts`. Checked in the browser preview (mock backend) at
     1, 2 and 4 decks; not on the real engine yet.
+33. [x] **Drag a track from deck to deck** (maintainer request, 2026-10-30).
+    - Drag a loaded deck's artwork or title onto another deck: the track
+      moves there as it plays (position, play state, loops, cues, tempo) and
+      the original deck is ejected. A Shift-drag copy (instant double) was
+      tried and dropped (maintainer, 2026-10-30): macOS's WebView reports
+      no modifier keys on drag events, so Shift never reached the drop.
+    - `reks-mix` `Control::Move { deck, from }`: the target takes the same
+      `Arc<DeckSource>` (no new decode) with position, play state, cue
+      point, hot cues, active loops, loop / IN / last loop, tempo (the
+      matched tempo when the original follows sync) and master tempo; sync
+      and quantise stay the target's, as on a load. Taken at the next block
+      start, once a playing target has faded out, so the track plays on
+      without a jump; the original is unloaded there (it fades out) and the
+      master role goes with the track. Any newer control for the target
+      cancels a move still waiting.
+    - `mix_deck_move(deck, from)`; the UI carries the deck's views, cues and
+      tempo range over, so nothing is fetched again. Dev mock.
+    Tests: `graph.rs` (`a_move_plays_on_from_the_other_deck_and_ejects_the_original`,
+    `a_move_onto_a_playing_deck_fades_it_out_first`,
+    `a_newer_control_cancels_a_waiting_move`, ignored moves), `mix.test.ts`,
+    `DeckStrip.test.tsx` (drop effect, own deck refused). Checked by the
+    maintainer in the app, 2026-10-30.
 
 ## Acceptance criteria
 

@@ -35,7 +35,7 @@ export function DeckSlot({ deck, state, solo, onRetry, onEject }: DeckSlotProps)
         <div className={box}>
           {solo
             ? "Double-click a track to play it, or drag one here"
-            : `Drag a track here, or right-click one and choose Load to deck ${n}`}
+            : `Drag a track here (from the list or another deck), or right-click one and choose Load to deck ${n}`}
         </div>
       );
     case "loading":

@@ -6,7 +6,8 @@
  * spare height; `compact` (4 decks) is the same deck 216 px tall. The
  * controls scale with the deck's width (`data-deck-size`, tokens.css).
  * The same in every state: what can't act yet is disabled, not hidden. Drop a track
- * from the table to load it. `solo` is the library's player deck on its own,
+ * from the table to load it, or drag one from another deck's header to move it here as
+ * it plays. `solo` is the library's player deck on its own,
  * full window width: CUE / PLAY left of the waveforms and the pads right of
  * them, so the deck is one row shorter; no MASTER or SYNC (nothing to sync
  * to), and no mixer keys.
@@ -22,7 +23,7 @@ import { type DragEvent, type ReactNode, useState } from "react";
 
 import { cn } from "../../lib/cn";
 import { zoomSeconds } from "../../lib/deckScroll";
-import { hasType, readTracks, TRACKS_MIME } from "../../lib/dnd";
+import { DECK_MIME, hasType, readDeck, readTracks, TRACKS_MIME } from "../../lib/dnd";
 import type { CueEdit, DeckView } from "../../lib/ipc";
 import { PLAYER_PLAY_KEY, WAVE_ZOOM_KEY } from "../../lib/keys";
 import { type DeckAction, deckKeyHint } from "../../lib/mixKeys";
@@ -82,6 +83,8 @@ export interface DeckActions {
   seek: (ms: number, exact?: boolean) => void;
   eject: () => void;
   drop: (trackId: number) => void;
+  /** Deck `from`'s track dropped here: it moves here as it plays. */
+  dropDeck: (from: number) => void;
   /** Loads the track that failed again, or fetches the waveform again. */
   retry: () => void;
 }
@@ -143,6 +146,8 @@ export function DeckStrip({
   actions,
 }: DeckStripProps) {
   const [dropping, setDropping] = useState(false);
+  // This deck's own track is being dragged: it can't drop on itself.
+  const [dragOut, setDragOut] = useState(false);
   const loaded = meta.track !== null && view?.loaded === true;
   const grid = loaded && view?.beat != null;
   const tempo = view?.tempo ?? 1;
@@ -295,15 +300,29 @@ export function DeckStrip({
     </div>
   );
 
+  function onDragStart(e: DragEvent) {
+    e.dataTransfer.setData(DECK_MIME, String(deck));
+    e.dataTransfer.effectAllowed = "move";
+    setDragOut(true);
+  }
+
   function onDragOver(e: DragEvent) {
-    if (!hasType(e.dataTransfer, TRACKS_MIME)) return;
+    const fromDeck = hasType(e.dataTransfer, DECK_MIME);
+    if (fromDeck ? dragOut : !hasType(e.dataTransfer, TRACKS_MIME)) return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
+    e.dataTransfer.dropEffect = fromDeck ? "move" : "copy";
     setDropping(true);
   }
 
   function onDrop(e: DragEvent) {
     setDropping(false);
+    const from = readDeck(e.dataTransfer);
+    if (from !== null) {
+      if (from === deck) return;
+      e.preventDefault();
+      actions.dropDeck(from);
+      return;
+    }
     const id = readTracks(e.dataTransfer)?.trackIds[0];
     if (id === undefined) return;
     e.preventDefault();
@@ -343,6 +362,7 @@ export function DeckStrip({
           onBpm={actions.setBpm}
           onEject={actions.eject}
           notice={notice}
+          drag={solo ? undefined : { onDragStart, onDragEnd: () => setDragOut(false) }}
           grid={
             gridMode === undefined
               ? undefined

@@ -78,6 +78,22 @@ impl Loop {
     }
 }
 
+/// What a [`Control::Move`] carries from one deck to the other.
+#[derive(Debug, Clone)]
+pub(crate) struct Handover {
+    src: Arc<DeckSource>,
+    position: f64,
+    playing: bool,
+    cue: f64,
+    looping: Option<Loop>,
+    loop_in: Option<f64>,
+    last_loop: Option<Loop>,
+    hot_cues: [Option<i64>; HOT_CUE_SLOTS as usize],
+    auto_loops: [Option<(f64, f64)>; AUTO_LOOP_SLOTS],
+    tempo: f64,
+    master_tempo: bool,
+}
+
 /// Clamps a ratio control to the tempo range; non-finite values give 1.0.
 fn ratio(value: f64) -> f64 {
     if value.is_finite() {
@@ -286,6 +302,8 @@ impl Deck {
                 self.play_after_load = None;
                 self.change(Pending::Load(None))
             }
+            // Two decks at once: the graph handles it.
+            Control::Move { .. } => None,
             Control::Play { .. } => {
                 self.transports = self.transports.wrapping_add(1);
                 // PLAY during a cue preview keeps it playing on release.
@@ -428,6 +446,60 @@ impl Deck {
             | Control::Master { .. }
             | Control::Volume { .. } => None,
         }
+    }
+
+    /// This deck as [`Control::Move`] carries it; `None` while empty or
+    /// changing track. A deck fading out to pause or in a cue preview moves
+    /// paused.
+    pub(crate) fn hand_over(&self) -> Option<Handover> {
+        if !matches!(self.pending, Pending::None | Pending::Pause | Pending::Cue) {
+            return None;
+        }
+        Some(Handover {
+            src: Arc::clone(self.src.as_ref()?),
+            position: self.position(),
+            playing: self.playing && matches!(self.pending, Pending::None) && !self.cue_preview,
+            cue: self.cue,
+            looping: self.looping,
+            loop_in: self.loop_in,
+            last_loop: self.last_loop,
+            hot_cues: self.hot_cues,
+            auto_loops: self.auto_loops,
+            tempo: self.matched.unwrap_or(self.tempo),
+            master_tempo: self.master_tempo,
+        })
+    }
+
+    /// Fades out towards a pause; returns a load it replaced, to drop off
+    /// the audio thread. [`Deck::playing`] turns false once it is silent.
+    pub(crate) fn fade_out(&mut self) -> Option<Arc<DeckSource>> {
+        self.play_after_load = None;
+        self.cue_preview = false;
+        self.change(Pending::Pause)
+    }
+
+    /// Takes `c` on a silent deck; returns the source it replaced.
+    pub(crate) fn take_over(&mut self, c: Handover, clock: u64) -> Option<Arc<DeckSource>> {
+        self.stop();
+        self.pending = Pending::None;
+        self.play_after_load = None;
+        self.seeks = self.seeks.wrapping_add(1);
+        self.transports = self.transports.wrapping_add(1);
+        self.head = Head::Copy;
+        self.position = c.position;
+        self.cue = c.cue;
+        self.looping = c.looping;
+        self.loop_in = c.loop_in;
+        self.last_loop = c.last_loop;
+        self.hot_cues = c.hot_cues;
+        self.auto_loops = c.auto_loops;
+        self.set_tempo(c.tempo);
+        self.master_tempo = c.master_tempo;
+        let old = self.src.replace(c.src);
+        if c.playing {
+            self.play(clock);
+        }
+        old
     }
 
     fn play(&mut self, clock: u64) {
