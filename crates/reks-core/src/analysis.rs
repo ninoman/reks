@@ -286,7 +286,10 @@ fn store(conn: &Connection, id: TrackId, rec: &AnalysisRecord) -> Result<StoreOu
             ])?;
         }
         out.grid = true;
-        if bpm_source.as_deref() != Some(SOURCE_MANUAL) {
+        // Only fills in (D10, F12): no BPM leaves a tag or rekordbox BPM
+        // alone, and clears only an earlier analysis BPM, whose grid just went.
+        let clears_own = rec.bpm_x100.is_none() && bpm_source.as_deref() == Some(SOURCE_ANALYSIS);
+        if bpm_source.as_deref() != Some(SOURCE_MANUAL) && (rec.bpm_x100.is_some() || clears_own) {
             conn.execute(
                 "UPDATE track SET bpm_x100 = ?2, bpm_source = ?3 WHERE id = ?1",
                 params![id, rec.bpm_x100, rec.bpm_x100.map(|_| SOURCE_ANALYSIS)],
@@ -604,6 +607,37 @@ mod tests {
         let out = lib.store_analysis(a, &record("h1")).unwrap();
         assert!(out.grid && !out.bpm);
         assert_eq!(key_bpm(&lib, a).2, Some(6400));
+    }
+
+    #[test]
+    fn an_empty_result_keeps_a_tag_or_rekordbox_bpm() {
+        let (_d, lib) = lib();
+        let empty = AnalysisRecord {
+            grid: Vec::new(),
+            bpm_x100: None,
+            ..record("h1")
+        };
+        for source in ["tag", "rekordbox"] {
+            let a = insert(&lib, &format!("/m/{source}.wav"));
+            lib.conn()
+                .unwrap()
+                .execute(
+                    "UPDATE track SET bpm_x100 = 12500, bpm_source = ?2 WHERE id = ?1",
+                    params![a, source],
+                )
+                .unwrap();
+            let out = lib.store_analysis(a, &empty).unwrap();
+            assert!(out.grid && !out.bpm, "{source}");
+            assert_eq!(key_bpm(&lib, a).2, Some(12500), "{source}");
+            assert_eq!(key_bpm(&lib, a).3.as_deref(), Some(source));
+        }
+        // An earlier analysis BPM goes with its grid.
+        let b = insert(&lib, "/m/b.wav");
+        lib.store_analysis(b, &record("h1")).unwrap();
+        let out = lib.store_analysis(b, &empty).unwrap();
+        assert!(out.grid && out.bpm);
+        assert_eq!(key_bpm(&lib, b).2, None);
+        assert!(grid(&lib, b).is_empty());
     }
 
     #[test]

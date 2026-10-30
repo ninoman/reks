@@ -172,3 +172,50 @@ fn an_import_replaces_an_analysis_grid() {
     lib.store_analysis(id, &record).unwrap();
     assert_eq!(lib.beatgrid(id).unwrap(), g);
 }
+
+/// The library's BPM and its source for track `id`.
+fn bpm(lib: &Library, id: TrackId) -> (Option<i64>, Option<String>) {
+    let t = lib.track(id).unwrap().track;
+    (t.row.bpm_x100, t.bpm_source)
+}
+
+/// F09: the BPM of an edited grid, or one set by hand, survives a re-import.
+#[test]
+fn a_reimport_keeps_a_manual_bpm() {
+    let (dir, lib) = library();
+    import_fixture(&lib);
+    let (id, _) = lossless(&lib);
+    assert_eq!(bpm(&lib, id), (Some(12_800), Some("rekordbox".into())));
+    lib.edit_beatgrid(
+        id,
+        GridEdit::SetAnchors {
+            anchors: vec![GridAnchor {
+                position_ms: 0,
+                bpm_x100: 6_400,
+                beat_in_bar: 1,
+                beats_per_bar: 4,
+            }],
+        },
+    )
+    .unwrap();
+    assert_eq!(bpm(&lib, id), (Some(6_400), Some("manual".into())));
+    import_fixture(&lib);
+    assert_eq!(bpm(&lib, id), (Some(6_400), Some("manual".into())));
+
+    // A manual BPM beside a rekordbox grid stays too; the grid is replaced.
+    lib.edit_beatgrid(id, GridEdit::Reset { section: None })
+        .unwrap();
+    rusqlite::Connection::open(dir.path().join("reks.sqlite"))
+        .unwrap()
+        .execute(
+            "UPDATE track SET bpm_x100 = 12900, bpm_source = 'manual' WHERE id = ?1",
+            [id],
+        )
+        .unwrap();
+    import_fixture(&lib);
+    assert_eq!(bpm(&lib, id), (Some(12_900), Some("manual".into())));
+    assert_eq!(
+        lib.beatgrid(id).unwrap().source.as_deref(),
+        Some("rekordbox")
+    );
+}

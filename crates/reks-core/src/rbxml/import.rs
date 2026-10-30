@@ -718,7 +718,8 @@ impl Import<'_> {
         let probe = info.map(|i| probe_cols(&i.probe));
         let tags = info.map(|i| &i.tags);
         let tag = |f: fn(&reks_audio::Tags) -> &Option<String>| tags.and_then(|t| f(t).as_deref());
-        tx.prepare_cached(
+        // The BPM of an edited or locked grid, or one set by hand, stays (F09).
+        tx.prepare_cached(&format!(
             "UPDATE track SET
                path = :path, missing = :missing,
                file_size = coalesce(:size, file_size), file_mtime = coalesce(:mtime, file_mtime),
@@ -746,8 +747,10 @@ impl Import<'_> {
                color = coalesce(:color, color),
                key_source = CASE WHEN :key IS NULL THEN key_source ELSE 'rekordbox' END,
                key = coalesce(:key, key),
-               bpm_source = CASE WHEN :bpm IS NULL THEN bpm_source ELSE 'rekordbox' END,
-               bpm_x100 = coalesce(:bpm, bpm_x100),
+               bpm_source = CASE WHEN :bpm IS NULL OR bpm_source IS 'manual' OR {USER_OWNED}
+                 THEN bpm_source ELSE 'rekordbox' END,
+               bpm_x100 = CASE WHEN bpm_source IS 'manual' OR {USER_OWNED}
+                 THEN bpm_x100 ELSE coalesce(:bpm, bpm_x100) END,
                baseline_play_count = CASE WHEN :created
                  THEN coalesce(:play_count, baseline_play_count) ELSE baseline_play_count END,
                date_added = coalesce(:date_added, date_added),
@@ -756,8 +759,8 @@ impl Import<'_> {
                artwork_id = coalesce(artwork_id, :artwork_id),
                rb_track_id = :rb_track_id, rb_location = coalesce(:rb_location, rb_location),
                updated_at = :now
-             WHERE id = :id",
-        )?
+             WHERE id = :id"
+        ))?
         .execute(named_params! {
             ":id": id, ":path": path, ":missing": missing, ":size": size, ":mtime": mtime,
             ":hash": info.map(|i| &i.hash), ":kind": probe.as_ref().map(|p| p.kind),
@@ -856,6 +859,14 @@ impl Import<'_> {
     }
 
     fn write_cues(&mut self, tx: &Transaction<'_>, id: TrackId, t: &XmlTrack) -> Result<()> {
+        // Hot cue slots held by cues this import doesn't replace (set in reks).
+        let mut taken: Vec<u8> = {
+            let mut stmt = tx.prepare_cached(
+                "SELECT slot FROM cue WHERE track_id = ?1 AND source <> ?2 AND slot IS NOT NULL",
+            )?;
+            let slots = stmt.query_map(params![id, SOURCE], |r| r.get(0))?;
+            slots.collect::<rusqlite::Result<_>>()?
+        };
         let mut rows = Vec::with_capacity(t.position_marks.len());
         for m in &t.position_marks {
             let Some(slot) = cue_slot(m.num) else {
@@ -865,6 +876,20 @@ impl Import<'_> {
                 );
                 continue;
             };
+            if let Some(s) = slot {
+                if taken.contains(&s) {
+                    self.warn(
+                        Some(t.track_id),
+                        format!(
+                            "hot cue {} at {} s: the slot already holds a cue; skipped",
+                            hot_cue_letter(s),
+                            m.start
+                        ),
+                    );
+                    continue;
+                }
+                taken.push(s);
+            }
             if m.kind == 4 && m.end.is_none() {
                 self.warn(
                     Some(t.track_id),
@@ -1249,6 +1274,11 @@ fn rgb_int((r, g, b): (u8, u8, u8)) -> u32 {
 
 /// `Num` → hot-cue slot: −1 memory cue (`Some(None)`), 0..7 hot cue;
 /// anything else `None` (skipped).
+/// A–H for hot cue slots 0..7.
+fn hot_cue_letter(slot: u8) -> char {
+    char::from(b'A' + slot)
+}
+
 fn cue_slot(num: i32) -> Option<Option<u8>> {
     match num {
         -1 => Some(None),

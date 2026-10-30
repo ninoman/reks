@@ -198,7 +198,7 @@ fn restore_migrates_an_older_snapshot() {
         let c = Connection::open(&path).unwrap();
         c.execute_batch(
             "DROP TABLE filter_preset; ALTER TABLE track DROP COLUMN grid_base;
-             PRAGMA user_version = 11;",
+             DROP INDEX cue_hot_slot_idx; PRAGMA user_version = 11;",
         )
         .unwrap();
     }

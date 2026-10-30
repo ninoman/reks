@@ -31,6 +31,7 @@ const MIGRATION_LIST: &[M<'static>] = &[
     M::up(include_str!("../migrations/0012_filter_presets.sql")),
     M::up(include_str!("../migrations/0013_grid_base.sql")),
     M::up(include_str!("../migrations/0014_drop_mixed_grids.sql")),
+    M::up(include_str!("../migrations/0015_one_hot_cue_per_slot.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 
@@ -688,6 +689,54 @@ mod tests {
         };
         assert_eq!(sources(mixed), ["rekordbox"]);
         assert_eq!(sources(analysed), ["analysis"]);
+    }
+
+    #[test]
+    fn migration_15_keeps_one_hot_cue_per_slot() {
+        let mut c = Connection::open_in_memory().unwrap();
+        MIGRATIONS.to_version(&mut c, 14).unwrap();
+        let t = insert_track(&c, "/music/a.wav", "Alpha");
+        let cue = |slot: Option<i64>, start: i64, source: &str| {
+            c.execute(
+                "INSERT INTO cue (track_id, slot, kind, start_ms, source)
+                 VALUES (?1, ?2, 0, ?3, ?4)",
+                rusqlite::params![t, slot, start, source],
+            )
+            .unwrap();
+        };
+        cue(Some(0), 1, "rekordbox");
+        cue(Some(0), 2, "manual");
+        cue(Some(1), 3, "rekordbox");
+        cue(Some(1), 4, "rekordbox");
+        cue(None, 5, "rekordbox");
+        cue(None, 6, "rekordbox");
+        MIGRATIONS.to_version(&mut c, 15).unwrap();
+        let mut stmt = c
+            .prepare("SELECT slot, start_ms FROM cue ORDER BY start_ms")
+            .unwrap();
+        let rows: Vec<(Option<i64>, f64)> = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<std::result::Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            rows,
+            [(Some(0), 2.0), (Some(1), 3.0), (None, 5.0), (None, 6.0)]
+        );
+        // The index refuses a second hot cue in a slot, not a memory cue.
+        assert!(c
+            .execute(
+                "INSERT INTO cue (track_id, slot, kind, start_ms, source)
+                 VALUES (?1, 0, 0, 9, 'manual')",
+                [t],
+            )
+            .is_err());
+        c.execute(
+            "INSERT INTO cue (track_id, slot, kind, start_ms, source)
+             VALUES (?1, NULL, 0, 9, 'manual')",
+            [t],
+        )
+        .unwrap();
     }
 
     #[test]

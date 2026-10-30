@@ -265,7 +265,8 @@ Date of decisions: 2026-10-18.
   background (cores − 1 workers), but analysis only fills in. `beatgrid`
   rows are replaced only when all are `source = 'analysis'` (manual and
   rekordbox grids stay); `bpm_x100` follows a written grid unless
-  `bpm_source = 'manual'`; `key` is written only when empty or from
+  `bpm_source = 'manual'`, and an empty result (no grid found) clears only
+  an earlier analysis BPM, never a tag or rekordbox one (review F12); `key` is written only when empty or from
   analysis (manual, tag and rekordbox keys stay). reks's own result is
   always in the analysis cache, so task 10 and the parity report (task 12)
   can use it without touching the library. Rationale: unmeasured analysis
@@ -275,7 +276,9 @@ Date of decisions: 2026-10-18.
   whose track has `TEMPO` rows replaces that track's `analysis` grid rows
   (manual and locked grids stay whole, as above). "Analysis only fills in"
   covers the queue, not imports: two grids on one track interleave their
-  anchors. reks's own result stays in the analysis cache. Migration 0014
+  anchors. reks's own result stays in the analysis cache. The XML's
+  `AverageBpm` likewise leaves a user-owned grid's BPM and any
+  `bpm_source = 'manual'` BPM alone (review F09). Migration 0014
   removed `analysis` rows from tracks that already had `rekordbox` ones
   ([`rbxml/import.rs`](../crates/reks-core/src/rbxml/import.rs),
   test `an_import_replaces_an_analysis_grid` in
