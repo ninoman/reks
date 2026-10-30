@@ -24,10 +24,11 @@ rekordbox grid has one anchor:
 | Key exact or relative | ≥ 85% | 63.8% | 63.8% | 63.8% | below |
 | Throughput per core (small model) | ≥ 5× real time | 25.0× | 24.2× | 24.2× | met |
 
-The bar is not lowered: the [tuning plan](#tuning-plan) continues with key.
-Key is libKeyFinder's algorithm exactly (the port matches the C++ library on
-every track) and keeps its own major/minor decision; what is left is the
-tonic ([step 4](#tuning-plan)). The reference is the maintainer's grids as
+The bar is not lowered. Key is libKeyFinder's algorithm exactly (the port
+matches the C++ library on every track) and keeps its own major/minor
+decision ([step 4](#tuning-plan)); no tonic change reached the key bar
+either ([step 5](#tuning-plan)), so whether to lower the key targets or
+replace the detector is open (D12, proposed). The reference is the maintainer's grids as
 rekordbox holds them, many corrected by hand, so this measures distance from
 a checked grid, not just from rekordbox's own analysis. Grids with several
 anchors are the maintainer's edits of tempo changes and re-phased sections;
@@ -347,8 +348,54 @@ that touches audio), and the doc is updated with the new numbers.
      minor is the largest group (40 tracks, the Phrygian psytrance case),
      then thirds and a whole tone; rekordbox's key is our second or third
      choice on 81 of the 274. Mode tuning cannot reach 70% exact (cap
-     77.6% with this tonic); the next candidates work on the tonic, e.g.
-     bass-weighted or kick-synchronous chroma.
+     77.6% with this tonic), so step 5 works on the tonic.
+5. **Key: tonic. Done (no analyser change); key bar not met.**
+   Measured 2026-10-30 ([#22](https://github.com/ninoman/reks/issues/22))
+   the same way as the mode: each track's 72-band frames, plain and with
+   every kick muted, scored offline (libKeyFinder's scoring reproduces
+   every stored key). 33 files have left the disk since
+   the version 3 run, so the sets are 1,733 scored and 875 hand-edited
+   tracks, and today's key scores 62.6% / 65.1% exact on them. "Fixed /
+   broken" counts tracks that a candidate turns exact or no longer exact.
+
+   | Tonic candidate | Scored exact | Holdout exact | Fixed / broken (scored) | Fixed / broken (holdout) |
+   | --- | --- | --- | --- | --- |
+   | libKeyFinder (kept) | 62.6% | 65.1% | – | – |
+   | bass-weighted chroma, C2–B2 × 0.5 | 63.0% | 63.4% | 48 / 40 | 15 / 30 |
+   | bass-weighted chroma, C1–B3 × 1.5 | 62.0% | 65.3% | 36 / 45 | 23 / 22 |
+   | kick-muted chroma (100 ms per kick) | 62.1% | 64.0% | 75 / 82 | 35 / 45 |
+   | re-rank top 2 by kick-muted bass | 63.2% | 65.4% | 33 / 22 | 12 / 10 |
+   | re-rank top 3 by bass, C1–B3 | 62.8% | 65.7% | 37 / 33 | 16 / 11 |
+   | tuning ±10 cents, most kernel energy | 63.0% | 65.6% | 55 / 48 | 26 / 22 |
+   | tuning + top-2 re-rank (best rule) | 63.5% | 65.8% | 71 / 54 | 31 / 25 |
+   | templates fitted to rekordbox, 5-fold (out of sample) | 67.5% | 68.2% | 189 / 103 | 89 / 62 |
+   | templates fitted on the scored set | 70.5% (training set) | 68.0% | 224 / 87 | 93 / 68 |
+   | *cap: rekordbox's tonic, our mode* | 79.4% | 82.7% | | |
+   | *cap: rekordbox's key when in our top 2 / top 3* | 80.1% / 86.0% | 80.8% / 86.5% | | |
+
+   - *Rules are noise.* Each fixes about as many tracks as it breaks; the
+     best (McNemar z 1.5 scored, 0.8 holdout) is not significant on either
+     set. Our top two keys are a median 0.0066 apart in cosine (0.0039 on
+     misses), so any change to the chroma flips tracks both ways. Also no
+     gain: the loudest bass pitch as the tonic (24–48% exact), harmonic
+     suppression, a per-frame majority vote (59.9% / 61.8%), fixed tuning
+     offsets, bass weights 0–3 on any octave range, 200 ms kick mutes.
+   - *Fitted templates are the only real gain, and fall short.* Major and
+     minor weights over the 72 bands of the plain and kick-muted chroma,
+     the same for every transposition, trained on rekordbox's keys: +4.9 /
+     +3.1 points on tracks they were not fitted to (z 5.0 / 2.2), still
+     below 70%. They call 93% of tracks minor (libKeyFinder 86%) and
+     rekordbox-major tracks drop from 24% / 32% to 19% / 19% exact, the
+     drift step 4 rejected for mode. The semitone-up minor group (61
+     tracks over both sets): rules fix 2–6, templates 14–15.
+   - *85% exact-or-relative is out of reach for the tonic alone.* With
+     rekordbox's tonic and our mode, exact-or-relative equals exact (a
+     relative key has another tonic): 79.4% / 82.7%. Meeting 85% needs
+     the mode to change too, which step 4 ruled out.
+
+   Key stays at 62.3% exact and 63.8% exact or relative. Lowering the key
+   bar or replacing the detector is the maintainer's call (D12, proposed).
+   The frame dump was a one-off tool, not kept.
 
 Hardware is unaffected by this measurement; the phase's CDJ checklist still
 applies to whatever grid the tuning ends with.

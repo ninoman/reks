@@ -477,7 +477,30 @@ Date of decisions: 2026-10-18.
   parallel-mode miss is three Camelot steps off. Rejected: minor bias,
   parallel-switch threshold, segment voting, energy-weighted frames (all
   measured in docs/analysis-parity.md). Revisit if tonic work (the larger
-  error, 15.6% wrong tonic) changes the chroma.
+  error, 15.6% wrong tonic) changes the chroma; it did not (below).
+- Tonic (status: **proposed** 2026-10-30, phase 3 task 12a,
+  [#22](https://github.com/ninoman/reks/issues/22)): no analyser change,
+  and the key bar (≥ 70% exact, ≥ 85% exact or relative) is not met.
+  Measured offline on 1,733 scored and 875 hand-edited tracks
+  (docs/analysis-parity.md, tuning step 5): bass-weighted chroma,
+  kick-muted chroma, re-ranking our top 2–3 keys and tuning correction each
+  fix about as many tracks as they break (best +0.9 / +0.7 points, not
+  significant). Templates fitted to rekordbox's keys gain +4.9 / +3.1
+  points out of sample (67.5% / 68.2% exact), still below 70%, and call
+  93% of tracks minor, the drift rejected for mode above. With rekordbox's
+  tonic and our mode, exact-or-relative caps at 79.4% / 82.7%, so the tonic
+  alone cannot meet 85%.
+  - Proposed: keep libKeyFinder's key as it is. Phase 3's key criterion
+    becomes "equals the C++ libKeyFinder on the maintainer's library" (met,
+    D12 above); agreement with rekordbox (62.3% exact, 63.8% exact or
+    relative) is reported, not gated. Key stays advisory with its
+    confidence shown, and analysis never overwrites a manual, tag or
+    rekordbox key (D10).
+  - Alternative: replace the detector (e.g. a trained key model) in a later
+    phase, under its own decision and licence check; phase 3's key bar
+    stays open until then. Not evaluated here.
+  - Rejected: fitted templates (below target, minor drift), every tonic
+    rule in the table (noise).
 
 ## D13. Waveforms (Phase 3): own Rust generator at 150 columns/s, calibrated against rekordbox output
 
