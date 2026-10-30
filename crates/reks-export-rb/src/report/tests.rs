@@ -346,7 +346,6 @@ fn problems_are_grouped_with_track_names() {
             message: "title matched two tracks".into(),
         },
     ];
-    writer.prune_skipped = true;
     let v = report.validation.as_mut().unwrap();
     v.findings = vec![
         Finding::TrackNotInPdb {
@@ -363,6 +362,7 @@ fn problems_are_grouped_with_track_names() {
         Finding::PdbMissing,
     ];
     report.errors = vec!["fsync failed: /x: busy".into()];
+    report.stale_removed = 2;
     report.status = ExportStatus::Problems;
     report.manifest = ManifestStatus::Skipped;
     report.manifest_rows = 0;
@@ -419,10 +419,7 @@ fn problems_are_grouped_with_track_names() {
             ),
         ]
     );
-    assert_eq!(
-        fact(&r.facts, "Stale files"),
-        "Kept: tracks failed, so nothing was removed"
-    );
+    assert_eq!(fact(&r.facts, "Stale files"), "2 removed");
     assert_eq!(fact(&r.facts, "Read back"), "4 problems found");
     assert_eq!(
         fact(&r.facts, "Library record"),

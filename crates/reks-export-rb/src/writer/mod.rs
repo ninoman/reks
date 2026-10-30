@@ -20,16 +20,28 @@
 //!   reuses a path for different audio), ANLZ files of tracks already on the
 //!   stick are rewritten in place for the same track.
 //! - `export.pdb` itself is written beside the old one and renamed over it,
-//!   so a crash leaves one or the other.
+//!   so an app crash leaves one or the other. baken does not fsync before
+//!   the rename (baken-core `fsname.rs:85`), so an unplug or power loss
+//!   right after it may leave a renamed but incomplete file; [`crate::apply`]
+//!   fsyncs it as soon as the writer returns (review F16).
+//! - A writer deletes nothing that the plan lists in `deletes`: baken runs
+//!   without `prune`, and [`crate::apply`] deletes exactly
+//!   [`ExportPlan::deletes`] once the new files are flushed. baken still
+//!   removes rekordbox's OneLibrary files after the new `export.pdb`, which
+//!   the plan lists too.
 //! - A track that fails alone (its source unreadable mid-run) does **not**
-//!   stop the run: baken writes `export.pdb` without it and skips the prune.
-//!   The track is in [`WriterReport::failures`]; the validator then reports
-//!   the plan/stick difference.
-//! - An error after `export.pdb` was replaced (settings copy, prune):
+//!   stop the run: baken writes `export.pdb` without it. The track is in
+//!   [`WriterReport::failures`]; the validator then reports the plan/stick
+//!   difference.
+//! - An error after `export.pdb` was replaced (settings copy):
 //!   [`WriterError::AfterDatabase`].
+//!
+//! ANLZ slot numbers ([`anlz_slots`]) depend only on the planned paths, not
+//! on plan order, so the same tracks always land in the same files.
 
 mod baken;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use reks_core::{CancelToken, TrackId};
@@ -38,6 +50,24 @@ use serde::Serialize;
 use crate::plan::ExportPlan;
 
 pub use baken::{BakenWriter, SettingsSource};
+
+/// Each planned track's ANLZ folder and slot (`ANLZ0000` is slot 0): tracks
+/// whose paths share a folder ([`crate::plan::anlz_dir`]) are numbered in
+/// `dst_rel` order, so the assignment does not depend on plan order.
+pub fn anlz_slots(plan: &ExportPlan) -> HashMap<TrackId, (String, u16)> {
+    let mut tracks: Vec<_> = plan.tracks.iter().collect();
+    tracks.sort_by(|a, b| a.dst_rel.cmp(&b.dst_rel).then(a.track_id.cmp(&b.track_id)));
+    let mut slots = baken_export::anlz::hash::AnlzSlots::default();
+    tracks
+        .into_iter()
+        .map(|t| (t.track_id, slots.assign(&t.dst_rel)))
+        .collect()
+}
+
+/// The stick path of slot `index`'s file with extension `ext` in `dir`.
+pub fn anlz_file(dir: &str, index: u16, ext: &str) -> String {
+    format!("{dir}/ANLZ{index:04}.{ext}")
+}
 
 /// Writes an [`ExportPlan`] to a stick.
 pub trait RekordboxWriter {
@@ -90,10 +120,6 @@ pub struct WriterReport {
     pub anlz_generated: usize,
     /// Tracks that got artwork.
     pub artwork: usize,
-    /// Stale files removed.
-    pub pruned: usize,
-    /// Pruning was due but skipped because tracks failed.
-    pub prune_skipped: bool,
     /// rekordbox's OneLibrary files removed, and those the OS refused to remove.
     pub onelibrary_removed: usize,
     pub onelibrary_kept: usize,

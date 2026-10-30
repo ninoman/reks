@@ -782,6 +782,7 @@ async function exportApply(onEvent: Channel<ExportProgress>): Promise<ExportRepo
   }
   for (const [stage, title] of [
     ["sync", "Flushing the written files to the stick"],
+    ["delete", "Deleting the stale files the dry run listed"],
     ["validate", "Reading the stick back to check it"],
     ["manifest", "Recording what is on the stick"],
   ] as const) {

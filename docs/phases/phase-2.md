@@ -126,8 +126,9 @@ Device layout written (via baken, verified by us)
 
 Stale-file policy
 - "Stale" = any file under `/Contents`, `/PIONEER/USBANLZ`, `/PIONEER/Artwork`
-  not referenced by the new plan. Default: delete (baken `prune`), listed in
-  the dry run. Option: keep. Files outside those folders are never touched.
+  not referenced by the new plan. Default: delete, listed in the dry run;
+  since 2026-10-30 `apply` deletes exactly the listed files after the new
+  ones are flushed, and baken runs without `prune` (review F16). Option: keep. Files outside those folders are never touched.
 - A stick previously written by rekordbox is detected (`exportLibrary.db`,
   `exportExt.pdb`, `.sync` files present); warn that rekordbox will show its
   "out of matching" caution afterwards and that reks rewrites the Device
@@ -270,14 +271,15 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    so PDB `file_path`, PPTH and USBANLZ all carry our ASCII path; no upstream
    patch needed. A planned track missing from baken's plan or with another
    source is `PlanMismatch` before any write; `ExportWithout` is refused
-   (baken writes ANLZ for every track). `prune` = `!keep_stale`, settings via
+   (baken writes ANLZ for every track). `prune` off (`apply` deletes the
+   plan's deletes itself, F16), ANLZ slots by `dst_rel` order, settings via
    `SettingsSource` (default `Skip` = baken `no_settings`), device name = the
    plan's label, `cancel` is passed to baken between tracks. Failure
    behaviour (read from baken 4.6.1 and tested where it can be provoked):
    cancel and stick-wide errors (`DeviceWrite`, `NotEnoughSpace`) leave the
    old `export.pdb` byte for byte; `export.pdb` is written beside the old one
    and renamed; a single failing track does **not** stop the run (new PDB
-   without it, prune skipped, `WriterReport::failures`); errors after the PDB
+   without it, `WriterReport::failures`); errors after the PDB
    was replaced are `AfterDatabase`. The test reads the stick back with
    rekordcrate: 20 tables, one row per planned track, `file_path` = `dst_rel`,
    `file_type` codes, UTF-16 for non-ASCII titles/artists, PPTH = `dst_rel`.
