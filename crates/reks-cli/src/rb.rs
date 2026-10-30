@@ -58,12 +58,10 @@ use reks_export_rb::apply::{
     StickCheck,
 };
 use reks_export_rb::device::{self, DeviceInfo, FsKind};
-use reks_export_rb::divider;
 use reks_export_rb::history::{self, HistoryPolicy, HistorySession, StickHistory};
 use reks_export_rb::onelibrary::resolve_key;
 use reks_export_rb::plan::{
-    self, human_bytes, AnlzOp, CacheLocator, ExportOptions, ExportPlan, MissingAnalysis, ReksCache,
-    Selection,
+    self, human_bytes, AnlzOp, CacheLocator, ExportOptions, ExportPlan, MissingAnalysis, Selection,
 };
 use reks_export_rb::rbcache::{self, RbCache};
 use reks_export_rb::validate::{self, ValidationReport};
@@ -543,13 +541,7 @@ fn build_plan(
         cache.roots()
     );
     let locator = CacheLocator::for_selection(&lib, &sel, cache)?;
-    let mut sources = plan::load(&lib, &sel)?;
-    if opts.dividers {
-        divider::expand(&mut sources, &lib.cache_dir().join(divider::DIVIDER_DIR))?;
-    }
-    let reks = ReksCache::new(lib.cache_dir());
-    let mut plan = plan::plan_sources(sources, dev, serial, &opts, &locator, &reks)?;
-    plan::guard_history(&mut plan, &lib)?;
+    let mut plan = plan::plan_with_serial(&lib, &sel, dev, serial, &opts, &locator)?;
     let key = resolve_key();
     plan::plan_onelibrary(&mut plan, &ONELIBRARY, key.as_ref(), &lib)?;
     let key = key.filter(|_| plan.onelibrary.is_some());

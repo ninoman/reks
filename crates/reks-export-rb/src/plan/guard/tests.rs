@@ -122,6 +122,29 @@ fn unimported_sessions_block_until_a_choice() {
     assert_eq!(again.errors, plan.errors);
 }
 
+/// `plan_with_serial` runs the export guard as `plan` does, with the given
+/// serial (the CLI's path for a folder standing in for a stick).
+#[test]
+fn plan_with_serial_runs_the_guard() {
+    let w = World::new();
+    w.put_played_pdb();
+    let opts = options(HistoryPolicy::BackUp, false);
+    let p = plan::plan_with_serial(
+        &w.lib,
+        &w.sel(),
+        &w.dev(),
+        Some(SERIAL.into()),
+        &opts,
+        &NoAnlz,
+    )
+    .unwrap();
+    assert_eq!(p.history.volume_serial.as_deref(), Some(SERIAL));
+    assert_eq!(p.guard.sessions.len(), 2);
+    assert!(p
+        .errors
+        .contains(&Problem::HistoryNotImported { sessions: 2 }));
+}
+
 #[test]
 fn import_now_imports_backs_up_then_writes() {
     let w = World::new();

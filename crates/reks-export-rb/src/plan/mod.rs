@@ -616,13 +616,27 @@ pub fn plan(
     opts: &ExportOptions,
     anlz: &dyn AnlzLocator,
 ) -> Result<ExportPlan, PlanError> {
+    let serial = crate::device::volume_serial(dev);
+    plan_with_serial(lib, sel, dev, serial, opts, anlz)
+}
+
+/// [`plan`] with the volume serial given rather than asked of the OS: for a
+/// directory standing in for a stick (`reks rb` on a folder, which has none)
+/// and for tests. Same steps otherwise, so every guard [`plan`] runs applies.
+pub fn plan_with_serial(
+    lib: &Library,
+    sel: &Selection,
+    dev: &DeviceInfo,
+    volume_serial: Option<String>,
+    opts: &ExportOptions,
+    anlz: &dyn AnlzLocator,
+) -> Result<ExportPlan, PlanError> {
     let mut sources = load(lib, sel)?;
     if opts.dividers {
         divider::expand(&mut sources, &lib.cache_dir().join(divider::DIVIDER_DIR))?;
     }
-    let serial = crate::device::volume_serial(dev);
     let reks = ReksCache::new(lib.cache_dir());
-    let mut plan = plan_sources(sources, dev, serial, opts, anlz, &reks)?;
+    let mut plan = plan_sources(sources, dev, volume_serial, opts, anlz, &reks)?;
     guard_history(&mut plan, lib)?;
     Ok(plan)
 }
