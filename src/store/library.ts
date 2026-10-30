@@ -16,6 +16,7 @@ import {
   type DividerRow,
   type Facets,
   libraryFacets,
+  libraryPages,
   libraryQuery,
   type RuleNode,
   type Sort,
@@ -114,6 +115,8 @@ export interface LibraryState extends QueryInputs {
   refresh(keepPlace?: boolean): void;
   /** Loads every page overlapping table rows `start..=end` that isn't loaded yet. */
   ensureRange(start: number, end: number): void;
+  /** Loads the pages holding table rows `rows` that aren't loaded yet, in one backend pass. */
+  ensureRows(rows: Iterable<number>): void;
   select(action: SelectionAction): void;
   /**
    * Swaps in a changed row (after an edit) wherever it is loaded, without
@@ -131,6 +134,23 @@ export type LibraryStore = UseBoundStore<StoreApi<LibraryState>>;
 
 export function createLibraryStore(): LibraryStore {
   return create<LibraryState>()((set, get) => {
+    /** Pages of the current generation that are neither loaded nor on their way. */
+    function missing(pages: Iterable<number>): number[] {
+      const s = get();
+      return [...new Set(pages)]
+        .filter((p) => p * PAGE_SIZE < s.total && !s.pages.has(p) && !s.inFlight.has(p))
+        .sort((a, b) => a - b);
+    }
+
+    function markDone(pages: readonly number[], generation: number) {
+      if (get().generation !== generation) return;
+      set((s) => {
+        const inFlight = new Set(s.inFlight);
+        for (const p of pages) inFlight.delete(p);
+        return { inFlight };
+      });
+    }
+
     async function fetchPage(page: number, generation: number): Promise<void> {
       set((s) => ({ inFlight: new Set(s.inFlight).add(page) }));
       try {
@@ -152,14 +172,32 @@ export function createLibraryStore(): LibraryStore {
       } catch (e) {
         if (get().generation === generation) set({ error: String(e) });
       } finally {
-        if (get().generation === generation) {
-          set((s) => {
-            const inFlight = new Set(s.inFlight);
-            inFlight.delete(page);
-            return { inFlight };
-          });
-        }
+        markDone([page], generation);
       }
+    }
+
+    /** Several pages in one query: one pass over the sorted result instead of an OFFSET walk per page. */
+    async function fetchPages(wanted: readonly number[], generation: number): Promise<void> {
+      set((s) => ({ inFlight: new Set([...s.inFlight, ...wanted]) }));
+      try {
+        const result = await libraryPages(buildQuery(get(), 0), PAGE_SIZE, [...wanted]);
+        if (get().generation !== generation) return;
+        set((s) => {
+          const pages = new Map(s.pages);
+          for (const { page, rows } of result) pages.set(page, rows);
+          return { pages, error: null };
+        });
+      } catch (e) {
+        if (get().generation === generation) set({ error: String(e) });
+      } finally {
+        markDone(wanted, generation);
+      }
+    }
+
+    /** One page by itself, several as a batch. */
+    function load(pages: readonly number[], generation: number) {
+      if (pages.length === 1) void fetchPage(pages[0] as number, generation);
+      else if (pages.length > 1) void fetchPages(pages, generation);
     }
 
     return {
@@ -234,10 +272,14 @@ export function createLibraryStore(): LibraryStore {
         if (s.pagesGeneration !== s.generation) return;
         const first = Math.max(0, Math.floor(trackIndex(s, start) / PAGE_SIZE));
         const last = Math.floor(trackIndex(s, Math.max(start, end)) / PAGE_SIZE);
-        for (let p = first; p <= last; p++) {
-          if (p * PAGE_SIZE >= s.total) break;
-          if (!s.pages.has(p) && !s.inFlight.has(p)) void fetchPage(p, s.generation);
-        }
+        const range: number[] = [];
+        for (let p = first; p <= last; p++) range.push(p);
+        load(missing(range), s.generation);
+      },
+      ensureRows(rows) {
+        const s = get();
+        if (s.pagesGeneration !== s.generation) return;
+        load(missing(trackPages(s, rows)), s.generation);
       },
       select(action) {
         set((s) => ({ selection: selectionReducer(s.selection, action) }));
@@ -322,6 +364,19 @@ export function trackIndex(v: LoadedView, index: number): number {
     n++;
   }
   return index - n;
+}
+
+/** Pages (in order) holding the tracks among table rows `rows`; dividers have none. */
+export function trackPages(v: LoadedView, rows: Iterable<number>): number[] {
+  const slots = dividerSlots(v);
+  const pages = new Set<number>();
+  let n = 0; // dividers before the current row
+  for (const index of [...rows].sort((a, b) => a - b)) {
+    while (n < slots.length && (slots[n] as number) < index) n++;
+    if (slots[n] === index) continue;
+    pages.add(Math.floor((index - n) / PAGE_SIZE));
+  }
+  return [...pages];
 }
 
 /** Table row `index`: a divider, or a track if its page is loaded. */

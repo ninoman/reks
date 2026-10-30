@@ -11,6 +11,7 @@ import {
   type ImportPreview,
   type ImportReport,
   type PrefixRemap,
+  rbxmlForget,
   rbxmlImportCancel,
   rbxmlImportStart,
   rbxmlPreview,
@@ -169,6 +170,7 @@ export const useImportWizard = create<ImportWizardState>((set, get) => {
     close() {
       if (get().step === "importing") return;
       previewGeneration++;
+      void rbxmlForget();
       set(idle);
     },
   };

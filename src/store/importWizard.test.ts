@@ -6,6 +6,7 @@ vi.mock("../lib/ipc", () => ({
   rbxmlPreview: vi.fn(),
   rbxmlImportStart: vi.fn(),
   rbxmlImportCancel: vi.fn(),
+  rbxmlForget: vi.fn(),
   playlistsGet: vi.fn(),
   libraryFacets: vi.fn(),
   libraryQuery: vi.fn(),
@@ -17,6 +18,7 @@ const ipc = await import("../lib/ipc");
 const rbxmlPreview = vi.mocked(ipc.rbxmlPreview);
 const rbxmlImportStart = vi.mocked(ipc.rbxmlImportStart);
 const rbxmlImportCancel = vi.mocked(ipc.rbxmlImportCancel);
+const rbxmlForget = vi.mocked(ipc.rbxmlForget);
 const { useLibrary } = await import("./library");
 const { useImportWizard } = await import("./importWizard");
 
@@ -163,6 +165,13 @@ describe("useImportWizard", () => {
     // The wizard can't be closed mid-import.
     w.close();
     expect(useImportWizard.getState().step).toBe("importing");
+  });
+
+  it("closing the wizard frees the backend's parsed XML", async () => {
+    rbxmlPreview.mockResolvedValue(previewOf());
+    await useImportWizard.getState().open("/x/c.xml");
+    useImportWizard.getState().close();
+    expect(rbxmlForget).toHaveBeenCalledOnce();
   });
 
   it("a failed import returns to review with the error", async () => {

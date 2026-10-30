@@ -172,6 +172,65 @@ pub struct TrackPage {
     pub divider_view: bool,
 }
 
+/// One page of rows from `Library::track_pages`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackPageRows {
+    pub page: u32,
+    pub rows: Vec<TrackRow>,
+}
+
+/// The FROM/WHERE/ORDER parts of a track query, shared by the paged and the
+/// multi-page reads.
+struct RowSelect {
+    view: Option<PlaylistId>,
+    from: &'static str,
+    entry_col: &'static str,
+    where_sql: String,
+    where_params: Vec<Value>,
+    order: String,
+    order_params: Vec<Value>,
+}
+
+impl RowSelect {
+    fn build(conn: &Connection, q: &TrackQuery) -> Result<Self> {
+        let index = if q.mentions_playlist() {
+            PlaylistIndex::load(conn)?
+        } else {
+            PlaylistIndex::default()
+        };
+        let view = first_playlist(q).filter(|&id| index.is_static_playlist(id));
+        let w = where_clause(q, view, &index)?;
+        let (order, order_params) = order_by(q.sort, view, first_playlist(q), &index);
+        // In a playlist view every entry is a row; `pe.position` is its place.
+        let (from, entry_col) = match view {
+            Some(_) => (
+                "track t JOIN playlist_track pe ON pe.track_id = t.id AND pe.playlist_id = ?",
+                "pe.position",
+            ),
+            None => ("track t", "NULL"),
+        };
+        let mut where_params: Vec<Value> = view.map(Value::Integer).into_iter().collect();
+        where_params.extend(w.params);
+        Ok(Self {
+            view,
+            from,
+            entry_col,
+            where_sql: w.sql,
+            where_params,
+            order,
+            order_params,
+        })
+    }
+
+    fn select_sql(&self) -> String {
+        format!(
+            "SELECT {ROW_COLUMNS}, {} FROM {}{}",
+            self.entry_col, self.from, self.where_sql
+        )
+    }
+}
+
 /// A divider entry in a playlist (D22).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -234,36 +293,20 @@ impl Library {
     /// One page of tracks matching `q`, and the total match count.
     pub fn tracks(&self, q: &TrackQuery) -> Result<TrackPage> {
         let conn = self.conn()?;
-        let index = if q.mentions_playlist() {
-            PlaylistIndex::load(&conn)?
-        } else {
-            PlaylistIndex::default()
-        };
-        let view = first_playlist(q).filter(|&id| index.is_static_playlist(id));
-        let w = where_clause(q, view, &index)?;
-        let (order, order_params) = order_by(q.sort, view, first_playlist(q), &index);
-        // In a playlist view every entry is a row; `pe.position` is its place.
-        let (from, entry_col) = match view {
-            Some(_) => (
-                "track t JOIN playlist_track pe ON pe.track_id = t.id AND pe.playlist_id = ?",
-                "pe.position",
-            ),
-            None => ("track t", "NULL"),
-        };
-        let mut params: Vec<Value> = view.map(Value::Integer).into_iter().collect();
-        params.extend(w.params);
-
+        let sel = RowSelect::build(&conn, q)?;
         let total: i64 = conn.query_row(
-            &format!("SELECT count(*) FROM {from}{}", w.sql),
-            params_from_iter(&params),
+            &format!("SELECT count(*) FROM {}{}", sel.from, sel.where_sql),
+            params_from_iter(&sel.where_params),
             |r| r.get(0),
         )?;
 
         let sql = format!(
-            "SELECT {ROW_COLUMNS}, {entry_col} FROM {from}{} ORDER BY {order} LIMIT ? OFFSET ?",
-            w.sql
+            "{} ORDER BY {} LIMIT ? OFFSET ?",
+            sel.select_sql(),
+            sel.order
         );
-        params.extend(order_params);
+        let mut params = sel.where_params.clone();
+        params.extend(sel.order_params.iter().cloned());
         params.push(Value::Integer(i64::from(q.limit.clamp(1, MAX_PAGE))));
         params.push(Value::Integer(i64::from(q.offset)));
         let mut stmt = conn.prepare_cached(&sql)?;
@@ -276,6 +319,7 @@ impl Library {
             .collect::<rusqlite::Result<Vec<_>>>()?;
         fill_tags(&conn, &mut rows)?;
 
+        let view = sel.view;
         let divider_view = view.is_some_and(|id| q.shows_dividers(id));
         let dividers = match view {
             Some(id) if divider_view => conn
@@ -301,6 +345,54 @@ impl Library {
             dividers,
             divider_view,
         })
+    }
+
+    /// The pages `pages` (of `page_size` tracks each, in `q`'s order, `q`'s
+    /// offset and limit ignored) in one sorted pass instead of one `OFFSET`
+    /// query per page. Pages past the end are left out.
+    pub fn track_pages(
+        &self,
+        q: &TrackQuery,
+        page_size: u32,
+        pages: &[u32],
+    ) -> Result<Vec<TrackPageRows>> {
+        let Some(&last) = pages.iter().max() else {
+            return Ok(Vec::new());
+        };
+        let size = page_size.clamp(1, MAX_PAGE) as usize;
+        let wanted: std::collections::BTreeSet<usize> = pages.iter().map(|&p| p as usize).collect();
+        let conn = self.conn()?;
+        let sel = RowSelect::build(&conn, q)?;
+        let sql = format!("{} ORDER BY {}", sel.select_sql(), sel.order);
+        let mut params = sel.where_params.clone();
+        params.extend(sel.order_params.iter().cloned());
+        let mut stmt = conn.prepare_cached(&sql)?;
+        let mut rows = stmt.query(params_from_iter(&params))?;
+        let mut out: Vec<TrackPageRows> = Vec::new();
+        let mut index = 0usize;
+        while let Some(r) = rows.next()? {
+            let page = index / size;
+            if page > last as usize {
+                break;
+            }
+            index += 1;
+            if !wanted.contains(&page) {
+                continue;
+            }
+            let mut row = track_row(r)?;
+            row.entry_position = r.get(22)?;
+            match out.last_mut() {
+                Some(p) if p.page as usize == page => p.rows.push(row),
+                _ => out.push(TrackPageRows {
+                    page: page as u32,
+                    rows: vec![row],
+                }),
+            }
+        }
+        for p in &mut out {
+            fill_tags(&conn, &mut p.rows)?;
+        }
+        Ok(out)
     }
 
     /// Genres, keys, colours and playlists for the filter sidebar.

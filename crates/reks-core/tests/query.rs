@@ -640,6 +640,33 @@ fn paging_and_total() {
 }
 
 #[test]
+fn track_pages_match_offset_paging() {
+    let env = seeded();
+    let q = TrackQuery {
+        sort: Sort {
+            column: SortColumn::Title,
+            descending: true,
+        },
+        ..TrackQuery::default()
+    };
+    // Pages 2 and 0 asked out of order, page 1 skipped, page 9 past the end.
+    let got = env.lib.track_pages(&q, 2, &[2, 0, 9]).unwrap();
+    assert_eq!(got.iter().map(|p| p.page).collect::<Vec<_>>(), [0, 2]);
+    for p in &got {
+        let expected = env
+            .lib
+            .tracks(&TrackQuery {
+                offset: p.page * 2,
+                limit: 2,
+                ..q.clone()
+            })
+            .unwrap();
+        assert_eq!(p.rows, expected.rows, "page {}", p.page);
+    }
+    assert!(env.lib.track_pages(&q, 2, &[]).unwrap().is_empty());
+}
+
+#[test]
 fn full_text_search() {
     let env = seeded();
     let s = |text: &str| env.matching(Some(text), vec![]);

@@ -590,10 +590,10 @@ there, the `player_*` commands, polling and transport bar are gone.
 
 ### Tauri commands (`src-tauri`)
 
-`library_query`, `library_facets`, `library_track`, `library_update_track`, `library_bulk_update_tracks`, `playlists_get`, `tags_get`, `tags_mutate`,
+`library_query`, `library_pages` (several pages in one sorted pass, for select-all), `library_facets`, `library_track`, `library_update_track`, `library_bulk_update_tracks`, `playlists_get`, `tags_get`, `tags_mutate`,
 `filter_presets_get`, `filter_presets_mutate`,
 `playlists_mutate`, `playlist_rule`, `scan_start` (progress via `Channel<ScanEvent>`), `scan_cancel`,
-`rbxml_preview(path, remap)`, `rbxml_import_start` (progress via Channel), `rbxml_import_cancel`, `rbxml_export`,
+`rbxml_preview(path, remap)`, `rbxml_import_start` (progress via Channel), `rbxml_import_cancel`, `rbxml_forget` (drops the parse cached between preview and import), `rbxml_export`,
 `player_load(id, play)`, `player_play/pause/seek/volume/devices/set_device`,
 `player_state` (polled every 100 ms while playing; these and `overview_waveform` were replaced by the
 mix engine's deck 2 and `audio_devices` in D30), `artwork_get(artwork_id) -> Response(bytes)`, `overview_waveform(id) ->
