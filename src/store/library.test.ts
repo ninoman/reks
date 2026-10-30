@@ -10,6 +10,7 @@ import {
   type QueryInputs,
   rowAt,
   trackIndex,
+  trackPages,
   viewCount,
 } from "./library";
 
@@ -117,5 +118,25 @@ describe("table rows with dividers", () => {
     expect(viewCount(plain)).toBe(3);
     expect(itemAt(plain, 2)).toEqual({ kind: "track", row: row(12) });
     expect(trackIndex(plain, 2)).toBe(2);
+  });
+});
+
+describe("trackPages", () => {
+  const view = (dividers: { position: number }[]) => ({
+    pages: new Map(),
+    total: PAGE_SIZE * 3,
+    dividers: dividers.map((d) => ({ ...d, label: "", ascii: true })),
+  });
+
+  it("maps table rows to the distinct pages of their tracks", () => {
+    expect(trackPages(view([]), [0, 1, PAGE_SIZE, PAGE_SIZE * 2 + 7, 5])).toEqual([0, 1, 2]);
+  });
+
+  it("skips dividers and shifts rows after them", () => {
+    // A divider at table row 0 (position 0): row 0 has no track, row PAGE_SIZE is track PAGE_SIZE-1.
+    const v = view([{ position: 0 }]);
+    expect(trackPages(v, [0])).toEqual([]);
+    expect(trackPages(v, [PAGE_SIZE])).toEqual([0]);
+    expect(trackPages(v, [PAGE_SIZE + 1])).toEqual([1]);
   });
 });

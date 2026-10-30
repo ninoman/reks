@@ -671,3 +671,23 @@ fn dividers_are_their_own_group() {
     let d = plan.tracks.iter().find(|t| t.is_divider()).unwrap();
     assert_eq!(labels[&d.track_id], "Divider \"PEAK\"");
 }
+
+#[test]
+fn file_group_lists_the_first_rows_but_counts_all() {
+    let n = FILE_LIST_CAP + 50;
+    let ops: Vec<FileOp> = (0..n)
+        .map(|i| FileOp {
+            src: None,
+            dst_rel: format!("/Contents/{i}.mp3"),
+            bytes: 10,
+            track_id: None,
+            reason: crate::plan::OpReason::NotOnStick,
+        })
+        .collect();
+    let g = file_group(&ops, false);
+    assert_eq!(g.files.len(), FILE_LIST_CAP);
+    assert_eq!(g.files[0].path, "/Contents/0.mp3");
+    assert_eq!(g.count, n);
+    assert_eq!(g.bytes, 10 * n as u64);
+    assert_eq!(g.total_text, total_text(n, 10 * n as u64));
+}

@@ -496,6 +496,24 @@ describe("ExportWizard", () => {
     expect(screen.getByText("Step 3 of 6: Options")).toBeTruthy();
   });
 
+  it("lists the rows it was sent and says how many more there are", async () => {
+    exportPlan.mockResolvedValue(
+      dryRun({
+        copies: {
+          count: 30_000,
+          bytes: 9e10,
+          totalText: "30,000 files, 90 GB",
+          files: [{ path: "/Contents/A/B/a.mp3", from: "/music/a.mp3", sizeText: "9.0 MB" }],
+        },
+      }),
+    );
+    await toOptions();
+    fireEvent.click(button("Dry run"));
+    await screen.findByText(/Ready to export/);
+    expect(screen.getByText("Copy: 30,000 files, 90 GB")).toBeTruthy();
+    expect(screen.getByText("…and 29999 more")).toBeTruthy();
+  });
+
   it("offers the converter for tracks it fixes", async () => {
     exportPlan.mockResolvedValue(
       dryRun({

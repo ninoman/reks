@@ -2,7 +2,7 @@
 //! worker thread and returns the result; no logic lives here (D2).
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError};
 
 use reks_core::convert::{self, ConvertEvent, ConvertOptions, ConvertSpec, PlanView};
 use reks_core::rbxml::{
@@ -13,7 +13,7 @@ use reks_core::{
     CommentTagsReport, Facets, FilterPreset, FilterPresetOp, FilterPresetOutcome, Library,
     LibraryRoot, PlaylistId, PlaylistOp, PlaylistOutcome, PlaylistTree, RuleNode, ScanEvent,
     ScanReport, Settings, SettingsPatch, TagId, TagOp, TagOutcome, TagTree, TrackDetail, TrackId,
-    TrackPage, TrackPatch, TrackQuery,
+    TrackPage, TrackPageRows, TrackPatch, TrackQuery,
 };
 use reks_export_onelibrary::{OneLibraryWriter, RbVersion};
 use reks_export_rb::device::{self, DeviceInfo};
@@ -67,6 +67,21 @@ where
 #[tauri::command]
 pub async fn library_query(state: State<'_, AppState>, query: TrackQuery) -> CmdResult<TrackPage> {
     blocking(&state, move |lib| lib.tracks(&query)).await
+}
+
+/// Pages `pages` of the track table in one pass (for a selection that spans
+/// pages not loaded yet).
+#[tauri::command]
+pub async fn library_pages(
+    state: State<'_, AppState>,
+    query: TrackQuery,
+    page_size: u32,
+    pages: Vec<u32>,
+) -> CmdResult<Vec<TrackPageRows>> {
+    blocking(&state, move |lib| {
+        lib.track_pages(&query, page_size, &pages)
+    })
+    .await
 }
 
 /// Option lists for the filter sidebar.
@@ -253,8 +268,12 @@ pub async fn rbxml_preview(
     path: PathBuf,
     remap: Vec<PrefixRemap>,
 ) -> CmdResult<ImportPreview> {
+    let cache = Arc::clone(&state.parsed_xml);
     blocking(&state, move |lib| {
-        let collection = rbxml::parse_file(&path)?;
+        let collection = cache
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&path)?;
         let opts = ImportOptions {
             remap,
             ..ImportOptions::default()
@@ -262,6 +281,16 @@ pub async fn rbxml_preview(
         rbxml::preview(&collection, lib, &opts)
     })
     .await
+}
+
+/// Drops the parsed XML kept for the preview (the import wizard closed).
+#[tauri::command]
+pub fn rbxml_forget(state: State<'_, AppState>) {
+    state
+        .parsed_xml
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clear();
 }
 
 /// Imports a rekordbox `collection.xml`, streaming progress to `on_event`.
@@ -284,8 +313,12 @@ pub async fn rbxml_import_start(
         }
         *running = Some(cancel.clone());
     }
+    let cache = Arc::clone(&state.parsed_xml);
     let result = blocking(&state, move |lib| {
-        let collection = rbxml::parse_file(&path)?;
+        let collection = cache
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&path)?;
         backup::before_bulk(lib, BackupReason::XmlImport);
         let opts = ImportOptions {
             remap,
@@ -302,6 +335,11 @@ pub async fn rbxml_import_start(
     if let Ok(mut running) = state.import_cancel.lock() {
         *running = None;
     }
+    state
+        .parsed_xml
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clear();
     state.analysis.queue_pending();
     result
 }
