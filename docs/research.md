@@ -868,3 +868,18 @@ https://musictech.com/features/pioneer-dj-cdj-3000-firmware-bug-jaguar-mojaxx/
 https://community.algoriddim.com/t/rekordbox-onelibrary-misaligned-beatgrids/40391
 (2025-12-06) · https://www.trustpilot.com/review/rekordbox.com (2024-11 to
 2026-08) · https://www.lexicondj.com (vendor, 2026-10)
+
+---
+
+## 13. Performance audit: import and USB export
+
+Research date: 2026-10-30. Not tied to a decision; input for fix PRs. Full
+report: [`research/perf-audit-2026-10-30.md`](research/perf-audit-2026-10-30.md)
+(method, benchmarks at 1k–30k tracks, profiles, findings by priority).
+
+- No P0. P1: the post-export flush (`apply::sync_written`) is a full
+  drive-cache flush per file and 44–67 % of most export runs (95 s of 159 s
+  at 3k on a FAT32 image); its write-open leaves `._*` files on the stick.
+- P2: select-all pages the whole table with OFFSET, quadratic (11.8 s at 30k).
+- Import is linear (≈12 s at 3k with full-size files). Measured on a FAT32
+  disk image, not a real stick: absolute stick timings UNVERIFIED.

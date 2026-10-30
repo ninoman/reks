@@ -36,9 +36,9 @@ pub use error::{Error, Result};
 pub use float::{decode_f32, FloatPcm, Layout};
 pub use mp3::mp3_audio_frames;
 pub use native::{NativeFormat, NativeStream};
-pub use probe::{probe, Kind, Probe};
+pub use probe::{probe, probe_headers, Kind, Probe};
 pub use resample::StreamResampler;
-pub use tags::{embedded_artwork, tags, Picture, Tags};
+pub use tags::{embedded_artwork, metadata, tags, Metadata, Picture, Tags};
 pub use timing::{Rule as TimingRule, Timeline};
 pub use write::{AiffWriter, FlacWriter, PcmSpec, PcmWriter, WavWriter, WriteError};
 

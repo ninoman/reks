@@ -194,6 +194,17 @@ Date of decisions: 2026-10-18.
   reader (`reks-anlz::read`, crate-digger layout; PPTH, PQTZ, PCOB/PCO2
   counts) and keeps rekordcrate for `export.pdb`. Row fields rekordcrate
   keeps private are read from rows re-serialised by rekordcrate.
+- Finding (2026-10-30, perf audit §9 item 1, #90): the validator compared
+  every file's cue count with the track's total, so every track with hot
+  cues D–H failed (`CueCount`, ~2,177 of 2,747 tracks) and the export ended
+  as `Problems`. The writers were right: rekordbox 7 exports (baken 4.6.1
+  `anlz/cues.rs`, verified on a real export; `reks-anlz` `build`/`cue` follow
+  it) put memory cues + hot cues A–C in the `.DAT` `PCOB`, hot cues D–H in
+  the `.EXT` `PCOB` (its memory list empty) and every cue in the `.EXT`
+  `PCO2`. The plan now carries `reks_anlz::cue::CueCounts` and the validator
+  checks each list against it (`.EXT` lists only when present). UNVERIFIED:
+  that rekordbox caches older than 7 use the same split; if not, their
+  copied `.DAT` reports `CueCount` (a false alarm, not a bad stick).
 
 ## D9. ANLZ serialisation (Phase 3): `rekordcrate::anlz` types (`BinWrite`) inside our `reks-anlz` crate
 

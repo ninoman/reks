@@ -155,8 +155,13 @@ pub struct FileGroup {
     pub bytes: u64,
     /// `12 files, 1.2 GB`, or `None` when empty.
     pub total_text: String,
+    /// The first [`FILE_LIST_CAP`] files; `count` and `bytes` cover all of them.
     pub files: Vec<FileRow>,
 }
+
+/// Rows of a [`FileGroup`] sent to the UI. A 30k-track export has tens of
+/// thousands of copies, which the wizard cannot usefully list (audit P3-7).
+pub const FILE_LIST_CAP: usize = 200;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -566,6 +571,7 @@ fn file_group(ops: &[FileOp], with_source: bool) -> FileGroup {
         total_text: total_text(ops.len(), bytes),
         files: ops
             .iter()
+            .take(FILE_LIST_CAP)
             .map(|f| FileRow {
                 path: f.dst_rel.clone(),
                 from: if with_source {

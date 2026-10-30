@@ -117,6 +117,11 @@ export interface DividerRow {
   ascii: boolean;
 }
 
+export interface TrackPageRows {
+  page: number;
+  rows: TrackRow[];
+}
+
 export interface TrackPage {
   rows: TrackRow[];
   /** Tracks over all pages; dividers are not counted. */
@@ -209,7 +214,7 @@ export interface Facets {
 }
 
 export type ScanEvent =
-  | { type: "found"; path: string }
+  /** Sent every 50 files and after the last. */
   | { type: "progress"; done: number; total: number }
   | { type: "added"; id: number; path: string }
   | { type: "updated"; id: number; path: string }
@@ -323,6 +328,15 @@ export function libraryQuery(query: TrackQuery): Promise<TrackPage> {
   return invoke("library_query", { query });
 }
 
+/** Pages of `query` (its offset and limit ignored) fetched in one pass. */
+export function libraryPages(
+  query: TrackQuery,
+  pageSize: number,
+  pages: number[],
+): Promise<TrackPageRows[]> {
+  return invoke("library_pages", { query, pageSize, pages });
+}
+
 export function libraryFacets(): Promise<Facets> {
   return invoke("library_facets");
 }
@@ -388,6 +402,11 @@ export function analysisReanalyse(ids: number[]): Promise<number> {
 
 export function rbxmlPreview(path: string, remap: PrefixRemap[]): Promise<ImportPreview> {
   return invoke("rbxml_preview", { path, remap });
+}
+
+/** Drops the parsed XML the backend kept for previews. */
+export function rbxmlForget(): Promise<void> {
+  return invoke("rbxml_forget");
 }
 
 export function rbxmlImportCancel(): Promise<void> {

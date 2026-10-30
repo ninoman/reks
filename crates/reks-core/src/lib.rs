@@ -22,6 +22,7 @@ pub mod history;
 pub mod keys;
 pub mod manifest;
 pub mod playlist;
+mod pool;
 pub mod preview;
 pub mod query;
 pub mod rbxml;
@@ -49,12 +50,13 @@ pub use filter_preset::{FilterPreset, FilterPresetId, FilterPresetOp, FilterPres
 pub use keys::{Key, KeyNotation, Mode};
 pub use manifest::{ManifestEntry, ManifestItemKind, ManifestRow};
 pub use playlist::{
-    DuplicateMode, PlaylistOp, PlaylistOutcome, PlaylistTree, MAX_DIVIDER_LABEL_CHARS,
+    DuplicateMode, PlaylistEntries, PlaylistOp, PlaylistOutcome, PlaylistTree,
+    MAX_DIVIDER_LABEL_CHARS,
 };
 pub use preview::PreviewAudio;
 pub use query::{
     DividerRow, Facets, Filter, KeyInfo, PlaylistId, PlaylistNode, Sort, SortColumn, TrackPage,
-    TrackQuery, TrackRow,
+    TrackPageRows, TrackQuery, TrackRow,
 };
 pub use rule::{Match, RuleNode, MAX_RULE_DEPTH, MAX_RULE_NODES};
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
@@ -65,7 +67,9 @@ pub use settings::{
 };
 pub use tag::{TagCategory, TagId, TagInfo, TagOp, TagOutcome, TagTree};
 pub use tag_comments::{CommentTagsPreview, CommentTagsReport};
-pub use track::{ArtworkInfo, BeatgridSummary, Cue, Track, TrackDetail, TrackPatch};
+pub use track::{
+    ArtworkInfo, BeatgridSummary, Cue, ExportTrackFields, Track, TrackDetail, TrackPatch,
+};
 
 /// Crate version, from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -871,6 +871,9 @@ function Files({ label, group }: { label: string; group: DryRunFileGroup }) {
             {f.path} <span className="text-fg-muted">({f.sizeText})</span>
           </li>
         ))}
+        {group.count > group.files.length && (
+          <li className="text-fg-muted">…and {group.count - group.files.length} more</li>
+        )}
       </ul>
     </details>
   );

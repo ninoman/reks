@@ -13,6 +13,7 @@ use reks_export_rb::plan::{ExportPlan, Selection};
 
 use crate::analysis::Analysis;
 use crate::mix::Mix;
+use crate::xml_cache::XmlCache;
 
 /// File name of the library database (docs/decisions.md D19).
 const DB_FILE: &str = "reks.sqlite";
@@ -24,6 +25,8 @@ pub struct AppState {
     pub scan_cancel: Mutex<Option<CancelToken>>,
     /// Cancels the running rekordbox XML import, if any.
     pub import_cancel: Mutex<Option<CancelToken>>,
+    /// The parsed rekordbox XML shared by the import preview and the import.
+    pub parsed_xml: Arc<Mutex<XmlCache>>,
     /// Cancels the running USB export, if any.
     pub export_cancel: Mutex<Option<CancelToken>>,
     /// The export plan the wizard's dry run shows; Export writes exactly it.
@@ -120,6 +123,7 @@ impl AppState {
             library,
             scan_cancel: Mutex::new(None),
             import_cancel: Mutex::new(None),
+            parsed_xml: Arc::new(Mutex::new(XmlCache::default())),
             export_cancel: Mutex::new(None),
             shown_plan: Mutex::new(ShownPlan::default()),
             convert_cancel: Mutex::new(None),

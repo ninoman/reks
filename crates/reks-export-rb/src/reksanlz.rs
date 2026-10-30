@@ -6,6 +6,11 @@
 //!   (`reks_analysis::cache`, same analyser version, same file content
 //!   hash), or a rekordbox entry ([`crate::rbmap`], D10) for the same file. [`ExportOptions::anlz_preference`](crate::plan::ExportOptions)
 //!   decides between that and rekordbox's cache.
+//! - **The content hash** comes from the track row while the file's path,
+//!   size and mtime match it ([`current_content_hash`], the folder scan's
+//!   test and blind spot); only a file changed since the last scan is read.
+//!   Planning and writing each check this, so a file changed in between
+//!   still makes the build [`ReksAnlzError::Stale`].
 //! - **Writing**: the writer builds each track's set into its scratch folder
 //!   before anything goes to the stick ([`write_all`]) and hands baken the
 //!   `.DAT` as if it were rekordbox's (D7). baken then rewrites `PPTH` and
@@ -31,7 +36,7 @@ use reks_anlz::rbwave::{read_waveforms, RbWaveError};
 use reks_anlz::waveform::EncodeError;
 use reks_anlz::{AnlzInput, AnlzSet, AnlzTarget, BuildError, WaveformCalibration, Waveforms};
 use reks_audio::Kind;
-use reks_core::analysis::file_content_hash;
+use reks_core::analysis::{current_content_hash, StoredFile};
 use reks_core::{Library, TrackId};
 
 use crate::plan::{AnlzSource, ExportPlan, PlannedTrack, ReksLocator, SourceTrack};
@@ -45,14 +50,25 @@ const DAT_NAME: &str = "ANLZ0000.DAT";
 #[derive(Debug, Clone)]
 pub struct ReksCache {
     cache_dir: PathBuf,
+    stored: HashMap<TrackId, StoredFile>,
 }
 
 impl ReksCache {
-    /// The cache under `cache_dir` (the library's `cache_dir()`).
+    /// The cache under `cache_dir` (the library's `cache_dir()`); hashes
+    /// every file it is asked about.
     pub fn new(cache_dir: impl Into<PathBuf>) -> Self {
         Self {
             cache_dir: cache_dir.into(),
+            stored: HashMap::new(),
         }
+    }
+
+    /// `lib`'s cache, taking unchanged files' hashes from their rows.
+    pub fn for_library(lib: &Library) -> reks_core::Result<Self> {
+        Ok(Self {
+            cache_dir: lib.cache_dir(),
+            stored: lib.stored_files()?,
+        })
     }
 }
 
@@ -61,7 +77,7 @@ impl ReksLocator for ReksCache {
         if track.divider.is_some() {
             return false;
         }
-        match file_content_hash(&track.src) {
+        match current_content_hash(&track.src, self.stored.get(&track.track_id)) {
             Ok(hash) => {
                 cache::has_valid(&self.cache_dir, track.track_id, &hash)
                     || cache::has_valid_rekordbox(&self.cache_dir, track.track_id, &hash)
@@ -174,7 +190,7 @@ pub fn build(
     track: &ReksTrack<'_>,
     target: AnlzTarget,
 ) -> Result<AnlzSet, ReksAnlzError> {
-    let hash = file_content_hash(track.src)?;
+    let hash = current_content_hash(track.src, lib.stored_file(track.track_id)?.as_ref())?;
     let cache_dir = lib.cache_dir();
     // reks's own analysis first (a Re-analyse replaces a mapping), then
     // rekordbox's mapped into the cache.

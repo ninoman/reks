@@ -26,7 +26,9 @@
 //!    [`OneLibraryExport::write`] puts `exportLibrary.db` on the stick. Only
 //!    after a clean write: with failed tracks or a writer error it would not
 //!    match `export.pdb`, so it is skipped (an error in the report).
-//! 6. **fsync** of the databases, the ANLZ files and the copied audio.
+//! 6. **fsync** of the databases, the ANLZ files and the copied audio, then
+//!    one drive-cache flush for the volume (`apply/flush.rs`): all of it is on the
+//!    media before validation reads it back and the manifest records it.
 //! 7. **Validate**: [`validate`] reads the stick back.
 //! 8. **Manifest** (task 13): `Library::replace_manifest` with the read-back
 //!    rows, only when the export is clean (no failed track, no finding, no
@@ -629,8 +631,9 @@ fn is_rekordbox(process_name: &str) -> bool {
 
 /// Flushes what the writer wrote: everything under `PIONEER/rekordbox` (and
 /// `PIONEER/Artwork` with artwork on), each track's ANLZ files, and audio
-/// copied this run. Directory syncs are best effort (some file systems
-/// refuse them); a file that won't sync is an error.
+/// copied this run, then the drive cache once. Directory syncs are best
+/// effort (some file systems refuse them); a file that won't sync, or a
+/// failed drive flush, is an error.
 fn sync_written(plan: &ExportPlan) -> Result<(), String> {
     let root = plan.device.mount_point.as_path();
     let mut files = Vec::new();
@@ -669,12 +672,7 @@ fn sync_written(plan: &ExportPlan) -> Result<(), String> {
     }
     let mut failed = Vec::new();
     for f in &files {
-        // Write access: Windows' FlushFileBuffers needs it. Nothing is written.
-        let synced = fs::OpenOptions::new()
-            .write(true)
-            .open(f)
-            .and_then(|file| file.sync_all());
-        if let Err(e) = synced {
+        if let Err(e) = flush::sync_file(f) {
             // A failed track's audio may be missing; the validator reports it.
             if e.kind() != std::io::ErrorKind::NotFound {
                 failed.push(format!("{}: {e}", f.display()));
@@ -682,8 +680,17 @@ fn sync_written(plan: &ExportPlan) -> Result<(), String> {
         }
     }
     for d in &dirs {
-        if let Err(e) = fs::File::open(d).and_then(|dir| dir.sync_all()) {
+        if let Err(e) = flush::sync_dir(d) {
             tracing::debug!(dir = %d.display(), error = %e, "directory sync refused");
+        }
+    }
+    // After every file sync, failed or not: the flush covers the whole drive,
+    // so it still lands what did sync.
+    let pdb = on_stick(root, "/PIONEER/rekordbox/export.pdb");
+    let anchor = std::iter::once(&pdb).chain(&files).find(|f| f.is_file());
+    if let Some(anchor) = anchor {
+        if let Err(e) = flush::flush_volume(anchor) {
+            failed.insert(0, format!("drive flush via {}: {e}", anchor.display()));
         }
     }
     tracing::debug!(files = files.len(), "stick files synced");
@@ -696,6 +703,8 @@ fn sync_written(plan: &ExportPlan) -> Result<(), String> {
         )),
     }
 }
+
+mod flush;
 
 #[cfg(test)]
 pub(crate) mod tests;

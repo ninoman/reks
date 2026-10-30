@@ -8,6 +8,7 @@ vi.mock("../lib/ipc", () => ({
   rbxmlPreview: vi.fn(),
   rbxmlImportStart: vi.fn(),
   rbxmlImportCancel: vi.fn(),
+  rbxmlForget: vi.fn(),
   playlistsGet: vi.fn(),
   libraryFacets: vi.fn(),
   libraryQuery: vi.fn(),

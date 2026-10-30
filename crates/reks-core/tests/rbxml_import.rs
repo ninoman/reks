@@ -1001,3 +1001,119 @@ fn reimport_never_writes_into_a_smart_playlist() {
     assert_ne!(id("Lossless"), smart);
     assert_eq!(env.playlist_tracks("Lossless").len(), 1);
 }
+
+/// Files are read on a pool; matching, duplicates, the report and row order
+/// must still follow the XML.
+#[test]
+fn parallel_reads_keep_xml_order_and_duplicates() {
+    let env = Env::new();
+    let music = env._dir.path().join("music");
+    std::fs::create_dir_all(&music).unwrap();
+    let exts = ["mp3", "flac", "m4a", "wav", "aiff"];
+    let mut tracks = Vec::new();
+    let mut expected = Vec::new();
+    for id in 1..=300u32 {
+        let ext = exts[id as usize % exts.len()];
+        let mut path = music.join(format!("t{id:03}.{ext}"));
+        let want = match id % 10 {
+            // Same file as the track before: a duplicate of it.
+            0 => {
+                path = music.join(format!("t{:03}.{}", id - 1, exts[(id - 1) as usize % 5]));
+                Some(UnmatchedReason::DuplicateOf { track_id: id - 1 })
+            }
+            3 => {
+                std::fs::write(&path, b"not audio").unwrap();
+                None
+            }
+            7 => None,
+            _ => {
+                link(&audio_dir().join(format!("sine-click-128.{ext}")), &path);
+                None
+            }
+        };
+        tracks.push(xml_track(id, &path));
+        expected.push((id, ext, want));
+    }
+    let c = Collection {
+        tracks,
+        playlists: XmlNode::folder("ROOT", Vec::new()),
+        ..Collection::default()
+    };
+    let report = env.import(&c, ImportOptions::default());
+
+    let ids: Vec<u32> = report.unmatched.iter().map(|u| u.track_id).collect();
+    let mut sorted = ids.clone();
+    sorted.sort_unstable();
+    assert_eq!(ids, sorted, "unmatched in XML order");
+    for u in &report.unmatched {
+        let reason = match u.track_id % 10 {
+            0 => "dup",
+            3 => "unreadable",
+            7 => "missing",
+            _ => panic!("unexpected {u:?}"),
+        };
+        let ok = match (&u.reason, reason) {
+            (UnmatchedReason::DuplicateOf { track_id }, "dup") => *track_id == u.track_id - 1,
+            (UnmatchedReason::Unreadable { .. }, "unreadable") => true,
+            (UnmatchedReason::FileNotFound { .. }, "missing") => true,
+            _ => false,
+        };
+        assert!(ok, "{u:?}");
+    }
+    assert_eq!(report.unmatched.len(), 30 * 3);
+    assert_eq!(report.added, 270);
+
+    // Rows are created in XML order and each got its own file's fields.
+    let rows: Vec<(i64, u32, String, i64)> = {
+        let db = env.db();
+        let mut stmt = db
+            .prepare("SELECT id, rb_track_id, kind, missing FROM track ORDER BY id")
+            .unwrap();
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    };
+    let rb: Vec<u32> = rows.iter().map(|r| r.1).collect();
+    let want_rb: Vec<u32> = expected
+        .iter()
+        .filter(|(_, _, w)| w.is_none())
+        .map(|e| e.0)
+        .collect();
+    assert_eq!(rb, want_rb);
+    for (_, id, kind, missing) in &rows {
+        let ext = expected[*id as usize - 1].1;
+        let want_kind = if ext == "m4a" { "aac" } else { ext };
+        assert_eq!(
+            (kind.as_str(), *missing),
+            (want_kind, i64::from(id % 10 == 7)),
+            "{id}"
+        );
+    }
+}
+
+/// An unchanged re-import skips the track UPDATE, so the FTS trigger and
+/// `updated_at` stay untouched; a changed field still writes.
+#[test]
+fn unchanged_reimport_writes_no_track_rows() {
+    let env = Env::new();
+    let mut c = small_collection();
+    env.import(&c, fixture_remap());
+    env.db()
+        .execute_batch(
+            "CREATE TABLE updates (id INTEGER);
+             -- The FTS trigger's columns. (The play-count cache is
+             -- recomputed on every import; it is not indexed.)
+             CREATE TRIGGER count_updates
+             AFTER UPDATE OF title, artist, album, genre, comment, label, remixer, updated_at
+             ON track
+             BEGIN INSERT INTO updates VALUES (new.id); END;",
+        )
+        .unwrap();
+    env.import(&c, fixture_remap());
+    assert_eq!(env.count("updates"), 0);
+
+    c.tracks[0].genre = Some("Changed".into());
+    env.import(&c, fixture_remap());
+    assert_eq!(env.count("updates"), 1);
+}

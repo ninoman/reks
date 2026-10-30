@@ -135,7 +135,11 @@ fn track(id: TrackId, src: PathBuf, artist: &str, album: &str) -> SourceTrack {
         probe: None,
         has_grid: true,
         grid_user_owned: false,
-        cue_count: 3,
+        cues: CueCounts {
+            memory: 1,
+            hot_dat: 2,
+            hot_ext: 0,
+        },
         divider: None,
     }
 }
@@ -1041,4 +1045,233 @@ fn clean_or_unreadable_sticks() {
     .unwrap();
     assert!(plan.warnings.contains(&Warning::NoVolumeSerial));
     assert_eq!(plan.backup_plan().volume_serial, None);
+}
+
+/// The loader as it was before the batched reads (one `tracks` query per
+/// playlist, one `track` per track): the reference for `load`.
+mod reference {
+    use std::collections::{HashMap, HashSet};
+    use std::path::PathBuf;
+
+    use reks_core::query::MAX_PAGE;
+    use reks_core::{Filter, Library, PlaylistId, Sort, SortColumn, TrackId, TrackQuery};
+
+    use crate::divider::{DividerInfo, SourceDivider};
+    use crate::plan::source::{parse_kind, SourceTrack};
+    use crate::plan::{PlannedPlaylist, Selection};
+
+    pub fn load(
+        lib: &Library,
+        sel: &Selection,
+    ) -> reks_core::Result<(Vec<SourceTrack>, Vec<PlannedPlaylist>, Vec<SourceDivider>)> {
+        let nodes = lib.playlists()?.nodes;
+        let by_id: HashMap<_, _> = nodes.iter().map(|n| (n.id, n)).collect();
+        let mut wanted: HashSet<PlaylistId> = HashSet::new();
+        for &id in &sel.playlists {
+            let mut cur = Some(id);
+            while let Some(c) = cur {
+                wanted.insert(c);
+                cur = by_id.get(&c).and_then(|n| n.parent_id);
+            }
+        }
+        let selected: HashSet<PlaylistId> = sel.playlists.iter().copied().collect();
+        let mut inside: HashSet<PlaylistId> = HashSet::new();
+        for n in &nodes {
+            if selected.contains(&n.id) || n.parent_id.is_some_and(|p| inside.contains(&p)) {
+                inside.insert(n.id);
+                wanted.insert(n.id);
+            }
+        }
+        let user_owned = lib.user_owned_grids()?;
+        let (mut tracks, mut playlists, mut all_dividers) = (Vec::new(), Vec::new(), Vec::new());
+        let mut seen: HashSet<TrackId> = HashSet::new();
+        for n in nodes.iter().filter(|n| wanted.contains(&n.id)) {
+            let mut track_ids = Vec::new();
+            if !n.is_folder && inside.contains(&n.id) {
+                let (ids, dividers) = entries(lib, n.id)?;
+                track_ids = ids;
+                all_dividers.extend(dividers);
+                for &tid in &track_ids {
+                    if seen.insert(tid) {
+                        tracks.push(source_track(lib, tid, user_owned.contains(&tid))?);
+                    }
+                }
+            }
+            playlists.push(PlannedPlaylist {
+                id: n.id,
+                parent_id: n.parent_id,
+                name: n.name.clone(),
+                is_folder: n.is_folder,
+                track_ids,
+                smart: n.smart && inside.contains(&n.id),
+            });
+        }
+        Ok((tracks, playlists, all_dividers))
+    }
+
+    fn entries(
+        lib: &Library,
+        id: PlaylistId,
+    ) -> reks_core::Result<(Vec<TrackId>, Vec<SourceDivider>)> {
+        let mut ids = Vec::new();
+        let mut dividers = Vec::new();
+        let mut offset = 0;
+        loop {
+            let page = lib.tracks(&TrackQuery {
+                filters: vec![Filter::Playlist { id }],
+                sort: Sort {
+                    column: SortColumn::PlaylistPosition,
+                    descending: false,
+                },
+                offset,
+                limit: MAX_PAGE,
+                ..TrackQuery::default()
+            })?;
+            if offset == 0 {
+                dividers = page
+                    .dividers
+                    .iter()
+                    .enumerate()
+                    .map(|(i, d)| SourceDivider {
+                        info: DividerInfo {
+                            playlist_id: id,
+                            ordinal: u32::try_from(i + 1).unwrap_or(u32::MAX),
+                            label: d.label.clone(),
+                        },
+                        tracks_before: usize::try_from(d.position).unwrap_or(0).saturating_sub(i),
+                    })
+                    .collect();
+            }
+            let n = page.rows.len();
+            ids.extend(page.rows.into_iter().map(|r| r.id));
+            if n < MAX_PAGE as usize {
+                return Ok((ids, dividers));
+            }
+            offset += MAX_PAGE;
+        }
+    }
+
+    fn source_track(lib: &Library, id: TrackId, owned: bool) -> reks_core::Result<SourceTrack> {
+        let d = lib.track(id)?;
+        let t = &d.track;
+        let probe = match (
+            parse_kind(&t.row.kind),
+            t.sample_rate.and_then(|v| u32::try_from(v).ok()),
+            t.channels.and_then(|v| u8::try_from(v).ok()),
+        ) {
+            (Some(kind), Some(sample_rate), Some(channels)) => Some(reks_audio::Probe {
+                kind,
+                duration_ms: t
+                    .row
+                    .duration_ms
+                    .and_then(|v| u64::try_from(v).ok())
+                    .unwrap_or(0),
+                sample_rate,
+                channels,
+                bit_depth: t.bit_depth.and_then(|v| u8::try_from(v).ok()),
+                bit_rate_kbps: t.row.bit_rate_kbps.and_then(|v| u32::try_from(v).ok()),
+            }),
+            _ => None,
+        };
+        Ok(SourceTrack {
+            track_id: id,
+            src: PathBuf::from(&t.path),
+            artist: t.row.artist.clone(),
+            album: t.row.album.clone(),
+            probe,
+            has_grid: d.beatgrid.is_some(),
+            grid_user_owned: owned,
+            cues: reks_anlz::cue::CueCounts::of(&d.cues),
+            divider: None,
+        })
+    }
+}
+
+/// The batched loader returns what the per-playlist, per-track one did, on a
+/// library with dividers, duplicates, a smart playlist, folders, a hand-edited
+/// grid and cues.
+#[test]
+fn batched_load_matches_the_per_playlist_loader() {
+    let w = World::new();
+    let (lib, set, ids) = library(&w);
+    let made = |op| match lib.playlist_mutate(op).unwrap() {
+        PlaylistOutcome::Done { created_id, .. } => created_id.unwrap(),
+        other => panic!("{other:?}"),
+    };
+    let folder = made(PlaylistOp::CreateFolder {
+        parent_id: None,
+        name: "Gigs".into(),
+        position: None,
+    });
+    let nested = made(PlaylistOp::CreatePlaylist {
+        parent_id: Some(folder),
+        name: "Nested".into(),
+        position: None,
+    });
+    let smart = made(PlaylistOp::CreateSmart {
+        parent_id: Some(folder),
+        name: "Smart".into(),
+        rule: reks_core::RuleNode::Filter {
+            not: false,
+            filter: reks_core::Filter::Playlist { id: set },
+        },
+        sort: None,
+        position: None,
+    });
+    let empty = made(PlaylistOp::CreatePlaylist {
+        parent_id: None,
+        name: "Empty".into(),
+        position: None,
+    });
+    let add = |playlist_id, track_ids: Vec<TrackId>| {
+        lib.playlist_mutate(PlaylistOp::AddTracks {
+            playlist_id,
+            track_ids,
+            before: None,
+            duplicates: reks_core::DuplicateMode::Allow,
+        })
+        .unwrap();
+    };
+    add(nested, vec![ids[1], ids[1], ids[0]]);
+    for (position, label) in [(Some(0), "Open"), (Some(2), "Peak"), (None, "Close")] {
+        lib.playlist_mutate(PlaylistOp::InsertDivider {
+            playlist_id: nested,
+            position,
+            label: label.into(),
+        })
+        .unwrap();
+    }
+    lib.playlist_mutate(PlaylistOp::InsertDivider {
+        playlist_id: set,
+        position: Some(1),
+        label: "Mid".into(),
+    })
+    .unwrap();
+    lib.edit_beatgrid(
+        ids[0],
+        reks_core::GridEdit::SetBpm {
+            bpm_x100: 12_800,
+            anchor_ms: 0,
+        },
+    )
+    .unwrap();
+    assert!(lib.grid_is_user_owned(ids[0]).unwrap());
+    lib.set_hot_cue(ids[1], 0, 1_000.0).unwrap();
+    lib.add_memory_cue(ids[1], 2_000.0, None).unwrap();
+
+    for playlists in [
+        vec![set],
+        vec![folder],
+        vec![nested, set],
+        vec![smart],
+        vec![empty, set, folder, 999],
+        vec![set, nested, smart, empty, folder],
+    ] {
+        let sel = Selection { playlists };
+        let got = load(&lib, &sel).unwrap();
+        let (tracks, playlists, dividers) = reference::load(&lib, &sel).unwrap();
+        assert_eq!(got.tracks, tracks, "{sel:?}");
+        assert_eq!(got.playlists, playlists, "{sel:?}");
+        assert_eq!(got.dividers, dividers, "{sel:?}");
+    }
 }

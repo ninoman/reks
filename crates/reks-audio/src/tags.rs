@@ -48,15 +48,39 @@ impl std::fmt::Debug for Picture {
     }
 }
 
+/// Tags, cover art and stream bit rate from one parse of a file.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Metadata {
+    pub tags: Tags,
+    pub artwork: Option<Picture>,
+    /// As [`crate::Probe::bit_rate_kbps`] for compressed streams.
+    pub bit_rate_kbps: Option<u32>,
+}
+
+/// [`tags`], [`embedded_artwork`] and the stream bit rate, parsing `path` once.
+pub fn metadata(path: &Path) -> Result<Metadata> {
+    use lofty::file::AudioFile;
+
+    let file = read(path)?;
+    Ok(Metadata {
+        tags: tags_of(&file),
+        artwork: artwork_of(&file),
+        bit_rate_kbps: file.properties().audio_bitrate().filter(|&b| b > 0),
+    })
+}
+
 /// Reads the tags of `path`. Fields missing from the primary tag fall back
 /// to the file's other tags (e.g. ID3v1, APE).
 pub fn tags(path: &Path) -> Result<Tags> {
-    let file = read(path)?;
-    let tags = ordered_tags(&file);
+    Ok(tags_of(&read(path)?))
+}
+
+fn tags_of(file: &TaggedFile) -> Tags {
+    let tags = ordered_tags(file);
     let text = |f: &dyn Fn(&Tag) -> Option<String>| tags.iter().find_map(|t| f(t).and_then(clean));
     let item = |key: ItemKey| text(&|t: &Tag| t.get_string(key).map(str::to_owned));
 
-    Ok(Tags {
+    Tags {
         title: text(&|t| t.title().map(|s| s.into_owned())),
         artist: text(&|t| t.artist().map(|s| s.into_owned())),
         album: text(&|t| t.album().map(|s| s.into_owned())),
@@ -78,19 +102,22 @@ pub fn tags(path: &Path) -> Result<Tags> {
         bpm_x100: item(ItemKey::Bpm)
             .or_else(|| item(ItemKey::IntegerBpm))
             .and_then(|b| parse_bpm_x100(&b)),
-    })
+    }
 }
 
 /// The file's cover art: the front-cover picture if tagged as one, else the
 /// first picture. `None` when the file has no pictures.
 pub fn embedded_artwork(path: &Path) -> Result<Option<Picture>> {
-    let file = read(path)?;
-    let tags = ordered_tags(&file);
+    Ok(artwork_of(&read(path)?))
+}
+
+fn artwork_of(file: &TaggedFile) -> Option<Picture> {
+    let tags = ordered_tags(file);
     let pictures = || tags.iter().flat_map(|t| t.pictures());
     let chosen = pictures()
         .find(|p| p.pic_type() == PictureType::CoverFront)
         .or_else(|| pictures().next());
-    Ok(chosen.filter(|p| !p.data().is_empty()).map(to_picture))
+    chosen.filter(|p| !p.data().is_empty()).map(to_picture)
 }
 
 /// Reads `path`, recognising the format by content when the extension does

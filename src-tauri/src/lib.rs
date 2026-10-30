@@ -14,6 +14,7 @@ mod relocate;
 mod report;
 mod startup;
 mod state;
+mod xml_cache;
 
 use tauri::webview::PageLoadEvent;
 use tauri::Manager;
@@ -79,6 +80,7 @@ pub fn run() {
             core_version,
             startup::app_ready,
             commands::library_query,
+            commands::library_pages,
             commands::library_facets,
             commands::library_track,
             commands::library_update_track,
@@ -101,6 +103,7 @@ pub fn run() {
             commands::rbxml_preview,
             commands::rbxml_import_start,
             commands::rbxml_import_cancel,
+            commands::rbxml_forget,
             commands::audio_devices,
             mix::mix_device_options,
             mix::mix_start,

@@ -33,6 +33,10 @@ tracing = { workspace = true }
 unicode-normalization = { workspace = true }
 zeroize = { workspace = true }
 
+# fsync / F_FULLFSYNC for the stick flush (apply/flush.rs).
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true }
 
