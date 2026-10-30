@@ -735,7 +735,9 @@ notes: [`../backups.md`](../backups.md).
     and reason; retention newest N plus one per week for 8 weeks; restore with
     a `before-restore` snapshot, refusal of damaged, foreign and newer-schema
     files), `Library::snapshot(reason)` called at start-up (daily), before a
-    migration, and before XML import, convert Replace and history import,
+    migration, and by the bulk operations themselves (XML import, convert
+    Replace, history import, bulk edit, adopt, relocate, comment tags; review
+    F06),
     `backups_list` / `backup_status` / `backup_now` / `backup_restore` /
     `backup_restart` / `backup_show_folder` commands, `backup.keep` setting,
     Settings → Library → Backups (list, Restore…, Back up now, Show in

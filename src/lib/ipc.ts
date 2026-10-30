@@ -1364,7 +1364,11 @@ export type BackupReason =
   | "beforeRestore"
   | "xmlImport"
   | "convertReplace"
-  | "historyImport";
+  | "historyImport"
+  | "bulkEdit"
+  | "adopt"
+  | "relocate"
+  | "commentTags";
 
 export interface BackupContents {
   schemaVersion: number;

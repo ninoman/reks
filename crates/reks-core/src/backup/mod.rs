@@ -4,7 +4,7 @@
 //! history, so it is snapshotted with SQLite's online backup API (never by
 //! copying the file while WAL is live) into `<app data>/library-backups/`:
 //! on app start (at most daily), before a migration, before bulk operations
-//! ([`Library::snapshot`]) and on request. [`Library::restore_backup`] takes a
+//! (which call `Library::snapshot_before` themselves) and on request. [`Library::restore_backup`] takes a
 //! snapshot of the current library first, so a restore can be undone.
 
 mod file;
@@ -52,10 +52,18 @@ pub enum BackupReason {
     ConvertReplace,
     /// Before a play history import.
     HistoryImport,
+    /// Before one metadata edit applied to many tracks.
+    BulkEdit,
+    /// Before adopting a foreign stick's playlists.
+    Adopt,
+    /// Before relocating missing files.
+    Relocate,
+    /// Before reading My Tags from comments or rewriting comments from tags.
+    CommentTags,
 }
 
 impl BackupReason {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 11] = [
         Self::Startup,
         Self::Migration,
         Self::Manual,
@@ -63,6 +71,10 @@ impl BackupReason {
         Self::XmlImport,
         Self::ConvertReplace,
         Self::HistoryImport,
+        Self::BulkEdit,
+        Self::Adopt,
+        Self::Relocate,
+        Self::CommentTags,
     ];
 
     pub(crate) fn slug(self) -> &'static str {
@@ -74,6 +86,10 @@ impl BackupReason {
             Self::XmlImport => "xml-import",
             Self::ConvertReplace => "convert-replace",
             Self::HistoryImport => "history-import",
+            Self::BulkEdit => "bulk-edit",
+            Self::Adopt => "adopt",
+            Self::Relocate => "relocate",
+            Self::CommentTags => "comment-tags",
         }
     }
 
@@ -279,6 +295,19 @@ impl Library {
         let outcome = self.snapshot_inner(reason);
         self.backup.record(reason, &outcome);
         outcome
+    }
+
+    /// The snapshot every bulk operation takes before it writes (D36), so
+    /// each front end gets it. A failure is recorded and logged, not
+    /// returned: a full disk should not lock the user out of an import. A
+    /// library with no backup folder (in memory) takes none.
+    pub(crate) fn snapshot_before(&self, reason: BackupReason) {
+        if self.backup.dir.is_none() {
+            return;
+        }
+        if let Err(err) = self.snapshot(reason) {
+            tracing::warn!(%err, reason = reason.slug(), "continuing without a pre-operation backup");
+        }
     }
 
     fn snapshot_inner(&self, reason: BackupReason) -> Result<BackupInfo> {

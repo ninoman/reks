@@ -1314,17 +1314,20 @@ Date of decisions: 2026-10-18.
     snapshot never sits among the good ones.
   - **When:** on app start if the newest snapshot is over 24 h old; before a
     migration changes a library that has data (inside `Library::open`, with
-    the pre-migration schema); before a rekordbox XML import, a convert with
-    Replace and a play history import (the Tauri commands call
-    `Library::snapshot(reason)`; future bulk edit and merge do the same); on
+    the pre-migration schema); before every bulk operation: rekordbox XML
+    import, convert with Replace, play history import, bulk edit, adopting a
+    stick's playlists, relocate apply, and reading or rewriting My Tags in
+    comments (the core operations call `Library::snapshot_before(reason)`
+    themselves, so the app and `reks-cli` get the same protection; changed
+    2026-10-30, architecture review F06; a future merge does the same); on
     "Back up now"; and before a restore. Reasons are the `BackupReason` enum.
   - **Verified:** every snapshot gets `PRAGMA integrity_check` on its copy;
     listings use `quick_check`. A failed snapshot is deleted, logged and kept
     as `BackupStatus.last_failure` (cleared by the next success). It never
     blocks start-up, a migration or a bulk operation; the UI warns with a
-    toast at start-up and in Settings → Library → Backups. Whether to
-    continue after a failed pre-operation snapshot is the caller's call;
-    today all three carry on.
+    toast at start-up and in Settings → Library → Backups. A failed
+    pre-operation snapshot never stops the operation (a full disk should not
+    lock the user out of an import).
   - **Retention** (pure, `backup::retention`): the newest N (setting
     `backup.keep`, default 10, 1–100) plus the newest snapshot of each of the
     last 8 calendar weeks (Monday to Sunday, UTC). Pruned after each
@@ -1358,7 +1361,9 @@ Date of decisions: 2026-10-18.
   destination and source page sizes to match (both are SQLite's default; a
   mismatch makes the restore fail whole, with the library untouched).
   Restoring an older snapshot loses what happened after it, by design; the
-  `before-restore` snapshot is the way back.
+  `before-restore` snapshot is the way back. Frequent bulk edits push older
+  snapshots past the newest-N limit; the weekly ones and `backup.keep`
+  bound what is lost.
 
 ## D37. Relocating missing files: content decides, names only suggest
 

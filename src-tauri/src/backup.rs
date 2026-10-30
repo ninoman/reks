@@ -1,5 +1,5 @@
-//! Library backups (D36): commands over `reks_core::backup`, and the guard
-//! that snapshots before a bulk operation.
+//! Library backups (D36): commands over `reks_core::backup`. Bulk
+//! operations snapshot the library themselves, in core.
 
 use std::path::Path;
 use std::process::Command;
@@ -9,15 +9,6 @@ use tauri::{AppHandle, State};
 
 use crate::commands::{blocking, CmdError, CmdResult};
 use crate::state::AppState;
-
-/// Snapshots the library before a bulk operation. A failure is logged and
-/// shown in Settings → Library → Backups (core records it), but does not
-/// stop the operation: a full disk should not lock the user out of an import.
-pub fn before_bulk(lib: &Library, reason: BackupReason) {
-    if let Err(err) = lib.snapshot(reason) {
-        tracing::warn!(%err, reason = ?reason, "continuing without a pre-operation backup");
-    }
-}
 
 /// The snapshots, newest first.
 #[tauri::command]

@@ -29,6 +29,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use super::colour::colour_name;
 use super::{location_to_path, Collection, NodeKind, Tempo, XmlNode, XmlTrack};
+use crate::backup::BackupReason;
 use crate::beatgrid::USER_OWNED;
 use crate::db::Library;
 use crate::error::Result;
@@ -298,6 +299,7 @@ pub fn import(
         return Ok(imp.report);
     }
 
+    lib.snapshot_before(BackupReason::XmlImport);
     let mut conn = lib.conn()?;
     let tx = conn.transaction()?;
     let mut row_of_xml: HashMap<u32, TrackId> = HashMap::new();

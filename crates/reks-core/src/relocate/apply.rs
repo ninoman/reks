@@ -12,6 +12,7 @@ use super::{
     FoundFile, RelocateChoices, RelocateEvent, RelocatePlan, RelocateReport, ReviewBasis, Skipped,
     TrackRef,
 };
+use crate::backup::BackupReason;
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::fileinfo;
@@ -88,6 +89,9 @@ pub fn apply(
         });
     }
 
+    if !checked.is_empty() {
+        lib.snapshot_before(BackupReason::Relocate);
+    }
     {
         let mut conn = lib.conn()?;
         let tx = conn.transaction()?;

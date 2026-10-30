@@ -9,6 +9,10 @@ const REASONS: Record<BackupReason, string> = {
   xmlImport: "Before a rekordbox import",
   convertReplace: "Before converting files",
   historyImport: "Before a history import",
+  bulkEdit: "Before editing many tracks",
+  adopt: "Before adopting a stick's playlists",
+  relocate: "Before relocating missing files",
+  commentTags: "Before a My Tags comment update",
 };
 
 export function reasonLabel(reason: BackupReason): string {

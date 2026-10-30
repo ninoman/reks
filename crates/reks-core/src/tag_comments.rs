@@ -10,6 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use unicode_normalization::UnicodeNormalization;
 
+use crate::backup::BackupReason;
 use crate::db::Library;
 use crate::error::Result;
 use crate::scan::TrackId;
@@ -59,6 +60,7 @@ impl Library {
     /// transaction. With [`settings::TAGS_IN_COMMENTS`] on, the blocks of
     /// tagged tracks are then rewritten from their tags.
     pub fn comment_tags_import(&self) -> Result<CommentTagsReport> {
+        self.snapshot_before(BackupReason::CommentTags);
         let mut conn = self.conn()?;
         let tx = conn.transaction()?;
         let report = import_tags(&tx, None)?;
@@ -71,6 +73,9 @@ impl Library {
     /// only counts). Tracks without tags keep their comment, so a block that
     /// was never imported is not lost. Returns the comments changed.
     pub fn comment_tags_sync_all(&self, apply: bool) -> Result<u32> {
+        if apply {
+            self.snapshot_before(BackupReason::CommentTags);
+        }
         let mut conn = self.conn()?;
         let tx = conn.transaction()?;
         let ids = tagged(&tx, None)?;

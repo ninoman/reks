@@ -328,3 +328,37 @@ fn unrelated_files_in_the_folder_are_left_alone() {
     assert!(f.files().contains(&"notes.txt".to_owned()));
     assert_eq!(f.lib.backups().unwrap().len(), 1);
 }
+
+/// F06: bulk operations snapshot the library themselves, whatever the front
+/// end; dry runs take none.
+#[test]
+fn bulk_operations_snapshot_first() {
+    let f = fixture();
+    add_track(&f.lib, 1);
+    let reasons = |f: &Fixture| -> Vec<BackupReason> {
+        f.lib.backups().unwrap().iter().map(|b| b.reason).collect()
+    };
+    f.lib.comment_tags_sync_all(false).unwrap();
+    assert!(reasons(&f).is_empty());
+
+    f.lib.comment_tags_sync_all(true).unwrap();
+    assert_eq!(reasons(&f), [BackupReason::CommentTags]);
+    f.lib
+        .bulk_update_tracks(&[1], &crate::BulkPatch::default())
+        .unwrap();
+    assert_eq!(reasons(&f)[0], BackupReason::BulkEdit);
+
+    let xml = crate::rbxml::parse(
+        br#"<DJ_PLAYLISTS Version="1.0.0"><COLLECTION Entries="0"/></DJ_PLAYLISTS>"#.as_slice(),
+    )
+    .unwrap();
+    crate::rbxml::import(&xml, &f.lib, crate::rbxml::ImportOptions::default(), |_| {}).unwrap();
+    assert_eq!(reasons(&f)[0], BackupReason::XmlImport);
+}
+
+#[test]
+fn every_reason_round_trips_through_its_slug() {
+    for r in BackupReason::ALL {
+        assert_eq!(BackupReason::from_slug(r.slug()), Some(r));
+    }
+}

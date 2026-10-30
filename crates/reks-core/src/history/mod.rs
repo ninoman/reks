@@ -40,6 +40,7 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::backup::BackupReason;
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::scan::TrackId;
@@ -358,6 +359,7 @@ pub fn import(
     choices: &ImportChoices,
     lib: &Library,
 ) -> Result<ImportReport> {
+    lib.snapshot_before(BackupReason::HistoryImport);
     let now = now_utc();
     let mut report = ImportReport::default();
     let mut touched: HashSet<TrackId> = HashSet::new();
