@@ -257,7 +257,6 @@ describe("useExportWizard", () => {
       keyNotation: "classical",
       deckWaveform: "threeBand",
       theme: "graphite",
-      syncAlign: "bar",
       mixerEq: "fourBand",
       mixerView: "simple",
       mixerFilters: "show",

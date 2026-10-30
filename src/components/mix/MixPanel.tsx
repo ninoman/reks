@@ -39,7 +39,7 @@ export function MixPanel() {
       live?.masterDeck == null ? null : (live.decks[live.masterDeck]?.beat ?? null);
     const phase =
       !master && view?.beat != null && masterBeat !== null
-        ? phaseOffset(view.beat, masterBeat, view.syncBar ? 4 : 1)
+        ? phaseOffset(view.beat, masterBeat)
         : null;
     const key = meta.track?.key ?? null;
     return (

@@ -417,9 +417,9 @@ Decks are one size in both modes
   release; PLAY during the preview keeps it playing.
 - Tempo range button cycles ±6, ±10 (default), ±16 and WIDE (±100%, labelled `W`; the
   slow end stands still), as on a CDJ-3000.
-- Sync aligns (Settings → Decks, `mix.sync_align`): **Bar** (default; SYNC
-  lines up the downbeats too) or **Beat**. Replaces the deck's BAR button;
-  a deck already synced keeps its mode until SYNC is pressed again.
+- SYNC matches beats only, never bars: the DJ decides where in the bar a
+  track comes in. (The "Sync aligns: beat / bar" setting was removed
+  2026-10-30.)
 - Mixer settings (Settings → Mixer, opened by the gear "Mixer settings" in
   the mixer's top-left corner; `setDialogOpen(true, "mixer")` opens on that
   tab and focuses its first control): Mixer view `mix.mixer_view` (**Simple**
@@ -460,7 +460,7 @@ Decks are one size in both modes
   analysis columns (close zoom: from the deck's detail, where 3-band mixes
   its band colours into one line like RGB); drawing is pure in
   [`waveDraw.ts`](../src/lib/waveDraw.ts) (`waveBars`, `detailBars`). Only styles our columns can feed are offered.
-- Sync phase: a marker half a beat either side (two beats with bar sync),
+- Sync phase: a marker half a beat either side,
   green within 1/32 beat. The tempo fader is CDJ-style: faster towards the
   bottom.
 - Load: the table's context menu ("Load to deck N", also in playlist views)
@@ -566,9 +566,9 @@ Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light g
   pointing down: left (− REV, anticlockwise) slows, right (+ FWD,
   clockwise) speeds up. Held.
 - **MASTER** is lit while the deck is master; a click takes master. SYNC as
-  before. Bar sync leaves the deck: Settings → Decks → "Sync aligns: beat /
-  bar" (default bar). The phase meter shows on synced decks other than the
-  master.
+  before; in BPM sync (a nudge, FINE jump or part-beat jump left the
+  master's phase) it reads BPM, and a press returns to beat sync. The
+  phase meter shows on synced decks other than the master.
 - **Pads** (pad mode is a tab strip: `SegmentedControl` `variant="outline"`, four equal tabs, the chosen one outlined like the set hot cues; lit is for switches like Q, not modes; same 2 × 4 in every mode; ◀ ▶ page through sizes in BEAT JUMP
   and BEAT LOOP, and through the memory cues in MEMORY; HOT CUE shows them disabled at 1/1 so the row doesn't shift; with the pads under 20rem the labels read CUE / MEM):
   - HOT CUE: A–H, a set pad outlined in its cue's colour (`HotCueView.color`,

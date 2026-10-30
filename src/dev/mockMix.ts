@@ -158,7 +158,7 @@ function emptyDeck(): Deck {
       beat: null,
       cuePreview: false,
       sync: false,
-      syncBar: false,
+      bpmSync: false,
       locked: false,
       quantise: true,
       masterTempo: false,
@@ -256,13 +256,13 @@ function tick() {
       givesPhase(leadDeck.view) &&
       v.playing &&
       v.nudge === 1 &&
+      !v.bpmSync &&
       !v.loopRegion
     ) {
-      // Jump into the leader's beat phase (bar phase with bar sync).
-      const span = v.syncBar ? 4 : 1;
+      // Jump into the leader's beat phase.
       const own = beatAt(v.positionMs);
       const diff = beatAt(leadDeck.view.positionMs) - own;
-      const wrapped = diff - span * Math.round(diff / span);
+      const wrapped = diff - Math.round(diff);
       v.positionMs = msAtBeat(own + wrapped);
     }
     v.bpm = d.grid ? GRID_BPM * v.speed : null;
@@ -389,6 +389,8 @@ function beatJump(d: Deck, beats: number) {
     if (l.startMs + by < 0 || l.endMs + by > v.durationMs) return;
     v.loopRegion = { ...l, startMs: l.startMs + by, endMs: l.endMs + by };
   }
+  // As `reks-mix` `Deck::beat_jump`: off the beat leaves phase.
+  if (v.locked && !Number.isInteger(beats)) v.bpmSync = true;
   v.positionMs = to;
 }
 
@@ -435,6 +437,7 @@ function control(c: MixControl) {
       beatJump(d, c.beats);
       break;
     case "fineJump":
+      if (v.locked) v.bpmSync = true;
       v.positionMs = Math.min(
         v.durationMs,
         Math.max(0, v.positionMs + (c.forward ? FINE_JUMP_MS : -FINE_JUMP_MS)),
@@ -530,10 +533,11 @@ function control(c: MixControl) {
       break;
     case "nudge":
       v.nudge = c.ratio;
+      if (v.locked && c.ratio !== 1) v.bpmSync = true;
       break;
     case "sync":
       v.sync = c.on;
-      v.syncBar = c.bar;
+      v.bpmSync = false;
       break;
     case "quantise":
       v.quantise = c.on;
@@ -555,7 +559,7 @@ function load(deck: number, id: number, analysed: boolean): DeckLoaded {
     durationMs: DURATION_MS,
     tempo: prev?.view.tempo ?? 1,
     sync: prev?.view.sync ?? false,
-    syncBar: prev?.view.syncBar ?? false,
+    bpmSync: false,
     quantise: prev?.view.quantise ?? true,
     masterTempo: prev?.view.masterTempo ?? false,
   };

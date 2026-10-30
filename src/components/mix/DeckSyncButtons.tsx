@@ -3,6 +3,8 @@
  * SYNC, one beside each pad row (`--deck-ctl-rows`), filling the column. Both
  * need a grid. SYNC lights in the synced colour (`data-lit`), matching the
  * BPM readout while it follows the master. The player deck alone has neither.
+ * In BPM sync (a nudge or jump left the master's phase) SYNC reads BPM; a
+ * press restores beat sync.
  */
 import { Button } from "../ui/Button";
 
@@ -12,6 +14,7 @@ export interface DeckSyncButtonsProps {
   ready: boolean;
   master: boolean;
   sync: boolean;
+  bpmSync: boolean;
   masterKey: string | undefined;
   syncKey: string | undefined;
   onMaster: () => void;
@@ -23,6 +26,7 @@ export function DeckSyncButtons({
   ready,
   master,
   sync,
+  bpmSync,
   masterKey,
   syncKey,
   onMaster,
@@ -51,12 +55,12 @@ export function DeckSyncButtons({
         aria-pressed={sync}
         data-lit="synced"
         aria-label={`Deck ${n} sync`}
-        hint="Sync"
+        hint={sync && bpmSync ? "BPM sync: tempo only (press for beat sync)" : "Sync"}
         shortcut={syncKey}
         className="row-start-3 size-full px-0 text-2xs font-bold tracking-caption"
         onClick={onSync}
       >
-        SYNC
+        {sync && bpmSync ? "BPM" : "SYNC"}
       </Button>
     </div>
   );

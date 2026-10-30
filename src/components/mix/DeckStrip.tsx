@@ -215,7 +215,6 @@ export function DeckStrip({
               onZoom={actions.zoom}
               phaseShown={!solo && view.sync && !view.master}
               phase={phase}
-              phaseHalf={view.syncBar ? 2 : 0.5}
               warning={warning(meta, grid)}
             />
           }
@@ -266,6 +265,7 @@ export function DeckStrip({
       ready={grid}
       master={view?.master ?? false}
       sync={view?.sync ?? false}
+      bpmSync={view?.bpmSync ?? false}
       masterKey={keyFor({ type: "master" })}
       syncKey={keyFor({ type: "sync" })}
       onMaster={actions.takeMaster}

@@ -25,8 +25,8 @@ speakers. It is a preparation tool. Nothing here is meant for playing a gig.
   to the track's hot cues, drag the waveform to skim, tempo fader
   (±6/±10/±16% and WIDE ±100%, CDJ-3000; ±10 default), pitch-bend nudge, quantise.
 - Sync: one leader deck (first playing, or chosen). SYNC on a deck matches the
-  leader's tempo and beat phase from `beatgrid` rows; bar sync also matches the
-  downbeat. Varispeed: pitch follows tempo.
+  leader's tempo and beat phase from `beatgrid` rows; it never lines up bars
+  (the DJ picks where a track comes in). Varispeed: pitch follows tempo.
 - Mixer, 4 channels, modelled on the Xone:92 music channels (R§9.1):
   - LEVEL trim (20 dB range); 4-band asymmetric EQ, the Xone:96's since
     2026-10-22 (maintainer's call): HI shelf above 3 kHz, HI MID bell at
@@ -136,11 +136,15 @@ pub enum Control {
    that has been playing longest (kept while all are stopped); it plays at its
    own tempo × nudge. Every 32-frame block a follower's speed is set from both
    local grid tempos (so dynamic grids are followed beat by beat), and its
-   beat (bar sync: place in the bar) is compared with the leader's: an error
+   place in the beat is compared with the leader's: an error
    over 1/32 beat jumps into phase (seek crossfade, never before the track's
    start), a smaller one bends the speed by at most 1% (time constant 0.5 s).
-   While nudged, a follower matches tempo only and re-locks on release. A
-   stopped leader passes on its tempo, not its phase. Measured worst gaps:
+   A nudge, a FINE jump or a beat jump of part of a beat puts a follower in
+   BPM sync (tempo only, phase left where the DJ put it) until SYNC is
+   pressed again; whole-beat jumps stay in beat sync. Changed 2026-10-30,
+   maintainer's call: nudges were undone on release, and bar sync (removed:
+   sync matches beats only) undid jumps of a beat or less. A stopped leader
+   passes on its tempo, not its phase. Measured worst gaps:
    128/125 over 64 bars 0.0005 ms; tempo change in the follower 0.043 ms, in
    the leader 0.025 ms.
 4. [x] **EQ**: 4-band asymmetric EQ with tapers. Sine-sweep tests: knobs at noon
@@ -448,8 +452,8 @@ pub enum Control {
     - `HotCueView.name` through `mix_load` (`CueMark.name` from `Cue.name`);
       the colour was already there from task 15 (`colorRgb`).
     - Bar sync is a setting (Settings → Decks → "Sync aligns: beat / bar",
-      `mix.sync_align`, `SyncAlign` in `reks-core` `settings.rs`, default
-      bar), replacing the deck's BAR button.
+      `mix.sync_align`, default bar), replacing the deck's BAR button.
+      Removed 2026-10-30 (maintainer's call): sync matches beats only.
     - A track loaded without a grid is queued for analysis first; when it is
       done the deck refetches columns and grid, and reloads the track in
       place once paused so the engine has the grid (cue point, position and

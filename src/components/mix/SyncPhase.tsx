@@ -1,7 +1,6 @@
 /**
  * Sync phase: how far a deck's beat is from the master's, as a marker on a
- * half-beat-either-side scale (bar sync: two beats either side), drawn on
- * the dark deck. Green when within 1/32 beat.
+ * half-beat-either-side scale, drawn on the dark deck. Green when within 1/32 beat.
  */
 import { cn } from "../../lib/cn";
 import { PHASE_LOCK } from "../../lib/mixView";
@@ -9,11 +8,9 @@ import { PHASE_LOCK } from "../../lib/mixView";
 export interface SyncPhaseProps {
   /** Beats ahead (+) or behind (−) the master; null when there is nothing to compare. */
   offset: number | null;
-  /** Half the scale, in beats: 0.5, or 2 for bar phase. */
-  half: number;
 }
 
-export function SyncPhase({ offset, half }: SyncPhaseProps) {
+export function SyncPhase({ offset }: SyncPhaseProps) {
   const inPhase = offset !== null && Math.abs(offset) <= PHASE_LOCK;
   const label =
     offset === null
@@ -34,7 +31,7 @@ export function SyncPhase({ offset, half }: SyncPhaseProps) {
             "absolute -inset-y-px w-1 -translate-x-1/2 rounded-full bg-warning",
             inPhase && "bg-success",
           )}
-          style={{ left: `${50 + (Math.max(-1, Math.min(1, offset / half))) * 50}%` }}
+          style={{ left: `${50 + (Math.max(-1, Math.min(1, offset / 0.5))) * 50}%` }}
         />
       )}
     </div>

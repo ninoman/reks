@@ -41,7 +41,7 @@ const deckView = (over: Partial<DeckView> = {}): DeckView => ({
   loopIn: null,
   lastLoop: null,
   sync: false,
-  syncBar: false,
+  bpmSync: false,
   locked: false,
   quantise: true,
   masterTempo: false,
@@ -538,16 +538,30 @@ describe("mix store", () => {
     expect(sent()).toHaveLength(1);
   });
 
-  it("sync uses the bar setting it is given; take master", () => {
+  it("sync and take master", () => {
     useMix.setState({
       status: "running",
       live: { ...running, decks: [deckView({ loaded: true })] },
     });
-    useMix.getState().toggleSync(0, false);
+    useMix.getState().toggleSync(0);
     useMix.getState().takeMaster(0);
     expect(sent()).toEqual([
-      { type: "sync", deck: 0, on: true, bar: false },
+      { type: "sync", deck: 0, on: true },
       { type: "takeMaster", deck: 0 },
+    ]);
+  });
+
+  it("SYNC in BPM sync goes back to beat sync; otherwise it toggles", () => {
+    const decks = [
+      deckView({ loaded: true, sync: true, bpmSync: true }),
+      deckView({ loaded: true, sync: true }),
+    ];
+    useMix.setState({ status: "running", live: { ...running, decks } });
+    useMix.getState().toggleSync(0);
+    useMix.getState().toggleSync(1);
+    expect(sent()).toEqual([
+      { type: "sync", deck: 0, on: true },
+      { type: "sync", deck: 1, on: false },
     ]);
   });
 

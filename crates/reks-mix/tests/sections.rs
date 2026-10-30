@@ -147,11 +147,7 @@ fn a_synced_deck_follows_the_tempo_change_within_2_ms() {
         deck: 1,
         src: Arc::clone(&follow.src),
     });
-    g.apply(Control::Sync {
-        deck: 1,
-        on: true,
-        bar: true,
-    });
+    g.apply(Control::Sync { deck: 1, on: true });
     g.apply(Control::Play { deck: 1 });
     // Through the change at 60.1 s and 16 bars of 174 BPM.
     let until = on[FIRST + 64];

@@ -56,7 +56,7 @@ describe("mock mixer", () => {
     send({ type: "tempo", deck: 0, ratio: 1.06 });
     send({ type: "play", deck: 0 });
     run(100);
-    send({ type: "sync", deck: 1, on: true, bar: false });
+    send({ type: "sync", deck: 1, on: true });
     send({ type: "play", deck: 1 });
     run(100);
     expect(state().masterDeck).toBe(0);
@@ -156,7 +156,7 @@ describe("mock mixer", () => {
     send({ type: "loopIn", deck: 0 });
     run(700);
     send({ type: "loopOut", deck: 0 });
-    send({ type: "sync", deck: 1, on: true, bar: false });
+    send({ type: "sync", deck: 1, on: true });
     send({ type: "play", deck: 1 });
     run(17);
     const before = state().decks[1]?.positionMs ?? 0;

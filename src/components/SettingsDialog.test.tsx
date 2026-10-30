@@ -39,7 +39,6 @@ const settings: Settings = {
   keyNotation: "classical",
   deckWaveform: "rgb",
   theme: "booth",
-  syncAlign: "bar",
   mixerEq: "fourBand",
   mixerView: "simple",
   mixerFilters: "show",

@@ -39,7 +39,7 @@ const view = (over: Partial<DeckView>): DeckView => ({
   loopIn: null,
   lastLoop: null,
   sync: false,
-  syncBar: false,
+  bpmSync: false,
   locked: false,
   quantise: true,
   masterTempo: false,

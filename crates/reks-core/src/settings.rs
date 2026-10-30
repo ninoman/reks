@@ -5,7 +5,7 @@
 //! means the default (an unreadable one is logged), so a bad row never stops
 //! the app. Keys: [`AUDIO_DEVICE`], [`AUDIO_SAMPLE_RATE`],
 //! [`AUDIO_BUFFER_FRAMES`], [`AUDIO_CUE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`THEME`],
-//! [`SYNC_ALIGN`], [`MIXER_VIEW`], [`MIXER_FILTERS`], [`MIXER_EQ`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`],
+//! [`MIXER_VIEW`], [`MIXER_FILTERS`], [`MIXER_EQ`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`],
 //! [`TAGS_IN_COMMENTS`].
 
 use std::collections::BTreeMap;
@@ -36,8 +36,6 @@ pub const KEY_NOTATION: &str = "display.key_notation";
 pub const DECK_WAVEFORM: &str = "display.deck_waveform";
 /// [`Theme`]: the app's colours.
 pub const THEME: &str = "display.theme";
-/// [`SyncAlign`]: what a deck's SYNC lines up with the master.
-pub const SYNC_ALIGN: &str = "mix.sync_align";
 /// [`MixerView`]: which mixer controls the Mix view shows.
 pub const MIXER_VIEW: &str = "mix.mixer_view";
 /// [`MixerFilters`]: whether the simple mixer view shows the filters.
@@ -126,19 +124,6 @@ pub enum Theme {
     Booth,
 }
 
-/// What SYNC lines up with the master besides the tempo (phase 5 task 16;
-/// replaces the deck's BAR button).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum SyncAlign {
-    /// The beat.
-    Beat,
-    /// The bar: the downbeats line up too (default, maintainer's call,
-    /// 2026-10-22).
-    #[default]
-    Bar,
-}
-
 /// Which mixer controls the Mix view shows (phase 5 task 24; the engine is
 /// the same in both views).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,7 +176,6 @@ pub struct Settings {
     pub key_notation: KeyNotation,
     pub deck_waveform: DeckWaveform,
     pub theme: Theme,
-    pub sync_align: SyncAlign,
     pub mixer_view: MixerView,
     pub mixer_filters: MixerFilters,
     pub mixer_eq: MixerEq,
@@ -291,7 +275,6 @@ pub struct SettingsPatch {
     pub key_notation: Option<KeyNotation>,
     pub deck_waveform: Option<DeckWaveform>,
     pub theme: Option<Theme>,
-    pub sync_align: Option<SyncAlign>,
     pub mixer_view: Option<MixerView>,
     pub mixer_filters: Option<MixerFilters>,
     pub mixer_eq: Option<MixerEq>,
@@ -335,7 +318,6 @@ impl Library {
             key_notation: get(&conn, KEY_NOTATION)?.unwrap_or_default(),
             deck_waveform: get(&conn, DECK_WAVEFORM)?.unwrap_or_default(),
             theme: get(&conn, THEME)?.unwrap_or_default(),
-            sync_align: get(&conn, SYNC_ALIGN)?.unwrap_or_default(),
             mixer_view: get(&conn, MIXER_VIEW)?.unwrap_or_default(),
             mixer_filters: get(&conn, MIXER_FILTERS)?.unwrap_or_default(),
             mixer_eq: get(&conn, MIXER_EQ)?.unwrap_or_default(),
@@ -373,9 +355,6 @@ impl Library {
             }
             if let Some(t) = patch.theme {
                 put(&tx, THEME, Some(&t))?;
-            }
-            if let Some(a) = patch.sync_align {
-                put(&tx, SYNC_ALIGN, Some(&a))?;
             }
             if let Some(v) = patch.mixer_view {
                 put(&tx, MIXER_VIEW, Some(&v))?;
@@ -719,7 +698,6 @@ mod tests {
         assert_eq!(s.key_notation, KeyNotation::Classical);
         assert_eq!(s.deck_waveform, DeckWaveform::Rgb);
         assert_eq!(s.theme, Theme::Booth);
-        assert_eq!(s.sync_align, SyncAlign::Bar);
         assert_eq!(s.mixer_view, MixerView::Simple);
         assert_eq!(s.mixer_filters, MixerFilters::Show);
         assert_eq!(s.mixer_eq, MixerEq::FourBand);
@@ -756,7 +734,6 @@ mod tests {
             key_notation: Some(KeyNotation::Camelot),
             deck_waveform: Some(DeckWaveform::ThreeBand),
             theme: Some(Theme::Paper),
-            sync_align: Some(SyncAlign::Beat),
             mixer_view: Some(MixerView::Advanced),
             mixer_filters: Some(MixerFilters::Hide),
             mixer_eq: Some(MixerEq::ThreeBand),
@@ -785,7 +762,6 @@ mod tests {
         assert_eq!(s.key_notation, KeyNotation::OpenKey);
         assert_eq!(s.deck_waveform, DeckWaveform::ThreeBand);
         assert_eq!(s.theme, Theme::Paper);
-        assert_eq!(s.sync_align, SyncAlign::Beat);
         assert_eq!(s.mixer_view, MixerView::Advanced);
         assert_eq!(s.mixer_filters, MixerFilters::Hide);
         assert_eq!(s.mixer_eq, MixerEq::ThreeBand);
@@ -824,8 +800,6 @@ mod tests {
         assert_eq!(p.deck_waveform, Some(DeckWaveform::Blue));
         let p: SettingsPatch = serde_json::from_str(r#"{"theme":"booth"}"#).unwrap();
         assert_eq!(p.theme, Some(Theme::Booth));
-        let p: SettingsPatch = serde_json::from_str(r#"{"syncAlign":"beat"}"#).unwrap();
-        assert_eq!(p.sync_align, Some(SyncAlign::Beat));
         let p: SettingsPatch =
             serde_json::from_str(r#"{"mixerView":"advanced","mixerFilters":"hide"}"#).unwrap();
         assert_eq!(p.mixer_view, Some(MixerView::Advanced));
