@@ -361,6 +361,26 @@ impl<'a> Compiler<'a> {
                 p.push(Value::Text(date.clone()));
                 "t.last_played >= ?".into()
             }
+            Filter::RatingRange { min, max } => {
+                p.push(Value::Integer(i64::from(*min)));
+                p.push(Value::Integer(i64::from(*max)));
+                "t.rating BETWEEN ? AND ?".into()
+            }
+            Filter::TagAll { ids } => {
+                let mut unique = ids.clone();
+                unique.sort_unstable();
+                unique.dedup();
+                if unique.is_empty() {
+                    return Ok("0".into());
+                }
+                p.extend(unique.iter().map(|&id| Value::Integer(id)));
+                p.push(Value::Integer(unique.len() as i64));
+                format!(
+                    "(SELECT COUNT(*) FROM track_tag tt WHERE tt.track_id = t.id
+                       AND tt.tag_id IN ({})) = ?",
+                    placeholders(unique.len())
+                )
+            }
             Filter::TagAny { ids } => {
                 if ids.is_empty() {
                     return Ok("0".into());

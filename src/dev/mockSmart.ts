@@ -68,6 +68,10 @@ export function createMockSmart(ctx: SmartContext) {
         return r.lastPlayed !== null && r.lastPlayed >= f.date;
       case "tagAny":
         return ctx.hasAnyTag(r.id, f.ids);
+      case "ratingRange":
+        return r.rating >= f.min && r.rating <= f.max;
+      case "tagAll":
+        return f.ids.length > 0 && f.ids.every((id) => ctx.hasAnyTag(r.id, [id]));
     }
   }
 

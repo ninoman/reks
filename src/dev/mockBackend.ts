@@ -377,6 +377,9 @@ function query(q: TrackQuery) {
       rows = rows.filter((r) => r.playCount >= f.min && r.playCount <= f.max);
     if (f.type === "playedSince")
       rows = rows.filter((r) => r.lastPlayed !== null && r.lastPlayed >= f.date);
+    if (f.type === "ratingRange") rows = rows.filter((r) => r.rating >= f.min && r.rating <= f.max);
+    if (f.type === "tagAll")
+      rows = rows.filter((r) => f.ids.length > 0 && f.ids.every((id) => tags.hasAny(r.id, [id])));
     if (f.type === "tagAny") rows = rows.filter((r) => tags.hasAny(r.id, f.ids));
   }
   // A smart list has no positions: its own sort stands in for "playlist order".
