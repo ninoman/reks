@@ -10,7 +10,6 @@ import { mixKeyAction } from "../lib/mixKeys";
 import { mixerParts } from "../lib/mixView";
 import { useMix } from "./mix";
 import { usePanels } from "./panels";
-import { syncBar } from "./settings";
 
 export function useMixShortcuts() {
   useEffect(() => {
@@ -36,7 +35,7 @@ export function useMixShortcuts() {
           mix.togglePlay(action.deck);
           break;
         case "sync":
-          mix.toggleSync(action.deck, syncBar());
+          mix.toggleSync(action.deck);
           break;
         case "jump":
           mix.jumpLast(action.deck, action.dir);

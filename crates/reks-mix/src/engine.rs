@@ -773,11 +773,7 @@ mod tests {
             },
             Control::Play { deck: 2 },
             Control::Play { deck: 1 },
-            Control::Sync {
-                deck: 1,
-                on: true,
-                bar: true,
-            },
+            Control::Sync { deck: 1, on: true },
         ] {
             r.controls.push(c).unwrap();
         }
@@ -801,11 +797,7 @@ mod tests {
         // Beat jumps, a beat loop wrapping a few times, halve, double, exit,
         // and the master pausing (hand-over to deck 2, which syncs first).
         for c in [
-            Control::Sync {
-                deck: 2,
-                on: true,
-                bar: false,
-            },
+            Control::Sync { deck: 2, on: true },
             Control::BeatJump {
                 deck: 2,
                 beats: 4.0,

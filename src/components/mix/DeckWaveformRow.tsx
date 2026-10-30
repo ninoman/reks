@@ -18,8 +18,6 @@ export interface DeckWaveformRowProps {
   phaseShown: boolean;
   /** Beats from the master's phase; null when there is none to compare. */
   phase: number | null;
-  /** Half the meter's scale in beats (2 with bar sync). */
-  phaseHalf: number;
   warning: string | null;
 }
 
@@ -31,7 +29,6 @@ export function DeckWaveformRow({
   onZoom,
   phaseShown,
   phase,
-  phaseHalf,
   warning,
 }: DeckWaveformRowProps) {
   const n = deck + 1;
@@ -39,7 +36,7 @@ export function DeckWaveformRow({
     <>
       {phaseShown && (
         <div className="pointer-events-none absolute top-0.5 left-1/2 -translate-x-1/2">
-          <SyncPhase offset={phase} half={phaseHalf} />
+          <SyncPhase offset={phase} />
         </div>
       )}
       <div className="absolute top-1 right-1 flex items-center gap-0.5 rounded-xs bg-overlay p-0.5 opacity-0 focus-within:opacity-100 group-hover/wave:opacity-100">

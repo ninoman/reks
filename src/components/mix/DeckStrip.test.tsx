@@ -22,7 +22,7 @@ const view = (over: Partial<DeckView> = {}): DeckView => ({
   bpm: 131.2,
   beat: 24.1,
   sync: false,
-  syncBar: false,
+  bpmSync: false,
   locked: false,
   quantise: true,
   masterTempo: false,
@@ -327,6 +327,14 @@ describe("DeckStrip", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("SYNC reads BPM in BPM sync", () => {
+    setup({ view: view({ sync: true, locked: true, bpmSync: true }), meta: loadedMeta() });
+    expect(screen.getByRole("button", { name: "Deck 2 sync" }).textContent).toBe("BPM");
+    cleanup();
+    setup({ view: view({ sync: true, locked: true }), meta: loadedMeta() });
+    expect(screen.getByRole("button", { name: "Deck 2 sync" }).textContent).toBe("SYNC");
   });
 
   it("shows sync phase against the master; the master is lit and has none", () => {

@@ -95,8 +95,8 @@ pub struct DeckState {
     pub cue_preview: bool,
     /// Sync is on.
     pub sync: bool,
-    /// Sync matches the downbeat too.
-    pub sync_bar: bool,
+    /// BPM sync: sync matches tempo only (a nudge or jump left phase).
+    pub bpm_sync: bool,
     /// Sync is following the leader (on, not the leader, and both decks
     /// have a grid).
     pub locked: bool,
@@ -130,7 +130,7 @@ impl Default for DeckState {
             beat: None,
             cue_preview: false,
             sync: false,
-            sync_bar: false,
+            bpm_sync: false,
             locked: false,
             quantise: false,
             master_tempo: false,
@@ -387,7 +387,7 @@ impl Graph {
                 position: d.position(),
                 rate_ratio: d.rate_ratio(),
                 playing: d.playing(),
-                bar: d.sync_bar,
+                phase: !d.bpm_sync,
                 nudge: d.nudge,
                 looping: d.looping(),
             });
@@ -898,16 +898,12 @@ mod tests {
             deck: 1,
             ratio: f64::NAN,
         });
-        g.apply(Control::Sync {
-            deck: 1,
-            on: true,
-            bar: true,
-        });
+        g.apply(Control::Sync { deck: 1, on: true });
         g.apply(Control::Quantise { deck: 1, on: true });
         let st = g.state();
         let d = st.decks[1];
         assert_eq!((d.tempo, d.nudge), (1.08, 1.0));
-        assert!(d.sync && d.sync_bar && d.quantise);
+        assert!(d.sync && d.quantise);
         assert_eq!(st.decks[2].tempo, TEMPO_MAX);
         // Only a deck with a grid can take master.
         g.apply(Control::TakeMaster { deck: 2 });
@@ -1300,11 +1296,7 @@ mod tests {
         });
         g.apply(Control::Play { deck: 0 });
         render_frames(&mut g, 64);
-        g.apply(Control::Sync {
-            deck: 1,
-            on: true,
-            bar: false,
-        });
+        g.apply(Control::Sync { deck: 1, on: true });
         if follower_plays {
             g.apply(Control::Play { deck: 1 });
         }
@@ -1397,11 +1389,7 @@ mod tests {
             deck: 1,
             src: gridded(480_000),
         });
-        g.apply(Control::Sync {
-            deck: 1,
-            on: true,
-            bar: false,
-        });
+        g.apply(Control::Sync { deck: 1, on: true });
         render_frames(&mut g, 64);
         // Paused follower: tempo matched, phase left alone.
         let d = g.state().decks[1];
@@ -1409,30 +1397,18 @@ mod tests {
         assert!((d.speed - 1.06).abs() < 1e-12);
         assert_eq!(d.position, 0);
         // The leader cannot follow; a deck without a grid cannot either.
-        g.apply(Control::Sync {
-            deck: 0,
-            on: true,
-            bar: false,
-        });
+        g.apply(Control::Sync { deck: 0, on: true });
         g.apply(Control::Load {
             deck: 2,
             src: ramp_source(480_000),
         });
-        g.apply(Control::Sync {
-            deck: 2,
-            on: true,
-            bar: false,
-        });
+        g.apply(Control::Sync { deck: 2, on: true });
         render_frames(&mut g, 64);
         let st = g.state();
         assert!(!st.decks[0].locked && !st.decks[2].locked);
         assert_eq!(st.decks[2].speed, 1.0);
         // Sync off: back to the deck's own tempo.
-        g.apply(Control::Sync {
-            deck: 1,
-            on: false,
-            bar: false,
-        });
+        g.apply(Control::Sync { deck: 1, on: false });
         render_frames(&mut g, 64);
         assert_eq!(g.state().decks[1].speed, 1.0);
     }

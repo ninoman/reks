@@ -16,7 +16,7 @@ fn constant(bpm: f64, beats: usize) -> [Section; 1] {
 
 /// Loads `lead` on deck 0 and starts it; after `delay_s`, loads `follow` on
 /// deck 1 with sync on and starts it. Returns the frame deck 1 started at.
-fn start(g: &mut Graph, o: &mut Onsets, lead: &Fixture, follow: &Fixture, bar: bool) -> usize {
+fn start(g: &mut Graph, o: &mut Onsets, lead: &Fixture, follow: &Fixture) -> usize {
     g.apply(Control::Load {
         deck: 0,
         src: Arc::clone(&lead.src),
@@ -28,11 +28,7 @@ fn start(g: &mut Graph, o: &mut Onsets, lead: &Fixture, follow: &Fixture, bar: b
         deck: 1,
         src: Arc::clone(&follow.src),
     });
-    g.apply(Control::Sync {
-        deck: 1,
-        on: true,
-        bar,
-    });
+    g.apply(Control::Sync { deck: 1, on: true });
     g.apply(Control::Play { deck: 1 });
     delay
 }
@@ -44,7 +40,7 @@ fn synced_128_and_125_stay_within_1_ms_for_64_bars() {
     let follow = click_track(RATE, Side::Right, 437.0, &constant(125.0, 330));
     let mut g = Graph::new(RATE).unwrap();
     let mut o = Onsets::new(RATE);
-    let from = start(&mut g, &mut o, &lead, &follow, true);
+    let from = start(&mut g, &mut o, &lead, &follow);
     // 64 bars at 128 BPM after the follower starts, and a beat to spare.
     let bars = (65.0 * 4.0 * 60.0 / 128.0 * f64::from(RATE)) as usize;
     run(&mut g, &mut o, bars);
@@ -60,15 +56,6 @@ fn synced_128_and_125_stay_within_1_ms_for_64_bars() {
     assert!(gap <= 1.0, "worst gap {gap:.3} ms");
     let checked = o.left.iter().filter(|l| l.at >= settle).count();
     assert!(checked >= 256, "{checked} beats");
-    // Bar sync: downbeats on downbeats.
-    for l in o.left.iter().filter(|l| l.at >= settle) {
-        let r = o
-            .right
-            .iter()
-            .min_by(|a, b| (a.at - l.at).abs().total_cmp(&(b.at - l.at).abs()))
-            .unwrap();
-        assert_eq!(l.loud, r.loud, "at frame {}", l.at);
-    }
 }
 
 #[test]
@@ -91,7 +78,7 @@ fn a_tempo_change_in_the_follower_stays_within_2_ms() {
     let follow = click_track(RATE, Side::Right, 80.0, &sections);
     let mut g = Graph::new(RATE).unwrap();
     let mut o = Onsets::new(RATE);
-    let from = start(&mut g, &mut o, &lead, &follow, false);
+    let from = start(&mut g, &mut o, &lead, &follow);
     run(&mut g, &mut o, RATE as usize * 80);
 
     let settle = from as f64 + f64::from(RATE) * 0.05;
@@ -121,7 +108,7 @@ fn a_tempo_change_in_the_leader_is_followed_within_2_ms() {
     let follow = click_track(RATE, Side::Right, 300.0, &constant(128.0, 200));
     let mut g = Graph::new(RATE).unwrap();
     let mut o = Onsets::new(RATE);
-    let from = start(&mut g, &mut o, &lead, &follow, false);
+    let from = start(&mut g, &mut o, &lead, &follow);
     run(&mut g, &mut o, RATE as usize * 60);
 
     let settle = from as f64 + f64::from(RATE) * 0.05;
@@ -141,7 +128,7 @@ fn two_synced_constant_grids_stay_within_2_ms_for_10_minutes() {
     let follow = click_track(SRC_RATE, Side::Right, 510.0, &constant(126.0, 1_300));
     let mut g = Graph::new(RATE).unwrap();
     let mut o = Onsets::new(RATE);
-    let from = start(&mut g, &mut o, &lead, &follow, true);
+    let from = start(&mut g, &mut o, &lead, &follow);
     run(&mut g, &mut o, RATE as usize * 600);
 
     let settle = from as f64 + f64::from(RATE) * 0.05;
@@ -151,4 +138,80 @@ fn two_synced_constant_grids_stay_within_2_ms_for_10_minutes() {
     let checked = o.left.iter().filter(|l| l.at >= settle).count();
     assert!(checked >= 1_270, "{checked} beats over 10 minutes");
     assert!(g.state().decks[1].playing && g.state().decks[1].locked);
+}
+
+/// The follower's beat phase against the leader's (0 in phase), in beats;
+/// `None` without beats.
+fn beat_offset(g: &mut Graph) -> Option<f64> {
+    let st = g.state();
+    let d = (st.decks[1].beat? - st.decks[0].beat?).rem_euclid(1.0);
+    Some(if d > 0.5 { d - 1.0 } else { d })
+}
+
+#[test]
+fn nudges_and_jumps_off_the_beat_leave_phase_for_bpm_sync() {
+    let lead = click_track(RATE, Side::Left, 100.0, &constant(128.0, 300));
+    let follow = click_track(RATE, Side::Right, 437.0, &constant(125.0, 330));
+    let mut g = Graph::new(RATE).unwrap();
+    let mut o = Onsets::new(RATE);
+    start(&mut g, &mut o, &lead, &follow);
+    let second = RATE as usize;
+    run(&mut g, &mut o, second);
+    assert!(beat_offset(&mut g).unwrap().abs() < 0.01);
+
+    // A one-beat jump: kept, still in beat sync (bars are not lined up).
+    let before = g.state().decks[1].beat.unwrap();
+    g.apply(Control::BeatJump {
+        deck: 1,
+        beats: 1.0,
+    });
+    run(&mut g, &mut o, second);
+    let d = g.state().decks[1];
+    assert!(d.locked && !d.bpm_sync);
+    assert!(beat_offset(&mut g).unwrap().abs() < 0.01);
+    // A second at 128 BPM, and the jump.
+    let moved = d.beat.unwrap() - before - 128.0 / 60.0;
+    assert!((moved - 1.0).abs() < 0.05, "{moved}");
+
+    // Half a beat: BPM sync keeps the tempo and leaves the phase alone.
+    g.apply(Control::BeatJump {
+        deck: 1,
+        beats: 0.5,
+    });
+    run(&mut g, &mut o, second * 2);
+    let d = g.state().decks[1];
+    assert!(d.locked && d.bpm_sync);
+    assert!((d.speed - 128.0 / 125.0).abs() < 1e-6, "{}", d.speed);
+    assert!(
+        (beat_offset(&mut g).unwrap().abs() - 0.5).abs() < 0.01,
+        "{}",
+        beat_offset(&mut g).unwrap()
+    );
+
+    // SYNC again: beat sync, back in phase.
+    g.apply(Control::Sync { deck: 1, on: true });
+    run(&mut g, &mut o, second);
+    assert!(!g.state().decks[1].bpm_sync);
+    assert!(beat_offset(&mut g).unwrap().abs() < 0.01);
+
+    // A held nudge stays where it was let go.
+    g.apply(Control::Nudge {
+        deck: 1,
+        ratio: 1.04,
+    });
+    run(&mut g, &mut o, second / 2);
+    g.apply(Control::Nudge {
+        deck: 1,
+        ratio: 1.0,
+    });
+    let moved = beat_offset(&mut g).unwrap();
+    run(&mut g, &mut o, second * 2);
+    let d = g.state().decks[1];
+    assert!(d.bpm_sync && d.locked);
+    assert!(moved > 0.02, "{moved}");
+    assert!(
+        (beat_offset(&mut g).unwrap() - moved).abs() < 0.005,
+        "{}",
+        beat_offset(&mut g).unwrap()
+    );
 }

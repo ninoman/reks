@@ -139,7 +139,9 @@ pub(crate) struct Deck {
     pub(crate) tempo: f64,
     pub(crate) nudge: f64,
     pub(crate) sync: bool,
-    pub(crate) sync_bar: bool,
+    /// BPM sync: sync matches tempo only, because a nudge or a jump moved
+    /// the deck off the master's phase; SYNC again restores beat sync.
+    pub(crate) bpm_sync: bool,
     quantise: bool,
     /// Play order, for the automatic sync leader; 0 when stopped.
     pub(crate) started: u64,
@@ -187,7 +189,7 @@ impl Deck {
             tempo: 1.0,
             nudge: 1.0,
             sync: false,
-            sync_bar: false,
+            bpm_sync: false,
             quantise: false,
             started: 0,
             locked: false,
@@ -277,6 +279,7 @@ impl Deck {
         match c {
             Control::Load { src, .. } => {
                 self.play_after_load = None;
+                self.bpm_sync = false;
                 self.change(Pending::Load(Some(src)))
             }
             Control::Unload { .. } => {
@@ -365,11 +368,14 @@ impl Deck {
             }
             Control::Nudge { ratio: r, .. } => {
                 self.nudge = ratio(r);
+                if self.nudge != 1.0 {
+                    self.leave_phase();
+                }
                 None
             }
-            Control::Sync { on, bar, .. } => {
+            Control::Sync { on, .. } => {
                 self.sync = on;
-                self.sync_bar = bar;
+                self.bpm_sync = false;
                 None
             }
             Control::Quantise { on, .. } => {
@@ -711,8 +717,17 @@ impl Deck {
         }
     }
 
+    /// A synced deck moved off the master's phase on purpose: keep its
+    /// tempo locked but stop pulling it back into phase.
+    fn leave_phase(&mut self) {
+        if self.locked {
+            self.bpm_sync = true;
+        }
+    }
+
     /// Beat jump; ignored when it would leave the track. The active loop
-    /// moves with the head.
+    /// moves with the head. While synced, a jump of part of a beat leaves
+    /// phase (BPM sync), so sync does not undo it.
     fn beat_jump(&mut self, beats: f64) {
         if !beats.is_finite() || beats == 0.0 {
             return;
@@ -735,6 +750,9 @@ impl Deck {
             };
             self.looping = Some(Loop { start, end, ..l });
         }
+        if (beats - beats.round()).abs() > 1e-9 {
+            self.leave_phase();
+        }
         self.jump(to);
     }
 
@@ -748,6 +766,7 @@ impl Deck {
         };
         let by = f64::from(src.sample_rate() * FINE_JUMP_MS) / 1000.0;
         let to = self.position() + if forward { by } else { -by };
+        self.leave_phase();
         self.jump(to.clamp(0.0, self.frames() as f64));
     }
 
@@ -1099,7 +1118,7 @@ impl Deck {
             beat: beats.and_then(|b| b.beat_at(position)),
             cue_preview: self.cue_preview,
             sync: self.sync,
-            sync_bar: self.sync_bar,
+            bpm_sync: self.bpm_sync,
             locked: self.locked,
             quantise: self.quantise,
             master_tempo: self.master_tempo,

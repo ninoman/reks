@@ -61,7 +61,7 @@ pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};
 pub use secret::OneLibraryKey;
 pub use settings::{
     AnlzPreference, DeckWaveform, FilterSaveTarget, LibraryRoot, MixerEq, MixerFilters, MixerView,
-    RowDensity, Settings, SettingsPatch, SyncAlign, Theme, UiState,
+    RowDensity, Settings, SettingsPatch, Theme, UiState,
 };
 pub use tag::{TagCategory, TagId, TagInfo, TagOp, TagOutcome, TagTree};
 pub use tag_comments::{CommentTagsPreview, CommentTagsReport};

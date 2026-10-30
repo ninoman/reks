@@ -103,11 +103,10 @@ pub enum Control {
         deck: u8,
         ratio: f64,
     },
-    /// Beat sync to the leader; `bar` also matches the downbeat.
+    /// Beat sync to the leader (beats only: bars are the DJ's call).
     Sync {
         deck: u8,
         on: bool,
-        bar: bool,
     },
     /// MASTER pressed: `deck` becomes the sync master (leader) now. It keeps
     /// the role until it stops, ends or is unloaded; see

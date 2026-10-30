@@ -1,6 +1,5 @@
 /** A deck's buttons and faders as mix store calls (shared by the Mix panel and the player deck). */
 import type { MixStore } from "../../store/mix";
-import { syncBar } from "../../store/settings";
 import type { DeckActions } from "./DeckStrip";
 
 export function deckActions(mix: MixStore, deck: number): DeckActions {
@@ -9,7 +8,7 @@ export function deckActions(mix: MixStore, deck: number): DeckActions {
     play: () => mix.send({ type: "play", deck }),
     pause: () => mix.send({ type: "pause", deck }),
     cue: (down) => mix.cue(deck, down),
-    toggleSync: () => mix.toggleSync(deck, syncBar()),
+    toggleSync: () => mix.toggleSync(deck),
     takeMaster: () => mix.takeMaster(deck),
     toggleQuantise: () =>
       mix.send({ type: "quantise", deck, on: !(mix.live?.decks[deck]?.quantise ?? false) }),

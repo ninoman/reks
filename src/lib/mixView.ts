@@ -108,13 +108,10 @@ export function formatTempo(ratio: number): string {
   return `${pct > 0 ? "+" : "-"}${text}%`;
 }
 
-/**
- * How far `beat` is from the leader's beat phase, in beats, in
- * [-span/2, span/2) (`span` 4 compares bar phase). Positive: ahead.
- */
-export function phaseOffset(beat: number, leaderBeat: number, span = 1): number {
-  const d = (((beat - leaderBeat) % span) + span) % span;
-  return d >= span / 2 ? d - span : d;
+/** How far `beat` is from the leader's beat phase, in beats, in [-1/2, 1/2). Positive: ahead. */
+export function phaseOffset(beat: number, leaderBeat: number): number {
+  const d = (((beat - leaderBeat) % 1) + 1) % 1;
+  return d >= 0.5 ? d - 1 : d;
 }
 
 /** Elapsed `m:ss.t` (tenths), or remaining with a leading minus. */

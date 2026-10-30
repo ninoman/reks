@@ -2,17 +2,18 @@
 //!
 //! Tempo match: the follower plays as many beats per output frame as the
 //! leader, from both decks' local grid tempo, so dynamic grids are followed
-//! beat by beat. Phase: the follower's beat (or place in the bar, for bar
-//! sync) is compared with the leader's at the same output frame. A small
-//! error is pulled in by bending the speed, at most [`MAX_BEND`], with time
-//! constant [`PULL_SECS`]; an error over [`JUMP_BEATS`] (sync just engaged,
-//! the leader jumped, a nudge was released) is fixed by a jump instead. Pure
+//! beat by beat. Phase: the follower's place in the beat is compared with
+//! the leader's at the same output frame; bars are not lined up, so the DJ
+//! decides where in the bar a track comes in. A small error is pulled in by
+//! bending the speed, at most [`MAX_BEND`], with time constant
+//! [`PULL_SECS`]; an error over [`JUMP_BEATS`] (sync just engaged, the
+//! leader jumped) is fixed by a jump instead. A follower in BPM sync (a
+//! nudge or a jump moved it off phase on purpose) matches tempo only. Pure
 //! functions; the graph calls them once per block on the audio thread.
 //!
 //! Loops: a looping follower matches tempo only, so its loop is not undone
 //! by phase jumps. A leader looping under a beat, or a length that is not a
-//! whole number of beats (a manual loop), gives no phase, and one looping a
-//! length that is not whole bars gives beat phase only.
+//! whole number of beats (a manual loop), gives no phase.
 
 use crate::beatmap::{wrap, BeatMap};
 
@@ -31,11 +32,9 @@ const WHOLE_BEATS: f64 = 1.0 / 64.0;
 pub(crate) struct Lead {
     /// Beats the leader advances per output frame.
     pub beats_per_frame: f64,
-    /// Beat number and place in the bar now; `None` while it is stopped
-    /// (followers then match its tempo only).
-    pub phase: Option<(f64, (f64, u8))>,
-    /// Its place in the bar keeps time (it is not looping part of a bar).
-    pub bars: bool,
+    /// Beat number now; `None` while it is stopped (followers then match its
+    /// tempo only).
+    pub phase: Option<f64>,
 }
 
 impl Lead {
@@ -51,18 +50,13 @@ impl Lead {
         let period = beats.period_at(position)?;
         let whole = |n: f64| n >= 1.0 - WHOLE_BEATS && (n - n.round()).abs() <= WHOLE_BEATS;
         let phase = if playing && loop_beats.is_none_or(whole) {
-            beats.beat_at(position).zip(beats.bar_at(position))
+            beats.beat_at(position)
         } else {
             None
-        };
-        let bars = match (loop_beats, phase) {
-            (Some(n), Some((_, (_, bpb)))) => n.round() % f64::from(bpb) == 0.0,
-            _ => true,
         };
         Some(Self {
             beats_per_frame: step / period,
             phase,
-            bars,
         })
     }
 }
@@ -75,7 +69,8 @@ pub(crate) struct Follower<'a> {
     /// Source frames per output frame at speed 1.
     pub rate_ratio: f64,
     pub playing: bool,
-    pub bar: bool,
+    /// Beat sync; `false` in BPM sync (tempo only).
+    pub phase: bool,
     /// Pitch bend held; phase correction pauses while it is not 1.0.
     pub nudge: f64,
     /// A loop is active: tempo only.
@@ -93,19 +88,6 @@ pub(crate) enum Plan {
     },
 }
 
-/// Phase error in beats (positive: the follower is ahead), wrapped into half
-/// a beat, or half a bar with bar sync when both bars are the same length;
-/// with the span it was wrapped in.
-pub(crate) fn phase_error(me: (f64, (f64, u8)), lead: (f64, (f64, u8)), bar: bool) -> (f64, f64) {
-    let ((beat, (in_bar, bpb)), (lead_beat, (lead_in_bar, lead_bpb))) = (me, lead);
-    if bar && bpb == lead_bpb {
-        let span = f64::from(bpb);
-        (wrap(in_bar - lead_in_bar, span), span)
-    } else {
-        (wrap(beat - lead_beat, 1.0), 1.0)
-    }
-}
-
 /// The speed (as a tempo ratio, 1.0 = as recorded) at which the follower
 /// plays as many beats per frame as the leader; `None` without a grid.
 pub(crate) fn matched_speed(lead: &Lead, me: &Follower<'_>) -> Option<f64> {
@@ -120,24 +102,22 @@ pub(crate) fn follow(lead: &Lead, me: &Follower<'_>, engine_rate: f64) -> Option
     // Source frames per output frame that match the leader's beat rate.
     let to_speed = |beats_per_frame: f64| beats_per_frame * period / me.rate_ratio;
     let matched = to_speed(lead.beats_per_frame);
-    if me.nudge != 1.0 {
+    if me.nudge != 1.0 || !me.phase {
         return Some(Plan::Speed(matched * me.nudge));
     }
     let (Some(lead_phase), true, false) = (lead.phase, me.playing, me.looping) else {
         return Some(Plan::Speed(matched));
     };
-    let mine = me
-        .beats
-        .beat_at(me.position)
-        .zip(me.beats.bar_at(me.position))?;
-    let (error, span) = phase_error(mine, lead_phase, me.bar && lead.bars);
+    let mine = me.beats.beat_at(me.position)?;
+    // Positive: the follower is ahead; wrapped into half a beat.
+    let error = wrap(mine - lead_phase, 1.0);
     if error.abs() > JUMP_BEATS {
         // In phase, and not before the track starts: a deck started from
         // its first frame is often less than a beat into its grid.
-        let mut target = mine.0 - error;
+        let mut target = mine - error;
         let start = me.beats.beat_at(0.0)?;
         if target < start {
-            target += ((start - target) / span).ceil() * span;
+            target += (start - target).ceil();
         }
         let to = me.beats.frame_at(target)?;
         return Some(Plan::Jump { to, speed: matched });
@@ -175,7 +155,7 @@ mod tests {
             position,
             rate_ratio: 1.0,
             playing: true,
-            bar: false,
+            phase: true,
             nudge: 1.0,
             looping: false,
         }
@@ -231,53 +211,23 @@ mod tests {
     }
 
     #[test]
-    fn bar_sync_matches_the_downbeat() {
+    fn bars_are_not_lined_up() {
         let map = grid(120.0, 0.0);
         let lead = Lead::new(&map, 240_000.0, 1.0, true, None).unwrap(); // beat 10: 3rd of its bar
-        let me = Follower {
-            bar: true,
-            ..follower(&map, 48_000.0) // beat 2: also 3rd
-        };
-        assert_eq!(follow(&lead, &me, RATE), Some(Plan::Speed(1.0)));
-        let me = Follower {
-            bar: true,
-            ..follower(&map, 72_000.0) // beat 3: one beat ahead in the bar
-        };
+                                                                         // Beat 3: 4th of its bar, in beat phase.
         assert_eq!(
-            follow(&lead, &me, RATE),
-            Some(Plan::Jump {
-                to: 48_000.0,
-                speed: 1.0
-            })
-        );
-        assert_eq!(
-            phase_error((3.0, (3.0, 4)), (1.0, (1.0, 4)), true),
-            (-2.0, 4.0)
-        );
-        assert_eq!(
-            phase_error((3.0, (3.0, 4)), (1.0, (1.0, 3)), true),
-            (0.0, 1.0)
+            follow(&lead, &follower(&map, 72_000.0), RATE),
+            Some(Plan::Speed(1.0))
         );
     }
 
     #[test]
     fn a_jump_never_lands_before_the_track() {
         let map = grid(120.0, 0.0);
-        let lead = Lead::new(&map, 240_000.0, 1.0, true, None).unwrap(); // bar position 2
-                                                                         // A follower whose first beat is 0.2 beats into the track, at its
-                                                                         // start: bar position 3.8, a bar later than the in-phase beat 2.
+        let lead = Lead::new(&map, 240_000.0, 1.0, true, None).unwrap();
+        // A follower whose first beat is 0.2 beats into the track, at its
+        // start: beat −0.2, so the in-phase beat −1 is before the track.
         let late = grid(120.0, 4_800.0);
-        let me = Follower {
-            bar: true,
-            ..follower(&late, 0.0)
-        };
-        assert_eq!(
-            follow(&lead, &me, RATE),
-            Some(Plan::Jump {
-                to: 4_800.0 + 2.0 * 24_000.0,
-                speed: 1.0
-            })
-        );
         let Some(Plan::Jump { to, .. }) = follow(&lead, &follower(&late, 0.0), RATE) else {
             panic!("jump");
         };
@@ -293,6 +243,12 @@ mod tests {
             ..follower(&map, 250_000.0)
         };
         assert_eq!(follow(&lead, &me, RATE), Some(Plan::Speed(1.04)));
+        // BPM sync: a third of a beat off, and left there.
+        let me = Follower {
+            phase: false,
+            ..follower(&map, 488_000.0)
+        };
+        assert_eq!(follow(&lead, &me, RATE), Some(Plan::Speed(1.0)));
         let me = Follower {
             playing: false,
             ..follower(&map, 250_000.0)
@@ -327,30 +283,12 @@ mod tests {
             follow(&half, &follower(&map, 488_000.0), RATE),
             Some(Plan::Speed(1.0))
         );
-        // Looping 2 beats: beat phase only, so bar sync does not jump a beat.
-        let two = Lead::new(&map, 240_000.0, 1.0, true, Some(2.0)).unwrap();
-        assert!(!two.bars);
-        let me = Follower {
-            bar: true,
-            ..follower(&map, 72_000.0) // one beat off in the bar, in beat phase
-        };
-        assert_eq!(follow(&two, &me, RATE), Some(Plan::Speed(1.0)));
-        assert!(
-            Lead::new(&map, 240_000.0, 1.0, true, Some(8.0))
-                .unwrap()
-                .bars
-        );
         // A manual loop of part of a beat gives no phase; within 1/64 of
         // whole beats it still counts as whole.
         for (n, phase) in [(3.87, false), (1.5, false), (4.01, true), (3.99, true)] {
             let l = Lead::new(&map, 240_000.0, 1.0, true, Some(n)).unwrap();
             assert_eq!(l.phase.is_some(), phase, "{n}");
         }
-        assert!(
-            Lead::new(&map, 240_000.0, 1.0, true, Some(3.99))
-                .unwrap()
-                .bars
-        );
         let slower = grid(125.0, 0.0);
         let m = matched_speed(&lead, &follower(&slower, 0.0)).unwrap();
         assert!((m - 120.0 / 125.0).abs() < 1e-12, "{m}");

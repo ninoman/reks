@@ -52,7 +52,7 @@ const idleDeck: DeckView = {
   bpm: null,
   beat: null,
   sync: false,
-  syncBar: false,
+  bpmSync: false,
   locked: false,
   quantise: false,
   masterTempo: false,

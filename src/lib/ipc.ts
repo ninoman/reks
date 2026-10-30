@@ -814,7 +814,8 @@ export interface DeckView {
   /** CUE is held from the cue point: playing until it is let go. */
   cuePreview: boolean;
   sync: boolean;
-  syncBar: boolean;
+  /** BPM sync: tempo only, since a nudge or jump left the master's phase; SYNC restores beat sync. */
+  bpmSync: boolean;
   /** Following the master's tempo and phase. */
   locked: boolean;
   quantise: boolean;
@@ -982,7 +983,7 @@ export type MixControl =
   | { type: "tempo"; deck: number; ratio: number }
   /** Pitch bend while held; 1 releases it. */
   | { type: "nudge"; deck: number; ratio: number }
-  | { type: "sync"; deck: number; on: boolean; bar: boolean }
+  | { type: "sync"; deck: number; on: boolean }
   /** MASTER: this deck becomes the sync master until it stops, ends or is unloaded. */
   | { type: "takeMaster"; deck: number }
   /** Signed beats along the grid (the pads' `JUMP_PAGES`, FINE = 1/32); during a loop the loop moves too. */
@@ -1092,9 +1093,6 @@ export type DeckWaveform = "threeBand" | "rgb" | "blue";
 /** The app's colour theme (`data-theme` on <html>, tokens.css). Booth is the default. */
 export type Theme = "graphite" | "paper" | "midnight" | "dusk" | "booth";
 
-/** What SYNC lines up with the master: the beat, or the bar (downbeats too). */
-export type SyncAlign = "beat" | "bar";
-
 /** Which mixer controls the Mix view shows; the engine is the same in both. */
 export type MixerView = "simple" | "advanced";
 
@@ -1149,7 +1147,6 @@ export interface Settings {
   keyNotation: KeyNotation;
   deckWaveform: DeckWaveform;
   theme: Theme;
-  syncAlign: SyncAlign;
   mixerEq: MixerEq;
   mixerView: MixerView;
   mixerFilters: MixerFilters;
@@ -1175,7 +1172,6 @@ export interface SettingsPatch {
   keyNotation?: KeyNotation;
   deckWaveform?: DeckWaveform;
   theme?: Theme;
-  syncAlign?: SyncAlign;
   mixerEq?: MixerEq;
   mixerView?: MixerView;
   mixerFilters?: MixerFilters;

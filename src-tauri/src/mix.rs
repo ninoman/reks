@@ -164,7 +164,8 @@ pub struct DeckView {
     /// CUE is held from the cue point (the deck plays until it is let go).
     pub cue_preview: bool,
     pub sync: bool,
-    pub sync_bar: bool,
+    /// BPM sync: tempo only, phase left by a nudge or jump.
+    pub bpm_sync: bool,
     pub locked: bool,
     pub quantise: bool,
     /// Master tempo (key lock) is on.
@@ -249,7 +250,7 @@ fn deck_view(d: &DeckState, track_id: Option<TrackId>, rate: u32) -> DeckView {
         beat: d.beat,
         cue_preview: d.cue_preview,
         sync: d.sync,
-        sync_bar: d.sync_bar,
+        bpm_sync: d.bpm_sync,
         locked: d.locked,
         quantise: d.quantise,
         master_tempo: d.master_tempo,
@@ -890,7 +891,6 @@ pub enum MixControl {
     Sync {
         deck: u8,
         on: bool,
-        bar: bool,
     },
     TakeMaster {
         deck: u8,
@@ -989,7 +989,7 @@ impl MixControl {
             },
             Self::Tempo { deck, ratio } => Control::Tempo { deck, ratio },
             Self::Nudge { deck, ratio } => Control::Nudge { deck, ratio },
-            Self::Sync { deck, on, bar } => Control::Sync { deck, on, bar },
+            Self::Sync { deck, on } => Control::Sync { deck, on },
             Self::TakeMaster { deck } => Control::TakeMaster { deck },
             Self::BeatJump { deck, beats } => Control::BeatJump { deck, beats },
             Self::FineJump { deck, forward } => Control::FineJump { deck, forward },
@@ -1207,12 +1207,8 @@ mod tests {
             }
         ));
         assert!(matches!(
-            parse(r#"{"type":"sync","deck":3,"on":true,"bar":false}"#),
-            reks_mix::Control::Sync {
-                deck: 3,
-                on: true,
-                bar: false
-            }
+            parse(r#"{"type":"sync","deck":3,"on":true}"#),
+            reks_mix::Control::Sync { deck: 3, on: true }
         ));
         assert!(matches!(
             parse(r#"{"type":"volume","value":0.5}"#),

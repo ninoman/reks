@@ -243,8 +243,8 @@ export interface MixStore {
   togglePlay: (deck: number) => void;
   /** CUE pressed (`down`) or let go. */
   cue: (deck: number, down: boolean) => void;
-  /** SYNC on or off; `bar` lines up the downbeats too (Settings → Decks). */
-  toggleSync: (deck: number, bar: boolean) => void;
+  /** SYNC on or off (beats only); in BPM sync, back to beat sync. */
+  toggleSync: (deck: number) => void;
   takeMaster: (deck: number) => void;
   /** Beat jump by `beats` (negative: back); remembers the size for the keys. */
   beatJump: (deck: number, beats: number) => void;
@@ -782,10 +782,11 @@ export const useMix = create<MixStore>((set, get) => {
       get().send({ type: down ? "cue" : "cueRelease", deck });
     },
 
-    toggleSync(deck, bar) {
+    toggleSync(deck) {
       const v = deckView(deck);
       if (v === undefined) return;
-      get().send({ type: "sync", deck, on: !v.sync, bar });
+      // In BPM sync, SYNC goes back to beat sync rather than off.
+      get().send({ type: "sync", deck, on: !v.sync || v.bpmSync });
     },
 
     takeMaster(deck) {

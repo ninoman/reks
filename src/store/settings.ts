@@ -269,11 +269,6 @@ export function useTheme(): Theme | null {
   return useSettings((s) => s.settings?.theme ?? null);
 }
 
-/** Whether SYNC lines up bars (Settings → Decks → Sync aligns; bar until settings load). */
-export function syncBar(): boolean {
-  return (useSettings.getState().settings?.syncAlign ?? "bar") === "bar";
-}
-
 /**
  * Keeps the mixer's view (Settings → Mixer) in the mix store, which sends
  * what the engine gets for the controls that view hides. Call after `load`;

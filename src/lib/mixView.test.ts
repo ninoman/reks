@@ -79,11 +79,6 @@ describe("phaseOffset", () => {
     expect(phaseOffset(9.9, 3.0)).toBeCloseTo(-0.1);
     expect(phaseOffset(3.5, 0)).toBeCloseTo(-0.5);
   });
-
-  it("compares bar phase with a span of 4", () => {
-    expect(phaseOffset(6, 0, 4)).toBeCloseTo(-2);
-    expect(phaseOffset(5, 0, 4)).toBeCloseTo(1);
-  });
 });
 
 describe("formatClock", () => {

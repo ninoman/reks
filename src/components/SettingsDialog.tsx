@@ -149,7 +149,7 @@ function SettingsBody({
               <DisplaySettings theme={settings.theme} notation={settings.keyNotation} />
             </Panel>
             <Panel value="decks">
-              <DeckSettings waveform={settings.deckWaveform} align={settings.syncAlign} />
+              <DeckSettings waveform={settings.deckWaveform} />
             </Panel>
             <Panel value="mixer">
               <MixerSettings
