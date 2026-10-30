@@ -3986,6 +3986,7 @@ dependencies = [
  "reks-analysis",
  "reks-audio",
  "reks-core",
+ "serde",
  "thiserror 2.0.21",
  "unicode-normalization",
  "walkdir",

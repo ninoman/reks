@@ -10,6 +10,7 @@
 //! (code + the player's RGB bytes, from the same exports).
 
 use reks_core::track::Cue;
+use serde::{Deserialize, Serialize};
 
 use crate::grid::bpm_at;
 use crate::write::{CueEntry, PqtzBeat};
@@ -184,6 +185,54 @@ impl CueLists {
     }
 }
 
+/// How many entries each file's cue lists hold for a track, placed as
+/// [`CueLists`] (and baken) place them; export validation compares these
+/// with what it reads back from the stick.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CueCounts {
+    /// Memory cues and loops.
+    pub memory: u8,
+    /// Hot cues A–C.
+    pub hot_dat: u8,
+    /// Hot cues D–H.
+    pub hot_ext: u8,
+}
+
+impl CueCounts {
+    /// Counts library cues (hot cues past H are dropped, as [`CueLists`]
+    /// drops them); each count saturates at 255.
+    pub fn of(cues: &[Cue]) -> Self {
+        let mut n = Self::default();
+        for c in cues {
+            let count = match c.slot {
+                Some(s) if s < DAT_HOT_SLOTS => &mut n.hot_dat,
+                Some(s) if s < HOT_SLOTS => &mut n.hot_ext,
+                Some(_) => continue,
+                None => &mut n.memory,
+            };
+            *count = count.saturating_add(1);
+        }
+        n
+    }
+
+    /// Entries across the `.DAT` `PCOB` lists: memory cues and hot cues A–C.
+    pub fn dat_pcob(self) -> u32 {
+        u32::from(self.memory) + u32::from(self.hot_dat)
+    }
+
+    /// Entries across the `.EXT` `PCOB` lists: hot cues D–H (its memory
+    /// list stays empty).
+    pub fn ext_pcob(self) -> u32 {
+        u32::from(self.hot_ext)
+    }
+
+    /// Entries across the `.EXT` `PCO2` lists: every hot and memory cue.
+    pub fn ext_pco2(self) -> u32 {
+        self.dat_pcob() + self.ext_pcob()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,5 +352,25 @@ mod tests {
         let e = entry(&named, &[]);
         assert_eq!((e.hot_cue, e.comment.as_str()), (2, "Drop"));
         assert_eq!(e.hot_color, [0x2A, 0xFF, 0x00, 0x00]);
+    }
+
+    /// The counts match the lists the builder writes: hot cues B, D–H and
+    /// two memory cues give a `.DAT` `PCOB` of 3 (B + memory), an `.EXT`
+    /// `PCOB` of 5 (D–H) and `PCO2` of all 8 (perf audit 2026-10-30).
+    #[test]
+    fn counts_follow_list_placement() {
+        let mut cues: Vec<Cue> = [1, 3, 4, 5, 6, 7]
+            .into_iter()
+            .map(|s| cue(Some(s), 0, f64::from(s) * 100.0, None))
+            .collect();
+        cues.push(cue(None, 0, 50.0, None));
+        cues.push(cue(None, 4, 60.0, Some(900.0)));
+        cues.push(cue(Some(8), 0, 70.0, None));
+        let n = CueCounts::of(&cues);
+        let l = CueLists::new(&cues, &[]);
+        assert_eq!(n.dat_pcob() as usize, l.dat_hot().len() + l.memory.len());
+        assert_eq!(n.ext_pcob() as usize, l.ext_hot().len());
+        assert_eq!(n.ext_pco2() as usize, l.hot.len() + l.memory.len());
+        assert_eq!((n.dat_pcob(), n.ext_pcob(), n.ext_pco2()), (3, 5, 8));
     }
 }

@@ -89,7 +89,7 @@ fn track(id: TrackId, src: PathBuf) -> SourceTrack {
         probe: None,
         has_grid: true,
         grid_user_owned: false,
-        cue_count: 0,
+        cues: Default::default(),
         divider: None,
     }
 }

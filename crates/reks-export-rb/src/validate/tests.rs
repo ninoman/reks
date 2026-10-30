@@ -6,6 +6,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use reks_anlz::cue::CueCounts;
 use reks_audio::{Kind, Probe};
 
 use super::*;
@@ -15,12 +16,28 @@ use crate::plan::{ExportOptions, PlannedTrack};
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures");
 const XML_LOCATION: &str = "file://localhost/Users/reks/Music/reks%20fixtures/";
 
-/// Fixture file, track id, cue count (POSITION_MARKs in the XML).
-const TRACKS: [(&str, TrackId, u8); 3] = [
-    ("sine-click-128.mp3", 1, 5),
-    ("sine-click-128.flac", 2, 2),
-    ("sine-click-128.m4a", 3, 3),
+/// Fixture file, track id, cues (POSITION_MARKs in the XML).
+const TRACKS: [(&str, TrackId, CueCounts); 3] = [
+    ("sine-click-128.mp3", 1, cues(2, 3, 0)),
+    ("sine-click-128.flac", 2, cues(1, 1, 0)),
+    ("sine-click-128.m4a", 3, cues(2, 1, 0)),
 ];
+
+/// Hot cues D–H added to track 2 by [`stick_with_hot_cues_d_to_h`].
+const TRACK_2_D_TO_H: &str = r#"<POSITION_MARK Name="Drop" Type="0" Start="7.500" Num="0" Red="230" Green="40" Blue="40"/>
+      <POSITION_MARK Name="" Type="0" Start="9.000" Num="3" Red="230" Green="40" Blue="40"/>
+      <POSITION_MARK Name="" Type="0" Start="11.000" Num="4" Red="230" Green="40" Blue="40"/>
+      <POSITION_MARK Name="" Type="0" Start="13.000" Num="5" Red="230" Green="40" Blue="40"/>
+      <POSITION_MARK Name="" Type="0" Start="17.000" Num="6" Red="230" Green="40" Blue="40"/>
+      <POSITION_MARK Name="Out" Type="4" Start="20.000" End="21.875" Num="7" Red="230" Green="40" Blue="40"/>"#;
+
+const fn cues(memory: u8, hot_dat: u8, hot_ext: u8) -> CueCounts {
+    CueCounts {
+        memory,
+        hot_dat,
+        hot_ext,
+    }
+}
 
 struct Stick {
     _tmp: tempfile::TempDir,
@@ -53,6 +70,21 @@ impl Stick {
 /// Writes the stick with baken and builds the plan the planner would have
 /// made for it (paths as baken chose them).
 fn stick() -> Stick {
+    stick_from(|xml| xml, TRACKS)
+}
+
+/// [`stick`] with track 2 also carrying hot cues D–H (one a hot loop).
+fn stick_with_hot_cues_d_to_h() -> Stick {
+    let drop = r#"<POSITION_MARK Name="Drop" Type="0" Start="7.500" Num="0" Red="230" Green="40" Blue="40"/>"#;
+    let mut tracks = TRACKS;
+    tracks[1].2 = cues(1, 1, 5);
+    stick_from(|xml| xml.replace(drop, TRACK_2_D_TO_H), tracks)
+}
+
+fn stick_from(
+    edit_xml: impl Fn(String) -> String,
+    tracks: [(&str, TrackId, CueCounts); 3],
+) -> Stick {
     let tmp = tempfile::tempdir().unwrap();
     let music = tmp.path().join("music");
     let root = tmp.path().join("stick");
@@ -60,13 +92,13 @@ fn stick() -> Stick {
     for d in [&music, &root, &anlz_roots] {
         fs::create_dir_all(d).unwrap();
     }
-    for (file, ..) in TRACKS {
+    for (file, ..) in tracks {
         fs::copy(Path::new(ROOT).join("audio").join(file), music.join(file)).unwrap();
     }
     let xml = fs::read_to_string(Path::new(ROOT).join("rekordbox/collection-small.xml")).unwrap();
     let location = format!("file://localhost{}/", music.display());
     let xml_path = tmp.path().join("collection.xml");
-    fs::write(&xml_path, xml.replace(XML_LOCATION, &location)).unwrap();
+    fs::write(&xml_path, edit_xml(xml.replace(XML_LOCATION, &location))).unwrap();
 
     let opts = baken_export::Options {
         xml: xml_path,
@@ -81,7 +113,7 @@ fn stick() -> Stick {
     let report = baken_export::export(&baken_plan, &(), &baken_core::CancelToken::new()).unwrap();
     assert!(report.failures.is_empty(), "{:?}", report.failures);
 
-    let tracks = TRACKS
+    let tracks = tracks
         .iter()
         .map(|&(file, id, cues)| {
             let dt = baken_plan
@@ -109,7 +141,7 @@ fn stick() -> Stick {
                     bit_rate_kbps: None,
                 },
                 has_grid: true,
-                cue_count: cues,
+                cues,
                 anlz_source: AnlzSource::Generated,
                 divider: None,
             }
@@ -441,23 +473,62 @@ fn playlist_tree_differences_are_reported() {
 #[test]
 fn cue_and_grid_expectations_are_checked() {
     let mut s = stick();
-    s.plan.tracks[0].cue_count = 9;
+    s.plan.tracks[0].cues.memory = 9;
     let r = s.validate();
-    assert!(!r.findings.is_empty());
-    assert!(r.findings.iter().all(|f| matches!(
-        f,
-        Finding::CueCount {
-            track_id: 1,
-            expected: 9,
-            ..
-        }
-    )));
+    let mut sections: Vec<(&str, u32)> = r
+        .findings
+        .iter()
+        .map(|f| match f {
+            Finding::CueCount {
+                track_id: 1,
+                section,
+                expected,
+                ..
+            } => (section.as_str(), *expected),
+            f => panic!("unexpected finding {f:?}"),
+        })
+        .collect();
+    sections.sort_unstable();
+    // Memory cues sit in the `.DAT` `PCOB` and the `.EXT` `PCO2`.
+    assert_eq!(sections, [("PCO2", 12), ("PCOB", 12)]);
 
     // Exported without analysis: no grid or cue expectations.
     let mut s = stick();
-    s.plan.tracks[0].cue_count = 9;
+    s.plan.tracks[0].cues.memory = 9;
     s.plan.tracks[0].anlz_source = AnlzSource::None;
     assert!(s.validate().is_valid());
+}
+
+/// Perf audit 2026-10-30 (§9 item 1): hot cues D–H live in the `.EXT`
+/// (`PCOB` D–H, `PCO2` all), not the `.DAT`, so a full write → validate of
+/// a track with them is clean.
+#[test]
+fn hot_cues_d_to_h_validate_clean() {
+    let s = stick_with_hot_cues_d_to_h();
+    let r = s.validate();
+    assert!(r.is_valid(), "{:#?}", r.findings);
+
+    // The files hold them where CueCounts says.
+    let dat_rel = s.analyze_path(2);
+    let read = |rel: &str| reks_anlz::read::summary(&fs::read(s.path(rel)).unwrap()).unwrap();
+    let dat = read(&dat_rel);
+    let ext = read(&with_extension(&dat_rel, "EXT"));
+    assert_eq!(dat.cues, Some(2));
+    assert_eq!((ext.cues, ext.extended_cues), (Some(5), Some(7)));
+
+    // Expecting them in the `.DAT` (the old rule) is a finding.
+    let mut s = s;
+    s.plan.tracks[1].cues = cues(1, 6, 0);
+    assert!(has(&s.validate(), |f| matches!(
+        f,
+        Finding::CueCount {
+            track_id: 2,
+            section,
+            expected: 7,
+            found: 2,
+            ..
+        } if section == "PCOB"
+    )));
 }
 
 #[test]

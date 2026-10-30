@@ -60,7 +60,7 @@ pub struct ExportPlan {
     pub bytes_to_write: u64, pub bytes_free_after: i64,
 }
 pub struct PlannedTrack { pub track_id: TrackId, pub src: PathBuf, pub dst_rel: String /* /Contents/... */,
-                          pub kind: Kind, pub probe: Probe, pub has_grid: bool, pub cue_count: u8,
+                          pub kind: Kind, pub probe: Probe, pub has_grid: bool, pub cues: CueCounts /* per ANLZ cue list */,
                           pub anlz_source: AnlzSource }
 pub enum TargetProfile { Cdj2000Nxs, Cdj2000Nxs2, Cdj3000, XdjXz, Generic }   // affects fs + codec warnings
 pub enum AnlzSource { RekordboxCache(PathBuf), Reks /* Phase 3 task 10 */, Generated, None }

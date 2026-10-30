@@ -135,7 +135,11 @@ fn track(id: TrackId, src: PathBuf, artist: &str, album: &str) -> SourceTrack {
         probe: None,
         has_grid: true,
         grid_user_owned: false,
-        cue_count: 3,
+        cues: CueCounts {
+            memory: 1,
+            hot_dat: 2,
+            hot_ext: 0,
+        },
         divider: None,
     }
 }

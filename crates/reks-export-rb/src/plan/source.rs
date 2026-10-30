@@ -4,6 +4,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use reks_anlz::cue::CueCounts;
 use reks_audio::{Kind, Probe};
 use reks_core::query::MAX_PAGE;
 use reks_core::{Filter, Library, PlaylistId, PlaylistNode, Sort, SortColumn, TrackId, TrackQuery};
@@ -25,8 +26,8 @@ pub struct SourceTrack {
     /// [`Library::grid_is_user_owned`]): the planner prefers reks's analysis,
     /// whose `PQTZ` is that grid, over rekordbox's cached one.
     pub grid_user_owned: bool,
-    /// Hot cues, memory cues and loops (capped at 255).
-    pub cue_count: u8,
+    /// Hot cues, memory cues and loops, per ANLZ cue list.
+    pub cues: CueCounts,
     /// Set for a playlist divider ([`crate::divider::expand`]).
     pub divider: Option<DividerInfo>,
 }
@@ -187,7 +188,7 @@ fn source_track(
         probe,
         has_grid: d.beatgrid.is_some(),
         grid_user_owned,
-        cue_count: u8::try_from(d.cues.len()).unwrap_or(u8::MAX),
+        cues: CueCounts::of(&d.cues),
         divider: None,
     })
 }
