@@ -27,14 +27,22 @@
 //!   sessions against the library ([`guard_history`]); sessions not imported
 //!   yet block the plan until [`ExportOptions::history_chosen`].
 //!
-//! - OneLibrary (Phase 4 task 8, D14): with [`ExportOptions::onelibrary`],
-//!   [`plan_onelibrary`] asks a [`OneLibraryExport`] to plan
-//!   `exportLibrary.db` ([`ExportPlan::onelibrary`]). Experimental, off by
-//!   default; a missing key blocks, and history in the stick's existing
-//!   `exportLibrary.db` goes through the export guard.
+//! - OneLibrary (Phase 4 task 8, D14): with [`ExportOptions::onelibrary`]
+//!   and a key, [`plan_onelibrary`] asks a [`OneLibraryExport`] to plan
+//!   `exportLibrary.db` ([`ExportPlan::onelibrary`]). On by default and
+//!   UNVERIFIED on players (D14, 2026-10-30). Without the option or a key,
+//!   the stick's OneLibrary files are listed as deletes and an
+//!   `exportLibrary.db` there needs
+//!   [`ExportOptions::onelibrary_removal_confirmed`]. History in the stick's
+//!   `exportLibrary.db` goes through the export guard whenever a key opens it.
 //! - Playlist dividers (D22) become planned tracks backed by a generated
-//!   silent WAV when [`ExportOptions::dividers`] is on ([`crate::divider`]);
-//!   otherwise they are left out.
+//!   silent WAV when [`ExportOptions::dividers`] is on (the default,
+//!   UNVERIFIED on players, [`crate::divider`]); otherwise they are left out.
+//!
+//! The UNVERIFIED stick features (dividers, active loops, OneLibrary,
+//! reks-built ANLZ) default on by the maintainer's decision of 2026-10-30
+//! (D7, D14, D22): an accepted exception to the flag rule until their
+//! hardware tests land. Each keeps its option, so a user can turn it off.
 //!
 //! ANLZ comes from an [`AnlzLocator`] ([`CacheLocator`] for rekordbox's local
 //! cache) or from reks's own analysis through a [`ReksLocator`]
@@ -120,21 +128,32 @@ pub struct ExportOptions {
     /// ([`guard_history`]). Without it such a stick blocks the plan.
     pub history_chosen: bool,
     /// The `export.dividers` flag: write playlist dividers as silent tracks
-    /// ([`crate::divider`]). Off by default and UNVERIFIED until the Phase
-    /// 2.5 hardware session passes on CDJ-2000NXS2 and CDJ-3000.
+    /// ([`crate::divider`]). On by default (D22, 2026-10-30) and UNVERIFIED
+    /// until the Phase 2.5 hardware session passes on CDJ-2000NXS2 and
+    /// CDJ-3000.
     pub dividers: bool,
     /// rekordbox's analysis or reks's first, when both have a track (the
     /// app setting of the same name, [`reks_core::settings::ANLZ_PREFERENCE`]).
+    /// The default, rekordbox first, exports reks-built ANLZ (UNVERIFIED on
+    /// players) for tracks only reks analysed and for grids the user owns
+    /// (D7, accepted 2026-10-30).
     pub anlz_preference: AnlzPreference,
     /// Also write `exportLibrary.db` for OneLibrary players
-    /// ([`plan_onelibrary`]). Off by default; experimental and UNVERIFIED
-    /// on players until a Phase 4 hardware test passes.
+    /// ([`plan_onelibrary`]), as rekordbox 6.8.1+ always does. On by default
+    /// (D14, 2026-10-30); experimental and UNVERIFIED on players until a
+    /// Phase 4 hardware test passes. Needs a key ([`crate::onelibrary::resolve_key`]).
     pub onelibrary: bool,
+    /// The user confirmed that the stick's `exportLibrary.db` is deleted
+    /// because this export does not write one (option off, or no key), so
+    /// OneLibrary-only players find no library. Without it such a stick
+    /// blocks the plan ([`Problem::OneLibraryRemovalNotConfirmed`]).
+    pub onelibrary_removal_confirmed: bool,
     /// The `export.active_loops` flag: the earliest memory loop marked
     /// active in the library (task 17) goes to the stick as the track's
     /// active loop (`PCPT` status 4, through baken's XML marker,
-    /// [`reks_core::rbxml::ActiveLoops::BakenMarker`]). Off by default and
-    /// UNVERIFIED until a player enters it in a hardware test.
+    /// [`reks_core::rbxml::ActiveLoops::BakenMarker`]). On by default (D14
+    /// and D22's rule, 2026-10-30) and UNVERIFIED until a player enters it
+    /// in a hardware test.
     pub active_loops: bool,
 }
 
@@ -149,10 +168,11 @@ impl Default for ExportOptions {
             history: HistoryPolicy::BackUp,
             discard_history_confirmed: false,
             history_chosen: false,
-            dividers: false,
+            dividers: true,
             anlz_preference: AnlzPreference::RekordboxFirst,
-            onelibrary: false,
-            active_loops: false,
+            onelibrary: true,
+            onelibrary_removal_confirmed: false,
+            active_loops: true,
         }
     }
 }
@@ -289,6 +309,10 @@ pub struct ExportPlan {
     /// has no key.
     #[serde(default)]
     pub onelibrary: Option<OneLibraryPlan>,
+    /// [`plan_onelibrary`] ran on this plan; `apply` refuses a plan without
+    /// it, which might delete the stick's `exportLibrary.db` unannounced.
+    #[serde(default)]
+    pub onelibrary_planned: bool,
 }
 
 impl ExportPlan {
@@ -382,6 +406,10 @@ pub enum OpReason {
     OneLibrary,
     /// rekordbox's file beside `exportLibrary.db` that the OneLibrary step removes.
     OneLibraryAuxiliary,
+    /// A OneLibrary file (`exportLibrary.db`, its `-wal`/`-shm`,
+    /// `exportExt.pdb`) deleted because this export writes no
+    /// `exportLibrary.db` ([`plan_onelibrary`]).
+    OneLibraryRemoved,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -458,7 +486,24 @@ pub enum Warning {
     /// The OneLibrary export is on: experimental, unverified on players and
     /// unsupported by AlphaTheta (D14).
     OneLibraryExperimental,
+    /// The OneLibrary export is on but this build has no key built in and
+    /// `REKS_ONELIBRARY_KEY` is unset ([`crate::onelibrary::resolve_key`]):
+    /// only the Device Library is written.
+    OneLibraryNoKey,
+    /// This export writes no `exportLibrary.db` and the stick has one: it is
+    /// deleted with `files` (in [`ExportPlan::deletes`]), so the players
+    /// that read only OneLibrary ([`ONELIBRARY_ONLY_PLAYERS`]) find no
+    /// library on the stick.
+    OneLibraryRemoved {
+        files: Vec<String>,
+        /// The OneLibrary option is on but no key resolved.
+        no_key: bool,
+    },
 }
+
+/// Players that read only `exportLibrary.db`, not `export.pdb` (R§2,
+/// `docs/research.md`; UNVERIFIED per player).
+pub const ONELIBRARY_ONLY_PLAYERS: &[&str] = crate::check::LibraryFormat::OneLibrary.players();
 
 /// A blocker.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -515,9 +560,6 @@ pub enum Problem {
     HistoryImportUnavailable {
         message: String,
     },
-    /// The OneLibrary export is on but this build has no key built in and
-    /// `REKS_ONELIBRARY_KEY` is unset ([`crate::onelibrary::resolve_key`]).
-    OneLibraryKeyMissing,
     /// The OneLibrary export is on but this build has no writer
     /// ([`crate::onelibrary::NoWriter`]).
     OneLibraryUnavailable,
@@ -527,6 +569,9 @@ pub enum Problem {
     OneLibraryHistoryNotImported {
         sessions: u32,
     },
+    /// [`Warning::OneLibraryRemoved`] without
+    /// [`ExportOptions::onelibrary_removal_confirmed`].
+    OneLibraryRemovalNotConfirmed,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -790,6 +835,7 @@ pub fn plan_sources(
         bytes_free_after,
         convertible,
         onelibrary: None,
+        onelibrary_planned: false,
     })
 }
 

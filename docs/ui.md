@@ -732,7 +732,7 @@ the command returns the deck's cues and the store takes them.
   Drop", "Memory cue", "Memory loop", "Auto loop", "Cue point"; native
   title, `markAt` / `markTitle` in `lib/deckMarks.ts`).
 - **Export**: AUTO loops reach a USB stick only with **Active loops**
-  (UNVERIFIED badge, off by default) in the export wizard; see phase 5
+  (UNVERIFIED badge, on by default) in the export wizard; see phase 5
   task 17.
 - Shared pieces: `ui/InlineText.tsx` (`InlineText`, `InlineTextField`);
   `Pad` shows its `hint` in a tooltip even without a key and takes

@@ -504,7 +504,8 @@ pub enum Control {
       (its issue #210; its test matches rekordbox 7 bytes), one per track
       (the earliest).
     - [x] Export, behind the `export.active_loops` flag (`ExportOptions::active_loops`,
-      wizard switch "Active loops", off by default, UNVERIFIED until a
+      wizard switch "Active loops", on by default since 2026-10-30 (D22
+      amendment), UNVERIFIED until a
       player enters the loop in a hardware test): the temp XML handed to
       baken prefixes the earliest AUTO memory loop's name with `[active]`
       (`rbxml::ActiveLoops::BakenMarker`), which baken strips. Our own ANLZ

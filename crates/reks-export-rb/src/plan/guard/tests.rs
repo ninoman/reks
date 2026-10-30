@@ -12,6 +12,7 @@ use crate::apply::tests::{World, SERIAL};
 use crate::apply::{apply, ApplyError, ApplyEvent, ApplyStage, ExportReport, ExportStatus};
 use crate::dryrun::{DryRun, TrackLabels};
 use crate::history::{read_play_history, HistoryPolicy, HistoryReadOptions, HistorySource};
+use crate::onelibrary::NoWriter;
 use crate::plan::{self, ExportOptions, MissingAnalysis, NoAnlz};
 use crate::report::ReportView;
 use crate::testutil;
@@ -23,6 +24,7 @@ fn options(history: HistoryPolicy, chosen: bool) -> ExportOptions {
         history,
         history_chosen: chosen,
         discard_history_confirmed: history == HistoryPolicy::Discard,
+        onelibrary: false,
         ..ExportOptions::default()
     }
 }
@@ -40,6 +42,7 @@ fn plan_guarded(w: &World, opts: &ExportOptions) -> ExportPlan {
     )
     .unwrap();
     guard_history(&mut p, &w.lib).unwrap();
+    plan::plan_onelibrary(&mut p, &NoWriter, None, &w.lib).unwrap();
     p
 }
 

@@ -240,6 +240,14 @@ impl OneLibraryExport for OneLibraryWriter {
         })
     }
 
+    fn existing(
+        &self,
+        device_root: &Path,
+        key: &OneLibraryKey,
+    ) -> Result<ExistingLibrary, PlanError> {
+        existing(device_root, key.expose())
+    }
+
     fn write(
         &self,
         _plan: &ExportPlan,

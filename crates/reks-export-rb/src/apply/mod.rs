@@ -2,9 +2,10 @@
 //! reks that writes to a stick. It runs a planned export in this order and
 //! stops at the first step that fails:
 //!
-//! 1. **Pre-flight**: the plan is not blocked, has tracks and, with the
-//!    OneLibrary option on, has its OneLibrary step and a writer in
-//!    [`ApplyEnv::onelibrary`]; the stick is still there ([`StickCheck`]):
+//! 1. **Pre-flight**: the plan is not blocked, has tracks, went through the
+//!    OneLibrary step ([`crate::plan::plan_onelibrary`]) and, when that step
+//!    writes `exportLibrary.db`, has a writer in [`ApplyEnv::onelibrary`];
+//!    the stick is still there ([`StickCheck`]):
 //!    mounted at the plan's root, with the same volume serial; enough free space for [`ExportPlan::bytes_to_write`];
 //!    the history on the stick is what the dry run showed (a stick played
 //!    since needs a new plan, or its new history would go without backup). A
@@ -294,12 +295,13 @@ pub enum ApplyError {
     /// The writer stopped before replacing `export.pdb`.
     #[error(transparent)]
     Writer(WriterError),
-    /// The plan has the OneLibrary option on but [`ApplyEnv::onelibrary`]
-    /// is `None` (no writer or no key).
+    /// The plan has a OneLibrary step but [`ApplyEnv::onelibrary`] is
+    /// `None` (no writer or no key).
     #[error("this export cannot write exportLibrary.db; turn the OneLibrary export off")]
     NoOneLibraryWriter,
-    /// The plan has the OneLibrary option on but no OneLibrary step (it was
-    /// read back from JSON); plan again.
+    /// [`plan_onelibrary`](crate::plan::plan_onelibrary) did not run on the
+    /// plan, so it may delete the stick's `exportLibrary.db` unannounced;
+    /// plan again.
     #[error("the plan has no OneLibrary step; plan the export again")]
     NoOneLibraryPlan,
 }
@@ -470,13 +472,11 @@ fn preflight(plan: &ExportPlan, env: &ApplyEnv<'_>) -> Result<Vec<ApplyWarning>,
     if plan.tracks.is_empty() {
         return Err(ApplyError::NothingToExport);
     }
-    if plan.options.onelibrary {
-        if onelibrary_plan(plan).is_none() {
-            return Err(ApplyError::NoOneLibraryPlan);
-        }
-        if env.onelibrary.is_none() {
-            return Err(ApplyError::NoOneLibraryWriter);
-        }
+    if !plan.onelibrary_planned {
+        return Err(ApplyError::NoOneLibraryPlan);
+    }
+    if onelibrary_plan(plan).is_some() && env.onelibrary.is_none() {
+        return Err(ApplyError::NoOneLibraryWriter);
     }
     let root = plan.device.mount_point.as_path();
     let free = match env.stick {

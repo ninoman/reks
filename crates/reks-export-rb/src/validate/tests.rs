@@ -159,6 +159,7 @@ fn stick() -> Stick {
         bytes_free_after: 0,
         convertible: Vec::new(),
         onelibrary: None,
+        onelibrary_planned: true,
     };
     Stick {
         _tmp: tmp,

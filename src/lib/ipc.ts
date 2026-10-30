@@ -1748,7 +1748,7 @@ export type MissingAnalysis = "skip" | "generate" | "exportWithout";
  */
 export type HistoryPolicy = "import" | "backUp" | "discard";
 
-/** `plan::ExportOptions`. */
+/** `plan::ExportOptions`; its defaults come from `exportDefaultOptions`. */
 export interface ExportOptions {
   target: TargetProfile;
   keepStale: boolean;
@@ -1760,12 +1760,14 @@ export interface ExportOptions {
   discardHistoryConfirmed: boolean;
   /** `history` was picked in the export guard; without it unimported sessions block the plan. */
   historyChosen: boolean;
-  /** The `export.dividers` flag: playlist dividers as silent tracks (UNVERIFIED, D22). */
+  /** The `export.dividers` flag: playlist dividers as silent tracks (UNVERIFIED, on by default, D22). */
   dividers: boolean;
   /** Seeded from and saved to the `anlzPreference` setting by the wizard. */
   anlzPreference: AnlzPreference;
-  /** Also write `exportLibrary.db` (OneLibrary, experimental, phase 4). Off by default. */
+  /** Also write `exportLibrary.db` (OneLibrary, experimental and UNVERIFIED, on by default, D14). */
   onelibrary: boolean;
+  /** Required when the export writes no `exportLibrary.db` and the stick has one (it is deleted). */
+  onelibraryRemovalConfirmed: boolean;
   /** The `export.active_loops` flag: each track's earliest active memory loop as its active loop (UNVERIFIED). */
   activeLoops: boolean;
 }
@@ -1867,6 +1869,17 @@ export interface DryRun {
   convertText: string | null;
   /** The experimental OneLibrary step (`dryrun::OneLibraryView`); null when off or unplanned. */
   onelibrary: OneLibraryView | null;
+  /** The stick's `exportLibrary.db` is deleted (`dryrun::OneLibraryRemovalView`); null when not. */
+  onelibraryRemoval: OneLibraryRemovalView | null;
+}
+
+/** This export writes no `exportLibrary.db` and deletes the stick's; needs a confirmation. */
+export interface OneLibraryRemovalView {
+  title: string;
+  text: string;
+  files: DryRunFileGroup;
+  confirmText: string;
+  confirmed: boolean;
 }
 
 /** What the OneLibrary step writes (`exportLibrary.db`) and removes beside it. */
@@ -1875,6 +1888,11 @@ export interface OneLibraryView {
   text: string;
   write: DryRunFileRow;
   removes: DryRunFileGroup;
+}
+
+/** `plan::ExportOptions::default()`: the wizard opens with these. */
+export function exportDefaultOptions(): Promise<ExportOptions> {
+  return invoke("export_default_options");
 }
 
 /**
