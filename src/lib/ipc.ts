@@ -426,8 +426,8 @@ export interface Track extends TrackRow {
   sampleRate: number | null;
   bitDepth: number | null;
   channels: number | null;
-  keySource: string | null;
-  bpmSource: string | null;
+  keySource: DataSource | null;
+  bpmSource: DataSource | null;
   rbTrackId: number | null;
   createdAt: string;
   updatedAt: string;
@@ -679,11 +679,15 @@ export interface BeatMark {
   beatInBar: number;
 }
 
+/** `reks_core::DataSource`: where a key, BPM, grid or cue came from. `stick`
+ * only for a plugged-in stick's own grid. */
+export type DataSource = "tag" | "rekordbox" | "analysis" | "manual" | "stick";
+
 export interface Beatgrid {
   /** Markers, sorted; each starts a tempo section. Empty: no grid yet. */
   anchors: GridAnchor[];
-  /** "rekordbox" | "analysis" | "manual"; null without a grid. */
-  source: string | null;
+  /** Null without a grid. */
+  source: DataSource | null;
   locked: boolean;
   /** Every beat line to the end of the track (Rust's beat rule). */
   beats: BeatMark[];

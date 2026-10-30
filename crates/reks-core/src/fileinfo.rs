@@ -10,6 +10,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::db::Library;
 use crate::keys::Key;
+use crate::source::DataSource;
 use crate::timefmt;
 
 /// Bytes hashed from each end of a file for `content_hash`.
@@ -106,9 +107,9 @@ pub(crate) fn probe_cols(p: &reks_audio::Probe) -> ProbeCols {
 }
 
 /// Canonical key from the tag, if it parses.
-pub(crate) fn key_cols(tags: &reks_audio::Tags) -> (Option<&'static str>, Option<&'static str>) {
+pub(crate) fn key_cols(tags: &reks_audio::Tags) -> (Option<&'static str>, Option<DataSource>) {
     match tags.key.as_deref().map(Key::parse) {
-        Some(Ok(k)) => (Some(k.canonical()), Some("tag")),
+        Some(Ok(k)) => (Some(k.canonical()), Some(DataSource::Tag)),
         Some(Err(e)) => {
             tracing::debug!(error = %e, "ignoring key tag");
             (None, None)
@@ -117,8 +118,8 @@ pub(crate) fn key_cols(tags: &reks_audio::Tags) -> (Option<&'static str>, Option
     }
 }
 
-pub(crate) fn bpm_cols(tags: &reks_audio::Tags) -> (Option<u32>, Option<&'static str>) {
-    (tags.bpm_x100, tags.bpm_x100.map(|_| "tag"))
+pub(crate) fn bpm_cols(tags: &reks_audio::Tags) -> (Option<u32>, Option<DataSource>) {
+    (tags.bpm_x100, tags.bpm_x100.map(|_| DataSource::Tag))
 }
 
 /// The library form of a path: UTF-8 and NFC, as long as the NFC spelling

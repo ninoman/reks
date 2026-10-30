@@ -21,6 +21,7 @@ use reks_anlz::AnlzTarget;
 use reks_audio::Kind;
 use reks_core::analysis::file_content_hash;
 use reks_core::rbxml::{self, ImportOptions, PrefixRemap};
+use reks_core::DataSource;
 use reks_core::{GridEdit, Library, TrackId};
 use reks_export_rb::rbcache::{Missing, RbCache};
 use reks_export_rb::rbmap::{map_pending, Skip};
@@ -181,7 +182,7 @@ impl World {
 fn import_gives_rekordbox_grid_rows() {
     let w = World::new();
     let grid = w.lib.beatgrid(w.id("Demo Track 1.mp3")).unwrap();
-    assert_eq!(grid.source.as_deref(), Some("rekordbox"));
+    assert_eq!(grid.source, Some(DataSource::Rekordbox));
     assert_eq!(grid.anchors.len(), 1);
     assert_eq!(grid.anchors[0].bpm_x100, 12800);
     assert_eq!(

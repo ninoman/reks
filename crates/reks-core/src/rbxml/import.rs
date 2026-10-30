@@ -30,18 +30,19 @@ use unicode_normalization::UnicodeNormalization;
 use super::colour::colour_name;
 use super::{location_to_path, Collection, NodeKind, Tempo, XmlNode, XmlTrack};
 use crate::backup::BackupReason;
-use crate::beatgrid::USER_OWNED;
+use crate::beatgrid::user_owned_sql;
 use crate::db::Library;
 use crate::error::Result;
 use crate::fileinfo::{self, kind_from_extension, library_path, probe_cols, FileInfo};
 use crate::keys::Key;
 use crate::playlist::{self, Entry};
 use crate::scan::{CancelToken, TrackId};
+use crate::source::DataSource;
 use crate::tag_comments::{self, CommentTagsPreview, CommentTagsReport};
 use crate::timefmt;
 
 /// Grid and cue rows written by this import carry this `source`.
-const SOURCE: &str = "rekordbox";
+const SOURCE: DataSource = DataSource::Rekordbox;
 
 pub use crate::tag_comments::IMPORTED_TAG_CATEGORY;
 
@@ -721,6 +722,7 @@ impl Import<'_> {
         let tags = info.map(|i| &i.tags);
         let tag = |f: fn(&reks_audio::Tags) -> &Option<String>| tags.and_then(|t| f(t).as_deref());
         // The BPM of an edited or locked grid, or one set by hand, stays (F09).
+        let owned = user_owned_sql();
         tx.prepare_cached(&format!(
             "UPDATE track SET
                path = :path, missing = :missing,
@@ -747,11 +749,11 @@ impl Import<'_> {
                comment = coalesce(:comment, comment, :tag_comment),
                rating = coalesce(:rating, rating),
                color = coalesce(:color, color),
-               key_source = CASE WHEN :key IS NULL THEN key_source ELSE 'rekordbox' END,
+               key_source = CASE WHEN :key IS NULL THEN key_source ELSE :rekordbox END,
                key = coalesce(:key, key),
-               bpm_source = CASE WHEN :bpm IS NULL OR bpm_source IS 'manual' OR {USER_OWNED}
-                 THEN bpm_source ELSE 'rekordbox' END,
-               bpm_x100 = CASE WHEN bpm_source IS 'manual' OR {USER_OWNED}
+               bpm_source = CASE WHEN :bpm IS NULL OR bpm_source IS :manual OR {owned}
+                 THEN bpm_source ELSE :rekordbox END,
+               bpm_x100 = CASE WHEN bpm_source IS :manual OR {owned}
                  THEN bpm_x100 ELSE coalesce(:bpm, bpm_x100) END,
                baseline_play_count = CASE WHEN :created
                  THEN coalesce(:play_count, baseline_play_count) ELSE baseline_play_count END,
@@ -796,6 +798,7 @@ impl Import<'_> {
             ":created": created,
             ":artwork_id": info.and_then(|i| i.artwork_id),
             ":rb_track_id": t.track_id, ":rb_location": t.location, ":now": now,
+            ":rekordbox": SOURCE, ":manual": DataSource::Manual,
         })?;
         Ok(())
     }
@@ -804,7 +807,7 @@ impl Import<'_> {
         // A grid edited or locked in reks stays (D10, "Grid editing"):
         // rekordbox rows beside manual ones would mix two grids.
         let owned: bool = tx.query_row(
-            &format!("SELECT {USER_OWNED} FROM track WHERE id = ?1"),
+            &format!("SELECT {} FROM track WHERE id = ?1", user_owned_sql()),
             [id],
             |r| r.get(0),
         )?;
@@ -1113,7 +1116,7 @@ fn replace_rows(
         "INSERT INTO {table} (track_id, source, {columns}) VALUES ({marks})"
     ))?;
     for row in rows {
-        let values = [Value::Integer(track), Value::Text(SOURCE.into())]
+        let values = [Value::Integer(track), Value::Text(SOURCE.as_str().into())]
             .into_iter()
             .chain(row.iter().cloned());
         insert.execute(rusqlite::params_from_iter(values))?;

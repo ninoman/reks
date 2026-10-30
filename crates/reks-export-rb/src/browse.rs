@@ -18,6 +18,7 @@ use reks_anlz::WaveformCalibration;
 use reks_audio::StereoPcm;
 use reks_core::beatgrid::beat_marks;
 use reks_core::deck::{cue_marks, deck_beats, hot_cue_frames};
+use reks_core::DataSource;
 use reks_core::{Beatgrid, DeckAudio, Key};
 use serde::Serialize;
 
@@ -199,7 +200,7 @@ pub fn beatgrid(root: &Path, id: u32) -> Result<Beatgrid, BrowseError> {
     Ok(Beatgrid {
         beats: beat_marks(&analysis.anchors, end_ms),
         anchors: analysis.anchors,
-        source: Some("stick".into()),
+        source: Some(DataSource::Stick),
         locked: true,
     })
 }

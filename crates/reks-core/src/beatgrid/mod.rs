@@ -20,10 +20,10 @@ use std::collections::HashSet;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use crate::analysis::{SOURCE_ANALYSIS, SOURCE_MANUAL};
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::scan::TrackId;
+use crate::source::DataSource;
 
 pub use edit::{apply_edit, GridEdit};
 pub use rule::{
@@ -33,9 +33,14 @@ pub use rule::{
 pub use tap::{tap_tempo, TAP_RESET_MS, TAP_WINDOW};
 
 /// SQL predicate on a `track` row: its grid is locked or edited by hand.
-pub(crate) const USER_OWNED: &str = "(grid_locked OR EXISTS (SELECT 1 FROM beatgrid
-                                                  WHERE beatgrid.track_id = track.id
-                                                    AND beatgrid.source = 'manual'))";
+pub(crate) fn user_owned_sql() -> String {
+    format!(
+        "(grid_locked OR EXISTS (SELECT 1 FROM beatgrid
+                                 WHERE beatgrid.track_id = track.id
+                                   AND beatgrid.source = '{}'))",
+        DataSource::Manual.as_str()
+    )
+}
 
 /// One tempo anchor (a marker): the beat at `position_ms` is beat
 /// `beat_in_bar` of a bar of `beats_per_bar`, and the tempo is `bpm_x100`
@@ -66,8 +71,9 @@ pub struct BeatMark {
 pub struct Beatgrid {
     /// Sorted by position; empty when the track has no grid.
     pub anchors: Vec<GridAnchor>,
-    /// `rekordbox`, `analysis` or `manual` (the first row's; edits make all `manual`).
-    pub source: Option<String>,
+    /// `rekordbox`, `analysis` or `manual` (the first row's; edits make all
+    /// `manual`); `stick` for a stick's own grid.
+    pub source: Option<DataSource>,
     pub locked: bool,
     /// Every beat up to the end of the track ([`grid_beats`]).
     pub beats: Vec<BeatMark>,
@@ -76,7 +82,7 @@ pub struct Beatgrid {
 /// The grid a track had before its first edit (`track.grid_base`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct GridBase {
-    source: Option<String>,
+    source: Option<DataSource>,
     anchors: Vec<GridAnchor>,
 }
 
@@ -95,7 +101,7 @@ pub fn beat_marks(anchors: &[GridAnchor], end_ms: i64) -> Vec<BeatMark> {
 struct Stored {
     anchors: Vec<GridAnchor>,
     /// Per anchor.
-    sources: Vec<String>,
+    sources: Vec<DataSource>,
     locked: bool,
     duration_ms: i64,
     base: Option<GridBase>,
@@ -106,7 +112,7 @@ impl Stored {
         Beatgrid {
             beats: beat_marks(&self.anchors, self.duration_ms),
             anchors: self.anchors.clone(),
-            source: self.sources.first().cloned(),
+            source: self.sources.first().copied(),
             locked: self.locked,
         }
     }
@@ -150,7 +156,7 @@ impl Library {
             }
             let base = match (&edit, &before.base) {
                 (GridEdit::Reset { .. }, None) => analysis().map(|anchors| GridBase {
-                    source: Some(SOURCE_ANALYSIS.into()),
+                    source: Some(DataSource::Analysis),
                     anchors,
                 }),
                 (_, base) => base.clone(),
@@ -163,26 +169,26 @@ impl Library {
             )?;
             match (&edit, base) {
                 (GridEdit::Reset { section: None }, Some(base)) => {
-                    store_rows(&tx, id, &base.anchors, base.source.as_deref())?;
+                    store_rows(&tx, id, &base.anchors, base.source)?;
                     set_base(&tx, id, None)?;
-                    if let Some(source) = base.source.as_deref() {
+                    if let Some(source) = base.source {
                         store_bpm(&tx, id, &base.anchors, before.duration_ms, source)?;
                     }
                 }
                 _ => {
-                    let edited = before.sources.iter().any(|s| s == SOURCE_MANUAL);
+                    let edited = before.sources.contains(&DataSource::Manual);
                     if before.base.is_none() && !edited {
                         set_base(
                             &tx,
                             id,
                             Some(&GridBase {
-                                source: before.sources.first().cloned(),
+                                source: before.sources.first().copied(),
                                 anchors: before.anchors.clone(),
                             }),
                         )?;
                     }
-                    store_rows(&tx, id, &after, Some(SOURCE_MANUAL))?;
-                    store_bpm(&tx, id, &after, before.duration_ms, SOURCE_MANUAL)?;
+                    store_rows(&tx, id, &after, Some(DataSource::Manual))?;
+                    store_bpm(&tx, id, &after, before.duration_ms, DataSource::Manual)?;
                 }
             }
         }
@@ -196,7 +202,7 @@ impl Library {
     pub fn grid_is_user_owned(&self, id: TrackId) -> Result<bool> {
         let conn = self.conn()?;
         conn.query_row(
-            &format!("SELECT {USER_OWNED} FROM track WHERE id = ?1"),
+            &format!("SELECT {} FROM track WHERE id = ?1", user_owned_sql()),
             [id],
             |r| r.get(0),
         )
@@ -208,7 +214,7 @@ impl Library {
     /// (the USB export planner asks for a whole selection at once).
     pub fn user_owned_grids(&self) -> Result<HashSet<TrackId>> {
         let conn = self.conn()?;
-        let mut stmt = conn.prepare(&format!("SELECT id FROM track WHERE {USER_OWNED}"))?;
+        let mut stmt = conn.prepare(&format!("SELECT id FROM track WHERE {}", user_owned_sql()))?;
         let ids = stmt
             .query_map([], |r| r.get(0))?
             .collect::<rusqlite::Result<_>>()?;
@@ -221,7 +227,7 @@ fn store_rows(
     conn: &Connection,
     id: TrackId,
     anchors: &[GridAnchor],
-    source: Option<&str>,
+    source: Option<DataSource>,
 ) -> Result<()> {
     conn.execute("DELETE FROM beatgrid WHERE track_id = ?1", [id])?;
     let mut ins = conn.prepare(
@@ -236,7 +242,7 @@ fn store_rows(
             a.bpm_x100,
             a.beats_per_bar,
             a.beat_in_bar,
-            source.unwrap_or(SOURCE_MANUAL)
+            source.unwrap_or(DataSource::Manual)
         ])?;
     }
     Ok(())
@@ -248,7 +254,7 @@ fn store_bpm(
     id: TrackId,
     anchors: &[GridAnchor],
     duration_ms: i64,
-    source: &str,
+    source: DataSource,
 ) -> Result<()> {
     if let Some(bpm) = main_tempo(anchors, duration_ms) {
         conn.execute(
@@ -310,7 +316,7 @@ fn read_grid(conn: &Connection, id: TrackId) -> Result<Stored> {
                         .unwrap_or(1),
                     beats_per_bar: bpb,
                 },
-                r.get::<_, String>(4)?,
+                r.get::<_, DataSource>(4)?,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;

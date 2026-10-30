@@ -9,11 +9,8 @@ use crate::beatgrid::{grid_beats, GridAnchor};
 use crate::db::Library;
 use crate::error::Result;
 use crate::scan::TrackId;
+use crate::source::CueKind;
 use crate::track::Cue;
-
-/// rekordbox cue `Type` of a plain cue and of a loop ([`Cue::kind`]).
-const KIND_CUE: i64 = 0;
-const KIND_LOOP: i64 = 4;
 
 /// A track decoded for a deck.
 #[derive(Debug)]
@@ -111,7 +108,7 @@ pub fn hot_cue_frames(cues: &[Cue], rate: u32) -> Vec<(u8, i64)> {
 fn hot_cues(cues: &[Cue]) -> Vec<&Cue> {
     let mut out: Vec<&Cue> = cues
         .iter()
-        .filter(|c| c.slot.is_some() && matches!(c.kind, KIND_CUE | KIND_LOOP))
+        .filter(|c| c.slot.is_some() && c.is_cue_or_loop())
         .collect();
     out.sort_by_key(|c| c.slot);
     out.dedup_by_key(|c| c.slot);
@@ -129,13 +126,13 @@ pub fn cue_marks(cues: &[Cue], rate: u32) -> Vec<CueMark> {
         name: c.name.clone(),
         end_frame: c
             .end_ms
-            .filter(|_| c.slot.is_none() && c.kind == KIND_LOOP)
+            .filter(|_| c.slot.is_none() && c.cue_kind() == Some(CueKind::Loop))
             .map(|e| ms_to_frame(e, rate)),
-        active_loop: c.active_loop && c.slot.is_none() && c.kind == KIND_LOOP,
+        active_loop: c.active_loop && c.slot.is_none() && c.cue_kind() == Some(CueKind::Loop),
     };
     let mut memory: Vec<CueMark> = cues
         .iter()
-        .filter(|c| c.slot.is_none() && matches!(c.kind, KIND_CUE | KIND_LOOP))
+        .filter(|c| c.slot.is_none() && c.is_cue_or_loop())
         .map(mark)
         .collect();
     memory.sort_by_key(|m| m.frame);
@@ -158,11 +155,11 @@ pub fn auto_loops(marks: &[CueMark]) -> Vec<(i64, i64)> {
 mod tests {
     use super::*;
 
-    fn cue(slot: Option<u8>, kind: i64, start_ms: f64) -> Cue {
+    fn cue(slot: Option<u8>, kind: CueKind, start_ms: f64) -> Cue {
         Cue {
             id: 0,
             slot,
-            kind,
+            kind: kind.code(),
             start_ms,
             end_ms: None,
             name: None,
@@ -209,11 +206,11 @@ mod tests {
     #[test]
     fn hot_cues_keep_slotted_cues_and_loops_sorted_by_slot() {
         let cues = [
-            cue(Some(2), KIND_LOOP, 2_000.0),
-            cue(None, KIND_CUE, 500.0),
-            cue(Some(0), KIND_CUE, 1_000.5),
-            cue(Some(1), 3, 1_500.0),
-            cue(Some(0), KIND_CUE, 9_000.0),
+            cue(Some(2), CueKind::Loop, 2_000.0),
+            cue(None, CueKind::Cue, 500.0),
+            cue(Some(0), CueKind::Cue, 1_000.5),
+            cue(Some(1), CueKind::Load, 1_500.0),
+            cue(Some(0), CueKind::Cue, 9_000.0),
         ];
         assert_eq!(
             hot_cue_frames(&cues, 44_100),
@@ -224,15 +221,15 @@ mod tests {
 
     #[test]
     fn cue_marks_list_hot_cues_with_colour_then_memory_cues_by_position() {
-        let mut red = cue(Some(1), KIND_CUE, 1_000.0);
+        let mut red = cue(Some(1), CueKind::Cue, 1_000.0);
         red.color_rgb = Some(0xff_00_00);
         red.name = Some("Drop".into());
         let cues = [
-            cue(None, KIND_CUE, 3_000.0),
+            cue(None, CueKind::Cue, 3_000.0),
             red,
-            cue(None, KIND_LOOP, 2_000.0),
-            cue(None, 3, 500.0),
-            cue(Some(0), KIND_LOOP, 4_000.0),
+            cue(None, CueKind::Loop, 2_000.0),
+            cue(None, CueKind::Load, 500.0),
+            cue(Some(0), CueKind::Loop, 4_000.0),
         ];
         let mark = |slot, frame, color_rgb, name: Option<&str>| CueMark {
             id: 0,
@@ -257,12 +254,12 @@ mod tests {
 
     #[test]
     fn memory_loops_carry_their_end_and_the_active_ones_are_auto_loops() {
-        let mut active = cue(None, KIND_LOOP, 2_000.0);
+        let mut active = cue(None, CueKind::Loop, 2_000.0);
         active.end_ms = Some(3_000.0);
         active.active_loop = true;
-        let mut plain = cue(None, KIND_LOOP, 5_000.0);
+        let mut plain = cue(None, CueKind::Loop, 5_000.0);
         plain.end_ms = Some(6_000.0);
-        let mut hot_loop = cue(Some(0), KIND_LOOP, 500.0);
+        let mut hot_loop = cue(Some(0), CueKind::Loop, 500.0);
         hot_loop.end_ms = Some(900.0);
         hot_loop.active_loop = true;
         let marks = cue_marks(&[plain, hot_loop, active], 1_000);

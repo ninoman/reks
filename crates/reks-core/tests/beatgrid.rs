@@ -5,6 +5,7 @@
 #![allow(clippy::unwrap_used)]
 
 use reks_core::beatgrid::GridProblem;
+use reks_core::DataSource;
 use reks_core::{Error, GridAnchor, GridEdit, Library};
 use rusqlite::Connection;
 
@@ -44,7 +45,7 @@ fn reading_rounds_to_whole_ms_and_lists_beats() {
     let (_dir, lib, id) = setup();
     let g = lib.beatgrid(id).unwrap();
     assert_eq!(g.anchors[0].position_ms, 20);
-    assert_eq!(g.source.as_deref(), Some("analysis"));
+    assert_eq!(g.source, Some(DataSource::Analysis));
     assert!(!g.locked);
     // 20 ms + k × 500 ms up to 4 s.
     assert_eq!(g.beats.len(), 8);
@@ -66,7 +67,7 @@ fn edits_write_manual_rows() {
         )
         .unwrap();
     assert_eq!(g.anchors[0].position_ms, 30);
-    assert_eq!(g.source.as_deref(), Some("manual"));
+    assert_eq!(g.source, Some(DataSource::Manual));
     assert_eq!(sources(&dir), ["manual"]);
     assert!(lib.grid_is_user_owned(id).unwrap());
     assert_eq!(lib.user_owned_grids().unwrap(), [id].into());
@@ -238,7 +239,7 @@ fn reset_brings_back_the_grid_from_before_the_first_edit() {
         .edit_beatgrid(id, GridEdit::Reset { section: None })
         .unwrap();
     assert_eq!(g.anchors, [anchor(20, 12_000)]);
-    assert_eq!(g.source.as_deref(), Some("analysis"));
+    assert_eq!(g.source, Some(DataSource::Analysis));
     assert!(!lib.grid_is_user_owned(id).unwrap());
     assert_eq!(track_bpm(&dir, id), (12_000, "analysis".into()));
     // The base went with the reset; the next edit keeps a new one.
@@ -254,7 +255,7 @@ fn reset_brings_back_the_grid_from_before_the_first_edit() {
         .edit_beatgrid(id, GridEdit::Reset { section: Some(0) })
         .unwrap();
     assert_eq!(g.anchors, [anchor(20, 12_000)]);
-    assert_eq!(g.source.as_deref(), Some("manual"));
+    assert_eq!(g.source, Some(DataSource::Manual));
 }
 
 #[test]
@@ -294,7 +295,7 @@ fn grids_edited_before_the_base_reset_to_the_analysis() {
         })
         .unwrap();
     assert_eq!(g.anchors, [anchor(33, 12_100)]);
-    assert_eq!(g.source.as_deref(), Some("analysis"));
+    assert_eq!(g.source, Some(DataSource::Analysis));
     // The analysis is only asked for a reset.
     lib.edit_beatgrid_with(
         id,

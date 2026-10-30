@@ -15,6 +15,7 @@ use crate::keys::Key;
 use crate::query::{fill_tags, track_row, TrackRow, ROW_COLUMNS};
 use crate::rbxml::TRACK_COLOURS;
 use crate::scan::TrackId;
+use crate::source::{CueKind, DataSource};
 use crate::timefmt::now_utc;
 
 /// Longest text value an edit accepts, in characters. Our own limit, not a
@@ -40,8 +41,8 @@ pub struct Track {
     pub sample_rate: Option<i64>,
     pub bit_depth: Option<i64>,
     pub channels: Option<i64>,
-    pub key_source: Option<String>,
-    pub bpm_source: Option<String>,
+    pub key_source: Option<DataSource>,
+    pub bpm_source: Option<DataSource>,
     pub rb_track_id: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
@@ -73,6 +74,19 @@ pub struct Cue {
     /// A memory loop playback enters by itself at its start (task 17;
     /// rekordbox's "active loop"). False for every other cue.
     pub active_loop: bool,
+}
+
+impl Cue {
+    /// [`Cue::kind`] as a [`CueKind`]; `None` for a type reks doesn't know.
+    pub fn cue_kind(&self) -> Option<CueKind> {
+        CueKind::from_code(self.kind)
+    }
+
+    /// A plain cue or a loop: what decks and players use (fades and load
+    /// markers are rekordbox-only).
+    pub fn is_cue_or_loop(&self) -> bool {
+        matches!(self.cue_kind(), Some(CueKind::Cue | CueKind::Loop))
+    }
 }
 
 /// The beatgrid at a glance.
@@ -337,7 +351,7 @@ pub(crate) fn validate(p: &TrackPatch) -> Result<Vec<(&'static str, Value)>> {
         let key = key(v.as_deref())?;
         let source = match key {
             Value::Null => Value::Null,
-            _ => Value::Text("manual".into()),
+            _ => Value::Text(DataSource::Manual.as_str().into()),
         };
         sets.push(("key", key));
         sets.push(("key_source", source));

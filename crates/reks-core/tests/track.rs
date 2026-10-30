@@ -4,6 +4,7 @@
 // Test helpers outside `#[test]` fns are not covered by clippy's allow-unwrap-in-tests.
 #![allow(clippy::unwrap_used)]
 
+use reks_core::DataSource;
 use reks_core::{Error, Library, TrackPatch, TrackQuery};
 use rusqlite::Connection;
 
@@ -99,7 +100,7 @@ fn track_returns_full_fields_cues_and_grid() {
     assert_eq!(d.track.row.title.as_deref(), Some("Midnight Groove"));
     assert_eq!(d.track.path, "Midnight Groove");
     assert_eq!(d.track.file_size, 1234);
-    assert_eq!(d.track.key_source.as_deref(), Some("rekordbox"));
+    assert_eq!(d.track.key_source, Some(DataSource::Rekordbox));
     assert_eq!(d.track.updated_at, OLD);
     assert!(!d.track.row.needs_analysis);
     assert_eq!(d.track.artwork, None);
@@ -182,7 +183,7 @@ fn valid_edit_persists_and_leaves_other_fields() {
     // Untouched.
     assert_eq!(t.row.artist.as_deref(), Some("Ana"));
     assert_eq!(t.row.key.as_deref(), Some("Am"));
-    assert_eq!(t.key_source.as_deref(), Some("rekordbox"));
+    assert_eq!(t.key_source, Some(DataSource::Rekordbox));
     // What came back is what is stored.
     assert_eq!(env.lib.track(id).unwrap(), d);
 }
@@ -197,7 +198,7 @@ fn key_edit_is_canonical_and_manual() {
         .unwrap()
         .track;
     assert_eq!(t.row.key.as_deref(), Some("C"));
-    assert_eq!(t.key_source.as_deref(), Some("manual"));
+    assert_eq!(t.key_source, Some(DataSource::Manual));
     let t = env
         .lib
         .update_track(id, &patch(r#"{"key": null}"#))

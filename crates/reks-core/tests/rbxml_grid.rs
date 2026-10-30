@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 use proptest::prelude::*;
 use reks_core::rbxml::{self, export, ImportOptions, PrefixRemap, Selection};
+use reks_core::DataSource;
 use reks_core::{
     AnalysisAnchor, AnalysisRecord, CancelToken, GridAnchor, GridEdit, Library, TrackId,
 };
@@ -93,7 +94,7 @@ proptest! {
         rbxml::import(&parsed, &other, ImportOptions::default(), |_| {}).unwrap();
         let g = other.beatgrid(only_track(&other_dir)).unwrap();
         prop_assert_eq!(g.anchors, anchors);
-        prop_assert_eq!(g.source.as_deref(), Some("rekordbox"));
+        prop_assert_eq!(g.source, Some(DataSource::Rekordbox));
     }
 }
 
@@ -158,7 +159,7 @@ fn an_import_replaces_an_analysis_grid() {
     import_fixture(&lib);
     let (id, _) = lossless(&lib);
     let g = lib.beatgrid(id).unwrap();
-    assert_eq!(g.source.as_deref(), Some("rekordbox"));
+    assert_eq!(g.source, Some(DataSource::Rekordbox));
     assert_eq!(
         g.anchors,
         [GridAnchor {
@@ -174,7 +175,7 @@ fn an_import_replaces_an_analysis_grid() {
 }
 
 /// The library's BPM and its source for track `id`.
-fn bpm(lib: &Library, id: TrackId) -> (Option<i64>, Option<String>) {
+fn bpm(lib: &Library, id: TrackId) -> (Option<i64>, Option<DataSource>) {
     let t = lib.track(id).unwrap().track;
     (t.row.bpm_x100, t.bpm_source)
 }
@@ -185,7 +186,7 @@ fn a_reimport_keeps_a_manual_bpm() {
     let (dir, lib) = library();
     import_fixture(&lib);
     let (id, _) = lossless(&lib);
-    assert_eq!(bpm(&lib, id), (Some(12_800), Some("rekordbox".into())));
+    assert_eq!(bpm(&lib, id), (Some(12_800), Some(DataSource::Rekordbox)));
     lib.edit_beatgrid(
         id,
         GridEdit::SetAnchors {
@@ -198,9 +199,9 @@ fn a_reimport_keeps_a_manual_bpm() {
         },
     )
     .unwrap();
-    assert_eq!(bpm(&lib, id), (Some(6_400), Some("manual".into())));
+    assert_eq!(bpm(&lib, id), (Some(6_400), Some(DataSource::Manual)));
     import_fixture(&lib);
-    assert_eq!(bpm(&lib, id), (Some(6_400), Some("manual".into())));
+    assert_eq!(bpm(&lib, id), (Some(6_400), Some(DataSource::Manual)));
 
     // A manual BPM beside a rekordbox grid stays too; the grid is replaced.
     lib.edit_beatgrid(id, GridEdit::Reset { section: None })
@@ -213,9 +214,9 @@ fn a_reimport_keeps_a_manual_bpm() {
         )
         .unwrap();
     import_fixture(&lib);
-    assert_eq!(bpm(&lib, id), (Some(12_900), Some("manual".into())));
+    assert_eq!(bpm(&lib, id), (Some(12_900), Some(DataSource::Manual)));
     assert_eq!(
-        lib.beatgrid(id).unwrap().source.as_deref(),
-        Some("rekordbox")
+        lib.beatgrid(id).unwrap().source,
+        Some(DataSource::Rekordbox)
     );
 }
