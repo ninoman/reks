@@ -25,7 +25,9 @@ is the worst possible bug; correctness and conservative defaults beat features.
 - Playback: Rust-side, our own `cpal` engine (`reks-mix`, D5), not the WebView
   `<audio>` element.
 - rekordbox legacy export: `baken-export` (MIT) behind our own adapter trait;
-  `rekordcrate` (MPL-2.0) for read-back validation. Spec of record: Deep
+  our own bounds-checked `reks-export-rb::pdb` reader for every stick read
+  (never rekordcrate on stick bytes: it panics on damage, D8);
+  `rekordcrate` (MPL-2.0) as the independent parser in tests. Spec of record: Deep
   Symmetry `crate-digger` `.ksy` + djl-analysis docs.
 - Engine DJ export: own Rust writer (Phase 6). OneLibrary: own writer (Phase 4).
 

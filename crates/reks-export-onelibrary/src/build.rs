@@ -8,7 +8,7 @@
 //! just wrote, and the two libraries describe the same tracks by
 //! construction.
 
-use reks_export_rb::pdbread::{PdbLibrary, PdbTrack};
+use reks_export_rb::pdb::{PdbLibrary, PdbTrack};
 
 use crate::rows::{
     Album, Artist, Content, Image, Named, OneLibrary, Playlist, PlaylistEntry, Property,
@@ -163,7 +163,7 @@ fn named(map: &std::collections::BTreeMap<u32, String>) -> Vec<Named> {
 
 #[cfg(test)]
 mod tests {
-    use reks_export_rb::pdbread::{PdbAlbum, PdbPlaylist};
+    use reks_export_rb::pdb::{PdbAlbum, PdbPlaylist};
 
     use super::*;
 

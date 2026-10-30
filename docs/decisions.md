@@ -194,6 +194,24 @@ Date of decisions: 2026-10-18.
   reader (`reks-anlz::read`, crate-digger layout; PPTH, PQTZ, PCOB/PCO2
   counts) and keeps rekordcrate for `export.pdb`. Row fields rekordcrate
   keeps private are read from rows re-serialised by rekordcrate.
+- Amended 2026-10-30 (review F03/F18, maintainer decision to own the
+  decoder rather than switch to `panic = "unwind"`): no app code parses
+  stick bytes with rekordcrate any more. Its 0.3.0 `DeviceSQLString` parser
+  underflows on a short-string header of `0x01` (`string.rs:164`) and its
+  `Long` form on a length under 4, and a `Page` parse decodes every row
+  eagerly; under `panic = "abort"` that kills the app. One bounds-checked
+  reader, [`reks_export_rb::pdb`](../crates/reks-export-rb/src/pdb/mod.rs),
+  replaces the four PDB decoders (validator, typed read, history, diff) and
+  their five string helpers; damage is an error or, in lenient mode, a
+  finding, and property tests feed it mutated files. The validator stays
+  independent of the writer (it shares no code with baken) but is no longer
+  a third-party parser: rekordcrate is not used even on the PDB we just
+  wrote, because `rb validate` and check-a-stick also read sticks written
+  elsewhere, and a writer bug that produced such a string would abort the
+  export instead of being reported. rekordcrate stays a dev-dependency: the
+  independent parser of the writer's round-trip tests (`tests/writer.rs`,
+  `tests/dividers.rs`) and a cross-check of our reader on rekordbox's
+  reference export (`pdb::library` tests).
 
 ## D9. ANLZ serialisation (Phase 3): `rekordcrate::anlz` types (`BinWrite`) inside our `reks-anlz` crate
 
@@ -572,7 +590,7 @@ Date of decisions: 2026-10-18.
   the reference every `content` value equals the PDB track row's (ids,
   `masterDbId`, `masterContentId`, `contentLink`, `analysedBits` included),
   so mirroring the PDB makes the two libraries agree by construction and
-  needs no library access in `write`. `reks-export-rb::pdbread` is the typed
+  needs no library access in `write`. `reks-export-rb::pdb` is the typed
   PDB reader. `myTag` gets the four default columns, not the reference's
   (its user's) tags; `myTagMasterDBID` 0. The file is written in WAL mode
   and checkpointed into one file (rekordbox leaves a `-wal`); UNVERIFIED on
@@ -1160,7 +1178,7 @@ Date of decisions: 2026-10-18.
   only our fitted model. On rekordbox 7.2.19's click-track export the mean
   error against the waveform computed from the audio is 9% / 5% / 1% / 0.3%
   of full scale (low / mid / high / mono), the low band smeared between
-  clicks. Reading `export.pdb` is strict ([`pdbread`](../crates/reks-export-rb/src/pdbread.rs)):
+  clicks. Reading `export.pdb` is strict ([`pdb`](../crates/reks-export-rb/src/pdb/library.rs)):
   one damaged row and the drive shows an error instead of its lists. Checked
   against rekordbox 7.2.19's reference export (`fixtures/onelibrary/ref-7.2.19`)
   and synthetic PDBs; a stick written by a player's history logging is
@@ -1409,10 +1427,10 @@ Date of decisions: 2026-10-18.
   - `exportLibrary.db` is read through a `check::OneLibraryRead` trait that
     `reks-export-onelibrary` implements (`check::CheckReader`), the same
     seam as `OneLibraryExport` (D14): that crate depends on this one.
-  - `export.pdb` is read leniently (`pdbread::read_pdb_lenient`): a row
+  - `export.pdb` is read leniently (`pdb::read_pdb_lenient`): a row
     that does not decode, or an entry of a missing playlist, is a finding
-    and the rest is checked. Damage that rekordcrate's page parser rejects
-    still makes the whole file one "does not open" finding; the rest of the
+    and the rest is checked. A broken file header or page chain still
+    makes the whole file one "does not open" finding; the rest of the
     report (OneLibrary, files it names, file system) goes on.
 - Rejected: wording findings in TS (two places to keep in step with the
   Rust checks); running the export validator against a made-up plan (it
@@ -1420,9 +1438,12 @@ Date of decisions: 2026-10-18.
   `analyze_path` against the folder players derive (`anlz_dir`): R§4 marks
   that rule UNVERIFIED, and a wrong rule would flag every rekordbox stick.
 - Risks: a missing `.2EX` is only a note and a missing `.EXT` a warning;
-  players may treat them more strictly (UNVERIFIED). rekordcrate 0.3.0
-  overflows on some damaged string offsets: a panic in debug and test
-  builds, a wrap in release builds (no overflow checks, `panic = "abort"`).
+  players may treat them more strictly (UNVERIFIED). Corrected 2026-10-30
+  (review F03): rekordcrate 0.3.0 underflowed on a short-string header of
+  `0x01`, and in release builds that did not wrap harmlessly: the wrapped
+  length made `reserve_exact` panic, which `panic = "abort"` turns into an
+  app abort. Fixed by reading every `export.pdb` with reks's own
+  bounds-checked reader (D8 amendment of the same date).
   Every track's audio is probed, so a large stick takes a while (no
   progress bar yet).
 ## D39. My Tags ↔ Comments: opt-in import, organizer, write-back

@@ -2,7 +2,7 @@
 //! playlists and play history as players see them, and its tracks ready for
 //! a deck. Read-only: nothing here writes to the stick.
 //!
-//! The library comes from `export.pdb` ([`crate::pdbread`] for tracks and
+//! The library comes from `export.pdb` ([`crate::pdb`] for tracks and
 //! playlists, [`crate::history::read_play_history`] for the sessions players
 //! logged). A track plays straight from the stick with the grid and cues of
 //! its ANLZ files ([`anlz`]), as a player would. Its deck waveform comes from
@@ -22,7 +22,7 @@ use reks_core::{Beatgrid, DeckAudio, Key};
 use serde::Serialize;
 
 use crate::history::{read_play_history, HistoryError, HistoryReadOptions, HistorySource};
-use crate::pdbread::{read_stick, PdbLibrary, PdbReadError, PdbTrack};
+use crate::pdb::{read_stick, PdbLibrary, PdbReadError, PdbTrack};
 use crate::validate::locate;
 use anlz::StickAnalysis;
 

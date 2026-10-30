@@ -103,7 +103,7 @@ stick, from rekordbox, reks or another tool: which library formats it holds
 and which player families read them, missing audio or ANLZ files, tracks
 without a waveform preview, `audiocheck` issues, playlists that differ
 between the two formats, unimported history. S, `reks-export-rb` (`browse`,
-`pdbread`, `audiocheck`, validator), phase 2.5 area. Stick risk: none (reads
+`pdb`, `audiocheck`, validator), phase 2.5 area. Stick risk: none (reads
 only). Constraint: reading a rekordbox-written OneLibrary needs the key (D14);
 the player-format table comes from V4 and stays UNVERIFIED per player.
 

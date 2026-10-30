@@ -57,7 +57,7 @@ fn empty_database_has_the_reference_schema_and_seeds() {
 
 #[test]
 fn rows_from_the_reference_pdb_match_rekordbox_strictly() {
-    let pdb = reks_export_rb::pdbread::read_stick(&root()).unwrap();
+    let pdb = reks_export_rb::pdb::read_stick(&root()).unwrap();
     // The reference export's date, so dates compare too.
     let lib = build::from_pdb(&pdb, "2026-10-20");
     let mut conn = Connection::open_in_memory().unwrap();

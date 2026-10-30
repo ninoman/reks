@@ -1,4 +1,4 @@
-use reks_export_rb::pdbread::{PdbPlaylist, PdbTrack};
+use reks_export_rb::pdb::{PdbPlaylist, PdbTrack};
 
 use super::*;
 use crate::rows::{Content, Playlist, PlaylistEntry, Property};

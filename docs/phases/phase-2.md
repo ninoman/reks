@@ -297,9 +297,11 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    duplicate rows, and sibling order (PDB `sort_order`). Grid and cue
    checks skip tracks planned without analysis (`AnlzSource::None`).
    `report.tracks` is the read-back (stick path → PDB row → planned track);
-   `manifest_rows()` feeds `Library::replace_manifest` (task 13). The PDB
-   pages are walked by us (bounded, cycle-checked); row fields rekordcrate
-   0.3.0 keeps private are read from the row re-serialised by rekordcrate.
+   `manifest_rows()` feeds `Library::replace_manifest` (task 13). Since
+   2026-10-30 the PDB is read with reks's own bounds-checked
+   [`pdb`](../../crates/reks-export-rb/src/pdb/mod.rs) reader, not
+   rekordcrate, which panics on some damaged strings (D8 amendment,
+   review F03); rekordcrate remains the parser of the round-trip tests.
    ANLZ files go through our own section reader
    ([reks-anlz `read`](../../crates/reks-anlz/src/read.rs)) because
    rekordcrate 0.3.0 rejects point cues (D8). Tests write a real stick with

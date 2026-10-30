@@ -93,7 +93,7 @@ As built (tasks 2–7, 10); code in
   `write(plan, key, device_root)` builds and replaces the file (task 6).
 - `build::from_pdb(&PdbLibrary, created_date) -> OneLibrary`: pure mapping
   from the `export.pdb` baken just wrote (read by
-  [`reks_export_rb::pdbread`](../../crates/reks-export-rb/src/pdbread.rs))
+  [`reks_export_rb::pdb`](../../crates/reks-export-rb/src/pdb/library.rs))
   to typed rows (`rows.rs`); `store` inserts and reads them.
 - `schema::RbVersion` (`V7_2_19`): DDL and seed SQL in
   `crates/reks-export-onelibrary/data/<version>/`, `create_empty`.
