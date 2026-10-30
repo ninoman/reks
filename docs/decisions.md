@@ -271,6 +271,15 @@ Date of decisions: 2026-10-18.
   can use it without touching the library. Rationale: unmeasured analysis
   must not silently replace grids a DJ has played with. A locked grid
   (`track.grid_locked`, task 13) stays too.
+- Import vs analysis (2026-10-30, architecture review F01): an XML import
+  whose track has `TEMPO` rows replaces that track's `analysis` grid rows
+  (manual and locked grids stay whole, as above). "Analysis only fills in"
+  covers the queue, not imports: two grids on one track interleave their
+  anchors. reks's own result stays in the analysis cache. Migration 0014
+  removed `analysis` rows from tracks that already had `rekordbox` ones
+  ([`rbxml/import.rs`](../crates/reks-core/src/rbxml/import.rs),
+  test `an_import_replaces_an_analysis_grid` in
+  [`tests/rbxml_grid.rs`](../crates/reks-core/tests/rbxml_grid.rs)).
 - Queue order (2026-10-21): pending tracks with a rekordbox grid are
   analysed after the rest
   ([`reks-core/src/analysis.rs`](../crates/reks-core/src/analysis.rs)), so

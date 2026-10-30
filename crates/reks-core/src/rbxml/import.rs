@@ -11,7 +11,9 @@
 //!   baseline of tracks this import creates and are ignored for existing
 //!   ones; the cached play count and last played are then recomputed.
 //! - Grids and cues with `source = 'rekordbox'` are replaced; rows from any
-//!   other source are left alone. Playlists are matched by name within their
+//!   other source are left alone, except that `TEMPO` rows replace an
+//!   `analysis` grid (D10): two grids on one track would interleave. A grid
+//!   edited or locked in reks is never touched. Playlists are matched by name within their
 //!   folder; tracks a user added in reks stay after the XML's entries.
 //! - Files are read before the database is locked; every track, grid, cue
 //!   and playlist write happens in one transaction.
@@ -838,6 +840,12 @@ impl Import<'_> {
             ]);
         }
         self.report.beatgrid_rows += rows.len();
+        if !rows.is_empty() {
+            // Not user-owned, so no manual rows: drop the analysis grid the
+            // queue may have written before this import (D10).
+            tx.prepare_cached("DELETE FROM beatgrid WHERE track_id = ?1 AND source <> ?2")?
+                .execute(params![id, SOURCE])?;
+        }
         replace_rows(
             tx,
             "beatgrid",

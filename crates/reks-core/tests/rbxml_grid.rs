@@ -8,7 +8,9 @@ use std::path::PathBuf;
 
 use proptest::prelude::*;
 use reks_core::rbxml::{self, export, ImportOptions, PrefixRemap, Selection};
-use reks_core::{GridAnchor, GridEdit, Library, TrackId};
+use reks_core::{
+    AnalysisAnchor, AnalysisRecord, CancelToken, GridAnchor, GridEdit, Library, TrackId,
+};
 
 const XML_PREFIX: &str = "/Users/reks/Music/reks fixtures";
 
@@ -125,4 +127,48 @@ fn a_reimport_keeps_a_user_owned_grid() {
     let before = lib.beatgrid(id).unwrap();
     import_fixture(&lib);
     assert_eq!(lib.beatgrid(id).unwrap(), before);
+}
+
+/// "Add folder", the queue analyses, then "import collection.xml" (F01):
+/// the XML's grid replaces the analysis grid instead of interleaving with it.
+#[test]
+fn an_import_replaces_an_analysis_grid() {
+    let (_d, lib) = library();
+    let audio = std::fs::canonicalize(fixtures().join("audio")).unwrap();
+    reks_core::scan(&[audio], &lib, &CancelToken::new(), |_| {}).unwrap();
+    let ids = lib.analysis_pending(u32::MAX).unwrap();
+    assert!(!ids.is_empty());
+    let record = AnalysisRecord {
+        version: 1,
+        content_hash: "h".into(),
+        grid: vec![AnalysisAnchor {
+            position_ms: 7,
+            bpm_x100: 12_799,
+            beat_in_bar: 1,
+        }],
+        bpm_x100: Some(12_799),
+        key: None,
+        beat_confidence: 1.0,
+        key_confidence: 1.0,
+    };
+    for job in &ids {
+        lib.store_analysis(job.track_id, &record).unwrap();
+    }
+
+    import_fixture(&lib);
+    let (id, _) = lossless(&lib);
+    let g = lib.beatgrid(id).unwrap();
+    assert_eq!(g.source.as_deref(), Some("rekordbox"));
+    assert_eq!(
+        g.anchors,
+        [GridAnchor {
+            position_ms: 0,
+            bpm_x100: 12_800,
+            beat_in_bar: 1,
+            beats_per_bar: 4,
+        }]
+    );
+    // A later analysis run keeps the rekordbox grid (D10).
+    lib.store_analysis(id, &record).unwrap();
+    assert_eq!(lib.beatgrid(id).unwrap(), g);
 }

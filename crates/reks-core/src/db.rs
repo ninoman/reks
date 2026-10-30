@@ -30,6 +30,7 @@ const MIGRATION_LIST: &[M<'static>] = &[
     M::up(include_str!("../migrations/0011_cue_active_loop.sql")),
     M::up(include_str!("../migrations/0012_filter_presets.sql")),
     M::up(include_str!("../migrations/0013_grid_base.sql")),
+    M::up(include_str!("../migrations/0014_drop_mixed_grids.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 
@@ -656,6 +657,37 @@ mod tests {
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
         assert_eq!(version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn migration_14_drops_analysis_rows_beside_rekordbox_ones() {
+        let mut c = Connection::open_in_memory().unwrap();
+        MIGRATIONS.to_version(&mut c, 13).unwrap();
+        let mixed = insert_track(&c, "/music/a.wav", "Mixed");
+        let analysed = insert_track(&c, "/music/b.wav", "Analysed");
+        let grid = |t: i64, pos: i64, source: &str| {
+            c.execute(
+                "INSERT INTO beatgrid (track_id, position_ms, bpm_x100, source)
+                 VALUES (?1, ?2, 12800, ?3)",
+                rusqlite::params![t, pos, source],
+            )
+            .unwrap();
+        };
+        grid(mixed, 0, "rekordbox");
+        grid(mixed, 7, "analysis");
+        grid(analysed, 7, "analysis");
+        MIGRATIONS.to_version(&mut c, 14).unwrap();
+        let sources = |t: i64| -> Vec<String> {
+            let mut stmt = c
+                .prepare("SELECT source FROM beatgrid WHERE track_id = ?1 ORDER BY id")
+                .unwrap();
+            stmt.query_map([t], |r| r.get(0))
+                .unwrap()
+                .collect::<std::result::Result<_, _>>()
+                .unwrap()
+        };
+        assert_eq!(sources(mixed), ["rekordbox"]);
+        assert_eq!(sources(analysed), ["analysis"]);
     }
 
     #[test]

@@ -273,7 +273,9 @@ Notes (task 7, [`rbxml/import.rs`](../../crates/reks-core/src/rbxml/import.rs))
 - `TEMPO` → `beatgrid` (seconds × 1000, `Metro` n/d, bad `Metro` → 4/4 + warning),
   `POSITION_MARK` → `cue` (`Num` −1 → slot NULL, 0..7 → slot, else skipped;
   `End` → `end_ms`; RGB → `color_rgb`). Only `source = 'rekordbox'` rows are
-  replaced, and only when they differ, so re-imports keep ids.
+  replaced, and only when they differ, so re-imports keep ids. Exception: a
+  track with `TEMPO` rows loses its `analysis` grid rows (D10, "Import vs
+  analysis"); a grid edited or locked in reks is left whole.
 - Playlists: matched by name and kind within their parent (n-th same-named
   sibling ↔ n-th existing); new ones appended. Contents are the XML entries in
   order, then any tracks added in reks that the XML lacks. Playlists not in the
