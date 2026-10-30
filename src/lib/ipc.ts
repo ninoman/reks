@@ -4,6 +4,7 @@
  * (`serde_shapes`) pins the query side.
  */
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
 
 /** Resolves once the library is open (opened off the main thread at start-up);
  * rejects with the reason it could not be. Call before any other command. */
@@ -2417,4 +2418,32 @@ export function reportSave(draft: ReportDraft, path: string): Promise<void> {
 /** Records a UI error in the app log, so reports include it. */
 export function logUiError(message: string, stack: string | null): Promise<void> {
   return invoke("log_ui_error", { message, stack });
+}
+
+/** Native folder picker; `null` when cancelled. */
+export async function pickFolder(title: string, defaultPath?: string): Promise<string | null> {
+  const dir = await open({ directory: true, title, defaultPath });
+  return typeof dir === "string" ? dir : null;
+}
+
+/** Native file picker for one file; `null` when cancelled. */
+export async function pickFile(
+  title: string,
+  filter?: { name: string; extensions: string[] },
+): Promise<string | null> {
+  const path = await open({ title, filters: filter ? [filter] : undefined });
+  return typeof path === "string" ? path : null;
+}
+
+/** Native save dialog; `null` when cancelled. */
+export async function pickSavePath(options: {
+  title: string;
+  defaultPath: string;
+  filter: { name: string; extensions: string[] };
+}): Promise<string | null> {
+  return save({
+    title: options.title,
+    defaultPath: options.defaultPath,
+    filters: [options.filter],
+  });
 }

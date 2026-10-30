@@ -7,9 +7,15 @@
  * Tag blocks, a checkbox (on by default) reads them into tags, and the report
  * offers the tag organizer (D39).
  */
-import { open } from "@tauri-apps/plugin-dialog";
 
-import type { ImportPreview, ImportReport, Unmatched, UnmatchedReason } from "../lib/ipc";
+import {
+  type ImportPreview,
+  type ImportReport,
+  pickFile,
+  pickFolder,
+  type Unmatched,
+  type UnmatchedReason,
+} from "../lib/ipc";
 import { useImportWizard } from "../store/importWizard";
 import { commentTagsText } from "../store/tagOrganizerModel";
 import { ErrorMessage } from "./ErrorMessage";
@@ -42,17 +48,15 @@ function fileName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
-async function pickFolder(from: string): Promise<string | null> {
-  const to = await open({ directory: true, title: `Where is "${from}" now?` });
-  return typeof to === "string" ? to : null;
+function pickMovedFolder(from: string): Promise<string | null> {
+  return pickFolder(`Where is "${from}" now?`);
 }
 
-async function pickXml(): Promise<string | null> {
-  const path = await open({
-    title: "Import rekordbox collection.xml",
-    filters: [{ name: "rekordbox XML", extensions: ["xml"] }],
+function pickXml(): Promise<string | null> {
+  return pickFile("Import rekordbox collection.xml", {
+    name: "rekordbox XML",
+    extensions: ["xml"],
   });
-  return typeof path === "string" ? path : null;
 }
 
 export function ImportWizard() {
@@ -132,7 +136,7 @@ function Review() {
   const { start, close, addRemap, removeRemap } = useImportWizard.getState();
 
   async function mapFolder(from: string) {
-    const to = await pickFolder(from);
+    const to = await pickMovedFolder(from);
     if (to !== null) await addRemap(from, to);
   }
 
@@ -323,7 +327,7 @@ function Report() {
   if (report === null) return null;
 
   async function mapAndReview(from: string) {
-    const to = await pickFolder(from);
+    const to = await pickMovedFolder(from);
     if (to !== null) await remapAndReview(from, to);
   }
 

@@ -8,10 +8,10 @@
  * tiles (`ChoiceTiles`). Values live in Rust (`useSettings`); the library
  * window's own state (columns, panels, volume) is saved without asking.
  */
-import { open } from "@tauri-apps/plugin-dialog";
-import { type ReactNode, type RefObject, useRef, useState } from "react";
 
+import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { cn } from "../lib/cn";
+import { pickFolder } from "../lib/ipc";
 import { useScan } from "../store/scan";
 import { type SettingsTab, useSettings } from "../store/settings";
 import { ErrorMessage } from "./ErrorMessage";
@@ -180,8 +180,8 @@ function LibraryFolders() {
   const { addRoot, removeRoot, loadRoots } = useSettings.getState();
 
   async function add() {
-    const dir = await open({ directory: true, title: "Add music folder" });
-    if (typeof dir === "string") await addRoot(dir);
+    const dir = await pickFolder("Add music folder");
+    if (dir) await addRoot(dir);
   }
 
   async function rescan() {
@@ -260,8 +260,8 @@ function CacheFolder({ cacheDir }: { cacheDir: string }) {
   const [target, setTarget] = useState<string | null>(null);
 
   async function pick() {
-    const dir = await open({ directory: true, title: "Move the cache to" });
-    if (typeof dir === "string") setTarget(dir);
+    const dir = await pickFolder("Move the cache to");
+    if (dir) setTarget(dir);
   }
 
   async function move(to: string) {
