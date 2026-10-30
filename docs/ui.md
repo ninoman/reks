@@ -71,7 +71,7 @@ on the `deck`, the theme's darkest panel (Paper's is light, so its
 `grid-downbeat`, `grid-pin-1` / `grid-pin-2` (grid mode's two points: red,
 and the text colour) and `grid-marker` (grid mode's tempo section markers);
 the mixer's decks add
-`deck-cue`, `deck-hotcue`, `deck-memory`, `deck-loop`, `deck-loop-in` (the pending loop IN), `deck-auto-loop` and the other waveform styles' `waveform-rgb-*` and
+`deck-cue`, `deck-hotcue`, `deck-memory`, `deck-loop`, `deck-loop-in` (the pending loop IN), `deck-auto-loop`, `deck-synced` (BPM and tempo % while sync holds the tempo, and the lit SYNC button via `data-lit="synced"`) and the other waveform styles' `waveform-rgb-*` and
 `waveform-blue(-high)`. The mark colours are the same in every theme.
 
 The `accent` stays scarce: primary buttons, the loaded track, the played
@@ -550,7 +550,7 @@ Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light g
 
 | Row | Contents |
 |---|---|
-| Header (40 px; 30 compact) | Deck number (lit when loaded) · artwork (eject ⏏ on hover or focus; dashed box without artwork) · title / artist · key (in the Settings notation; a readout with KEY under it, not a pill) · BPM with tempo % under it · remaining over elapsed time |
+| Header (40 px; 30 compact) | Deck number (lit when loaded) · artwork (eject ⏏ on hover or focus; dashed box without artwork) · title / artist · key (in the Settings notation; a readout with KEY under it, not a pill) · BPM with tempo % under it (both in `deck-synced` while sync holds the deck at the master's tempo: the fader does nothing) · remaining over elapsed time |
 | Zoomed waveform (spare height, min 60 px; the player deck 72 px) | Playhead centred, beat lines, hot cue and loop markers, sync phase meter on the top edge when synced. Zoom − / + float top right on hover or focus-within, zoom level between them. Drag to skim |
 | Overview (20 px; 14 compact) | Whole track, played part shaded, hot cue ticks in cue colour, cue point, loop bar. Keyboard seek slider |
 | Controls (see Controls row) | Q over CUE and PLAY (round) · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · `LoopBlock` (see [Quick loop](#quick-loop-task-21)) · MASTER over SYNC |

@@ -1,7 +1,8 @@
 /**
  * MASTER (lit while this deck is the sync master; a click takes master) and
  * SYNC, one beside each pad row (`--deck-ctl-rows`), filling the column. Both
- * need a grid. The player deck alone has neither.
+ * need a grid. SYNC lights in the synced colour (`data-lit`), matching the
+ * BPM readout while it follows the master. The player deck alone has neither.
  */
 import { Button } from "../ui/Button";
 
@@ -48,6 +49,7 @@ export function DeckSyncButtons({
         variant="control"
         disabled={!ready}
         aria-pressed={sync}
+        data-lit="synced"
         aria-label={`Deck ${n} sync`}
         hint="Sync"
         shortcut={syncKey}

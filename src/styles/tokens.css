@@ -132,6 +132,8 @@
   --amber-500: #d49a45;
   --indigo-500: #839cff;
   --indigo-600: #4250db;
+  --cyan-500: #4cc4d6;
+  --cyan-700: #0f7e8f;
 
   /* Mixer level LEDs (DJM-style column); white is themed (a light deck needs dark). */
   --led-red: #ff3d3d;
@@ -239,6 +241,10 @@
   --color-deck-loop-in: var(--color-deck-cue);
   /* A memory loop playback enters by itself (active loop): its mark and bar. */
   --color-deck-auto-loop: var(--indigo-500);
+  /* BPM and tempo % while sync holds the deck at the master's tempo (the fader is inactive). */
+  --color-deck-synced: var(--cyan-500);
+  --color-deck-synced-fg: var(--graphite-950);
+  --shadow-deck-synced: 0 0 8px rgb(76 196 214 / 45%);
   /* Level meter LEDs, on the deck colour: +10 red, +6/+3 white, 0 blue, below lime. */
   --color-led-clip: var(--led-red);
   --color-led-hot: var(--led-white);
@@ -343,6 +349,9 @@
   --color-waveform-blue-high: var(--wave-blue-deep);
   --color-grid-beat: rgb(31 30 29 / 30%);
   --color-deck-auto-loop: var(--indigo-600);
+  --color-deck-synced: var(--cyan-700);
+  --color-deck-synced-fg: var(--paper-0);
+  --shadow-deck-synced: 0 0 8px rgb(15 126 143 / 40%);
   --color-led-hot: var(--paper-800);
   --color-lit: var(--paper-rose-500);
   --color-lit-fg: var(--paper-0);
@@ -598,6 +607,13 @@
   --duration-fast: 100ms;
   --duration-slide-in: 240ms;
   --duration-slide-out: 160ms;
+}
+
+/* SYNC lights in the synced colour, like the BPM it holds (`data-lit="synced"`). */
+[data-lit="synced"] {
+  --color-lit: var(--color-deck-synced);
+  --color-lit-fg: var(--color-deck-synced-fg);
+  --shadow-lit: var(--shadow-deck-synced);
 }
 
 /*
