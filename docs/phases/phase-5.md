@@ -301,6 +301,9 @@ pub enum Control {
     don't click), `keylock.rs` unit test, no-allocation callback test in
     `engine.rs`, `DeckStrip.test.tsx`.
 11. **Listening checklist** below, run and logged ([#26](https://github.com/ninoman/reks/issues/26)).
+    Run 2026-10-30: steps 1–5, 7 and 8 pass; step 6 (cue routing) not run, as
+    the 2i2 has 2 outputs. Open until a 4-output device or the laptop output
+    has run it.
 12. [x] **Deck refinements** (maintainer review of tasks 8–9, 2026-10-21):
     - Tempo ranges ±6, ±10, ±16 and WIDE (±100%), CDJ-3000; ±10 is the
       default, as on the CDJ. The engine takes tempo 0–2 (`TEMPO_MIN`/`MAX`);
@@ -756,8 +759,11 @@ nothing; 25 needs 22–24.
       unchanged ([fx-select-knob.html](../wireframes/fx-select-knob.html),
       variant A; checked in the dev mock, 3-band Simple/Advanced, 2 and 4
       decks; 2026-10-23).
-    - [ ] Listening check on the maintainer's laptop (filter ends, echo
-      time and feedback, reverb decay and level are UNVERIFIED figures).
+    - [x] Listening check (2026-10-30, MacBook Pro + Scarlett 2i2, headphones;
+      [`../hw-test-log.md`](../hw-test-log.md#mixer-phase-5-task-11-and-task-27)):
+      filter ends, echo time and feedback, reverb decay and level sound right
+      by ear, so those figures are verified as listening choices (not
+      measured). Slopes and the EQ figures stay UNVERIFIED.
     Tests: `dsp::eq3`, `dsp::channel_filter`, `dsp::channel_echo`,
     `dsp::channel_reverb`, `taper` (eq3, fx_send, channel filter table),
     `settings.rs` round trip, `mix.rs` IPC parse, `mixView.test.ts`,
