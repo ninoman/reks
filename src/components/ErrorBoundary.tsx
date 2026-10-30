@@ -1,6 +1,8 @@
 /**
- * Last-resort screen when rendering throws: logs the error (D34) and offers
- * a bug report about it or a reload, instead of a blank window.
+ * Catches a render error: logs it (D34) and offers a bug report instead of
+ * a blank window. With `region` it replaces only that part of the screen
+ * and offers "Try again", so the rest keeps working (and the engine keeps
+ * its state); without, it is the last-resort full screen with Reload.
  */
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
@@ -13,7 +15,13 @@ interface State {
   error: Error | null;
 }
 
-export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
+interface Props {
+  children: ReactNode;
+  /** Names the part of the screen this guards, e.g. "Deck". */
+  region?: string;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
   state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
@@ -28,7 +36,34 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
 
   render() {
     const { error } = this.state;
+    const { region } = this.props;
     if (error === null) return this.props.children;
+    if (region !== undefined) {
+      return (
+        <div
+          role="alert"
+          className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4 text-fg"
+        >
+          <p className="m-0 text-sm font-semibold">{region} hit a problem</p>
+          <p className="m-0 max-w-[420px] text-center text-xs text-fg-muted select-text">
+            {error.message}
+          </p>
+          <div className="flex gap-2">
+            <Button onClick={() => this.setState({ error: null })}>Try again</Button>
+            <Button
+              variant="primary"
+              onClick={() =>
+                void useReport
+                  .getState()
+                  .openReport({ kind: "bug", context: `${region}: ${error.message}` })
+              }
+            >
+              Report this
+            </Button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 bg-bg p-6 text-fg">
         <p className="m-0 text-md font-semibold">Something went wrong</p>
