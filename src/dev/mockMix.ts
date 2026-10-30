@@ -569,6 +569,28 @@ function load(deck: number, id: number, analysed: boolean): DeckLoaded {
   return { deck, load: loadSeq, trackId: id, durationMs: DURATION_MS, ...cues };
 }
 
+/** `mix_deck_move`: deck `from`'s track on `deck` as it plays; `from` empties. */
+function deckMove(deck: number, from: number): number | null {
+  if (config === null) throw new Error("the mixer's audio output is not started");
+  const src = decks[from];
+  if (src?.view.loaded !== true || deck === from) return null;
+  const prev = decks[deck] ?? emptyDeck();
+  const view: DeckView = {
+    ...src.view,
+    sync: prev.view.sync,
+    syncBar: prev.view.syncBar,
+    quantise: prev.view.quantise,
+    locked: false,
+    master: false,
+  };
+  loadSeq += 1;
+  decks[deck] = { view, load: loadSeq, grid: src.grid, since: src.since };
+  decks[from] = emptyDeck();
+  if (master === from) master = deck;
+  else if (master === deck) masterPlaying = true;
+  return loadSeq;
+}
+
 export function mockMix(
   cmd: string,
   args: Record<string, unknown>,
@@ -627,6 +649,8 @@ export function mockMix(
       if (d !== undefined) d.view = { ...d.view, trackId: null };
       return new Promise((resolve) => setTimeout(() => resolve({ ...loaded, trackId: null }), 300));
     }
+    case "mix_deck_move":
+      return deckMove(args.deck as number, args.from as number);
     case "mix_waveform_detail": {
       const d = decks[args.deck as number];
       const bytes =

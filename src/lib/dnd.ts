@@ -11,6 +11,8 @@ export const NODE_MIME = "application/x-reks-node";
 /** A tag or a tag category dragged inside the My Tags drawer (the id is in the store's ref). */
 export const TAG_MIME = "application/x-reks-tag";
 export const TAG_CATEGORY_MIME = "application/x-reks-tag-category";
+/** A loaded mixer deck dragged onto another (its index). */
+export const DECK_MIME = "application/x-reks-deck";
 
 export interface TrackDrag {
   trackIds: number[];
@@ -40,11 +42,19 @@ export function readTracks(dt: Transfer | null): TrackDrag | null {
   }
 }
 
-export function readNode(dt: Transfer | null): number | null {
-  const raw = dt?.getData(NODE_MIME);
+function readInt(dt: Transfer | null, type: string): number | null {
+  const raw = dt?.getData(type);
   if (!raw) return null;
-  const id = Number(raw);
-  return Number.isInteger(id) ? id : null;
+  const n = Number(raw);
+  return Number.isInteger(n) ? n : null;
+}
+
+export function readNode(dt: Transfer | null): number | null {
+  return readInt(dt, NODE_MIME);
+}
+
+export function readDeck(dt: Transfer | null): number | null {
+  return readInt(dt, DECK_MIME);
 }
 
 /** Where a pointer is on a row: top quarter, bottom quarter or the middle. */

@@ -19,6 +19,16 @@ pub enum Control {
     Unload {
         deck: u8,
     },
+    /// Moves `from`'s track to `deck` as it plays: the same source (not a
+    /// new decode) with its position, play state, cue point, cues, loops,
+    /// tempo (the tempo it matched, when `from` follows sync) and master
+    /// tempo; `from` is unloaded. Sync and quantise stay `deck`'s, as on a
+    /// load. Taken at the next block start, once a playing `deck` has faded
+    /// out. Ignored for an empty `from`, the same deck or the preview deck.
+    Move {
+        deck: u8,
+        from: u8,
+    },
     Play {
         deck: u8,
     },
@@ -220,6 +230,7 @@ impl Control {
         match self {
             Self::Load { deck, .. }
             | Self::Unload { deck }
+            | Self::Move { deck, .. }
             | Self::Play { deck }
             | Self::Pause { deck }
             | Self::Cue { deck }

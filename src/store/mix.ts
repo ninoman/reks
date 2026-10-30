@@ -39,6 +39,7 @@ import {
   type MixState,
   mixControl,
   mixCueEdit,
+  mixDeckMove,
   mixDeviceOptions,
   mixLoad,
   mixLoadStick,
@@ -233,6 +234,11 @@ export interface MixStore {
   /** Loads `track` on `deck`, starting the output if it is off; `play` plays it once loaded. */
   load: (deck: number, track: TrackRef | number, play?: boolean) => Promise<void>;
   unload: (deck: number) => void;
+  /**
+   * Moves deck `from`'s track to `to` as it plays (position, play state, cues, loops,
+   * tempo and tempo range), without decoding it again; `from` is ejected.
+   */
+  moveDeck: (from: number, to: number) => Promise<void>;
   /** Loads the track that failed again, or fetches a failed waveform again. */
   retry: (deck: number) => Promise<void>;
   /** A track's analysis finished (`ok`) or failed: decks waiting on it pick up the grid. */
@@ -734,6 +740,41 @@ export const useMix = create<MixStore>((set, get) => {
       loads[deck] = (loads[deck] ?? 0) + 1;
       patchDeck(deck, emptyDeckFrom(get().decks[deck]));
       get().send({ type: "unload", deck });
+    },
+
+    async moveDeck(from, to) {
+      const src = get().decks[from];
+      if (from === to || src === undefined || src.track === null || src.load === null) return;
+      const seq = (loads[to] ?? 0) + 1;
+      loads[to] = seq;
+      const current = () => loads[to] === seq;
+      try {
+        const load = await mixDeckMove(to, from);
+        if (load === null || !current()) return;
+        const { track, hotCues, memoryCues, columns, beats, viewError, analysing } = src;
+        patchDeck(to, {
+          track,
+          loading: null,
+          error: null,
+          failed: null,
+          load,
+          hotCues,
+          memoryCues,
+          columns,
+          beats,
+          viewError,
+          analysing,
+          gridPending: src.gridPending,
+          tempoRange: src.tempoRange,
+        });
+        // The engine ejected it.
+        loads[from] = (loads[from] ?? 0) + 1;
+        patchDeck(from, emptyDeckFrom(get().decks[from]));
+        // The original's views were still on their way.
+        if (columns === null && viewError === null) await fetchViews(to, track, current);
+      } catch (e) {
+        if (current()) set({ error: message(e) });
+      }
     },
 
     async retry(deck) {

@@ -556,6 +556,10 @@ Measured in the dev mock (headless, Dawn Dawn loaded on deck 2; dark and light g
 | Controls (see Controls row) | Q over CUE and PLAY (round) · pad mode (HOT CUE / MEMORY / JUMP / LOOP: equal tabs, the chosen one outlined in `accent`) · page ◀ ▶ (JUMP, LOOP, MEMORY; disabled in HOT CUE so nothing shifts) · 2 × 4 pads · `LoopBlock` (see [Quick loop](#quick-loop-task-21)) · MASTER over SYNC |
 | Tempo column (44 px) | Range button (±6 / ±10 / ±16 / W, for WIDE) and **M** (master tempo: key lock, lit when on) · full-height fader · nudge |
 
+- **Deck to deck**: drag a loaded deck's artwork or title onto another deck
+  to move the track there as it plays (position, play state, loops, cues,
+  tempo); the original is ejected (`Control::Move`, phase 5 task 33). Not in
+  1-deck mode.
 - **BPM edit**: double-click (or Enter when focused) turns the BPM into a
   number field; Enter or blur saves, Esc cancels. Tempo = typed ÷ the
   track's BPM at the playhead; out of range, the range steps up to the

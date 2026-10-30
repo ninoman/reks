@@ -37,6 +37,7 @@ export function deckActions(mix: MixStore, deck: number): DeckActions {
     eject: () => mix.unload(deck),
     // A drop onto a playing deck keeps the deck playing with the new track.
     drop: (id) => void mix.load(deck, id, mix.live?.decks[deck]?.playing === true),
+    dropDeck: (from) => void mix.moveDeck(from, deck),
     retry: () => void mix.retry(deck),
   };
 }

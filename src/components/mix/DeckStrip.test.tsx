@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { TRACKS_MIME } from "../../lib/dnd";
+import { DECK_MIME, TRACKS_MIME } from "../../lib/dnd";
 import type { DeckView } from "../../lib/ipc";
 import { type DeckMeta, emptyDeck } from "../../store/mix";
 import { type DeckActions, DeckStrip, type DeckStripProps } from "./DeckStrip";
@@ -91,6 +91,7 @@ function setup(props: Partial<DeckStripProps> = {}) {
       "seek",
       "eject",
       "drop",
+      "dropDeck",
       "retry",
     ].map((k) => [k, vi.fn()]),
   ) as unknown as DeckActions;
@@ -434,6 +435,39 @@ describe("DeckStrip", () => {
     fireEvent.dragOver(deck, { dataTransfer });
     fireEvent.drop(deck, { dataTransfer });
     expect(a.drop).toHaveBeenCalledWith(42);
+  });
+
+  it("moves a track dragged from another deck", () => {
+    const a = setup();
+    const dataTransfer = { types: [DECK_MIME], getData: () => "0", dropEffect: "none" };
+    const deck = screen.getByRole("region", { name: "Deck 2" });
+    fireEvent.dragOver(deck, { dataTransfer });
+    expect(dataTransfer.dropEffect).toBe("move");
+    fireEvent.drop(deck, { dataTransfer });
+    expect(a.dropDeck).toHaveBeenCalledWith(0);
+  });
+
+  it("drags its own track out, but not onto itself", () => {
+    setup({ view: view(), meta: loadedMeta() });
+    const deck = screen.getByRole("region", { name: "Deck 2" });
+    const handle = deck.querySelector("[draggable=true]");
+    if (handle === null) throw new Error("no drag handle");
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      types: [] as string[],
+      setData: (t: string, v: string) => {
+        dataTransfer.types.push(t);
+        data.set(t, v);
+      },
+      getData: (t: string) => data.get(t) ?? "",
+      dropEffect: "none",
+      effectAllowed: "none",
+    };
+    fireEvent.dragStart(handle, { dataTransfer });
+    expect(data.get(DECK_MIME)).toBe("1");
+    expect(dataTransfer.effectAllowed).toBe("move");
+    fireEvent.dragOver(deck, { dataTransfer });
+    expect(deck.dataset.dropping).toBeUndefined();
   });
 
   it("solo (the player deck): no sync controls, says how to play", () => {

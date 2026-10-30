@@ -3,9 +3,10 @@
  * hover or focus), title and artist, key (a readout, KEY under it), BPM (double-click to type one)
  * with the tempo under it, and remaining over elapsed time. The grid mode
  * toggle (beat lines icon, lit when on; a library track only) sits right
- * after the title.
+ * after the title. With `drag`, the artwork and title drag the track to
+ * another deck.
  */
-import type { ReactNode } from "react";
+import type { DragEvent, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
 import { formatClock, formatTempo } from "../../lib/mixView";
@@ -37,6 +38,8 @@ export interface DeckHeaderProps {
   notice?: ReactNode;
   /** The GRID toggle; left out where grid mode can't open. */
   grid?: { available: boolean; on: boolean; onToggle: () => void } | undefined;
+  /** Dragging the loaded track to another deck; left out where there is none. */
+  drag?: { onDragStart: (e: DragEvent) => void; onDragEnd: () => void } | undefined;
 }
 
 export function DeckHeader({
@@ -54,6 +57,7 @@ export function DeckHeader({
   onEject,
   notice,
   grid,
+  drag,
 }: DeckHeaderProps) {
   const n = deck + 1;
   const shown = track ?? loading;
@@ -62,36 +66,53 @@ export function DeckHeader({
       <Badge variant={loaded ? "accent" : "muted"} size="md" className="rounded-xs font-mono">
         {n}
       </Badge>
-      <Artwork
-        size="deck"
-        artworkId={track?.artworkId ?? null}
-        mime={track?.artworkMime ?? ""}
-        action={
-          loaded ? (
-            <IconButton
-              aria-label={`Eject deck ${n}`}
-              hint="Eject"
-              className="size-full rounded-xs bg-overlay text-deck-fg hover:bg-overlay hover:text-deck-fg"
-              onClick={onEject}
-            >
-              <EjectIcon />
-            </IconButton>
-          ) : undefined
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: a pointer drag shortcut; the
+          deck's own buttons and the track list's Load to deck do the same by keyboard. */}
+      <div
+        draggable={loaded && drag !== undefined}
+        onDragStart={drag?.onDragStart}
+        onDragEnd={drag?.onDragEnd}
+        title={
+          loaded && drag !== undefined
+            ? "Drag to another deck to move the track there as it plays"
+            : undefined
         }
-      />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        {track !== null ? (
-          <span className="truncate text-sm font-semibold">{track.title ?? "Untitled"}</span>
-        ) : loading !== null ? (
-          <span className="truncate text-sm text-fg-muted">
-            Loading {loading.title ?? "track"}…
-          </span>
-        ) : (
-          <span className="text-sm text-fg-subtle">Empty</span>
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-1.5",
+          loaded && drag !== undefined && "cursor-grab active:cursor-grabbing",
         )}
-        <span className="truncate text-xs text-fg-muted">
-          {shown === null ? `Deck ${n}` : (shown.artist ?? "")}
-        </span>
+      >
+        <Artwork
+          size="deck"
+          artworkId={track?.artworkId ?? null}
+          mime={track?.artworkMime ?? ""}
+          action={
+            loaded ? (
+              <IconButton
+                aria-label={`Eject deck ${n}`}
+                hint="Eject"
+                className="size-full rounded-xs bg-overlay text-deck-fg hover:bg-overlay hover:text-deck-fg"
+                onClick={onEject}
+              >
+                <EjectIcon />
+              </IconButton>
+            ) : undefined
+          }
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          {track !== null ? (
+            <span className="truncate text-sm font-semibold">{track.title ?? "Untitled"}</span>
+          ) : loading !== null ? (
+            <span className="truncate text-sm text-fg-muted">
+              Loading {loading.title ?? "track"}…
+            </span>
+          ) : (
+            <span className="text-sm text-fg-subtle">Empty</span>
+          )}
+          <span className="truncate text-xs text-fg-muted">
+            {shown === null ? `Deck ${n}` : (shown.artist ?? "")}
+          </span>
+        </div>
       </div>
       {grid !== undefined && (
         <Tooltip

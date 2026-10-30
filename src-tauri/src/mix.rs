@@ -536,6 +536,30 @@ where
     }))
 }
 
+/// Moves deck `from`'s track to `deck` as it plays, without decoding it
+/// again: position, play state, cues, loops and tempo
+/// (`reks_mix::Control::Move`); `from` is unloaded. Returns `deck`'s new
+/// load (the UI's handle, as `DeckLoaded::load`), or `None` when `from` is
+/// empty.
+#[tauri::command]
+pub fn mix_deck_move(state: State<'_, AppState>, deck: u8, from: u8) -> CmdResult<Option<u64>> {
+    let (i, f) = (deck_index(deck)?, deck_index(from)?);
+    if i == f || deck == PREVIEW_DECK || from == PREVIEW_DECK {
+        return Err(CmdError::new(
+            "a track moves between two mixer decks".into(),
+        ));
+    }
+    let mut s = lock(&state.mix)?;
+    let Some(loaded) = s.decks[f].take() else {
+        return Ok(None);
+    };
+    s.engine()?.send(reks_mix::Control::Move { deck, from })?;
+    s.generation[i] += 1;
+    let load = s.generation[i];
+    s.decks[i] = Some(LoadedDeck { load, ..loaded });
+    Ok(Some(load))
+}
+
 /// Most points one `mix_waveform_detail` request builds (60 s).
 const MAX_DETAIL_POINTS: u64 = 180_000;
 
