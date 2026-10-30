@@ -325,7 +325,10 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    errors after the PDB was written, `AfterDatabase` included, are in the
    report). The manifest is recorded only on `Success`. fsync covers
    `PIONEER/rekordbox`, the planned ANLZ files, copied audio (and
-   `PIONEER/Artwork` with artwork). Progress: `ApplyEvent` (`stage`, `writer`
+   `PIONEER/Artwork` with artwork); on Unix files are opened read-only and
+   get a plain `fsync`, then macOS flushes the drive cache once
+   (`F_FULLFSYNC`), see [apply/flush.rs](../../crates/reks-export-rb/src/apply/flush.rs)
+   and perf audit P1-1/P1-2. Progress: `ApplyEvent` (`stage`, `writer`
    wrapping `ExportEvent`, `warning`). Tests on temp-dir sticks: played stick
    backed up, written, validated clean, manifest recorded; second identical
    export copies nothing; failing backup leaves the stick byte-identical with
