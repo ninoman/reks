@@ -22,7 +22,7 @@ Cues, beatgrids, tags, playlists and play history live only in reks's library
   a "Before a restore" backup first, replaces it, and restarts reks. Restoring
   gives back the library as it was then: changes made since are gone (restore
   the "Before a restore" backup to undo). Damaged backups and ones made by a
-  newer reks are listed but cannot be restored. A restore waits while a scan,
+  newer reks are listed but cannot be restored. A restore is refused while a scan,
   import, export or conversion is running.
 - Music files, artwork and analysis caches are not in a backup: they are
   rebuilt from your files, or are the files themselves.

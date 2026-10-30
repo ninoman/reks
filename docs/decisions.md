@@ -100,7 +100,7 @@ Date of decisions: 2026-10-18.
   (game-oriented); web-audio-api crate (niche); WebView audio (see D4).
 - Risks: Linux needs ALSA/Pulse/PipeWire client libs (standard); whole-track
   decode costs about 10 MB per minute at 44.1 kHz, so tracks over 60 minutes
-  are refused for preview; a device-rate change needs a reload.
+  are refused (preview, analysis, columns and transients share the limit); a device-rate change needs a reload.
 
 ## D6. Tags and artwork: `lofty`
 
@@ -116,8 +116,9 @@ Date of decisions: 2026-10-18.
 - Decision: Phase 2 writes `export.pdb` + ANLZ by (1) generating a rekordbox
   `collection.xml` from our library into a temp dir (we need the XML writer
   anyway, D11), (2) calling `baken_export::plan(&Options)` then
-  `export()`, with `anlz_roots` pointing at rekordbox's local analysis cache
-  for imported tracks and `prune` for stale-file cleanup. Our
+  `export()`, with an empty `anlz_roots` (a scratch
+  folder; the ANLZ files come from `reks-anlz`/`reksanlz`, injected in
+  `reconcile`, not from rekordbox's cache; 2026-10-30 correction) and `prune` for stale-file cleanup. Our
   `reks-export-rb` crate wraps this behind a `RekordboxWriter` trait and
   adds our own dry-run presentation, FAT32 validation and read-back
   validation (D8).
@@ -307,7 +308,7 @@ Date of decisions: 2026-10-18.
   columns. Our encoders (peak-hold envelope, per-track gain, gamma curves,
   3–7-bit fields) are not invertible, so columns rebuilt from them would
   only approximate rekordbox's bytes. Keeping the bytes is exact, and
-  nothing that reads columns needs them from the cache. When reks builds
+  nothing that reads columns needs them from the cache. (2026-10-30 correction: `reks-analysis::columns::stored_columns` does read columns from the rekordbox cache, converting the bytes on demand without caching them, when the columns and reks analysis caches have none.) When reks builds
   ANLZ for a mapped track (`reksFirst`, or a grid the user edited or locked,
   D7), [`reksanlz`](../crates/reks-export-rb/src/reksanlz.rs) writes
   rekordbox's waveform payloads unchanged with the library's grid and cues.
@@ -941,7 +942,7 @@ Date of decisions: 2026-10-18.
   per theme under `:root[data-theme]`); Tailwind CSS v4 (`@tailwindcss/vite`) utilities;
   `class-variance-authority` for variants and `clsx` + `tailwind-merge` as `cn()`;
   Radix Primitives for behaviour (Dialog, DropdownMenu, ContextMenu, Popover,
-  Tooltip, Switch, Slider, ToggleGroup, ScrollArea, Slot) in `src/components/ui/`.
+  Tabs, Tooltip, Switch, Slider, ToggleGroup, ScrollArea, Slot) in `src/components/ui/`.
   Selects stay native (styled), so keyboard and OS behaviour are unchanged.
 - Licences: tailwindcss, @tailwindcss/vite, cva (Apache-2.0), clsx, tailwind-merge,
   all @radix-ui packages MIT. Build-only tree (dev deps, not in
@@ -1483,7 +1484,7 @@ Date of decisions: 2026-10-18.
     playhead, and stick tracks get it too. Not cached on disk.
   - Fetched in 30 s chunks (`mix_waveform_detail`, an `ArrayBuffer`), the
     playhead's chunk first, then outward; a deck keeps the 20 chunks nearest
-    the playhead, so a 2-hour mix costs no more than a 10-minute track.
+    the playhead, so the detail view costs the same however long the track (tracks over 60 minutes are refused at decode, D5).
     Requests carry the deck's load generation (`DeckLoaded.load`): after a
     newer load they come back empty and the UI stops.
   - Until a tile's chunk arrives it draws from the columns; playback never
