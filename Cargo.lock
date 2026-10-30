@@ -4111,6 +4111,7 @@ dependencies = [
  "baken-export",
  "binrw",
  "blake3",
+ "libc",
  "proptest",
  "rekordcrate",
  "reks-analysis",
