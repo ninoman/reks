@@ -22,6 +22,7 @@ import { ConvertDialog } from "./components/ConvertDialog";
 import { COLUMN_DEFAULTS } from "./components/columns";
 import { DevicesDialog } from "./components/DevicesDialog";
 import { DeviceTree } from "./components/DeviceTree";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ErrorMessage } from "./components/ErrorMessage";
 import { ExportWizard } from "./components/ExportWizard";
 import { HistoryImportDialog } from "./components/HistoryImportDialog";
@@ -56,6 +57,7 @@ import { useFilterPresets } from "./store/filterPresets";
 import { useHistory } from "./store/history";
 import { useLibrary } from "./store/library";
 import { useMix } from "./store/mix";
+import { releaseStaleEngine } from "./store/mixEngine";
 import { useMixShortcuts } from "./store/mixShortcuts";
 import { usePanels } from "./store/panels";
 import { togglePlayer } from "./store/player";
@@ -101,6 +103,7 @@ export default function App() {
     void useTags.getState().load();
     void useFilterPresets.getState().load();
     void useHistory.getState().load();
+    void releaseStaleEngine();
     void useAnalysis.getState().subscribe();
     void offerCrashReport();
     void offerBackupWarning();
@@ -141,48 +144,58 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col" style={panelWidths}>
-      <AppHeader />
+      <ErrorBoundary region="Header">
+        <AppHeader />
+      </ErrorBoundary>
       <div className="flex shrink-0 flex-col border-b border-border bg-bg-subtle">
-        <PlayerBar />
-        {mixOpen ? <MixPanel /> : <PlayerDeck />}
+        <ErrorBoundary region="Player">
+          <PlayerBar />
+          {mixOpen ? <MixPanel /> : <PlayerDeck />}
+        </ErrorBoundary>
       </div>
       <div className="flex min-h-0 flex-1">
         <aside className="relative flex w-(--sidebar-w) shrink-0 flex-col border-r border-border bg-bg-subtle">
-          <PlaylistTree />
-          <DeviceTree />
-          <HistoryTree />
+          <ErrorBoundary region="Sidebar">
+            <PlaylistTree />
+            <DeviceTree />
+            <HistoryTree />
+          </ErrorBoundary>
           <SidebarResizeHandle />
         </aside>
         <main className="flex min-w-0 flex-1 flex-col">
-          {stickCheckOpen ? (
-            <StickCheckView />
-          ) : stickListOpen ? (
-            <StickListView />
-          ) : sessionOpen ? (
-            <SessionView />
-          ) : (
-            <>
-              <LibraryToolbar table={table} />
-              {error !== null && (
-                <ErrorMessage className="border-b border-border px-2.5 py-1" message={error} />
-              )}
-              <TrackLists columns={visibleColumns(table)} />
-            </>
-          )}
+          <ErrorBoundary region="Library">
+            {stickCheckOpen ? (
+              <StickCheckView />
+            ) : stickListOpen ? (
+              <StickListView />
+            ) : sessionOpen ? (
+              <SessionView />
+            ) : (
+              <>
+                <LibraryToolbar table={table} />
+                {error !== null && (
+                  <ErrorMessage className="border-b border-border px-2.5 py-1" message={error} />
+                )}
+                <TrackLists columns={visibleColumns(table)} />
+              </>
+            )}
+          </ErrorBoundary>
         </main>
       </div>
-      <DuplicateDialog />
-      <DeleteDialog />
-      <ImportWizard />
-      <TagOrganizer />
-      <SettingsDialog />
-      <DevicesDialog />
-      <AdoptDialog />
-      <RelocateDialog />
-      <RemapDialog />
-      <ExportWizard />
-      <ConvertDialog />
-      <HistoryImportDialog />
+      <ErrorBoundary region="Dialogs">
+        <DuplicateDialog />
+        <DeleteDialog />
+        <ImportWizard />
+        <TagOrganizer />
+        <SettingsDialog />
+        <DevicesDialog />
+        <AdoptDialog />
+        <RelocateDialog />
+        <RemapDialog />
+        <ExportWizard />
+        <ConvertDialog />
+        <HistoryImportDialog />
+      </ErrorBoundary>
       <ReportDialog />
       <ToastHost />
     </div>
