@@ -1898,6 +1898,7 @@ export type ApplyStage =
   | "write"
   | "oneLibrary"
   | "sync"
+  | "delete"
   | "validate"
   | "manifest";
 

@@ -8,11 +8,11 @@
 //! [`reconcile`] rewrites baken's plan to match ours, through baken's public
 //! `Plan` fields:
 //!
-//! - tracks: exactly the planned ones, in plan order (baken's ANLZ slot
-//!   numbers and PDB track ids follow that order);
-//! - `usb_path` = the plan's `dst_rel`, and `anlz_dir`/`anlz_index` computed
-//!   from it with baken's own `AnlzSlots`, so `export.pdb`, PPTH and the
-//!   USBANLZ layout all carry our path;
+//! - tracks: exactly the planned ones, in plan order (PDB track ids follow
+//!   that order);
+//! - `usb_path` = the plan's `dst_rel`, and `anlz_dir`/`anlz_index` from
+//!   [`super::anlz_slots`] (baken's own `AnlzSlots`, in `dst_rel` order), so
+//!   `export.pdb`, PPTH and the USBANLZ layout all carry our path;
 //! - `anlz` = the plan's [`AnlzSource`]: the planned cache `.DAT`, the
 //!   `.DAT` [`BakenWriter::prepare`] built from reks's analysis
 //!   ([`crate::reksanlz::write_all`], in the scratch folder), or generation.
@@ -38,7 +38,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use baken_export::anlz::hash::AnlzSlots;
 use baken_export::anlz::locate::Entry;
 use reks_core::{rbxml, CancelToken, Library, TrackId};
 
@@ -165,7 +164,8 @@ impl BakenWriter {
             // Always on: which tracks get generated ANLZ is the plan's call,
             // made in `reconcile`; off, baken would drop them instead.
             generate_analysis: true,
-            prune: !plan.options.keep_stale,
+            // `apply` deletes exactly the plan's deletes (review F16).
+            prune: false,
             onelibrary: false,
             artwork: plan.options.artwork,
         }
@@ -294,7 +294,7 @@ fn reconcile(
         .into_iter()
         .map(|t| (t.device.track.id, t))
         .collect();
-    let mut slots = AnlzSlots::default();
+    let slots = super::anlz_slots(plan);
     let mut seen = HashSet::new();
     let mut tracks = Vec::with_capacity(plan.tracks.len());
     for t in &plan.tracks {
@@ -327,7 +327,10 @@ fn reconcile(
                 t.src.display()
             )));
         }
-        let (anlz_dir, anlz_index) = slots.assign(&t.dst_rel);
+        let (anlz_dir, anlz_index) = slots
+            .get(&t.track_id)
+            .cloned()
+            .ok_or_else(|| mismatch("no ANLZ slot".to_owned()))?;
         bt.device.usb_path = t.dst_rel.clone();
         bt.device.anlz_dir = anlz_dir;
         bt.device.anlz_index = anlz_index;
@@ -431,8 +434,6 @@ fn translate(r: baken_export::Report, bplan: &baken_export::Plan) -> WriterRepor
         anlz_unchanged: r.anlz_unchanged,
         anlz_generated: r.anlz_generated,
         artwork: r.artwork,
-        pruned: r.pruned,
-        prune_skipped: r.prune_skipped,
         onelibrary_removed: r.onelibrary_removed,
         onelibrary_kept: r.onelibrary_kept,
         seek_tables_rebuilt: r.seek_tables_rebuilt,

@@ -277,6 +277,7 @@ fn played_stick_is_backed_up_written_validated_and_recorded() {
             ApplyStage::Backup,
             ApplyStage::Write,
             ApplyStage::Sync,
+            ApplyStage::Delete,
             ApplyStage::Validate,
             ApplyStage::Manifest,
         ]
@@ -313,9 +314,54 @@ fn second_identical_export_copies_nothing() {
     assert_eq!(report.status, ExportStatus::Success, "{report:#?}");
     let writer = report.writer.unwrap();
     assert_eq!((writer.audio_copied, writer.audio_kept), (0, 3));
-    assert_eq!(writer.pruned, 0);
+    assert_eq!(report.stale_removed, 0);
     assert_eq!(report.manifest_rows, 3);
     assert_eq!(w.lib.manifest(SERIAL).unwrap().len(), 3);
+}
+
+/// `apply` deletes exactly the dry run's deletes, after the write (F16):
+/// a file put on the stick since stays, and so does a listed one that
+/// changed size; a listed one's `._` file goes with it.
+#[test]
+fn deletes_exactly_what_the_dry_run_listed() {
+    let w = World::new();
+    w.export();
+    let old = w.stick.join("Contents/Old");
+    fs::create_dir_all(&old).unwrap();
+    fs::write(old.join("old.mp3"), [1u8; 100]).unwrap();
+    fs::write(old.join("changed.mp3"), [2u8; 100]).unwrap();
+    let plan = w.plan();
+    let listed: Vec<&str> = plan.deletes.iter().map(|d| d.dst_rel.as_str()).collect();
+    assert_eq!(listed.len(), 2, "{listed:?}");
+
+    fs::write(old.join("._old.mp3"), [0u8; 4]).unwrap();
+    fs::write(old.join("late.mp3"), [3u8; 10]).unwrap();
+    fs::write(old.join("changed.mp3"), [2u8; 101]).unwrap();
+    let (report, events) = w.apply(&plan);
+    let report = report.unwrap();
+    assert!(stages(&events).contains(&ApplyStage::Delete));
+    assert!(!old.join("old.mp3").exists());
+    assert!(!old.join("._old.mp3").exists());
+    assert!(old.join("late.mp3").exists());
+    assert!(old.join("changed.mp3").exists());
+    assert_eq!(report.stale_removed, 1);
+    assert_eq!(report.status, ExportStatus::Problems);
+    assert_eq!(
+        report.errors,
+        ["/Contents/Old/changed.mp3 changed since the dry run; left on the stick"]
+    );
+}
+
+/// ANLZ slots follow the planned paths, not plan order (F16).
+#[test]
+fn anlz_slots_do_not_depend_on_plan_order() {
+    let w = World::new();
+    let plan = w.plan();
+    let mut reversed = plan.clone();
+    reversed.tracks.reverse();
+    let slots = crate::writer::anlz_slots(&plan);
+    assert_eq!(slots, crate::writer::anlz_slots(&reversed));
+    assert_eq!(slots.len(), plan.tracks.len());
 }
 
 #[test]

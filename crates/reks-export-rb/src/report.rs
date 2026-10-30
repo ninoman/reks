@@ -197,6 +197,7 @@ fn stage_title(stage: ApplyStage) -> &'static str {
         ApplyStage::Write => "Writing tracks",
         ApplyStage::OneLibrary => "Writing exportLibrary.db (experimental)",
         ApplyStage::Sync => "Flushing the written files to the stick",
+        ApplyStage::Delete => "Deleting the stale files the dry run listed",
         ApplyStage::Validate => "Reading the stick back to check it",
         ApplyStage::Manifest => "Recording what is on the stick",
     }
@@ -428,6 +429,9 @@ fn facts(plan: &ExportPlan, r: &ExportReport) -> Vec<Fact> {
     if let Some(w) = &r.writer {
         out.extend(writer_facts(plan, w).into_iter().map(|(l, v)| fact(l, v)));
     }
+    if r.stale_removed > 0 {
+        out.push(fact("Stale files", format!("{} removed", r.stale_removed)));
+    }
     if plan.options.onelibrary {
         out.push(fact(
             "OneLibrary (experimental)",
@@ -502,14 +506,6 @@ fn writer_facts(plan: &ExportPlan, w: &WriterReport) -> Vec<(&'static str, Strin
     out.push(("Analysis", analysis));
     if plan.options.artwork {
         out.push(("Artwork", count(w.artwork, "track", "tracks")));
-    }
-    if w.prune_skipped {
-        out.push((
-            "Stale files",
-            "Kept: tracks failed, so nothing was removed".to_owned(),
-        ));
-    } else if w.pruned > 0 {
-        out.push(("Stale files", format!("{} removed", w.pruned)));
     }
     if w.onelibrary_removed > 0 || w.onelibrary_kept > 0 {
         let mut text = format!(

@@ -163,8 +163,8 @@ Divider rules
   no Tonality, AverageBpm, TEMPO or POSITION_MARK.
 - The planner gives it the stick path any track with no artist or album gets,
   `/Contents/Unknown Artist/Unknown Album/div-<playlist_id>-<n>.wav` (our
-  planner decides paths, not baken's layout). Stale dividers go with `prune`
-  like any file.
+  planner decides paths, not baken's layout). Stale dividers are plan
+  deletes like any file.
 - ANLZ: the planner sets `generate_analysis` when the plan has dividers. baken
   applies it only to tracks rekordbox never analysed, and the planner already
   leaves other unanalysed tracks out unless the user opted in. If baken can't

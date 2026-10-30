@@ -297,6 +297,7 @@ fn print_event(e: ApplyEvent) {
                 ApplyStage::Write => "writing",
                 ApplyStage::OneLibrary => "writing exportLibrary.db (experimental)",
                 ApplyStage::Sync => "flushing to the stick",
+                ApplyStage::Delete => "deleting stale files",
                 ApplyStage::Validate => "reading the stick back",
                 ApplyStage::Manifest => "recording the export manifest",
             };
@@ -785,19 +786,14 @@ fn render_report(r: &ExportReport) -> String {
         let _ = writeln!(
             o,
             "Written   {} tracks in export.pdb; audio {} copied, {} kept; ANLZ {} written \
-             ({} generated), {} unchanged; {} stale files removed{}",
+             ({} generated), {} unchanged; {} stale files removed",
             w.tracks_in_database,
             w.audio_copied,
             w.audio_kept,
             w.anlz_written,
             w.anlz_generated,
             w.anlz_unchanged,
-            w.pruned,
-            if w.prune_skipped {
-                " (prune skipped: tracks failed)"
-            } else {
-                ""
-            }
+            r.stale_removed,
         );
         for f in &w.failures {
             let _ = writeln!(o, "  - failed: {}: {}", f.title, f.message);

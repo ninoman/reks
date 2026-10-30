@@ -759,8 +759,8 @@ pub fn plan_sources(
         }
     }
 
-    // The writer deletes stale files only after writing the new ones (baken
-    // prunes last), so the new files must fit in today's free space.
+    // `apply` deletes stale files only after writing and flushing the new
+    // ones, so the new files must fit in today's free space.
     if bytes_to_write > dev.free_bytes {
         errors.push(Problem::NotEnoughSpace {
             needed: bytes_to_write,
