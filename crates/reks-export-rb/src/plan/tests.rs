@@ -135,7 +135,11 @@ fn track(id: TrackId, src: PathBuf, artist: &str, album: &str) -> SourceTrack {
         probe: None,
         has_grid: true,
         grid_user_owned: false,
-        cue_count: 3,
+        cues: CueCounts {
+            memory: 1,
+            hot_dat: 2,
+            hot_ext: 0,
+        },
         divider: None,
     }
 }
@@ -1177,7 +1181,7 @@ mod reference {
             probe,
             has_grid: d.beatgrid.is_some(),
             grid_user_owned: owned,
-            cue_count: u8::try_from(d.cues.len()).unwrap_or(u8::MAX),
+            cues: reks_anlz::cue::CueCounts::of(&d.cues),
             divider: None,
         })
     }

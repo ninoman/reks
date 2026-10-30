@@ -52,6 +52,7 @@ mod text;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use reks_anlz::cue::CueCounts;
 use reks_audio::{Kind, Probe};
 use reks_core::fsname;
 use reks_core::history::HistoryImportPlan;
@@ -326,7 +327,8 @@ pub struct PlannedTrack {
     pub kind: Kind,
     pub probe: Probe,
     pub has_grid: bool,
-    pub cue_count: u8,
+    /// What the track's ANLZ cue lists must hold (read-back validation).
+    pub cues: CueCounts,
     pub anlz_source: AnlzSource,
     /// Set for a playlist divider (synthetic `track_id`, generated `src`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -714,7 +716,7 @@ pub fn plan_sources(
             kind: probe.kind,
             probe,
             has_grid: t.has_grid,
-            cue_count: t.cue_count,
+            cues: t.cues,
             anlz_source,
             divider: t.divider,
         });

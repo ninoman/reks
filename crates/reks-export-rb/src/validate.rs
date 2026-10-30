@@ -14,8 +14,10 @@
 //!   from `file_path` ([`anlz_dir`], R§4), parses, and its `PPTH` equals
 //!   `file_path`; the same for the `.EXT` beside it when there is one.
 //! - For tracks with analysis ([`AnlzSource`] not `None`): `PQTZ` holds beats
-//!   where the plan says `has_grid`, and the cue count of the `.DAT` (`PCOB`)
-//!   and, when present, the `.EXT` (`PCO2`) equals the plan's `cue_count`.
+//!   where the plan says `has_grid`, and each file's cue lists hold what the
+//!   plan's [`CueCounts`](reks_anlz::cue::CueCounts) place there: `.DAT` `PCOB` memory cues + hot cues
+//!   A–C; when present, `.EXT` `PCOB` hot cues D–H and `PCO2` every cue
+//!   (rekordbox 7's layout, as baken writes it; D8).
 //! - For tracks whose ANLZ reks built ([`AnlzSource::Reks`]): the `.DAT`,
 //!   `.EXT` and `.2EX` as baken left them pass [`reks_anlz::validate_set`]
 //!   (section lists and order, lengths, beats, cues, waveform sizes).
@@ -226,10 +228,13 @@ pub enum Finding {
         track_id: TrackId,
         path: String,
     },
+    /// A cue section (`PCOB`/`PCO2`) of one file holds a different number
+    /// of cues than [`CueCounts`](reks_anlz::cue::CueCounts) places there.
     CueCount {
         track_id: TrackId,
         path: String,
-        expected: u8,
+        section: String,
+        expected: u32,
         found: u32,
     },
     /// An ANLZ set reks built fails [`reks_anlz::validate_set`] on the stick.
@@ -352,11 +357,12 @@ impl std::fmt::Display for Finding {
             Self::CueCount {
                 track_id,
                 path,
+                section,
                 expected,
                 found,
             } => write!(
                 f,
-                "track {track_id}: {path} has {found} cues, the plan {expected}"
+                "track {track_id}: {path} has {found} cues in {section}, the plan {expected}"
             ),
             Self::AnlzInvalid {
                 track_id,
@@ -588,15 +594,14 @@ fn check_tracks(
                 path: row.analyze_path.clone(),
             });
         }
-        let found = dat.cues.unwrap_or(0);
-        if found != u32::from(t.cue_count) {
-            findings.push(Finding::CueCount {
-                track_id,
-                path: row.analyze_path.clone(),
-                expected: t.cue_count,
-                found,
-            });
-        }
+        check_cues(
+            track_id,
+            &row.analyze_path,
+            "PCOB",
+            dat.cues,
+            t.cues.dat_pcob(),
+            findings,
+        );
 
         if t.anlz_source.reks_built() {
             check_reks_set(root, track_id, &row.analyze_path, &row.file_path, findings)?;
@@ -608,21 +613,41 @@ fn check_tracks(
         if locate(root, &ext_rel).map_err(io_err(root))?.is_some() {
             if let Some(ext) = read_anlz(root, track_id, &ext_rel, findings)? {
                 check_ppth(&ext, track_id, &ext_rel, &row.file_path, findings);
-                match ext.extended_cues {
-                    Some(found) if found != u32::from(t.cue_count) => {
-                        findings.push(Finding::CueCount {
-                            track_id,
-                            path: ext_rel,
-                            expected: t.cue_count,
-                            found,
-                        });
+                // Each list kind only when the file has it.
+                for (section, found, expected) in [
+                    ("PCOB", ext.cues, t.cues.ext_pcob()),
+                    ("PCO2", ext.extended_cues, t.cues.ext_pco2()),
+                ] {
+                    if found.is_some() {
+                        check_cues(track_id, &ext_rel, section, found, expected, findings);
                     }
-                    _ => {}
                 }
             }
         }
     }
     Ok(())
+}
+
+/// A file's cue lists of one kind (`found`, `None` without the section)
+/// against the count the plan places there.
+fn check_cues(
+    track_id: TrackId,
+    path: &str,
+    section: &str,
+    found: Option<u32>,
+    expected: u32,
+    findings: &mut Vec<Finding>,
+) {
+    let found = found.unwrap_or(0);
+    if found != expected {
+        findings.push(Finding::CueCount {
+            track_id,
+            path: path.to_owned(),
+            section: section.to_owned(),
+            expected,
+            found,
+        });
+    }
 }
 
 /// [`reks_anlz::validate_set`] on a set reks built, as it sits on the stick.

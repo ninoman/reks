@@ -170,7 +170,12 @@ pub struct ExportTrackFields {
     pub bit_depth: Option<i64>,
     pub channels: Option<i64>,
     pub has_grid: bool,
-    pub cue_count: u32,
+    /// Memory cues and loops (`slot` NULL).
+    pub memory_cues: u32,
+    /// Hot cues A–C (slots 0–2), which the `.DAT` carries.
+    pub hot_cues_dat: u32,
+    /// Hot cues D–H (slots 3–7), which only the `.EXT` carries.
+    pub hot_cues_ext: u32,
 }
 
 /// Ids per `IN (…)` list, well under SQLite's bound-variable limit.
@@ -191,7 +196,9 @@ impl Library {
                 "SELECT t.id, t.path, t.artist, t.album, t.kind, t.duration_ms,
                         t.bit_rate_kbps, t.sample_rate, t.bit_depth, t.channels,
                         EXISTS (SELECT 1 FROM beatgrid b WHERE b.track_id = t.id),
-                        (SELECT count(*) FROM cue c WHERE c.track_id = t.id)
+                        (SELECT count(*) FROM cue c WHERE c.track_id = t.id AND c.slot IS NULL),
+                        (SELECT count(*) FROM cue c WHERE c.track_id = t.id AND c.slot BETWEEN 0 AND 2),
+                        (SELECT count(*) FROM cue c WHERE c.track_id = t.id AND c.slot BETWEEN 3 AND 7)
                  FROM track t WHERE t.id IN ({marks})"
             ))?;
             let rows = stmt.query_map(params_from_iter(chunk), |r| {
@@ -208,7 +215,9 @@ impl Library {
                         bit_depth: r.get(8)?,
                         channels: r.get(9)?,
                         has_grid: r.get(10)?,
-                        cue_count: r.get(11)?,
+                        memory_cues: r.get(11)?,
+                        hot_cues_dat: r.get(12)?,
+                        hot_cues_ext: r.get(13)?,
                     },
                 ))
             })?;
