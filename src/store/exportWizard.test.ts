@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Device, DryRun, ExportProgress, ExportReportView, PlaylistNode } from "../lib/ipc";
+import type {
+  Device,
+  DryRun,
+  ExportOptions,
+  ExportProgress,
+  ExportReportView,
+  PlaylistNode,
+} from "../lib/ipc";
 
 vi.mock("../lib/ipc", async (original) => ({
   ...(await original<typeof import("../lib/ipc")>()),
+  exportDefaultOptions: vi.fn(),
   exportPlan: vi.fn(),
   exportApply: vi.fn(),
   exportCancel: vi.fn(),
@@ -17,6 +25,7 @@ vi.mock("../lib/ipc", async (original) => ({
 
 const ipc = await import("../lib/ipc");
 const exportPlan = vi.mocked(ipc.exportPlan);
+const exportDefaultOptions = vi.mocked(ipc.exportDefaultOptions);
 const exportApply = vi.mocked(ipc.exportApply);
 const exportCancel = vi.mocked(ipc.exportCancel);
 const deviceEject = vi.mocked(ipc.deviceEject);
@@ -26,9 +35,24 @@ const profileSetSelection = vi.mocked(ipc.profileSetSelection);
 const profileSetTarget = vi.mocked(ipc.profileSetTarget);
 const settingsSet = vi.mocked(ipc.settingsSet);
 const { useSettings } = await import("./settings");
-const { coveredIds, DEFAULT_EXPORT_OPTIONS, selectionOf, useExportWizard } = await import(
-  "./exportWizard"
-);
+const { coveredIds, selectionOf, useExportWizard } = await import("./exportWizard");
+
+/** What `export_default_options` returns (stands in for Rust's defaults). */
+const DEFAULTS: ExportOptions = {
+  target: "Generic",
+  keepStale: false,
+  missingAnalysis: "skip",
+  artwork: false,
+  skipUnsupported: false,
+  history: "backUp",
+  discardHistoryConfirmed: false,
+  historyChosen: false,
+  dividers: true,
+  activeLoops: true,
+  anlzPreference: "rekordboxFirst",
+  onelibrary: true,
+  onelibraryRemovalConfirmed: false,
+};
 
 const node = (id: number, parentId: number | null, isFolder = false): PlaylistNode => ({
   id,
@@ -58,7 +82,7 @@ const DEVICE: Device = {
 
 /** Opens the wizard on the known stick /Volumes/REKS (empty profile) with `playlists` ticked. */
 async function openOnStick(playlists: number[]) {
-  useExportWizard.getState().open({ mountPoint: "/Volumes/REKS", playlists });
+  await useExportWizard.getState().open({ mountPoint: "/Volumes/REKS", playlists });
   await useExportWizard.getState().takeProfile(DEVICE);
 }
 
@@ -91,6 +115,7 @@ async function toDryRun(planId = 7) {
 }
 
 beforeEach(() => {
+  exportDefaultOptions.mockReset().mockResolvedValue(DEFAULTS);
   exportPlan.mockReset();
   exportApply.mockReset();
   exportCancel.mockReset().mockResolvedValue();
@@ -111,18 +136,73 @@ describe("selection", () => {
 });
 
 describe("useExportWizard", () => {
-  it("opens on the device step with the given stick and playlists", () => {
-    useExportWizard.getState().open({ mountPoint: "/Volumes/REKS", playlists: [2] });
+  it("opens on the device step with the given stick, playlists and Rust's defaults", async () => {
+    const opened = useExportWizard.getState().open({ mountPoint: "/Volumes/REKS", playlists: [2] });
     const s = useExportWizard.getState();
     expect(s.step).toBe("device");
     expect(s.mountPoint).toBe("/Volumes/REKS");
     expect([...s.checked]).toEqual([2]);
-    expect(s.options).toEqual(DEFAULT_EXPORT_OPTIONS);
+    // Nothing goes on until the defaults arrive.
+    expect(s.options).toBeNull();
+    await opened;
+    expect(exportDefaultOptions).toHaveBeenCalledOnce();
+    expect(useExportWizard.getState().options).toEqual(DEFAULTS);
+  });
+
+  it("keeps a stick's target that arrives before the defaults, and drops late defaults", async () => {
+    const w = useExportWizard.getState;
+    let resolve: (o: ExportOptions) => void = () => {};
+    exportDefaultOptions.mockReturnValueOnce(
+      new Promise((r) => {
+        resolve = r;
+      }),
+    );
+    const opened = w().open({ mountPoint: "/Volumes/REKS", playlists: [5] });
+    await w().takeProfile({ ...DEVICE, target: "Cdj3000" });
+    resolve(DEFAULTS);
+    await opened;
+    expect(w().options?.target).toBe("Cdj3000");
+
+    exportDefaultOptions.mockReturnValueOnce(
+      new Promise((r) => {
+        resolve = r;
+      }),
+    );
+    const late = w().open();
+    w().close();
+    resolve(DEFAULTS);
+    await late;
+    expect(w().options).toBeNull();
+  });
+
+  it("says when the defaults can't be read", async () => {
+    exportDefaultOptions.mockRejectedValueOnce("no backend");
+    await useExportWizard.getState().open();
+    expect(useExportWizard.getState().error).toBe("Could not read the export options: no backend");
+  });
+
+  it("the OneLibrary removal confirmation plans again and going back withdraws it", async () => {
+    const w = useExportWizard.getState;
+    exportPlan.mockResolvedValue({ planId: 1 } as DryRun);
+    await openOnStick([5]);
+    useExportWizard.setState({ step: "dryRun" });
+    await w().confirmOnelibraryRemoval(NODES);
+    expect(exportPlan).toHaveBeenLastCalledWith(
+      "/Volumes/REKS",
+      { playlists: [5] },
+      expect.objectContaining({ onelibraryRemovalConfirmed: true }),
+      1,
+    );
+    w().back();
+    expect(w().options?.onelibraryRemovalConfirmed).toBe(false);
+    w().setOptions({ onelibraryRemovalConfirmed: true });
+    w().setOptions({ onelibrary: false });
+    expect(w().options?.onelibraryRemovalConfirmed).toBe(false);
   });
 
   it("does not go on until the step is complete", async () => {
     const w = useExportWizard.getState;
-    w().open();
+    await w().open();
     await w().next(NODES);
     expect(w().step).toBe("device");
     w().setDevice("/Volumes/REKS");
@@ -157,7 +237,7 @@ describe("useExportWizard", () => {
       "/Volumes/REKS",
       { playlists: [1] },
       {
-        ...DEFAULT_EXPORT_OPTIONS,
+        ...DEFAULTS,
         history: "discard",
         discardHistoryConfirmed: true,
         artwork: true,
@@ -174,14 +254,14 @@ describe("useExportWizard", () => {
   it("ticks the stick's profile and takes its target", async () => {
     const w = useExportWizard.getState;
     profileSelection.mockResolvedValue({ playlists: [2, 5] });
-    w().open({ mountPoint: "/Volumes/REKS", playlists: [4] });
+    await w().open({ mountPoint: "/Volumes/REKS", playlists: [4] });
     await w().takeProfile({ ...DEVICE, target: "Cdj3000" });
     expect(profileSelection).toHaveBeenCalledWith(1);
     expect([...w().checked]).toEqual([2, 5]);
-    expect(w().options.target).toBe("Cdj3000");
+    expect(w().options?.target).toBe("Cdj3000");
     // A new stick keeps the sidebar's selection.
     profileSelection.mockResolvedValue({ playlists: [] });
-    w().open({ mountPoint: "/Volumes/REKS", playlists: [4] });
+    await w().open({ mountPoint: "/Volumes/REKS", playlists: [4] });
     await w().takeProfile(DEVICE);
     expect([...w().checked]).toEqual([4]);
   });
@@ -245,7 +325,7 @@ describe("useExportWizard", () => {
 
     w().setOptions({ historyChosen: true });
     w().setOptions({ keepStale: true });
-    expect(w().options.historyChosen).toBe(false);
+    expect(w().options?.historyChosen).toBe(false);
   });
 
   it("opens with the analysis setting and saves a change to it", async () => {
@@ -283,12 +363,12 @@ describe("useExportWizard", () => {
     } as const;
     useSettings.setState({ settings });
     const w = useExportWizard.getState;
-    w().open();
-    expect(w().options.anlzPreference).toBe("reksFirst");
+    await w().open();
+    expect(w().options?.anlzPreference).toBe("reksFirst");
 
     settingsSet.mockResolvedValueOnce({ ...settings, anlzPreference: "rekordboxOnly" });
     w().setOptions({ anlzPreference: "rekordboxOnly" });
-    expect(w().options.anlzPreference).toBe("rekordboxOnly");
+    expect(w().options?.anlzPreference).toBe("rekordboxOnly");
     expect(settingsSet).toHaveBeenCalledWith({ anlzPreference: "rekordboxOnly" });
     await vi.waitFor(() =>
       expect(useSettings.getState().settings?.anlzPreference).toBe("rekordboxOnly"),
@@ -300,11 +380,12 @@ describe("useExportWizard", () => {
     useSettings.setState({ settings: null });
   });
 
-  it("leaving discard withdraws the confirmation", () => {
+  it("leaving discard withdraws the confirmation", async () => {
     const w = useExportWizard.getState;
+    await w().open();
     w().setOptions({ history: "discard", discardHistoryConfirmed: true });
     w().setOptions({ history: "backUp" });
-    expect(w().options.discardHistoryConfirmed).toBe(false);
+    expect(w().options?.discardHistoryConfirmed).toBe(false);
   });
 
   it("keeps only the newest plan and reports failures", async () => {
@@ -318,7 +399,7 @@ describe("useExportWizard", () => {
       )
       .mockResolvedValueOnce(plan("second"))
       .mockRejectedValueOnce("stick unplugged");
-    w().open({ mountPoint: "/Volumes/REKS", playlists: [5] });
+    await w().open({ mountPoint: "/Volumes/REKS", playlists: [5] });
     const a = w().replan(NODES);
     await w().replan(NODES);
     first(plan("first"));

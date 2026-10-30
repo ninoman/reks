@@ -92,6 +92,22 @@ impl fmt::Display for Warning {
                 "OneLibrary (exportLibrary.db) is experimental: no player has been tested with \
                  reks's file, and AlphaTheta does not support third-party OneLibrary exports",
             ),
+            Self::OneLibraryNoKey => f.write_str(
+                "this build of reks has no OneLibrary key (use a release build or set \
+                 REKS_ONELIBRARY_KEY), so only the Device Library (export.pdb) is written",
+            ),
+            Self::OneLibraryRemoved { files, no_key } => write!(
+                f,
+                "{}the stick's exportLibrary.db is deleted ({}): {} read only that file and \
+                 will find no library on this stick",
+                if *no_key {
+                    "with no OneLibrary key, "
+                } else {
+                    "with OneLibrary off, "
+                },
+                files.join(", "),
+                super::ONELIBRARY_ONLY_PLAYERS.join(", ")
+            ),
         }
     }
 }
@@ -145,10 +161,6 @@ impl fmt::Display for Problem {
                 f,
                 "cannot import the stick's play history ({message}); back it up or discard it"
             ),
-            Self::OneLibraryKeyMissing => f.write_str(
-                "this build of reks has no OneLibrary key built in: use a release build \
-                 or set REKS_ONELIBRARY_KEY",
-            ),
             Self::OneLibraryUnavailable => f.write_str(
                 "this build of reks cannot write exportLibrary.db yet; turn the OneLibrary \
                  export off",
@@ -159,6 +171,10 @@ impl fmt::Display for Problem {
                  in your library; import, back up or discard {}",
                 if *sessions == 1 { "" } else { "s" },
                 if *sessions == 1 { "it" } else { "them" },
+            ),
+            Self::OneLibraryRemovalNotConfirmed => f.write_str(
+                "deleting the stick's exportLibrary.db needs an explicit confirmation, or \
+                 write OneLibrary with a key",
             ),
         }
     }

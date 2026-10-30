@@ -81,6 +81,15 @@ pub trait OneLibraryExport: Send + Sync {
     /// only; `key` opens the existing database, if any.
     fn plan(&self, plan: &ExportPlan, key: &OneLibraryKey) -> Result<OneLibraryPlan, PlanError>;
 
+    /// The `exportLibrary.db` under `device_root`, opened with `key`, for
+    /// the export guard when this export writes no new one (D23: its
+    /// history is scanned whenever a key resolves). Reads the stick only.
+    fn existing(
+        &self,
+        device_root: &Path,
+        key: &OneLibraryKey,
+    ) -> Result<ExistingLibrary, PlanError>;
+
     /// Writes `exportLibrary.db` for `plan`, encrypted with `key`, at
     /// [`DB_PATH`] under `device_root`. Only [`crate::apply`] calls it, after
     /// the new `export.pdb` is in place and rekordbox's auxiliary files are
@@ -150,13 +159,21 @@ pub fn pick_key(
 /// its `-wal`/`-shm`, which SQLite would replay into ours, and
 /// `exportExt.pdb`), as found on the stick under `root`.
 pub fn auxiliary_files(root: &Path) -> Result<Vec<FileOp>, PlanError> {
+    let mut found = library_files(root, OpReason::OneLibraryAuxiliary)?;
+    found.retain(|f| f.dst_rel != DB_PATH);
+    Ok(found)
+}
+
+/// Every OneLibrary file on the stick under `root`
+/// ([`baken_export::ONELIBRARY_FILES`]: `exportLibrary.db`, its
+/// `-wal`/`-shm` and `exportExt.pdb`), as deletes for `reason`. baken
+/// removes them whenever it writes no `exportLibrary.db` itself, which is
+/// always (D14).
+pub fn library_files(root: &Path, reason: OpReason) -> Result<Vec<FileOp>, PlanError> {
     let rb_dir = DB_PATH.rsplit_once('/').map_or("", |(dir, _)| dir);
     let mut found = Vec::new();
     for name in baken_export::ONELIBRARY_FILES {
         let rel = format!("{rb_dir}/{name}");
-        if rel == DB_PATH {
-            continue;
-        }
         let path = on_stick(root, &rel);
         match std::fs::metadata(&path) {
             Ok(meta) if meta.is_file() => found.push(FileOp {
@@ -164,7 +181,7 @@ pub fn auxiliary_files(root: &Path) -> Result<Vec<FileOp>, PlanError> {
                 dst_rel: rel,
                 bytes: meta.len(),
                 track_id: None,
-                reason: OpReason::OneLibraryAuxiliary,
+                reason,
             }),
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -185,14 +202,12 @@ pub fn db_write(bytes: u64) -> FileOp {
     }
 }
 
-/// Test stand-in for a writer: lists the file and what it would remove,
-/// and blocks the export with [`Problem::OneLibraryUnavailable`]; `write`
-/// refuses.
-#[cfg(test)]
+/// Stand-in for a writer, for tests and plans that write no OneLibrary:
+/// lists the file and what it would remove, and blocks the export with
+/// [`Problem::OneLibraryUnavailable`]; `write` refuses.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoWriter;
 
-#[cfg(test)]
 impl OneLibraryExport for NoWriter {
     fn plan(&self, plan: &ExportPlan, _key: &OneLibraryKey) -> Result<OneLibraryPlan, PlanError> {
         let root = plan.device.mount_point.as_path();
@@ -209,6 +224,16 @@ impl OneLibraryExport for NoWriter {
             existing,
             warnings: Vec::new(),
             errors: vec![Problem::OneLibraryUnavailable],
+        })
+    }
+
+    fn existing(
+        &self,
+        _device_root: &Path,
+        _key: &OneLibraryKey,
+    ) -> Result<ExistingLibrary, PlanError> {
+        Ok(ExistingLibrary::NotRead {
+            reason: "this build has no OneLibrary reader".to_owned(),
         })
     }
 

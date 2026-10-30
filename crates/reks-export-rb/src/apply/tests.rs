@@ -13,6 +13,7 @@ use reks_core::{CancelToken, Library};
 
 use super::*;
 use crate::device::{DeviceInfo, FsKind};
+use crate::onelibrary::NoWriter;
 use crate::plan::{self, ExportOptions, MissingAnalysis, NoAnlz, Selection};
 use crate::testutil;
 use crate::writer::BakenWriter;
@@ -90,11 +91,13 @@ impl World {
 
     fn plan_with(&self, serial: Option<&str>) -> ExportPlan {
         let sources = plan::load(&self.lib, &self.sel()).unwrap();
+        // The Device Library only: the OneLibrary step has its own tests.
         let opts = ExportOptions {
             missing_analysis: MissingAnalysis::Generate,
+            onelibrary: false,
             ..ExportOptions::default()
         };
-        let p = plan::plan_sources(
+        let mut p = plan::plan_sources(
             sources,
             &self.dev(),
             serial.map(str::to_owned),
@@ -103,6 +106,7 @@ impl World {
             &NoAnlz,
         )
         .unwrap();
+        plan::plan_onelibrary(&mut p, &NoWriter, None, &self.lib).unwrap();
         assert!(!p.is_blocked(), "{:?}", p.errors);
         p
     }

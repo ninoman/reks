@@ -16,6 +16,7 @@ use reks_core::{fsname, CancelToken, Library, ManifestItemKind, PlaylistId, Play
 use reks_export_rb::apply::{apply, ApplyEnv, ExportReport, ExportStatus, StickCheck};
 use reks_export_rb::device::{DeviceInfo, FsKind};
 use reks_export_rb::divider::{self, DIVIDER_DIR};
+use reks_export_rb::onelibrary::NoWriter;
 use reks_export_rb::plan::{
     self, anlz_dir, AnlzSource, ExportOptions, ExportPlan, MissingAnalysis, NoAnlz, OpReason,
     Selection,
@@ -116,13 +117,14 @@ impl World {
         let opts = ExportOptions {
             missing_analysis: MissingAnalysis::Generate,
             dividers,
+            onelibrary: false,
             ..ExportOptions::default()
         };
         let mut sources = plan::load(&self.lib, &self.sel()).unwrap();
         if dividers {
             divider::expand(&mut sources, &self.lib.cache_dir().join(DIVIDER_DIR)).unwrap();
         }
-        let p = plan::plan_sources(
+        let mut p = plan::plan_sources(
             sources,
             &self.dev(),
             Some(SERIAL.into()),
@@ -131,6 +133,7 @@ impl World {
             &NoAnlz,
         )
         .unwrap();
+        plan::plan_onelibrary(&mut p, &NoWriter, None, &self.lib).unwrap();
         assert!(!p.is_blocked(), "{:?}", p.errors);
         p
     }

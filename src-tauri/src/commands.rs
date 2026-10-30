@@ -493,6 +493,13 @@ pub struct PlannedExport {
     dry_run: DryRun,
 }
 
+/// `ExportOptions::default()`, so the export wizard opens with the planner's
+/// defaults instead of a copy of them.
+#[tauri::command]
+pub fn export_default_options() -> ExportOptions {
+    ExportOptions::default()
+}
+
 /// Dry run of exporting `selection` to the stick mounted at `mount_point`
 /// (phase 2 task 10): plans, writes nothing, returns the plan as the UI shows
 /// it. Scans rekordbox's analysis folders, checks reks's analysis cache
@@ -577,8 +584,9 @@ pub async fn export_apply(
     let result = tauri::async_runtime::spawn_blocking(move || {
         let labels = dryrun::plan_track_labels(&lib, &plan);
         // Read again rather than kept from the dry run, so the key is in
-        // memory only while an export needs it. Without one, apply refuses.
-        let key = if plan.options.onelibrary {
+        // memory only while an export needs it. Without one, apply refuses
+        // a plan that writes exportLibrary.db.
+        let key = if plan.onelibrary.is_some() {
             one::resolve_key()
         } else {
             None

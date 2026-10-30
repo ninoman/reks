@@ -814,6 +814,23 @@ async function exportApply(onEvent: Channel<ExportProgress>): Promise<ExportRepo
 }
 
 /** A dry run in the shape `dryrun::DryRun` gives: GIGS holds play history, Backup is blocked. */
+/** `ExportOptions::default()` in Rust (the mock's stand-in for `export_default_options`). */
+const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
+  target: "Generic",
+  keepStale: false,
+  missingAnalysis: "skip",
+  artwork: false,
+  skipUnsupported: false,
+  history: "backUp",
+  discardHistoryConfirmed: false,
+  historyChosen: false,
+  dividers: true,
+  activeLoops: true,
+  anlzPreference: "rekordboxFirst",
+  onelibrary: true,
+  onelibraryRemovalConfirmed: false,
+};
+
 function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): DryRun {
   const dev = devices.find((d) => d.mountPoint === mountPoint) ?? (devices[0] as DeviceInfo);
   const lists = NODES.filter((n) => sel.playlists.includes(n.id));
@@ -848,12 +865,14 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
       items: [],
     });
   }
-  // The OneLibrary step (phase 4 task 8): blocked only without the key.
-  if (opts.onelibrary && !settings.onelibraryKeyBuiltin) {
+  // The OneLibrary step: the played stick has an exportLibrary.db, deleted when none is written.
+  const writesOneLibrary = opts.onelibrary && settings.onelibraryKeyBuiltin;
+  const removesOneLibrary = played && !writesOneLibrary;
+  if (removesOneLibrary && !opts.onelibraryRemovalConfirmed) {
     problems.push({
-      kind: "oneLibraryKeyMissing",
+      kind: "oneLibraryRemovalNotConfirmed",
       title:
-        "This build of reks has no OneLibrary key built in: use a release build or set REKS_ONELIBRARY_KEY.",
+        "Deleting the stick's exportLibrary.db needs your confirmation: tick the box under \"The stick's OneLibrary library is deleted\".",
       items: [],
     });
   }
@@ -997,27 +1016,44 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
           ]
         : []),
     ],
-    onelibrary:
-      opts.onelibrary && settings.onelibraryKeyBuiltin
-        ? {
-            title: "OneLibrary (experimental)",
-            text: "Also writes exportLibrary.db for players that read OneLibrary, next to the Device Library. No player has been tested with it, and AlphaTheta does not support it. It replaces the exportLibrary.db already on the stick.",
-            write: {
-              path: "/PIONEER/rekordbox/exportLibrary.db",
-              from: null,
-              sizeText: "size not known yet",
-            },
-            removes: {
-              count: 2,
-              bytes: 1_200_000,
-              totalText: "2 files, 1.2 MB",
-              files: [
-                { path: "/PIONEER/rekordbox/exportLibrary.db-wal", from: null, sizeText: "1.1 MB" },
-                { path: "/PIONEER/rekordbox/exportExt.pdb", from: null, sizeText: "98.3 KB" },
-              ],
-            },
-          }
-        : null,
+    onelibraryRemoval: removesOneLibrary
+      ? {
+          title: "The stick's OneLibrary library is deleted",
+          text: `${opts.onelibrary ? "This build of reks has no OneLibrary key (use a release build or set REKS_ONELIBRARY_KEY), so it writes only the Device Library (export.pdb)" : "OneLibrary is off, so this export writes only the Device Library (export.pdb)"}, and the stick's exportLibrary.db is deleted with the files below. Players that read only OneLibrary (CDJ-3000X, CDJ-1500X, OPUS-QUAD, OMNIS-DUO, XDJ-AZ, XDJ-AN) will find no library on this stick. Players that read export.pdb are not affected.`,
+          files: {
+            count: 2,
+            bytes: 2_400_000,
+            totalText: "2 files, 2.4 MB",
+            files: [
+              { path: "/PIONEER/rekordbox/exportLibrary.db", from: null, sizeText: "2.3 MB" },
+              { path: "/PIONEER/rekordbox/exportExt.pdb", from: null, sizeText: "98.3 KB" },
+            ],
+          },
+          confirmText:
+            "I understand exportLibrary.db is deleted and OneLibrary-only players won't find a library on this stick.",
+          confirmed: opts.onelibraryRemovalConfirmed,
+        }
+      : null,
+    onelibrary: writesOneLibrary
+      ? {
+          title: "OneLibrary (experimental)",
+          text: "Also writes exportLibrary.db for players that read OneLibrary, next to the Device Library. No player has been tested with it, and AlphaTheta does not support it. It replaces the exportLibrary.db already on the stick.",
+          write: {
+            path: "/PIONEER/rekordbox/exportLibrary.db",
+            from: null,
+            sizeText: "size not known yet",
+          },
+          removes: {
+            count: 2,
+            bytes: 1_200_000,
+            totalText: "2 files, 1.2 MB",
+            files: [
+              { path: "/PIONEER/rekordbox/exportLibrary.db-wal", from: null, sizeText: "1.1 MB" },
+              { path: "/PIONEER/rekordbox/exportExt.pdb", from: null, sizeText: "98.3 KB" },
+            ],
+          },
+        }
+      : null,
     convertible: copies.length > 0 ? TRACKS.slice(0, 2).map((t) => t.id) : [],
     convertText:
       copies.length > 0
@@ -1222,6 +1258,8 @@ mockIPC((cmd, payload) => {
       return known.find((d) => d.id === args.id);
     case "profile_status":
       return profileStatus(args.id as number, args.mountPoint as string | null);
+    case "export_default_options":
+      return DEFAULT_EXPORT_OPTIONS;
     case "export_plan":
       return new Promise((resolve) =>
         setTimeout(

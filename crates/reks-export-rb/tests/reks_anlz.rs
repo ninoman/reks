@@ -27,6 +27,7 @@ use reks_core::{AnlzPreference, CancelToken, GridEdit, Library, TrackId};
 use reks_export_rb::apply::{apply, ApplyEnv, ExportStatus, StickCheck};
 use reks_export_rb::device::{DeviceInfo, FsKind};
 use reks_export_rb::dryrun::DryRun;
+use reks_export_rb::onelibrary::NoWriter;
 use reks_export_rb::plan::{
     self, anlz_dir, AnlzOp, AnlzSource, ExportOptions, ExportPlan, NoAnlz, ReksCache, Selection,
     SourceTrack, Warning,
@@ -181,11 +182,12 @@ impl World {
     fn plan_with(&self, pref: AnlzPreference, rekordbox: &dyn plan::AnlzLocator) -> ExportPlan {
         let opts = ExportOptions {
             anlz_preference: pref,
+            onelibrary: false,
             ..ExportOptions::default()
         };
         let sources = plan::load(&self.lib, &self.sel).unwrap();
         let reks = ReksCache::new(self.lib.cache_dir());
-        plan::plan_sources(
+        let mut p = plan::plan_sources(
             sources,
             &self.dev(),
             Some(SERIAL.into()),
@@ -193,7 +195,9 @@ impl World {
             rekordbox,
             &reks,
         )
-        .unwrap()
+        .unwrap();
+        plan::plan_onelibrary(&mut p, &NoWriter, None, &self.lib).unwrap();
+        p
     }
 
     fn sources(&self, plan: &ExportPlan) -> HashMap<String, AnlzSource> {

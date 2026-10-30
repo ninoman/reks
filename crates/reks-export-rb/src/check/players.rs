@@ -43,7 +43,7 @@ impl LibraryFormat {
 
     /// The players that read this file (R§2). Empty for `exportExt.pdb`:
     /// the notice names none.
-    pub fn players(self) -> &'static [&'static str] {
+    pub const fn players(self) -> &'static [&'static str] {
         match self {
             LibraryFormat::DeviceLibrary => &[
                 "CDJ-3000",

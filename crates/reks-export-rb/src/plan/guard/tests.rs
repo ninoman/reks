@@ -12,6 +12,7 @@ use crate::apply::tests::{World, SERIAL};
 use crate::apply::{apply, ApplyError, ApplyEvent, ApplyStage, ExportReport, ExportStatus};
 use crate::dryrun::{DryRun, TrackLabels};
 use crate::history::{read_play_history, HistoryPolicy, HistoryReadOptions, HistorySource};
+use crate::onelibrary::NoWriter;
 use crate::plan::{self, ExportOptions, MissingAnalysis, NoAnlz};
 use crate::report::ReportView;
 use crate::testutil;
@@ -23,6 +24,7 @@ fn options(history: HistoryPolicy, chosen: bool) -> ExportOptions {
         history,
         history_chosen: chosen,
         discard_history_confirmed: history == HistoryPolicy::Discard,
+        onelibrary: false,
         ..ExportOptions::default()
     }
 }
@@ -40,6 +42,7 @@ fn plan_guarded(w: &World, opts: &ExportOptions) -> ExportPlan {
     )
     .unwrap();
     guard_history(&mut p, &w.lib).unwrap();
+    plan::plan_onelibrary(&mut p, &NoWriter, None, &w.lib).unwrap();
     p
 }
 
@@ -117,6 +120,29 @@ fn unimported_sessions_block_until_a_choice() {
     let mut again = plan.clone();
     guard_history(&mut again, &w.lib).unwrap();
     assert_eq!(again.errors, plan.errors);
+}
+
+/// `plan_with_serial` runs the export guard as `plan` does, with the given
+/// serial (the CLI's path for a folder standing in for a stick).
+#[test]
+fn plan_with_serial_runs_the_guard() {
+    let w = World::new();
+    w.put_played_pdb();
+    let opts = options(HistoryPolicy::BackUp, false);
+    let p = plan::plan_with_serial(
+        &w.lib,
+        &w.sel(),
+        &w.dev(),
+        Some(SERIAL.into()),
+        &opts,
+        &NoAnlz,
+    )
+    .unwrap();
+    assert_eq!(p.history.volume_serial.as_deref(), Some(SERIAL));
+    assert_eq!(p.guard.sessions.len(), 2);
+    assert!(p
+        .errors
+        .contains(&Problem::HistoryNotImported { sessions: 2 }));
 }
 
 #[test]

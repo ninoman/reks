@@ -183,6 +183,17 @@ Date of decisions: 2026-10-18.
   the library's grid.
   - Phase 2's ANLZ for imported tracks depends on rekordbox's local cache
     existing on the machine; otherwise fall back to generation.
+- Amended 2026-10-30 (maintainer decision, review F04): the `rekordboxFirst`
+  default above, with its user-owned-grid branch, is **accepted**. reks-built
+  and `ReksGrid` ANLZ (no PQT2, PSSI or PVB2) stay UNVERIFIED on players and
+  are labelled so in the dry run ("UNVERIFIED on players") and the wizard.
+  This is an accepted exception to CLAUDE.md's rule that UNVERIFIED features
+  sit behind a flag that is off: the same rule now applies to every
+  UNVERIFIED stick feature (dividers D22, active loops, OneLibrary D14) —
+  on by default, each keeps its option so a user can turn it off — until
+  `hw-test-log.md` has their hardware tests. The maintainer runs those
+  tests; bugs they find are fixed in later sessions. `rekordboxOnly`
+  remains the way to export Phase 2's ANLZ only.
 
 ## D8. Export validation: parse what we wrote with `rekordcrate` 0.3.0; spec of record is crate-digger `.ksy` + djl-analysis
 
@@ -543,7 +554,8 @@ Date of decisions: 2026-10-18.
 - Rationale and policy: see `docs/phases/phase-4.md`. Originally the key was
   user- or environment-supplied at runtime only, mirroring libdjinterop and
   Mixxx, because the legal position is untested and the format is in flux
-  (R§2). Feature off by default until a hardware success is logged.
+  (R§2). Feature off by default until a hardware success is logged
+  (superseded 2026-10-30, below).
 - Amended 2026-10-21 (maintainer decision): release builds have the key built
   in, because asking users to find it was too unfriendly. It is still never in
   the repository: CI injects it from a secret at compile time and the binary
@@ -559,6 +571,26 @@ Date of decisions: 2026-10-18.
   Rejected: committing it obfuscated (as baken does; puts the repository at
   risk) and extracting it from a local rekordbox (does not help users
   without rekordbox).
+- Amended 2026-10-30 (maintainer decision, review F02/F08): OneLibrary is
+  **on by default**. rekordbox 6.8.1+ and 7.x always write `exportLibrary.db`
+  beside `export.pdb`, with no toggle (R§2, `research.md:99-108`), so reks
+  matches it; it stays UNVERIFIED on players and labelled so in the wizard
+  and dry run, and the option stays so a user can turn it off (the D7
+  amendment of the same date gives the rule and why it is an accepted
+  exception to the flag rule). A build with no key (from source, no
+  `REKS_ONELIBRARY_KEY`) no longer blocks: it writes the Device Library
+  only (`Warning::OneLibraryNoKey`). Whenever an export writes no
+  `exportLibrary.db` (option off or no key), baken removes the stick's
+  OneLibrary files, so the planner lists all four (`exportLibrary.db`,
+  `-wal`, `-shm`, `exportExt.pdb`) as deletes and, when `exportLibrary.db`
+  is among them, warns that the OneLibrary-only players (CDJ-3000X,
+  CDJ-1500X, OPUS-QUAD, OMNIS-DUO, XDJ-AZ, XDJ-AN) find no library and
+  blocks until `ExportOptions::onelibrary_removal_confirmed`, like
+  discarding history. The export guard scans the stick's `exportLibrary.db`
+  history whenever a key opens it, whether or not the export writes a new
+  one. Every export runs the OneLibrary step; `apply` refuses a plan without
+  it (`NoOneLibraryPlan`). The wizard takes its defaults from Rust
+  (`export_default_options`) instead of a TS copy (F24).
 - Rejected: enabling `baken-export`'s `onelibrary` option (embeds the key,
   untested on players); rbox (GPL-3.0-only is compatible but the repo is
   unreachable and docs.rs fails).
@@ -828,6 +860,10 @@ Date of decisions: 2026-10-18.
   (baken lays out `/Contents/<Artist>/<Album>/` itself, R§10).
 - Risks: dividers show in All Tracks, search and player history; label length
   and glyphs per player; baken's analysis of a silent file with no TEMPO.
+- Amended 2026-10-30 (maintainer decision): `export.dividers` is **on by
+  default** while still UNVERIFIED, under the rule in D7's amendment of the
+  same date; the flag stays so a user can turn it off. The same goes for
+  `export.active_loops` (Phase 5 task 17).
 
 ## D23. Play history: imported sessions, derived play counts, and no export ever loses player history
 

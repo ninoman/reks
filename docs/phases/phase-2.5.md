@@ -205,15 +205,15 @@ Divider rules
    table's scroll position.
 4. [x] **Divider export**: WAV generator (round-trip through Symphonia probe and
    `audiocheck`), planner expansion, temp XML rows, `generate_analysis`,
-   manifest kind, dry-run group, `export.dividers` flag (off with an UNVERIFIED
-   badge until task 11 passes). Temp-dir test: 30 tracks and 3 dividers →
+   manifest kind, dry-run group, `export.dividers` flag (UNVERIFIED badge
+   until task 11 passes; on by default since 2026-10-30, D22). Temp-dir test: 30 tracks and 3 dividers →
    33 playlist entries in order (rekordcrate), 3 WAVs with ANLZ, zero validator
    findings; a second identical export copies nothing; removing a divider and
    re-exporting deletes exactly its WAV and ANLZ.
    Done in [`divider.rs`](../../crates/reks-export-rb/src/divider.rs)
    (`wav_bytes`, `ensure_wav`, `expand`); the flag is
    `ExportOptions::dividers` (UI: "Playlist dividers" switch with an
-   UNVERIFIED badge; CLI: `reks rb plan|export --dividers`). `plan()` expands
+   UNVERIFIED badge; CLI: `reks rb plan|export`, `--no-dividers` to leave them out). `plan()` expands
    dividers into `PlannedTrack`s with `divider: Some(DividerInfo)` and synthetic
    track ids counting down from `u32::MAX` (refused if they would meet a
    library id); their ANLZ is always `Generated`, whatever
