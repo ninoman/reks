@@ -90,7 +90,7 @@ fn set_rename_and_delete_round_trip() {
     assert_eq!(env.sources(id), ["manual"; 3]);
 
     env.lib.rename_cue(id, c.id, Some("   ")).unwrap();
-    env.lib.delete_cue(id, a.id).unwrap();
+    assert_eq!(env.lib.delete_cue(id, a.id).unwrap(), Some(0));
     let cues = env.lib.track(id).unwrap().cues;
     assert_eq!(cues.len(), 2);
     assert_eq!(cues[0].name, None, "a blank name clears it");
@@ -191,4 +191,18 @@ fn memory_loops_and_their_active_flag_round_trip() {
             .active_loop
     );
     assert_eq!(env.sources(id), ["manual"; 2]);
+}
+
+#[test]
+fn memory_saves_the_playing_loop_else_the_cue_and_delete_reports_the_slot() {
+    let env = Env::new();
+    let id = env.track("/music/m.mp3");
+    let point = env.lib.save_memory(id, 1_000.0, None).unwrap();
+    assert_eq!((point.end_ms, point.slot), (None, None));
+    let lp = env
+        .lib
+        .save_memory(id, 1_000.0, Some((1_000.0, 2_875.0)))
+        .unwrap();
+    assert_eq!(lp.end_ms, Some(2_875.0));
+    assert_eq!(env.lib.delete_cue(id, lp.id).unwrap(), None);
 }

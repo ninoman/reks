@@ -39,7 +39,7 @@ use reks_core::history::{
 };
 use reks_core::{Library, OneLibraryKey};
 use reks_export_onelibrary::history::{read_both, OneLibraryStatus};
-use reks_export_rb::history::{HistoryReadOptions, HistorySource, BACKUP_MANIFEST};
+use reks_export_rb::history::{HistoryReadOptions, HistorySource};
 use reks_export_rb::onelibrary::resolve_key;
 use serde::Serialize;
 
@@ -128,10 +128,10 @@ struct Source {
 }
 
 fn source(path: &Path) -> anyhow::Result<Source> {
-    if path.join(BACKUP_MANIFEST).is_file() {
-        let dir = std::fs::canonicalize(path).with_context(|| format!("{}", path.display()))?;
+    let src = HistorySource::from_folder(path)?;
+    if matches!(src, HistorySource::Backup(_)) {
         return Ok(Source {
-            src: HistorySource::Backup(dir),
+            src,
             stick_serial: None,
         });
     }

@@ -54,14 +54,7 @@ pub async fn device_check(state: State<'_, AppState>, info: DeviceInfo) -> CmdRe
     let lib = Arc::clone(&state.library);
     Ok(tauri::async_runtime::spawn_blocking(move || {
         let serial = device::volume_serial(&info);
-        let target = match serial.as_deref().map(|s| lib.device_by_serial(s)) {
-            Some(Ok(Some(dev))) => Some(devices::target(&dev)),
-            Some(Err(e)) => {
-                tracing::warn!(error = %e, "stick profile not read; checking against the strictest players");
-                None
-            }
-            _ => None,
-        };
+        let target = devices::target_for_serial(&lib, serial.as_deref());
         let opts = CheckOptions {
             target,
             volume_serial: serial,

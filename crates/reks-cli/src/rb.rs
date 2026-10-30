@@ -169,23 +169,17 @@ fn map(flags: &[String]) -> anyhow::Result<()> {
     if cache_dir.is_none() {
         lib.use_stored_cache_dir()?;
     }
-    if roots.is_empty() {
-        roots = rbcache::default_roots();
-    }
-    let started = std::time::Instant::now();
-    let cache = RbCache::scan(&roots)?;
-    let scanned = started.elapsed();
-    let report = reks_export_rb::rbmap::map_pending(&lib, &cache, reks_analysis::ANALYSER_VERSION)?;
+    let run = reks_export_rb::rbmap::map_local(&lib, &roots)?;
+    let report = &run.report;
     let mut reasons: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     for (_, skip) in &report.skipped {
         *reasons.entry(skip.to_string()).or_default() += 1;
     }
     println!(
         "rekordbox analysis files indexed: {} in {} ms ({})",
-        cache.files_indexed(),
-        scanned.as_millis(),
-        cache
-            .roots()
+        run.files_indexed,
+        run.scan_ms,
+        run.roots
             .iter()
             .map(|r| r.display().to_string())
             .collect::<Vec<_>>()
@@ -196,7 +190,7 @@ fn map(flags: &[String]) -> anyhow::Result<()> {
         report.candidates,
         report.mapped.len(),
         report.skipped.len(),
-        started.elapsed().as_millis()
+        run.total_ms
     );
     for (reason, n) in reasons {
         println!("  {n:>5}  {reason}");

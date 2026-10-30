@@ -210,6 +210,15 @@ impl Library {
         Ok(cue)
     }
 
+    /// MEMORY pressed at `at_ms`: while a loop plays (`looping` is its
+    /// `(start, end)`), it saves the loop (rekordbox), else a cue at `at_ms`.
+    pub fn save_memory(&self, id: TrackId, at_ms: f64, looping: Option<(f64, f64)>) -> Result<Cue> {
+        match looping {
+            Some((start, end)) => self.add_memory_cue(id, start, Some(end)),
+            None => self.add_memory_cue(id, at_ms, None),
+        }
+    }
+
     /// Renames cue `cue` of track `id`; `None` or blank clears the name.
     pub fn rename_cue(&self, id: TrackId, cue: i64, name: Option<&str>) -> Result<Cue> {
         let name = clean_name(name)?;
@@ -247,15 +256,16 @@ impl Library {
         Ok(out)
     }
 
-    /// Deletes cue `cue` of track `id` (hot cue, memory cue or loop).
-    pub fn delete_cue(&self, id: TrackId, cue: i64) -> Result<()> {
+    /// Deletes cue `cue` of track `id` (hot cue, memory cue or loop). Returns
+    /// the hot cue slot it freed, if it was one.
+    pub fn delete_cue(&self, id: TrackId, cue: i64) -> Result<Option<u8>> {
         let mut conn = self.conn()?;
         let tx = conn.transaction()?;
-        read_cue(&tx, id, cue)?;
+        let slot = read_cue(&tx, id, cue)?.slot;
         tx.execute("DELETE FROM cue WHERE id = ?1", [cue])?;
         touch(&tx, id)?;
         tx.commit()?;
-        Ok(())
+        Ok(slot)
     }
 }
 

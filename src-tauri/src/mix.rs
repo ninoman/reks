@@ -679,11 +679,7 @@ pub async fn mix_cue_edit(
                 Some((slot, Some(at)))
             }
             CueEdit::AddMemoryCue => {
-                // While a loop plays, MEMORY saves the loop (rekordbox).
-                match looping {
-                    Some(l) => lib.add_memory_cue(id, ms(l.start), Some(ms(l.end)))?,
-                    None => lib.add_memory_cue(id, ms(at), None)?,
-                };
+                lib.save_memory(id, ms(at), looping.map(|l| (ms(l.start), ms(l.end))))?;
                 None
             }
             CueEdit::Rename { cue_id, name } => {
@@ -695,13 +691,7 @@ pub async fn mix_cue_edit(
                 None
             }
             CueEdit::Delete { cue_id } => {
-                let slot = lib
-                    .track(id)?
-                    .cues
-                    .iter()
-                    .find(|c| c.id == cue_id)
-                    .and_then(|c| c.slot);
-                lib.delete_cue(id, cue_id)?;
+                let slot = lib.delete_cue(id, cue_id)?;
                 slot.map(|slot| (slot, None))
             }
         };
