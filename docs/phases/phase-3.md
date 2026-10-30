@@ -1,7 +1,7 @@
 # Phase 3 — Own analysis engine (BPM, beatgrid, key, waveforms)
 
 Status: in progress (started 2026-10-20 ahead of the Phase 2 hardware checks;
-tasks 1–11, 11b and 13 done; 12 measured, tuning (12a) in progress: BPM and downbeat met; key port verified, mode kept, tonic next; grid editing with tempo sections, tasks 15–18, added and done 2026-10-24; its hardware check, item 7, UNVERIFIED). Depends on: Phase 1 (library, decode) and Phase 2
+tasks 1–11, 11b and 13 done; 12 measured, tuning (12a) in progress: BPM and downbeat met; key port verified, mode and tonic kept, key bar below target pending D12's tonic proposal; grid editing with tempo sections, tasks 15–18, added and done 2026-10-24; its hardware check, item 7, UNVERIFIED). Depends on: Phase 1 (library, decode) and Phase 2
 (export pipeline, hardware checklist). Read `docs/decisions.md` D9, D10, D12,
 D13 and `docs/research.md` §3 first.
 
@@ -383,6 +383,12 @@ rekordbox keys (D10, "Queue"). A track rekordbox analysed has a rekordbox entry 
       minor (D12). Key unchanged: 62.3% exact, 63.8% exact/relative.
     - [ ] Key tonic: wrong-tonic misses (15.6%; semitone up in minor the
       largest group) before the key bar can be met ([#22](https://github.com/ninoman/reks/issues/22)).
+      Measured 2026-10-30, no analyser change: tonic rules (bass weight,
+      kick-muted chroma, top-2/3 re-rank, tuning) are noise on both sets;
+      templates fitted to rekordbox reach 68% out of sample by calling 93%
+      of tracks minor; the tonic alone caps exact-or-relative at 79–83%.
+      Open until the maintainer decides D12's tonic proposal (lower the
+      key bar, or replace the detector).
 13. [x] **Grid editor UI**: waveform view from our columns (zoomable, 150/s),
     beat markers, set-downbeat-here, nudge ±1 ms/±10 ms, tap tempo,
     double/halve, lock grid; edits write `beatgrid` rows with `source =
