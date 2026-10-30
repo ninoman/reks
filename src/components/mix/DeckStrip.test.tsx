@@ -340,7 +340,7 @@ describe("DeckStrip", () => {
     );
   });
 
-  it("BEAT JUMP: split pads jump back and forward; the last size is marked", () => {
+  it("BEAT JUMP: split pads jump back and forward", () => {
     const a = setup({ view: view(), meta: loadedMeta({ padMode: "beatJump", lastJump: 2 }) });
     fireEvent.click(screen.getByRole("button", { name: "Deck 2 jump back FINE (1/32 beat)" }));
     expect(a.beatJump).toHaveBeenLastCalledWith(-1 / 32);
