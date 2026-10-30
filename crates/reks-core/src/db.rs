@@ -16,24 +16,30 @@ use crate::error::{Error, Result};
 use crate::settings;
 
 /// Ordered schema migrations. Append only; never edit a released migration.
+/// Each runs with foreign keys off ([`migrate`]) and is checked with
+/// `PRAGMA foreign_key_check` before its transaction commits.
 const MIGRATION_LIST: &[M<'static>] = &[
-    M::up(include_str!("../migrations/0001_init.sql")),
-    M::up(include_str!("../migrations/0002_export_manifest.sql")),
-    M::up(include_str!("../migrations/0003_device_profiles.sql")),
-    M::up(include_str!("../migrations/0004_superseded_file.sql")),
-    M::up(include_str!("../migrations/0005_dividers_history.sql")),
-    M::up(include_str!("../migrations/0006_grid_lock.sql")),
-    M::up(include_str!("../migrations/0007_analysis.sql")),
-    M::up(include_str!("../migrations/0008_analysis_source.sql")),
-    M::up(include_str!("../migrations/0009_my_tags.sql")),
-    M::up(include_str!("../migrations/0010_smart_playlists.sql")),
-    M::up(include_str!("../migrations/0011_cue_active_loop.sql")),
-    M::up(include_str!("../migrations/0012_filter_presets.sql")),
-    M::up(include_str!("../migrations/0013_grid_base.sql")),
-    M::up(include_str!("../migrations/0014_drop_mixed_grids.sql")),
-    M::up(include_str!("../migrations/0015_one_hot_cue_per_slot.sql")),
+    up(include_str!("../migrations/0001_init.sql")),
+    up(include_str!("../migrations/0002_export_manifest.sql")),
+    up(include_str!("../migrations/0003_device_profiles.sql")),
+    up(include_str!("../migrations/0004_superseded_file.sql")),
+    up(include_str!("../migrations/0005_dividers_history.sql")),
+    up(include_str!("../migrations/0006_grid_lock.sql")),
+    up(include_str!("../migrations/0007_analysis.sql")),
+    up(include_str!("../migrations/0008_analysis_source.sql")),
+    up(include_str!("../migrations/0009_my_tags.sql")),
+    up(include_str!("../migrations/0010_smart_playlists.sql")),
+    up(include_str!("../migrations/0011_cue_active_loop.sql")),
+    up(include_str!("../migrations/0012_filter_presets.sql")),
+    up(include_str!("../migrations/0013_grid_base.sql")),
+    up(include_str!("../migrations/0014_drop_mixed_grids.sql")),
+    up(include_str!("../migrations/0015_one_hot_cue_per_slot.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
+
+const fn up(sql: &'static str) -> M<'static> {
+    M::up(sql).foreign_key_check()
+}
 
 /// Schema version after all migrations (SQLite `user_version`).
 pub const SCHEMA_VERSION: i64 = MIGRATION_LIST.len() as i64;
@@ -128,7 +134,19 @@ impl Library {
 
 /// Brings the schema to the latest version.
 pub(crate) fn migrate(conn: &mut Connection) -> Result<()> {
-    MIGRATIONS.to_latest(conn)?;
+    migrate_with(conn, &MIGRATIONS)
+}
+
+/// Runs `migrations` with foreign keys off, as SQLite's table-rebuild recipe
+/// requires: with them on, a `DROP TABLE` of a parent cascade-deletes its
+/// children (cues, grids, entries, tags). The pragma is a no-op inside a
+/// transaction, so it is switched here, around the migration transactions.
+/// Each step's `foreign_key_check` stands in for the constraints meanwhile.
+fn migrate_with(conn: &mut Connection, migrations: &Migrations<'_>) -> Result<()> {
+    conn.pragma_update(None, "foreign_keys", "OFF")?;
+    let migrated = migrations.to_latest(conn);
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    migrated?;
     Ok(())
 }
 
@@ -737,6 +755,87 @@ mod tests {
             [t],
         )
         .unwrap();
+    }
+
+    /// The migrations plus `extra`, as a later release would ship them.
+    fn with_extra(extra: &'static str) -> Migrations<'static> {
+        let mut list = MIGRATION_LIST.to_vec();
+        list.push(up(extra));
+        Migrations::new(list)
+    }
+
+    #[test]
+    fn a_table_rebuild_keeps_child_rows() {
+        let lib = Library::open_in_memory(Path::new("cache-unused")).unwrap();
+        let mut c = lib.conn().unwrap();
+        let t = insert_track(&c, "/music/a.wav", "Alpha");
+        // SQLite's recipe for a schema change ALTER TABLE can't do.
+        let rebuild = with_extra(
+            "CREATE TABLE tag_new (
+               id INTEGER PRIMARY KEY,
+               parent_id INTEGER REFERENCES tag(id) ON DELETE CASCADE,
+               name TEXT NOT NULL, sort_order INTEGER NOT NULL,
+               created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+             INSERT INTO tag_new SELECT id, parent_id, name, sort_order, created_at, updated_at
+               FROM tag;
+             DROP TABLE tag;
+             ALTER TABLE tag_new RENAME TO tag;",
+        );
+        let tagged: i64 = {
+            let cat: i64 = c
+                .query_row(
+                    "SELECT id FROM tag WHERE parent_id IS NULL LIMIT 1",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            c.execute(
+                "INSERT INTO tag (parent_id, name, sort_order, created_at, updated_at)
+                 VALUES (?1, 'Peak', 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+                [cat],
+            )
+            .unwrap();
+            let tag = c.last_insert_rowid();
+            c.execute(
+                "INSERT INTO track_tag (track_id, tag_id) VALUES (?1, ?2)",
+                [t, tag],
+            )
+            .unwrap();
+            count(&c, "track_tag")
+        };
+        let tags = count(&c, "tag");
+        migrate_with(&mut c, &rebuild).unwrap();
+        assert_eq!(count(&c, "tag"), tags);
+        assert_eq!(count(&c, "track_tag"), tagged);
+        let fk: i64 = c
+            .pragma_query_value(None, "foreign_keys", |r| r.get(0))
+            .unwrap();
+        assert_eq!(fk, 1);
+    }
+
+    #[test]
+    fn a_migration_that_orphans_rows_is_rolled_back() {
+        let lib = Library::open_in_memory(Path::new("cache-unused")).unwrap();
+        let mut c = lib.conn().unwrap();
+        let t = insert_track(&c, "/music/a.wav", "Alpha");
+        c.execute(
+            "INSERT INTO cue (track_id, kind, start_ms, source) VALUES (?1, 0, 0, 'manual')",
+            [t],
+        )
+        .unwrap();
+        let err = migrate_with(&mut c, &with_extra("DELETE FROM track;")).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::Migration(rusqlite_migration::Error::ForeignKeyCheck(_))
+            ),
+            "{err}"
+        );
+        assert_eq!(count(&c, "track"), 1);
+        let version: i64 = c
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
     }
 
     #[test]

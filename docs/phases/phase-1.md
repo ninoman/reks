@@ -157,7 +157,8 @@ Design notes
   as whatever the user's rekordbox preference emitted; we normalise. The exact
   strings rekordbox emits are UNVERIFIED until task 7 checks a real export.
 - The two PRAGMAs above are per-connection settings, so `Library::open` sets
-  them (plus `synchronous=NORMAL`, `busy_timeout`); migration 0001
+  them (plus `synchronous=NORMAL`, `busy_timeout`; foreign keys are off while
+  migrations run, D3); migration 0001
   ([`0001_init.sql`](../../crates/reks-core/migrations/0001_init.sql)) holds the
   rest. Its FTS update trigger fires only when an indexed column changes.
 - Waveform/analysis caches are *not* in the library DB; they go in

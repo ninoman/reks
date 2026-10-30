@@ -32,6 +32,11 @@ Date of decisions: 2026-10-18.
 - Rationale: backend-owned DB, synchronous API, bundled SQLite gives one
   version on all OSes; migrations via `user_version` (R§6). WAL mode, one
   writer connection behind a mutex, queries on `spawn_blocking`. FTS5 for search.
+- Migrations (2026-10-30, architecture review F11) run with `foreign_keys`
+  off, as SQLite's table-rebuild recipe requires (with it on, dropping a
+  parent table cascade-deletes cues, grids and entries), and each one runs
+  `PRAGMA foreign_key_check` before its transaction commits, so a step that
+  orphans rows rolls back ([`db.rs`](../crates/reks-core/src/db.rs)).
 - Rejected: `tauri-plugin-sql` (sqlx-based, JS-facing, no Rust query API);
   `sqlx` (async overhead without benefit here); `diesel` (heavier, used by
   rbox/rekordcrate's OneLibrary branches but not needed for our own schema).
