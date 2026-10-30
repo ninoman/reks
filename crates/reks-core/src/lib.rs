@@ -22,6 +22,7 @@ pub mod history;
 pub mod keys;
 pub mod manifest;
 pub mod playlist;
+mod pool;
 pub mod preview;
 pub mod query;
 pub mod rbxml;

@@ -355,3 +355,51 @@ fn missing_artwork_file_is_reextracted_on_read() {
     ));
     assert!(!cached.exists());
 }
+
+/// Files are read on a pool but written in walk order, each with its own
+/// file's fields; progress is throttled.
+#[test]
+fn parallel_reads_keep_walk_order() {
+    let env = Env::new();
+    let exts = ["mp3", "flac", "m4a", "wav", "aiff"];
+    for i in 0..120 {
+        env.add_fixture(
+            exts[i % exts.len()],
+            &format!("set/f{i:03}.{}", exts[i % exts.len()]),
+        );
+    }
+    let (report, events) = env.scan();
+    assert_eq!(report.added, 120);
+    let added: Vec<&String> = events
+        .iter()
+        .filter_map(|e| match e {
+            ScanEvent::Added { path, .. } => Some(path),
+            _ => None,
+        })
+        .collect();
+    let mut sorted = added.clone();
+    sorted.sort();
+    assert_eq!(added, sorted);
+    let progress: Vec<(usize, usize)> = events
+        .iter()
+        .filter_map(|e| match e {
+            ScanEvent::Progress { done, total } => Some((*done, *total)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(progress, vec![(50, 120), (100, 120), (120, 120)]);
+
+    let db = env.db();
+    let mut stmt = db
+        .prepare("SELECT path, kind FROM track ORDER BY id")
+        .unwrap();
+    let rows: Vec<(String, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    for (path, kind) in rows {
+        let ext = Path::new(&path).extension().unwrap().to_str().unwrap();
+        assert_eq!(kind, if ext == "m4a" { "aac" } else { ext }, "{path}");
+    }
+}

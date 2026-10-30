@@ -23,7 +23,7 @@ use crate::error::Result;
 use crate::fileinfo::{
     self, bpm_cols, content_hash, key_cols, library_path, probe_cols, FileInfo, ProbeCols,
 };
-use crate::timefmt;
+use crate::{pool, timefmt};
 
 /// Row id in the `track` table.
 pub type TrackId = i64;
@@ -31,6 +31,9 @@ pub type TrackId = i64;
 /// File extensions the scan picks up (lower case). Must match what
 /// `reks-audio` can probe.
 const AUDIO_EXTENSIONS: &[&str] = &["mp3", "m4a", "aac", "flac", "wav", "wave", "aif", "aiff"];
+
+/// A [`ScanEvent::Progress`] goes out every this many files (and after the last).
+const PROGRESS_EVERY: usize = 50;
 
 /// Cooperative cancellation (scan, import, export, convert). Clones share
 /// one flag. One type for the whole stack, so a token passes straight
@@ -41,11 +44,8 @@ pub use reks_audio::CancelToken;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ScanEvent {
-    /// An audio file was found during the walk.
-    Found {
-        path: String,
-    },
-    /// `done` of `total` found files processed.
+    /// `done` of `total` found files processed. Sent every
+    /// [`PROGRESS_EVERY`] files and after the last.
     Progress {
         done: usize,
         total: usize,
@@ -129,33 +129,58 @@ pub fn scan(
         }
     }
 
-    let total = walk.files.len();
-    for (i, path) in walk.files.iter().enumerate() {
+    // Files are read on a pool (stat, hash, probe, tags, artwork) and written
+    // here one by one, in walk order. A new file whose hash could be a move is
+    // only hashed there, so a move reads no tags and stores no artwork.
+    let files: Vec<&str> = walk.files.iter().map(String::as_str).collect();
+    let move_keys: HashSet<(String, i64)> = by_hash.keys().cloned().collect();
+    let lib = s.lib;
+    let read = |path: &&str| prepare(lib, path, &existing, &superseded, &move_keys);
+    let total = files.len();
+    pool::for_each_ordered(&files, &|| cancel.is_cancelled(), read, |i, prepared| {
         if s.cancelled() {
-            break;
+            return Ok(());
         }
-        match existing.get(path) {
-            Some(t) => s.rescan(t, path)?,
-            None if superseded.contains(path) => {
-                tracing::debug!(path, "skipping converted-away original");
+        let path = files[i];
+        match prepared {
+            Prepared::Superseded => tracing::debug!(path, "skipping converted-away original"),
+            Prepared::Failed(message) => s.error(path, message),
+            Prepared::Unchanged(t) => s.unchanged(t, path)?,
+            Prepared::Changed(t, info) => {
+                if let Some(info) = s.checked(path, info) {
+                    s.refresh(t, path, &info)?;
+                }
             }
-            None => {
-                let moved_from = |hash: &str, size: i64| {
-                    let ids = by_hash.get_mut(&(hash.to_owned(), size))?;
+            Prepared::New(info) => {
+                if let Some(info) = s.checked(path, info) {
+                    s.add(path, &info)?;
+                }
+            }
+            Prepared::MaybeMoved { size, mtime, hash } => {
+                let moved_from = by_hash.get_mut(&(hash.clone(), size)).and_then(|ids| {
                     let pos = ids.iter().position(|id| {
                         // A row that was already missing may live outside the
                         // scanned roots; only claim it if its old file is gone.
                         gone.get(id).is_some_and(|t| !Path::new(&t.path).exists())
                     })?;
                     Some(ids.swap_remove(pos))
-                };
-                if let Some(id) = s.add_or_move(path, moved_from)? {
+                });
+                if let Some(id) = moved_from {
+                    s.moved(id, path, &mtime)?;
                     gone.remove(&id);
+                } else {
+                    let info = fileinfo::read_file_hashed(lib, path, size, mtime, hash);
+                    if let Some(info) = s.checked(path, info) {
+                        s.add(path, &info)?;
+                    }
                 }
             }
         }
-        s.emit(ScanEvent::Progress { done: i + 1, total });
-    }
+        if (i + 1) % PROGRESS_EVERY == 0 || i + 1 == total {
+            s.emit(ScanEvent::Progress { done: i + 1, total });
+        }
+        Ok::<(), crate::error::Error>(())
+    })?;
 
     if s.cancelled() {
         s.report.cancelled = true;
@@ -209,6 +234,59 @@ impl Walk {
         self.roots.iter().any(|r| is_under(path, r))
             && !self.failed.iter().any(|f| is_under(path, f))
     }
+}
+
+/// What the pool learned about one walked file, before the DB is touched.
+enum Prepared<'a> {
+    /// A converted-away original; never added back.
+    Superseded,
+    /// Stat or hash failed; reported as a scan error.
+    Failed(String),
+    /// Known path with the size and mtime its row records.
+    Unchanged(&'a ExistingTrack),
+    /// Known path whose file changed. `Err`: not playable audio.
+    Changed(&'a ExistingTrack, std::result::Result<FileInfo, String>),
+    /// New path whose hash matches no row that could have moved.
+    New(std::result::Result<FileInfo, String>),
+    /// New path whose (hash, size) matches a row whose file is gone.
+    MaybeMoved {
+        size: i64,
+        mtime: String,
+        hash: String,
+    },
+}
+
+/// Runs on the pool: everything the scan needs from the file itself.
+fn prepare<'a>(
+    lib: &Library,
+    path: &str,
+    existing: &'a HashMap<String, ExistingTrack>,
+    superseded: &HashSet<String>,
+    move_keys: &HashSet<(String, i64)>,
+) -> Prepared<'a> {
+    let known = existing.get(path);
+    if known.is_none() && superseded.contains(path) {
+        return Prepared::Superseded;
+    }
+    let cannot_read = |e: std::io::Error| Prepared::Failed(format!("cannot read file: {e}"));
+    let (size, mtime) = match fileinfo::stat(path) {
+        Ok(s) => s,
+        Err(e) => return cannot_read(e),
+    };
+    if let Some(t) = known {
+        if size == t.file_size && mtime == t.file_mtime {
+            return Prepared::Unchanged(t);
+        }
+        return Prepared::Changed(t, fileinfo::read_file(lib, path, size, mtime));
+    }
+    let hash = match content_hash(Path::new(path)) {
+        Ok(h) => h,
+        Err(e) => return cannot_read(e),
+    };
+    if move_keys.contains(&(hash.clone(), size)) {
+        return Prepared::MaybeMoved { size, mtime, hash };
+    }
+    Prepared::New(fileinfo::read_file_hashed(lib, path, size, mtime, hash))
 }
 
 #[derive(Debug)]
@@ -282,9 +360,8 @@ impl Scan<'_> {
                 }
                 match library_path(entry.path()) {
                     Some(path) => {
-                        if walk.files.insert(path.clone()) {
+                        if walk.files.insert(path) {
                             self.report.found += 1;
-                            self.emit(ScanEvent::Found { path });
                         }
                     }
                     None => self.error(
@@ -329,26 +406,22 @@ impl Scan<'_> {
         Ok(paths)
     }
 
-    /// A known path: unchanged, changed on disk, or back after being missing.
-    fn rescan(&mut self, t: &ExistingTrack, path: &str) -> Result<()> {
-        let Some((size, mtime)) = self.stat(path) else {
-            return Ok(());
-        };
-        if size == t.file_size && mtime == t.file_mtime {
-            if t.missing {
-                self.lib.conn()?.execute(
-                    "UPDATE track SET missing = 0, updated_at = ?2 WHERE id = ?1",
-                    (t.id, timefmt::now_utc()),
-                )?;
-                self.updated(t.id, path);
-            } else {
-                self.report.unchanged += 1;
-            }
-            return Ok(());
+    /// A known path whose file is as its row records; back if it was missing.
+    fn unchanged(&mut self, t: &ExistingTrack, path: &str) -> Result<()> {
+        if t.missing {
+            self.lib.conn()?.execute(
+                "UPDATE track SET missing = 0, updated_at = ?2 WHERE id = ?1",
+                (t.id, timefmt::now_utc()),
+            )?;
+            self.updated(t.id, path);
+        } else {
+            self.report.unchanged += 1;
         }
-        let Some(info) = self.read_file(path, size, mtime) else {
-            return Ok(());
-        };
+        Ok(())
+    }
+
+    /// A known path whose file changed on disk.
+    fn refresh(&mut self, t: &ExistingTrack, path: &str, info: &FileInfo) -> Result<()> {
         let ProbeCols {
             kind,
             duration_ms,
@@ -396,46 +469,28 @@ impl Scan<'_> {
         Ok(())
     }
 
-    /// A new path: either a known file that moved (same content hash and
-    /// size as a row whose file is gone) or a new track. Returns the id of a
-    /// moved row.
-    fn add_or_move(
-        &mut self,
-        path: &str,
-        moved_from: impl FnOnce(&str, i64) -> Option<TrackId>,
-    ) -> Result<Option<TrackId>> {
-        let Some((size, mtime)) = self.stat(path) else {
-            return Ok(None);
-        };
-        let hash = match content_hash(Path::new(path)) {
-            Ok(h) => h,
-            Err(e) => {
-                self.error(path, format!("cannot read file: {e}"));
-                return Ok(None);
-            }
-        };
-        if let Some(id) = moved_from(&hash, size) {
-            let conn = self.lib.conn()?;
-            let from: String =
-                conn.query_row("SELECT path FROM track WHERE id = ?1", [id], |r| r.get(0))?;
-            conn.execute(
-                "UPDATE track SET path = ?2, file_mtime = ?3, missing = 0, updated_at = ?4
-                 WHERE id = ?1",
-                (id, path, &mtime, timefmt::now_utc()),
-            )?;
-            drop(conn);
-            self.report.moved += 1;
-            self.emit(ScanEvent::Moved {
-                id,
-                from,
-                to: path.to_owned(),
-            });
-            return Ok(Some(id));
-        }
+    /// A row whose file moved to `path` (same content hash and size).
+    fn moved(&mut self, id: TrackId, path: &str, mtime: &str) -> Result<()> {
+        let conn = self.lib.conn()?;
+        let from: String =
+            conn.query_row("SELECT path FROM track WHERE id = ?1", [id], |r| r.get(0))?;
+        conn.execute(
+            "UPDATE track SET path = ?2, file_mtime = ?3, missing = 0, updated_at = ?4
+             WHERE id = ?1",
+            (id, path, mtime, timefmt::now_utc()),
+        )?;
+        drop(conn);
+        self.report.moved += 1;
+        self.emit(ScanEvent::Moved {
+            id,
+            from,
+            to: path.to_owned(),
+        });
+        Ok(())
+    }
 
-        let Some(info) = self.read_file_hashed(path, size, mtime, hash) else {
-            return Ok(None);
-        };
+    /// A new track.
+    fn add(&mut self, path: &str, info: &FileInfo) -> Result<()> {
         let ProbeCols {
             kind,
             duration_ms,
@@ -482,7 +537,7 @@ impl Scan<'_> {
             id,
             path: path.to_owned(),
         });
-        Ok(None)
+        Ok(())
     }
 
     fn updated(&mut self, id: TrackId, path: &str) {
@@ -493,35 +548,7 @@ impl Scan<'_> {
         });
     }
 
-    /// Size and mtime, or `None` after reporting an error.
-    fn stat(&mut self, path: &str) -> Option<(i64, String)> {
-        match fileinfo::stat(path) {
-            Ok(s) => Some(s),
-            Err(e) => {
-                self.error(path, format!("cannot read file: {e}"));
-                None
-            }
-        }
-    }
-
-    /// Probe, tags and artwork, done outside the DB lock. `None` if the file
-    /// is not playable audio (reported as an error, not added).
-    fn read_file(&mut self, path: &str, size: i64, mtime: String) -> Option<FileInfo> {
-        let info = fileinfo::read_file(self.lib, path, size, mtime);
-        self.checked(path, info)
-    }
-
-    fn read_file_hashed(
-        &mut self,
-        path: &str,
-        size: i64,
-        mtime: String,
-        hash: String,
-    ) -> Option<FileInfo> {
-        let info = fileinfo::read_file_hashed(self.lib, path, size, mtime, hash);
-        self.checked(path, info)
-    }
-
+    /// `None` after reporting a file that is not playable audio.
     fn checked(
         &mut self,
         path: &str,

@@ -65,6 +65,17 @@ pub struct Probe {
 
 /// Reads the headers of `path` and describes its first audio track.
 pub fn probe(path: &Path) -> Result<Probe> {
+    let mut p = probe_headers(path)?;
+    if p.bit_rate_kbps.is_none() {
+        p.bit_rate_kbps = stream_bit_rate(path);
+    }
+    Ok(p)
+}
+
+/// [`probe`] without the separate lofty pass for a compressed stream's bit
+/// rate: `bit_rate_kbps` is set for PCM only. For callers that take it from
+/// [`crate::metadata`] instead.
+pub fn probe_headers(path: &Path) -> Result<Probe> {
     let file = File::open(path).map_err(|source| Error::Io {
         path: path.to_path_buf(),
         source,
@@ -121,7 +132,7 @@ pub fn probe(path: &Path) -> Result<Probe> {
             u32::try_from(u64::from(sample_rate) * u64::from(bits) * u64::from(channels) / 1000)
                 .unwrap_or(u32::MAX),
         ),
-        _ => stream_bit_rate(path),
+        _ => None,
     };
 
     Ok(Probe {

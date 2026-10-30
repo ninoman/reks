@@ -13,8 +13,9 @@
 //! - Grids and cues with `source = 'rekordbox'` are replaced; rows from any
 //!   other source are left alone. Playlists are matched by name within their
 //!   folder; tracks a user added in reks stay after the XML's entries.
-//! - Files are read before the database is locked; every track, grid, cue
-//!   and playlist write happens in one transaction.
+//! - Files are read before the database is locked, on a small thread pool;
+//!   matching stays serial and in XML order. Every track, grid, cue and
+//!   playlist write happens in one transaction.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -33,9 +34,22 @@ use crate::error::Result;
 use crate::fileinfo::{self, kind_from_extension, library_path, probe_cols, FileInfo};
 use crate::keys::Key;
 use crate::playlist::{self, Entry};
+use crate::pool;
 use crate::scan::{CancelToken, TrackId};
 use crate::tag_comments::{self, CommentTagsPreview, CommentTagsReport};
 use crate::timefmt;
+
+/// The `track` columns `update_track` writes, in the order of its `new` CTE.
+/// A macro so the one list can go into `concat!`.
+macro_rules! update_cols {
+    () => {
+        "path, missing, file_size, file_mtime, content_hash, kind, duration_ms, sample_rate,
+         bit_depth, bit_rate_kbps, channels, title, artist, album, album_artist, genre,
+         composer, remixer, label, mix, grouping, track_no, disc_no, year, comment, rating,
+         color, key_source, key, bpm_source, bpm_x100, baseline_play_count, date_added,
+         baseline_last_played, artwork_id, rb_track_id, rb_location"
+    };
+}
 
 /// Grid and cue rows written by this import carry this `source`.
 const SOURCE: &str = "rekordbox";
@@ -414,6 +428,20 @@ enum Target {
     New,
 }
 
+/// An XML track after matching, before its file is read.
+enum Planned {
+    /// Decided without reading the file; the reason, if any, is reported
+    /// once reads are done so `unmatched` stays in XML order.
+    Done(Plan, Option<UnmatchedReason>),
+    /// The file has to be read (new, or changed since the row was written).
+    Read {
+        target: Target,
+        path: String,
+        size: i64,
+        mtime: String,
+    },
+}
+
 enum FileState {
     /// File not found (or not stat-able): `missing = 1`.
     Missing,
@@ -459,26 +487,103 @@ impl Import<'_> {
     }
 
     /// Resolves, matches and reads the file of every XML track. No DB lock
-    /// is held (artwork storage takes it briefly).
+    /// is held (artwork storage takes it briefly). Stat and file reads run
+    /// on a pool; matching is serial and in XML order, because which row a
+    /// track claims depends on the tracks before it. Returns fewer plans
+    /// than tracks only when cancelled.
     fn plan_tracks(&mut self, tracks: &[XmlTrack], ex: &Existing) -> Vec<Plan> {
+        let cancel = self.cancel.clone();
+        let stop = move || cancel.as_ref().is_some_and(CancelToken::is_cancelled);
+
+        let remap = &self.remap;
+        let mut located = Vec::with_capacity(tracks.len());
+        let _ = pool::for_each_ordered(
+            tracks,
+            &stop,
+            |t| {
+                resolve(remap, t).map(|path| {
+                    let stat = fileinfo::stat(&path);
+                    (path, stat)
+                })
+            },
+            |_, l| {
+                located.push(l);
+                Ok::<(), ()>(())
+            },
+        );
+        if self.cancelled() {
+            return Vec::new();
+        }
+
         // Row (existing index or new path) → XML TrackID that claimed it.
         let mut claimed_rows: HashMap<usize, u32> = HashMap::new();
         let mut claimed_paths: HashMap<String, u32> = HashMap::new();
+        let planned: Vec<Planned> = tracks
+            .iter()
+            .zip(located)
+            .map(|(t, l)| self.plan_track(t, l, ex, &mut claimed_rows, &mut claimed_paths))
+            .collect();
+
+        let lib = self.lib;
         let total = tracks.len();
+        let mut read = Vec::with_capacity(total);
+        let _ = pool::for_each_ordered(
+            &planned,
+            &stop,
+            |p| match p {
+                Planned::Read {
+                    path, size, mtime, ..
+                } => Some(fileinfo::read_file(lib, path, *size, mtime.clone())),
+                Planned::Done(..) => None,
+            },
+            |i, r| {
+                read.push(r);
+                if (i + 1) % 50 == 0 || i + 1 == total {
+                    self.emit(&ImportEvent::Progress {
+                        stage: ImportStage::Files,
+                        done: i + 1,
+                        total,
+                    });
+                }
+                Ok::<(), ()>(())
+            },
+        );
+        if self.cancelled() {
+            return Vec::new();
+        }
+
         let mut plans = Vec::with_capacity(total);
-        for (i, t) in tracks.iter().enumerate() {
-            if self.cancelled() {
-                break;
+        for ((t, p), r) in tracks.iter().zip(planned).zip(read) {
+            let (plan, note) = match (p, r) {
+                (Planned::Done(plan, note), _) => (plan, note),
+                (
+                    Planned::Read {
+                        target,
+                        path,
+                        size,
+                        mtime,
+                    },
+                    r,
+                ) => match r.unwrap_or_else(|| Err("file not read".into())) {
+                    Ok(info) => {
+                        let file = FileState::Read(Box::new(info));
+                        (Plan::Write { target, path, file }, None)
+                    }
+                    Err(message) => {
+                        tracing::warn!(path, %message, "import: unreadable file");
+                        let reason = UnmatchedReason::Unreadable {
+                            path: path.clone(),
+                            message,
+                        };
+                        let file = FileState::Unreadable { size, mtime };
+                        (Plan::Write { target, path, file }, Some(reason))
+                    }
+                },
+            };
+            if let Some(reason) = note {
+                self.unmatched(t, reason);
             }
-            let plan = self.plan_track(t, ex, &mut claimed_rows, &mut claimed_paths);
             plans.push(plan);
-            if (i + 1) % 50 == 0 || i + 1 == total {
-                self.emit(&ImportEvent::Progress {
-                    stage: ImportStage::Files,
-                    done: i + 1,
-                    total,
-                });
-            }
         }
         plans
     }
@@ -486,19 +591,15 @@ impl Import<'_> {
     fn plan_track(
         &mut self,
         t: &XmlTrack,
+        located: std::result::Result<(String, std::io::Result<(i64, String)>), UnmatchedReason>,
         ex: &Existing,
         claimed_rows: &mut HashMap<usize, u32>,
         claimed_paths: &mut HashMap<String, u32>,
-    ) -> Plan {
-        let xml_path = match resolve(&self.remap, t) {
-            Ok(p) => p,
-            Err(reason) => {
-                self.unmatched(t, reason);
-                return Plan::Skip;
-            }
+    ) -> Planned {
+        let (xml_path, xml_stat) = match located {
+            Ok(l) => l,
+            Err(reason) => return Planned::Done(Plan::Skip, Some(reason)),
         };
-        let xml_stat = fileinfo::stat(&xml_path);
-
         // Match: path, then earlier Location, then (artist, title, size).
         let free = |i: &usize| !claimed_rows.contains_key(i);
         let (row, how) = if let Some(&i) = ex.by_path.get(&xml_path) {
@@ -528,14 +629,13 @@ impl Import<'_> {
             }
         };
 
-        if let Some(i) = row {
-            if let Some(&first) = claimed_rows.get(&i) {
-                self.unmatched(t, UnmatchedReason::DuplicateOf { track_id: first });
-                return Plan::Skip;
-            }
-        } else if let Some(&first) = claimed_paths.get(&xml_path) {
-            self.unmatched(t, UnmatchedReason::DuplicateOf { track_id: first });
-            return Plan::Skip;
+        let first = match row {
+            Some(i) => claimed_rows.get(&i),
+            None => claimed_paths.get(&xml_path),
+        };
+        if let Some(&first) = first {
+            let reason = UnmatchedReason::DuplicateOf { track_id: first };
+            return Planned::Done(Plan::Skip, Some(reason));
         }
 
         let (target, path, stat) = match row {
@@ -572,7 +672,7 @@ impl Import<'_> {
             }
         };
 
-        let file = match stat {
+        let (file, note) = match stat {
             Err(e) => {
                 self.report.missing += 1;
                 let reason = if e.kind() == std::io::ErrorKind::NotFound {
@@ -583,8 +683,7 @@ impl Import<'_> {
                         message: e.to_string(),
                     }
                 };
-                self.unmatched(t, reason);
-                FileState::Missing
+                (FileState::Missing, Some(reason))
             }
             Ok((size, mtime)) => {
                 let unchanged = match &target {
@@ -594,27 +693,18 @@ impl Import<'_> {
                     }
                     Target::New => false,
                 };
-                if unchanged {
-                    FileState::Unchanged
-                } else {
-                    match fileinfo::read_file(self.lib, &path, size, mtime.clone()) {
-                        Ok(info) => FileState::Read(Box::new(info)),
-                        Err(message) => {
-                            tracing::warn!(path, %message, "import: unreadable file");
-                            self.unmatched(
-                                t,
-                                UnmatchedReason::Unreadable {
-                                    path: path.clone(),
-                                    message,
-                                },
-                            );
-                            FileState::Unreadable { size, mtime }
-                        }
-                    }
+                if !unchanged {
+                    return Planned::Read {
+                        target,
+                        path,
+                        size,
+                        mtime,
+                    };
                 }
+                (FileState::Unchanged, None)
             }
         };
-        Plan::Write { target, path, file }
+        Planned::Done(Plan::Write { target, path, file }, note)
     }
 
     /// Writes one track with its grid and cues; returns its row id.
@@ -716,46 +806,58 @@ impl Import<'_> {
         let probe = info.map(|i| probe_cols(&i.probe));
         let tags = info.map(|i| &i.tags);
         let tag = |f: fn(&reks_audio::Tags) -> &Option<String>| tags.and_then(|t| f(t).as_deref());
-        tx.prepare_cached(
-            "UPDATE track SET
-               path = :path, missing = :missing,
-               file_size = coalesce(:size, file_size), file_mtime = coalesce(:mtime, file_mtime),
-               content_hash = coalesce(:hash, content_hash), kind = coalesce(:kind, kind),
-               duration_ms = coalesce(:duration_ms, duration_ms, :xml_duration_ms),
-               sample_rate = coalesce(:sample_rate, sample_rate, :xml_sample_rate),
-               bit_depth = coalesce(:bit_depth, bit_depth),
-               bit_rate_kbps = coalesce(:bit_rate_kbps, bit_rate_kbps, :xml_bit_rate),
-               channels = coalesce(:channels, channels),
-               title = coalesce(:title, title, :tag_title),
-               artist = coalesce(:artist, artist, :tag_artist),
-               album = coalesce(:album, album, :tag_album),
-               album_artist = coalesce(album_artist, :tag_album_artist),
-               genre = coalesce(:genre, genre, :tag_genre),
-               composer = coalesce(:composer, composer, :tag_composer),
-               remixer = coalesce(:remixer, remixer, :tag_remixer),
-               label = coalesce(:label, label, :tag_label),
-               mix = coalesce(:mix, mix),
-               grouping = coalesce(:grouping, grouping, :tag_grouping),
-               track_no = coalesce(:track_no, track_no, :tag_track_no),
-               disc_no = coalesce(:disc_no, disc_no, :tag_disc_no),
-               year = coalesce(:year, year, :tag_year),
-               comment = coalesce(:comment, comment, :tag_comment),
-               rating = coalesce(:rating, rating),
-               color = coalesce(:color, color),
-               key_source = CASE WHEN :key IS NULL THEN key_source ELSE 'rekordbox' END,
-               key = coalesce(:key, key),
-               bpm_source = CASE WHEN :bpm IS NULL THEN bpm_source ELSE 'rekordbox' END,
-               bpm_x100 = coalesce(:bpm, bpm_x100),
-               baseline_play_count = CASE WHEN :created
-                 THEN coalesce(:play_count, baseline_play_count) ELSE baseline_play_count END,
-               date_added = coalesce(:date_added, date_added),
-               baseline_last_played = CASE WHEN :created
-                 THEN coalesce(:last_played, baseline_last_played) ELSE baseline_last_played END,
-               artwork_id = coalesce(artwork_id, :artwork_id),
-               rb_track_id = :rb_track_id, rb_location = coalesce(:rb_location, rb_location),
-               updated_at = :now
-             WHERE id = :id",
-        )?
+        // Skipped when nothing differs, so an unchanged re-import neither
+        // bumps `updated_at` nor fires the FTS trigger (`track_fts_au`
+        // re-indexes on any SET of its columns, equal or not).
+        tx.prepare_cached(concat!(
+            "WITH new AS (SELECT
+               :path AS path, :missing AS missing,
+               coalesce(:size, file_size) AS file_size, coalesce(:mtime, file_mtime) AS file_mtime,
+               coalesce(:hash, content_hash) AS content_hash, coalesce(:kind, kind) AS kind,
+               coalesce(:duration_ms, duration_ms, :xml_duration_ms) AS duration_ms,
+               coalesce(:sample_rate, sample_rate, :xml_sample_rate) AS sample_rate,
+               coalesce(:bit_depth, bit_depth) AS bit_depth,
+               coalesce(:bit_rate_kbps, bit_rate_kbps, :xml_bit_rate) AS bit_rate_kbps,
+               coalesce(:channels, channels) AS channels,
+               coalesce(:title, title, :tag_title) AS title,
+               coalesce(:artist, artist, :tag_artist) AS artist,
+               coalesce(:album, album, :tag_album) AS album,
+               coalesce(album_artist, :tag_album_artist) AS album_artist,
+               coalesce(:genre, genre, :tag_genre) AS genre,
+               coalesce(:composer, composer, :tag_composer) AS composer,
+               coalesce(:remixer, remixer, :tag_remixer) AS remixer,
+               coalesce(:label, label, :tag_label) AS label,
+               coalesce(:mix, mix) AS mix,
+               coalesce(:grouping, grouping, :tag_grouping) AS grouping,
+               coalesce(:track_no, track_no, :tag_track_no) AS track_no,
+               coalesce(:disc_no, disc_no, :tag_disc_no) AS disc_no,
+               coalesce(:year, year, :tag_year) AS year,
+               coalesce(:comment, comment, :tag_comment) AS comment,
+               coalesce(:rating, rating) AS rating,
+               coalesce(:color, color) AS color,
+               CASE WHEN :key IS NULL THEN key_source ELSE 'rekordbox' END AS key_source,
+               coalesce(:key, key) AS key,
+               CASE WHEN :bpm IS NULL THEN bpm_source ELSE 'rekordbox' END AS bpm_source,
+               coalesce(:bpm, bpm_x100) AS bpm_x100,
+               CASE WHEN :created THEN coalesce(:play_count, baseline_play_count)
+                 ELSE baseline_play_count END AS baseline_play_count,
+               coalesce(:date_added, date_added) AS date_added,
+               CASE WHEN :created THEN coalesce(:last_played, baseline_last_played)
+                 ELSE baseline_last_played END AS baseline_last_played,
+               coalesce(artwork_id, :artwork_id) AS artwork_id,
+               :rb_track_id AS rb_track_id, coalesce(:rb_location, rb_location) AS rb_location
+             FROM track WHERE id = :id)
+             UPDATE track SET (",
+            update_cols!(),
+            ", updated_at) = (SELECT ",
+            update_cols!(),
+            ", :now FROM new)
+             WHERE id = :id AND (",
+            update_cols!(),
+            ") IS NOT (SELECT ",
+            update_cols!(),
+            " FROM new)",
+        ))?
         .execute(named_params! {
             ":id": id, ":path": path, ":missing": missing, ":size": size, ":mtime": mtime,
             ":hash": info.map(|i| &i.hash), ":kind": probe.as_ref().map(|p| p.kind),
@@ -796,11 +898,9 @@ impl Import<'_> {
     fn write_grid(&mut self, tx: &Transaction<'_>, id: TrackId, t: &XmlTrack) -> Result<()> {
         // A grid edited or locked in reks stays (D10, "Grid editing"):
         // rekordbox rows beside manual ones would mix two grids.
-        let owned: bool = tx.query_row(
-            &format!("SELECT {USER_OWNED} FROM track WHERE id = ?1"),
-            [id],
-            |r| r.get(0),
-        )?;
+        let owned: bool = tx
+            .prepare_cached(&format!("SELECT {USER_OWNED} FROM track WHERE id = ?1"))?
+            .query_row([id], |r| r.get(0))?;
         if owned {
             if !t.tempos.is_empty() {
                 self.warn(

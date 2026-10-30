@@ -190,7 +190,7 @@ pub struct Sort { pub column: SortColumn, pub descending: bool }
 pub mod scan {   // folder import
     pub fn scan(roots: &[PathBuf], lib: &Library, cancel: &CancelToken,
                 progress: impl Fn(&ScanEvent)) -> Result<ScanReport>;
-    // ScanEvent::{Found, Progress{done,total}, Added, Updated, Moved{id,from,to}, Missing, Error{path,message}}
+    // ScanEvent::{Progress{done,total} (every 50 files), Added, Updated, Moved{id,from,to}, Missing, Error{path,message}}
     // (struct variants, serialised with a "type" tag for the Tauri channel)
 }
 

@@ -209,7 +209,7 @@ export interface Facets {
 }
 
 export type ScanEvent =
-  | { type: "found"; path: string }
+  /** Sent every 50 files and after the last. */
   | { type: "progress"; done: number; total: number }
   | { type: "added"; id: number; path: string }
   | { type: "updated"; id: number; path: string }

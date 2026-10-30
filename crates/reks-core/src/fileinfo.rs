@@ -58,22 +58,20 @@ pub(crate) fn read_file_hashed(
     hash: String,
 ) -> Result<FileInfo, String> {
     let p = Path::new(path);
-    let probe = reks_audio::probe(p).map_err(|e| e.to_string())?;
-    let tags = reks_audio::tags(p).unwrap_or_else(|e| {
+    let mut probe = reks_audio::probe_headers(p).map_err(|e| e.to_string())?;
+    // One lofty parse for tags, artwork and bit rate (P3-9 of the perf audit).
+    let meta = reks_audio::metadata(p).unwrap_or_else(|e| {
         tracing::warn!(path, error = %e, "no tags read");
-        reks_audio::Tags::default()
+        reks_audio::Metadata::default()
     });
-    let artwork_id = match reks_audio::embedded_artwork(p) {
-        Ok(Some(pic)) => lib.store_artwork(&pic.data).unwrap_or_else(|e| {
+    probe.bit_rate_kbps = probe.bit_rate_kbps.or(meta.bit_rate_kbps);
+    let artwork_id = meta.artwork.and_then(|pic| {
+        lib.store_artwork(&pic.data).unwrap_or_else(|e| {
             tracing::warn!(path, error = %e, "artwork not stored");
             None
-        }),
-        Ok(None) => None,
-        Err(e) => {
-            tracing::warn!(path, error = %e, "no artwork read");
-            None
-        }
-    };
+        })
+    });
+    let tags = meta.tags;
     Ok(FileInfo {
         size,
         mtime,
