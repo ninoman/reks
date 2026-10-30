@@ -26,6 +26,7 @@ pair passes WCAG AA in every theme (body text 7:1 or more, filled buttons
 | Path | What |
 |---|---|
 | [`src/styles/tokens.css`](../src/styles/tokens.css) | **The only place that sets the look**: palettes, semantic colours (one block per theme), type, radii, shadow, layers, motion, control sizes, row heights |
+| [`src/lib/ipc.ts`](../src/lib/ipc.ts) | The only module that calls Tauri: commands, and the native pickers `pickFolder`, `pickFile`, `pickSavePath` (they return `null` when cancelled); components and stores never import `@tauri-apps/*` |
 | [`src/lib/theme.ts`](../src/lib/theme.ts) | Puts the theme on `<html>` (`data-theme`); `startThemeSync` in `store/settings.ts` calls it when the setting changes |
 | [`src/styles/base.css`](../src/styles/base.css) | Our reset (instead of Tailwind preflight) and element defaults (body, `user-select: none` for chrome, focus outline) |
 | [`src/styles/index.css`](../src/styles/index.css) | Entry: Tailwind, tokens, base |

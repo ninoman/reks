@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DeviceInfo, HistoryScan, PlannedSession } from "../lib/ipc";
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 vi.mock("../lib/ipc", () => ({
   devicesList: vi.fn(),
   historyScan: vi.fn(),
+  pickFolder: vi.fn(),
   historyImport: vi.fn(),
   historySessions: vi.fn(),
   historySession: vi.fn(),

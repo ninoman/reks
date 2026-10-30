@@ -8,9 +8,8 @@
  * from the stick's OneLibrary database (read with the OneLibrary key) carry a
  * OneLibrary badge; a database that could not be read is said so.
  */
-import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useState } from "react";
 
+import { useEffect, useState } from "react";
 import {
   type DeviceInfo,
   devicesList,
@@ -20,6 +19,7 @@ import {
   historyScan,
   type OneLibraryStatus,
   type PlannedSession,
+  pickFolder,
   type ScanSource,
 } from "../lib/ipc";
 import { useHistory } from "../store/history";
@@ -82,9 +82,9 @@ function ImportDialog() {
     }
   }
 
-  async function pickFolder() {
-    const dir = await open({ directory: true, title: "Stick or stick backup folder" });
-    if (typeof dir === "string") await scan({ kind: "folder", path: dir });
+  async function chooseFolder() {
+    const dir = await pickFolder("Stick or stick backup folder");
+    if (dir) await scan({ kind: "folder", path: dir });
   }
 
   async function runImport(s: HistoryScan) {
@@ -126,7 +126,7 @@ function ImportDialog() {
               devices={devices}
               busy={step.kind === "scanning"}
               onStick={(device) => void scan({ kind: "stick", device })}
-              onFolder={() => void pickFolder()}
+              onFolder={() => void chooseFolder()}
             />
           )}
           {plan !== null && (

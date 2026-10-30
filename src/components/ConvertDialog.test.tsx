@@ -9,17 +9,17 @@ vi.mock("../lib/ipc", async (original) => ({
   convertPlan: vi.fn(),
   convertApply: vi.fn(),
   convertCancel: vi.fn(),
+  pickFolder: vi.fn(),
   libraryQuery: vi.fn(),
   libraryFacets: vi.fn(),
   playlistsGet: vi.fn(),
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
 const ipc = await import("../lib/ipc");
 const convertPlan = vi.mocked(ipc.convertPlan);
 const convertApply = vi.mocked(ipc.convertApply);
 const convertCancel = vi.mocked(ipc.convertCancel);
-const pickFolder = vi.mocked((await import("@tauri-apps/plugin-dialog")).open);
+const pickFolder = vi.mocked(ipc.pickFolder);
 vi.mocked(ipc.libraryQuery).mockResolvedValue({ rows: [], total: 0 } as never);
 vi.mocked(ipc.libraryFacets).mockResolvedValue({
   genres: [],

@@ -5,11 +5,11 @@
  * totals come from Rust (`convert_plan` → `ConvertDryRun`, `convert_apply`
  * → `ConvertReportView`); this lays them out.
  */
-import { open } from "@tauri-apps/plugin-dialog";
-import type { ReactNode } from "react";
 
+import type { ReactNode } from "react";
 import { cn } from "../lib/cn";
 import type { ConvertDepth, ConvertFact, ConvertSkip, ConvertTarget } from "../lib/ipc";
+import { pickFolder } from "../lib/ipc";
 import { type Preset, presetOf, type RateChoice, useConverter } from "../store/converter";
 import { ErrorMessage } from "./ErrorMessage";
 import { Button } from "./ui/Button";
@@ -163,8 +163,8 @@ function SettingsStep() {
   const preset = presetOf(s);
 
   async function chooseFolder() {
-    const dir = await open({ directory: true, title: "Folder for the converted files" });
-    if (typeof dir === "string") c.set({ folder: dir });
+    const dir = await pickFolder("Folder for the converted files");
+    if (dir) c.set({ folder: dir });
   }
 
   return (

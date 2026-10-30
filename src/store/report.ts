@@ -4,10 +4,10 @@
  * the build has no relay or sending fails). Nothing leaves the machine until
  * the user presses Send.
  */
-import { save } from "@tauri-apps/plugin-dialog";
-import { create } from "zustand";
 
+import { create } from "zustand";
 import {
+  pickSavePath,
   type Report,
   type ReportDraft,
   type ReportKind,
@@ -130,10 +130,10 @@ export const useReport = create<ReportState>()((set, get) => ({
   },
 
   async saveToFile() {
-    const path = await save({
+    const path = await pickSavePath({
       title: "Save report",
       defaultPath: "reks-report.txt",
-      filters: [{ name: "Text", extensions: ["txt"] }],
+      filter: { name: "Text", extensions: ["txt"] },
     });
     if (path === null) return;
     try {
