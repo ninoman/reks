@@ -1,8 +1,7 @@
 # Phase 5 — Mix-prep mixer (decks, beat sync, Xone:92-style mixer)
 
 Status: in progress (tasks 1–9 and 12–25 done by 2026-10-23; 10 key lock
-evaluation (master tempo works on `timestretch`, engine choice pending
-listening) and 11 listening checklist open). Runs before Engine DJ export
+evaluation done 2026-10-30, Signalsmith; 11 listening checklist open). Runs before Engine DJ export
 (Phase 6) (D21, reordered 2026-10-20). Depends on: Phase 1
 (library, decode, imported grids) and Phase 3 (waveform columns, grid editor).
 Read `docs/decisions.md` D5, D10, D21 and `docs/research.md` §9 first.
@@ -216,10 +215,11 @@ pub enum Control {
    picks 3-band, RGB or Blue for the deck waveforms and overviews, applied
    live ([`../ui.md`](../ui.md#mix-panel-phase-5); `display.deck_waveform`
    in `reks-core` `settings.rs`). Verified in the browser with the dev mock.
-10. **Key lock evaluation** ([#25](https://github.com/ninoman/reks/issues/25)): listen to `timestretch`, `signalsmith-stretch` and
+10. [x] **Key lock evaluation** ([#25](https://github.com/ninoman/reks/issues/25)): listen to `timestretch`, `signalsmith-stretch` and
     `rubberband` at ±6% on three techno tracks and one vocal track; record the
     choice in D21; add it as a per-deck toggle, or record why not.
-    Partial (2026-10-21): research and render tool done, listening pending.
+    Done 2026-10-30: Signalsmith Stretch, one engine, no per-deck engine
+    setting (D21). Research and render tool 2026-10-21.
     Licences, builds and maintenance: [R§9.3](../research.md). All three are
     GPLv3-compatible (timestretch and Signalsmith MIT, Rubber Band
     GPL-2.0-or-later). `reks keylock-render` ([`keylock/`](../../crates/reks-cli/src/keylock/mod.rs))
@@ -266,36 +266,30 @@ pub enum Control {
     for kick smear, hi-hat flamming, bass warble, phasiness on pads, and
     pitch wobble or doubling on the vocal. Score 1–5 (5 = sounds untouched).
 
-    | Track (genre) | Engine | 0.94 | 1.06 | Notes |
-    |---|---|---|---|---|
-    | techno 1 | timestretch-keylock | | | |
-    | techno 1 | timestretch-wide | | | |
-    | techno 1 | signalsmith | | | |
-    | techno 1 | rubberband-r3 | | | |
-    | techno 1 | rubberband-r2 | | | |
-    | techno 2 | timestretch-keylock | | | |
-    | techno 2 | timestretch-wide | | | |
-    | techno 2 | signalsmith | | | |
-    | techno 2 | rubberband-r3 | | | |
-    | techno 2 | rubberband-r2 | | | |
-    | techno 3 | timestretch-keylock | | | |
-    | techno 3 | timestretch-wide | | | |
-    | techno 3 | signalsmith | | | |
-    | techno 3 | rubberband-r3 | | | |
-    | techno 3 | rubberband-r2 | | | |
-    | vocal 1 | timestretch-keylock | | | |
-    | vocal 1 | timestretch-wide | | | |
-    | vocal 1 | signalsmith | | | |
-    | vocal 1 | rubberband-r3 | | | |
-    | vocal 1 | rubberband-r2 | | | |
+    Results (maintainer, 2026-10-30, blind: five engines behind letters
+    shuffled per track, 90 s from 1:00; varispeed and 1.00 as references;
+    nothing reported at 1.00). Scores 0.94 / 1.06:
 
-    Listener, date, headphones/speakers: _______. Choice: pending (D21).
+    | Engine | psy, rolling bass | techno, punchy kick | trance, pads | vocal | Mean |
+    |---|---|---|---|---|---|
+    | **signalsmith** | 4 / 4 | **5 / 5** | **5 / 5** | 3 / 3 | **4.25** |
+    | rubberband-r3 | **5 / 5** | 3 / 2 | 3 / 3 | **4 / 4** | 3.63 |
+    | rubberband-r2 | 3 / 3 | 4 / 3 | 4 / 4 | 3 / 4 | 3.5 |
+    | timestretch-keylock | 2 / 2 | 2 / 4 | 2 / 2 | 2 / 2 | 2.25 |
+    | timestretch-wide | 1 / 1 | 1 / 1 | 1 / 1 | 2 / 2 | 1.25 |
+
+    Choice: Signalsmith (D21). The deck's key lock head moved to it:
+    [`keylock.rs`](../../crates/reks-mix/src/keylock.rs), with a test that a
+    burst after a jump is heard where the position says (within 1 ms at
+    0.94 / 1.00 / 1.06; measured ≤ 0.3 ms). Building now needs a C++ compiler
+    and libclang (README; CI installs `libclang-dev`; Windows UNVERIFIED
+    until a 3-OS run).
 
     Master tempo on the decks (2026-10-23, maintainer report "M does not
     work"): M was a disabled placeholder and the engine had no stretcher.
     Now **M** toggles `Control::MasterTempo`; the deck plays through a key
-    lock head on `timestretch` Keylock (D21, proposed until the listening
-    above picks an engine). Tests: `crates/reks-mix/tests/master_tempo.rs`
+    lock head (on `timestretch` Keylock until the listening above picked
+    Signalsmith, 2026-10-30). Tests: `crates/reks-mix/tests/master_tempo.rs`
     (90 / 440 / 1,000 Hz tones at ±6%: key held within 0.5% with M, shifted
     by the tempo without; head moves at the tempo; toggling and seeking
     don't click), `keylock.rs` unit test, no-allocation callback test in
