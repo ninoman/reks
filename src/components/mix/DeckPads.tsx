@@ -8,9 +8,10 @@
  * way (time, LOOP / AUTO for a memory loop, name); a set pad calls the cue,
  * an empty one sets one at the playhead, and right-click has
  * jump, rename, AUTO (memory loops) and delete. BEAT JUMP: split pads, back on the
- * left, forward on the right. BEAT LOOP: a loop of that size, the active
- * size lit (press it again to leave the loop). The size used last has a
- * heavy outline: the keys use it. Jumps and loops wait for a grid.
+ * left, forward on the right: a one-shot action, so no active state; the
+ * size used last (the keys use it) only shows its shortcut in the tooltip.
+ * BEAT LOOP: a loop of that size, the active size lit (press it again to
+ * leave the loop), the size used last with a heavy outline. Jumps and loops wait for a grid.
  */
 import { type CSSProperties, useState } from "react";
 
@@ -353,17 +354,16 @@ function JumpPads({
 }: DeckPadsProps & { sizes: readonly number[] }) {
   const n = deck + 1;
   return sizes.map((b) => {
-    const marked = b === lastJump;
+    const last = b === lastJump;
     return (
       <SplitPad
         key={b}
         label={formatBeats(b)}
-        marked={marked}
         disabled={!loaded || !grid}
         backLabel={`Deck ${n} jump back ${beatsWord(b)}`}
         forwardLabel={`Deck ${n} jump forward ${beatsWord(b)}`}
-        backShortcut={marked ? keyFor({ type: "jump", dir: -1 }) : undefined}
-        forwardShortcut={marked ? keyFor({ type: "jump", dir: 1 }) : undefined}
+        backShortcut={last ? keyFor({ type: "jump", dir: -1 }) : undefined}
+        forwardShortcut={last ? keyFor({ type: "jump", dir: 1 }) : undefined}
         onBack={() => onJump(-b)}
         onForward={() => onJump(b)}
       />
