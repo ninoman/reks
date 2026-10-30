@@ -13,6 +13,7 @@ use reks_core::{CancelToken, DuplicateMode, Library, ManifestItemKind, ManifestR
 use super::*;
 use crate::apply::{apply, ApplyEnv, StickCheck};
 use crate::device::FsKind;
+use crate::onelibrary::NoWriter;
 use crate::plan::{self, ExportOptions, MissingAnalysis, NoAnlz};
 use crate::testutil;
 use crate::writer::BakenWriter;
@@ -109,10 +110,11 @@ impl World {
     fn plan(&self, sel: &Selection) -> ExportPlan {
         let opts = ExportOptions {
             missing_analysis: MissingAnalysis::Generate,
+            onelibrary: false,
             ..ExportOptions::default()
         };
         let sources = plan::load(&self.lib, sel).unwrap();
-        plan::plan_sources(
+        let mut p = plan::plan_sources(
             sources,
             &self.info(),
             Some(SERIAL.into()),
@@ -120,7 +122,9 @@ impl World {
             &NoAnlz,
             &NoAnlz,
         )
-        .unwrap()
+        .unwrap();
+        plan::plan_onelibrary(&mut p, &NoWriter, None, &self.lib).unwrap();
+        p
     }
 
     /// A Sync: the profile's plan written by baken through `apply`.
@@ -342,6 +346,19 @@ fn rename_and_target() {
     let mut odd = dev;
     odd.target = "Cdj9000".into();
     assert_eq!(target(&odd), TargetProfile::Generic);
+}
+
+#[test]
+fn target_for_serial_falls_back_to_none() {
+    let w = World::new();
+    let dev = w.device();
+    let serial = dev.volume_serial.clone().unwrap();
+    assert_eq!(
+        target_for_serial(&w.lib, Some(&serial)),
+        Some(TargetProfile::Cdj3000)
+    );
+    assert_eq!(target_for_serial(&w.lib, Some("0000-0000")), None);
+    assert_eq!(target_for_serial(&w.lib, None), None);
 }
 
 // ---- profile → selection → plan -------------------------------------------

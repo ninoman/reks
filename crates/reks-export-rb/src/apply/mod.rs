@@ -2,9 +2,10 @@
 //! reks that writes to a stick. It runs a planned export in this order and
 //! stops at the first step that fails:
 //!
-//! 1. **Pre-flight**: the plan is not blocked, has tracks and, with the
-//!    OneLibrary option on, has its OneLibrary step and a writer in
-//!    [`ApplyEnv::onelibrary`]; the stick is still there ([`StickCheck`]):
+//! 1. **Pre-flight**: the plan is not blocked, has tracks, went through the
+//!    OneLibrary step ([`crate::plan::plan_onelibrary`]) and, when that step
+//!    writes `exportLibrary.db`, has a writer in [`ApplyEnv::onelibrary`];
+//!    the stick is still there ([`StickCheck`]):
 //!    mounted at the plan's root, with the same volume serial; enough free space for [`ExportPlan::bytes_to_write`];
 //!    the history on the stick is what the dry run showed (a stick played
 //!    since needs a new plan, or its new history would go without backup). A
@@ -27,10 +28,13 @@
 //!    after a clean write: with failed tracks or a writer error it would not
 //!    match `export.pdb`, so it is skipped (an error in the report).
 //! 6. **fsync** of the databases, the ANLZ files and the copied audio, then
-//!    one drive-cache flush for the volume (`apply/flush.rs`): all of it is on the
-//!    media before validation reads it back and the manifest records it.
-//! 7. **Validate**: [`validate`] reads the stick back.
-//! 8. **Manifest** (task 13): `Library::replace_manifest` with the read-back
+//!    one drive-cache flush for the volume (`apply/flush.rs`).
+//! 7. **Delete** exactly [`ExportPlan::deletes`], now that the new files are
+//!    on the stick: a listed file that changed size since the dry run stays
+//!    (an error in the report), and nothing the dry run did not list goes
+//!    (review F16). Then the folders are flushed.
+//! 8. **Validate**: [`validate`] reads the stick back.
+//! 9. **Manifest** (task 13): `Library::replace_manifest` with the read-back
 //!    rows, only when the export is clean (no failed track, no finding, no
 //!    error after the database was written).
 //!
@@ -46,7 +50,7 @@
 //! - `Ok` with [`ExportStatus::Success`] or [`ExportStatus::Problems`]: the
 //!   stick has a new `export.pdb`. `Problems` lists what went wrong: tracks
 //!   that failed alone (the writer goes on without them), validator findings,
-//!   errors after the database was replaced (prune, OneLibrary, fsync,
+//!   errors after the database was replaced (OneLibrary, fsync, deletes,
 //!   validation I/O, manifest).
 
 use std::fs;
@@ -59,9 +63,11 @@ use serde::Serialize;
 use crate::device::{self, DeviceError};
 use crate::history::{self, BackupReport, HistoryError, HistoryPolicy, StickHistory};
 use crate::onelibrary::{OneLibraryExport, OneLibraryPlan, OneLibraryWritten};
-use crate::plan::{anlz_dir, on_stick, AnlzSource, ExportPlan, FileOp};
+use crate::plan::{on_stick, AnlzSource, ExportPlan, FileOp};
 use crate::validate::{self, ValidationReport};
-use crate::writer::{ExportEvent, RekordboxWriter, WriterError, WriterReport};
+use crate::writer::{
+    anlz_file, anlz_slots, ExportEvent, RekordboxWriter, WriterError, WriterReport,
+};
 
 /// How [`apply`] makes sure the plan's stick is still there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -122,6 +128,8 @@ pub enum ApplyStage {
     OneLibrary,
     /// Flushing written files to the stick.
     Sync,
+    /// Deleting the plan's stale files.
+    Delete,
     /// Reading the stick back.
     Validate,
     /// Recording the export manifest.
@@ -220,6 +228,8 @@ pub struct ExportReport {
     pub manifest: ManifestStatus,
     /// Manifest rows stored (0 unless [`ManifestStatus::Recorded`]).
     pub manifest_rows: usize,
+    /// Files of [`ExportPlan::deletes`] removed.
+    pub stale_removed: usize,
     /// Errors after the new `export.pdb` was written.
     pub errors: Vec<String>,
 }
@@ -238,6 +248,7 @@ impl ExportReport {
             validation: None,
             manifest: ManifestStatus::Skipped,
             manifest_rows: 0,
+            stale_removed: 0,
             errors: Vec::new(),
         }
     }
@@ -296,12 +307,13 @@ pub enum ApplyError {
     /// The writer stopped before replacing `export.pdb`.
     #[error(transparent)]
     Writer(WriterError),
-    /// The plan has the OneLibrary option on but [`ApplyEnv::onelibrary`]
-    /// is `None` (no writer or no key).
+    /// The plan has a OneLibrary step but [`ApplyEnv::onelibrary`] is
+    /// `None` (no writer or no key).
     #[error("this export cannot write exportLibrary.db; turn the OneLibrary export off")]
     NoOneLibraryWriter,
-    /// The plan has the OneLibrary option on but no OneLibrary step (it was
-    /// read back from JSON); plan again.
+    /// [`plan_onelibrary`](crate::plan::plan_onelibrary) did not run on the
+    /// plan, so it may delete the stick's `exportLibrary.db` unannounced;
+    /// plan again.
     #[error("the plan has no OneLibrary step; plan the export again")]
     NoOneLibraryPlan,
 }
@@ -419,6 +431,11 @@ pub fn apply(
         report.errors.push(e);
     }
 
+    stage(ApplyStage::Delete);
+    let (removed, errors) = delete_stale(plan);
+    report.stale_removed = removed;
+    report.errors.extend(errors);
+
     stage(ApplyStage::Validate);
     match validate::validate(root, plan) {
         Ok(v) => report.validation = Some(v),
@@ -472,13 +489,11 @@ fn preflight(plan: &ExportPlan, env: &ApplyEnv<'_>) -> Result<Vec<ApplyWarning>,
     if plan.tracks.is_empty() {
         return Err(ApplyError::NothingToExport);
     }
-    if plan.options.onelibrary {
-        if onelibrary_plan(plan).is_none() {
-            return Err(ApplyError::NoOneLibraryPlan);
-        }
-        if env.onelibrary.is_none() {
-            return Err(ApplyError::NoOneLibraryWriter);
-        }
+    if !plan.onelibrary_planned {
+        return Err(ApplyError::NoOneLibraryPlan);
+    }
+    if onelibrary_plan(plan).is_some() && env.onelibrary.is_none() {
+        return Err(ApplyError::NoOneLibraryWriter);
     }
     let root = plan.device.mount_point.as_path();
     let free = match env.stick {
@@ -629,11 +644,12 @@ fn is_rekordbox(process_name: &str) -> bool {
         || process_name.eq_ignore_ascii_case("rekordbox.exe")
 }
 
-/// Flushes what the writer wrote: everything under `PIONEER/rekordbox` (and
-/// `PIONEER/Artwork` with artwork on), each track's ANLZ files, and audio
-/// copied this run, then the drive cache once. Directory syncs are best
-/// effort (some file systems refuse them); a file that won't sync, or a
-/// failed drive flush, is an error.
+/// Flushes what the writer wrote: everything under `PIONEER/rekordbox`
+/// (`export.pdb` among it; and `PIONEER/Artwork` with artwork on), each
+/// track's ANLZ files in its slot ([`anlz_slots`]), and audio copied this
+/// run, then the drive cache once. Directory syncs are best effort (some
+/// file systems refuse them); a file that won't sync, or a failed drive
+/// flush, is an error.
 fn sync_written(plan: &ExportPlan) -> Result<(), String> {
     let root = plan.device.mount_point.as_path();
     let mut files = Vec::new();
@@ -655,19 +671,21 @@ fn sync_written(plan: &ExportPlan) -> Result<(), String> {
             }
         }
     }
+    let slots = anlz_slots(plan);
     for t in &plan.tracks {
         if !t.on_stick {
             files.push(on_stick(root, &t.dst_rel));
         }
-        if t.anlz_source != AnlzSource::None {
-            let anlz = on_stick(root, &anlz_dir(&t.dst_rel));
+        if let (true, Some((dir, index))) =
+            (t.anlz_source != AnlzSource::None, slots.get(&t.track_id))
+        {
             for ext in ["DAT", "EXT", "2EX"] {
-                let f = anlz.join(format!("ANLZ0000.{ext}"));
+                let f = on_stick(root, &anlz_file(dir, *index, ext));
                 if f.is_file() {
                     files.push(f);
                 }
             }
-            dirs.push(anlz);
+            dirs.push(on_stick(root, dir));
         }
     }
     let mut failed = Vec::new();
@@ -705,6 +723,65 @@ fn sync_written(plan: &ExportPlan) -> Result<(), String> {
 }
 
 mod flush;
+
+/// Removes [`ExportPlan::deletes`] and the macOS `._` file beside each (FAT
+/// keeps extended attributes there), then flushes their folders. A file
+/// already gone counts as removed; one whose size changed since the dry run,
+/// or that is no longer a file, stays and is an error: the dry run did not
+/// show the user that file. Returns the count removed and the errors.
+fn delete_stale(plan: &ExportPlan) -> (usize, Vec<String>) {
+    let root = plan.device.mount_point.as_path();
+    let mut removed = 0;
+    let mut errors = Vec::new();
+    let mut dirs = Vec::new();
+    for op in &plan.deletes {
+        let path = on_stick(root, &op.dst_rel);
+        match fs::symlink_metadata(&path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                removed += 1;
+                continue;
+            }
+            Err(e) => {
+                errors.push(format!("{}: {e}", path.display()));
+                continue;
+            }
+            Ok(m) if !m.is_file() || m.len() != op.bytes => {
+                errors.push(format!(
+                    "{} changed since the dry run; left on the stick",
+                    op.dst_rel
+                ));
+                continue;
+            }
+            Ok(_) => {}
+        }
+        match fs::remove_file(&path) {
+            Ok(()) => removed += 1,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => removed += 1,
+            Err(e) => {
+                errors.push(format!("cannot delete {}: {e}", path.display()));
+                continue;
+            }
+        }
+        if let (Some(dir), Some(name)) = (path.parent(), path.file_name()) {
+            let sidecar = dir.join(format!("._{}", name.to_string_lossy()));
+            if let Err(e) = fs::remove_file(&sidecar) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    tracing::debug!(path = %sidecar.display(), error = %e, "AppleDouble file kept");
+                }
+            }
+            if !dirs.iter().any(|d: &PathBuf| d == dir) {
+                dirs.push(dir.to_path_buf());
+            }
+        }
+    }
+    for d in &dirs {
+        if let Err(e) = fs::File::open(d).and_then(|dir| dir.sync_all()) {
+            tracing::debug!(dir = %d.display(), error = %e, "directory sync refused");
+        }
+    }
+    tracing::debug!(removed, errors = errors.len(), "stale files deleted");
+    (removed, errors)
+}
 
 #[cfg(test)]
 pub(crate) mod tests;

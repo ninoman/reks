@@ -8,7 +8,10 @@ use std::path::PathBuf;
 
 use proptest::prelude::*;
 use reks_core::rbxml::{self, export, ImportOptions, PrefixRemap, Selection};
-use reks_core::{GridAnchor, GridEdit, Library, TrackId};
+use reks_core::DataSource;
+use reks_core::{
+    AnalysisAnchor, AnalysisRecord, CancelToken, GridAnchor, GridEdit, Library, TrackId,
+};
 
 const XML_PREFIX: &str = "/Users/reks/Music/reks fixtures";
 
@@ -91,7 +94,7 @@ proptest! {
         rbxml::import(&parsed, &other, ImportOptions::default(), |_| {}).unwrap();
         let g = other.beatgrid(only_track(&other_dir)).unwrap();
         prop_assert_eq!(g.anchors, anchors);
-        prop_assert_eq!(g.source.as_deref(), Some("rekordbox"));
+        prop_assert_eq!(g.source, Some(DataSource::Rekordbox));
     }
 }
 
@@ -125,4 +128,95 @@ fn a_reimport_keeps_a_user_owned_grid() {
     let before = lib.beatgrid(id).unwrap();
     import_fixture(&lib);
     assert_eq!(lib.beatgrid(id).unwrap(), before);
+}
+
+/// "Add folder", the queue analyses, then "import collection.xml" (F01):
+/// the XML's grid replaces the analysis grid instead of interleaving with it.
+#[test]
+fn an_import_replaces_an_analysis_grid() {
+    let (_d, lib) = library();
+    let audio = std::fs::canonicalize(fixtures().join("audio")).unwrap();
+    reks_core::scan(&[audio], &lib, &CancelToken::new(), |_| {}).unwrap();
+    let ids = lib.analysis_pending(u32::MAX).unwrap();
+    assert!(!ids.is_empty());
+    let record = AnalysisRecord {
+        version: 1,
+        content_hash: "h".into(),
+        grid: vec![AnalysisAnchor {
+            position_ms: 7,
+            bpm_x100: 12_799,
+            beat_in_bar: 1,
+        }],
+        bpm_x100: Some(12_799),
+        key: None,
+        beat_confidence: 1.0,
+        key_confidence: 1.0,
+    };
+    for job in &ids {
+        lib.store_analysis(job.track_id, &record).unwrap();
+    }
+
+    import_fixture(&lib);
+    let (id, _) = lossless(&lib);
+    let g = lib.beatgrid(id).unwrap();
+    assert_eq!(g.source, Some(DataSource::Rekordbox));
+    assert_eq!(
+        g.anchors,
+        [GridAnchor {
+            position_ms: 0,
+            bpm_x100: 12_800,
+            beat_in_bar: 1,
+            beats_per_bar: 4,
+        }]
+    );
+    // A later analysis run keeps the rekordbox grid (D10).
+    lib.store_analysis(id, &record).unwrap();
+    assert_eq!(lib.beatgrid(id).unwrap(), g);
+}
+
+/// The library's BPM and its source for track `id`.
+fn bpm(lib: &Library, id: TrackId) -> (Option<i64>, Option<DataSource>) {
+    let t = lib.track(id).unwrap().track;
+    (t.row.bpm_x100, t.bpm_source)
+}
+
+/// F09: the BPM of an edited grid, or one set by hand, survives a re-import.
+#[test]
+fn a_reimport_keeps_a_manual_bpm() {
+    let (dir, lib) = library();
+    import_fixture(&lib);
+    let (id, _) = lossless(&lib);
+    assert_eq!(bpm(&lib, id), (Some(12_800), Some(DataSource::Rekordbox)));
+    lib.edit_beatgrid(
+        id,
+        GridEdit::SetAnchors {
+            anchors: vec![GridAnchor {
+                position_ms: 0,
+                bpm_x100: 6_400,
+                beat_in_bar: 1,
+                beats_per_bar: 4,
+            }],
+        },
+    )
+    .unwrap();
+    assert_eq!(bpm(&lib, id), (Some(6_400), Some(DataSource::Manual)));
+    import_fixture(&lib);
+    assert_eq!(bpm(&lib, id), (Some(6_400), Some(DataSource::Manual)));
+
+    // A manual BPM beside a rekordbox grid stays too; the grid is replaced.
+    lib.edit_beatgrid(id, GridEdit::Reset { section: None })
+        .unwrap();
+    rusqlite::Connection::open(dir.path().join("reks.sqlite"))
+        .unwrap()
+        .execute(
+            "UPDATE track SET bpm_x100 = 12900, bpm_source = 'manual' WHERE id = ?1",
+            [id],
+        )
+        .unwrap();
+    import_fixture(&lib);
+    assert_eq!(bpm(&lib, id), (Some(12_900), Some(DataSource::Manual)));
+    assert_eq!(
+        lib.beatgrid(id).unwrap().source,
+        Some(DataSource::Rekordbox)
+    );
 }

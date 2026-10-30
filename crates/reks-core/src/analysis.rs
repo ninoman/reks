@@ -35,16 +35,8 @@ use crate::error::{Error, Result};
 use crate::fileinfo;
 use crate::keys::Key;
 use crate::scan::TrackId;
+use crate::source::{AnalysisSource, DataSource};
 use crate::timefmt::now_utc;
-
-/// `beatgrid.source` and `key_source`/`bpm_source` for analyser output.
-pub const SOURCE_ANALYSIS: &str = "analysis";
-/// `beatgrid.source` and `key_source`/`bpm_source` for user edits.
-pub const SOURCE_MANUAL: &str = "manual";
-/// `analysis_source` of a track whose rekordbox analysis was mapped.
-pub const SOURCE_REKORDBOX: &str = "rekordbox";
-/// `analysis_source` of a track reks's analyser ran on.
-pub const SOURCE_REKS: &str = "reks";
 
 /// One track to analyse.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,9 +123,10 @@ pub fn current_content_hash(path: &Path, stored: Option<&StoredFile>) -> Result<
 /// failed run counts as a run, so failures are not retried until either
 /// changes; missing files are skipped. A track whose rekordbox analysis was
 /// mapped into the cache (`analysis_source = 'rekordbox'`) is done while its
-/// file is unchanged, whatever the analyser version (D10).
+/// file is unchanged, whatever the analyser version (D10). Parameters: see
+/// [`pending_params`].
 const PENDING_WHERE: &str = "missing = 0
-       AND NOT (analysis_source IS 'rekordbox' AND content_hash IS NOT NULL
+       AND NOT (analysis_source IS ?2 AND content_hash IS NOT NULL
                 AND analysis_hash IS content_hash)
        AND (analysis_version IS NULL OR analysis_version <> ?1
             OR (content_hash IS NOT NULL AND analysis_hash IS NOT content_hash))";
@@ -154,7 +147,12 @@ fn stored_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<(TrackId, StoredFi
 
 /// Whether the track has a rekordbox grid (SQL on `track`).
 const HAS_RB_GRID: &str = "EXISTS (SELECT 1 FROM beatgrid
-                      WHERE beatgrid.track_id = track.id AND beatgrid.source = 'rekordbox')";
+                      WHERE beatgrid.track_id = track.id AND beatgrid.source = ?3)";
+
+/// `?1` analyser version, `?2` mapped analysis, `?3` rekordbox grid rows.
+fn pending_params(version: u32) -> (u32, AnalysisSource, DataSource) {
+    (version, AnalysisSource::Rekordbox, DataSource::Rekordbox)
+}
 
 /// Pending tracks; those with a rekordbox grid come last: the library
 /// already has their grid and BPM from the XML import, which analysis keeps
@@ -170,9 +168,9 @@ fn mapping_sql() -> String {
     format!(
         "SELECT id, path, duration_ms,
                 (SELECT position_ms FROM beatgrid b WHERE b.track_id = track.id
-                   AND b.source = 'rekordbox' ORDER BY position_ms LIMIT 1),
+                   AND b.source = ?3 ORDER BY position_ms LIMIT 1),
                 (SELECT bpm_x100 FROM beatgrid b WHERE b.track_id = track.id
-                   AND b.source = 'rekordbox' ORDER BY position_ms LIMIT 1)
+                   AND b.source = ?3 ORDER BY position_ms LIMIT 1)
          FROM track WHERE {PENDING_WHERE} AND key IS NOT NULL AND {HAS_RB_GRID}
          ORDER BY id"
     )
@@ -215,7 +213,7 @@ impl Library {
     pub fn analysis_pending(&self, version: u32) -> Result<Vec<AnalysisJob>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&pending_sql())?;
-        let rows = stmt.query_map([version], |r| {
+        let rows = stmt.query_map(pending_params(version), |r| {
             Ok(AnalysisJob {
                 track_id: r.get(0)?,
                 path: r.get(1)?,
@@ -244,7 +242,7 @@ impl Library {
     pub fn mapping_candidates(&self, version: u32) -> Result<Vec<MappingCandidate>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(&mapping_sql())?;
-        let rows = stmt.query_map([version], |r| {
+        let rows = stmt.query_map(pending_params(version), |r| {
             Ok(MappingCandidate {
                 track_id: r.get(0)?,
                 path: r.get(1)?,
@@ -267,7 +265,7 @@ impl Library {
                     analysis_hash = ?3, content_hash = ?3, analysis_error = NULL,
                     beat_confidence = NULL, key_confidence = NULL, analysed_at = ?4
              WHERE id = ?1",
-            params![id, SOURCE_REKORDBOX, content_hash, now_utc()],
+            params![id, AnalysisSource::Rekordbox, content_hash, now_utc()],
         )?;
         if n == 0 {
             return Err(Error::TrackNotFound(id));
@@ -298,12 +296,19 @@ impl Library {
         // Without a hash of our own (the file could not be read), take the
         // scan's, so the pending query doesn't pick the track up again at once.
         let n = conn.execute(
-            "UPDATE track SET analysis_version = ?2, analysis_source = 'reks',
+            "UPDATE track SET analysis_version = ?2, analysis_source = ?6,
                     analysis_hash = coalesce(?3, content_hash),
                     content_hash = coalesce(?3, content_hash),
                     analysis_error = ?4, analysed_at = ?5
              WHERE id = ?1",
-            params![id, version, content_hash, message, now_utc()],
+            params![
+                id,
+                version,
+                content_hash,
+                message,
+                now_utc(),
+                AnalysisSource::Reks
+            ],
         )?;
         if n == 0 {
             return Err(Error::TrackNotFound(id));
@@ -313,8 +318,8 @@ impl Library {
 }
 
 fn store(conn: &Connection, id: TrackId, rec: &AnalysisRecord) -> Result<StoreOutcome> {
-    let (key_source, bpm_source, grid_locked): (Option<String>, Option<String>, bool) = conn
-        .query_row(
+    let (key_source, bpm_source, grid_locked): (Option<DataSource>, Option<DataSource>, bool) =
+        conn.query_row(
             "SELECT key_source, bpm_source, grid_locked FROM track WHERE id = ?1",
             [id],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
@@ -325,7 +330,7 @@ fn store(conn: &Connection, id: TrackId, rec: &AnalysisRecord) -> Result<StoreOu
 
     let foreign_rows: i64 = conn.query_row(
         "SELECT count(*) FROM beatgrid WHERE track_id = ?1 AND source <> ?2",
-        params![id, SOURCE_ANALYSIS],
+        params![id, DataSource::Analysis],
         |r| r.get(0),
     )?;
     if foreign_rows == 0 && !grid_locked {
@@ -340,14 +345,17 @@ fn store(conn: &Connection, id: TrackId, rec: &AnalysisRecord) -> Result<StoreOu
                 a.position_ms,
                 a.bpm_x100,
                 a.beat_in_bar,
-                SOURCE_ANALYSIS
+                DataSource::Analysis
             ])?;
         }
         out.grid = true;
-        if bpm_source.as_deref() != Some(SOURCE_MANUAL) {
+        // Only fills in (D10, F12): no BPM leaves a tag or rekordbox BPM
+        // alone, and clears only an earlier analysis BPM, whose grid just went.
+        let clears_own = rec.bpm_x100.is_none() && bpm_source == Some(DataSource::Analysis);
+        if bpm_source != Some(DataSource::Manual) && (rec.bpm_x100.is_some() || clears_own) {
             conn.execute(
                 "UPDATE track SET bpm_x100 = ?2, bpm_source = ?3 WHERE id = ?1",
-                params![id, rec.bpm_x100, rec.bpm_x100.map(|_| SOURCE_ANALYSIS)],
+                params![id, rec.bpm_x100, rec.bpm_x100.map(|_| DataSource::Analysis)],
             )?;
             out.bpm = true;
         }
@@ -359,13 +367,13 @@ fn store(conn: &Connection, id: TrackId, rec: &AnalysisRecord) -> Result<StoreOu
         conn.query_row("SELECT key IS NULL FROM track WHERE id = ?1", [id], |r| {
             r.get(0)
         })?;
-    if key_empty || key_source.as_deref() == Some(SOURCE_ANALYSIS) {
+    if key_empty || key_source == Some(DataSource::Analysis) {
         conn.execute(
             "UPDATE track SET key = ?2, key_source = ?3 WHERE id = ?1",
             params![
                 id,
                 rec.key.map(Key::canonical),
-                rec.key.map(|_| SOURCE_ANALYSIS)
+                rec.key.map(|_| DataSource::Analysis)
             ],
         )?;
         out.key = true;
@@ -383,7 +391,7 @@ fn store(conn: &Connection, id: TrackId, rec: &AnalysisRecord) -> Result<StoreOu
             f64::from(rec.beat_confidence),
             f64::from(rec.key_confidence),
             now_utc(),
-            SOURCE_REKS
+            AnalysisSource::Reks
         ],
     )?;
     Ok(out)
@@ -713,6 +721,37 @@ mod tests {
         let out = lib.store_analysis(a, &record("h1")).unwrap();
         assert!(out.grid && !out.bpm);
         assert_eq!(key_bpm(&lib, a).2, Some(6400));
+    }
+
+    #[test]
+    fn an_empty_result_keeps_a_tag_or_rekordbox_bpm() {
+        let (_d, lib) = lib();
+        let empty = AnalysisRecord {
+            grid: Vec::new(),
+            bpm_x100: None,
+            ..record("h1")
+        };
+        for source in ["tag", "rekordbox"] {
+            let a = insert(&lib, &format!("/m/{source}.wav"));
+            lib.conn()
+                .unwrap()
+                .execute(
+                    "UPDATE track SET bpm_x100 = 12500, bpm_source = ?2 WHERE id = ?1",
+                    params![a, source],
+                )
+                .unwrap();
+            let out = lib.store_analysis(a, &empty).unwrap();
+            assert!(out.grid && !out.bpm, "{source}");
+            assert_eq!(key_bpm(&lib, a).2, Some(12500), "{source}");
+            assert_eq!(key_bpm(&lib, a).3.as_deref(), Some(source));
+        }
+        // An earlier analysis BPM goes with its grid.
+        let b = insert(&lib, "/m/b.wav");
+        lib.store_analysis(b, &record("h1")).unwrap();
+        let out = lib.store_analysis(b, &empty).unwrap();
+        assert!(out.grid && out.bpm);
+        assert_eq!(key_bpm(&lib, b).2, None);
+        assert!(grid(&lib, b).is_empty());
     }
 
     #[test]

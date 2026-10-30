@@ -9,11 +9,11 @@ use reks_core::rbxml::{
     self, ImportEvent, ImportOptions, ImportPreview, ImportReport, PrefixRemap,
 };
 use reks_core::{
-    ArtworkId, BackupReason, BulkOutcome, BulkPatch, CancelToken, CommentTagsPreview,
-    CommentTagsReport, Facets, FilterPreset, FilterPresetOp, FilterPresetOutcome, Library,
-    LibraryRoot, PlaylistId, PlaylistOp, PlaylistOutcome, PlaylistTree, RuleNode, ScanEvent,
-    ScanReport, Settings, SettingsPatch, TagId, TagOp, TagOutcome, TagTree, TrackDetail, TrackId,
-    TrackPage, TrackPageRows, TrackPatch, TrackQuery,
+    ArtworkId, BulkOutcome, BulkPatch, CancelToken, CommentTagsPreview, CommentTagsReport, Facets,
+    FilterPreset, FilterPresetOp, FilterPresetOutcome, Library, LibraryRoot, PlaylistId,
+    PlaylistOp, PlaylistOutcome, PlaylistTree, RuleNode, ScanEvent, ScanReport, Settings,
+    SettingsPatch, TagId, TagOp, TagOutcome, TagTree, TrackDetail, TrackId, TrackPage,
+    TrackPageRows, TrackPatch, TrackQuery,
 };
 use reks_export_onelibrary::{OneLibraryWriter, RbVersion};
 use reks_export_rb::device::{self, DeviceInfo};
@@ -27,7 +27,6 @@ use serde::Serialize;
 use tauri::ipc::{Channel, Response};
 use tauri::State;
 
-use crate::backup;
 use crate::state::AppState;
 
 /// Error returned to the UI: the message of the underlying error. Every one
@@ -319,7 +318,6 @@ pub async fn rbxml_import_start(
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .get(&path)?;
-        backup::before_bulk(lib, BackupReason::XmlImport);
         let opts = ImportOptions {
             remap,
             cancel: Some(cancel),
@@ -533,6 +531,13 @@ pub struct PlannedExport {
     dry_run: DryRun,
 }
 
+/// `ExportOptions::default()`, so the export wizard opens with the planner's
+/// defaults instead of a copy of them.
+#[tauri::command]
+pub fn export_default_options() -> ExportOptions {
+    ExportOptions::default()
+}
+
 /// Dry run of exporting `selection` to the stick mounted at `mount_point`
 /// (phase 2 task 10): plans, writes nothing, returns the plan as the UI shows
 /// it. Scans rekordbox's analysis folders, checks reks's analysis cache
@@ -617,8 +622,9 @@ pub async fn export_apply(
     let result = tauri::async_runtime::spawn_blocking(move || {
         let labels = dryrun::plan_track_labels(&lib, &plan);
         // Read again rather than kept from the dry run, so the key is in
-        // memory only while an export needs it. Without one, apply refuses.
-        let key = if plan.options.onelibrary {
+        // memory only while an export needs it. Without one, apply refuses
+        // a plan that writes exportLibrary.db.
+        let key = if plan.onelibrary.is_some() {
             one::resolve_key()
         } else {
             None
@@ -739,9 +745,6 @@ pub async fn convert_apply(
         *running = Some(cancel.clone());
     }
     let result = blocking(&state, move |lib| {
-        if plan.options.library == convert::LibraryMode::Replace {
-            backup::before_bulk(lib, BackupReason::ConvertReplace);
-        }
         let events = |e: ConvertEvent| {
             if let Err(err) = on_event.send(e) {
                 tracing::warn!(%err, "convert progress channel closed");

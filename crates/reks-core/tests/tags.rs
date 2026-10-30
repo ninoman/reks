@@ -471,6 +471,15 @@ fn track_rows_carry_tags_and_filter_by_any_tag() {
         [t[0], t[2]]
     );
     assert!(ids(vec![Filter::TagAny { ids: vec![] }]).is_empty());
+    // TagAll wants every tag; repeats count once; none listed matches nothing.
+    assert_eq!(
+        ids(vec![Filter::TagAll {
+            ids: vec![peak, warmup, peak]
+        }]),
+        [t[0]]
+    );
+    assert_eq!(ids(vec![Filter::TagAll { ids: vec![peak] }]), [t[0], t[1]]);
+    assert!(ids(vec![Filter::TagAll { ids: vec![] }]).is_empty());
     // Several TagAny filters are ANDed.
     assert_eq!(
         ids(vec![

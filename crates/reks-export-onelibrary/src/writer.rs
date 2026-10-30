@@ -19,7 +19,7 @@ use reks_export_rb::onelibrary::{
     auxiliary_files, db_write, ExistingLibrary, OneLibraryExport, OneLibraryPlan,
     OneLibraryWriteError, OneLibraryWritten, DB_PATH,
 };
-use reks_export_rb::pdbread;
+use reks_export_rb::pdb;
 use reks_export_rb::plan::{ExportPlan, PlanError};
 use reks_export_rb::validate::{locate, PDB_PATH};
 use rusqlite::Connection;
@@ -109,7 +109,7 @@ fn verify(path: &Path, key: &str, lib: &OneLibrary) -> Result<()> {
 impl OneLibraryWriter {
     /// The rows for the stick under `device_root`, from its `export.pdb`.
     pub fn rows(&self, device_root: &Path) -> Result<OneLibrary> {
-        let pdb = pdbread::read_stick(device_root).map_err(|e| Error::Pdb(e.to_string()))?;
+        let pdb = pdb::read_stick(device_root).map_err(|e| Error::Pdb(e.to_string()))?;
         Ok(build::from_pdb(&pdb, &reks_core::timefmt::today_utc()))
     }
 
@@ -238,6 +238,14 @@ impl OneLibraryExport for OneLibraryWriter {
             warnings: Vec::new(),
             errors: Vec::new(),
         })
+    }
+
+    fn existing(
+        &self,
+        device_root: &Path,
+        key: &OneLibraryKey,
+    ) -> Result<ExistingLibrary, PlanError> {
+        existing(device_root, key.expose())
     }
 
     fn write(

@@ -19,8 +19,8 @@ use crate::device::{self, DeviceError, DeviceInfo, FsKind};
 use crate::history::HistoryPolicy;
 use crate::onelibrary::{self as one, ExistingLibrary, OneLibraryExport};
 use crate::plan::{
-    self, human_bytes, AnlzOp, CacheLocator, ExportOptions, ExportPlan, FileOp, PlanError, Problem,
-    Selection, Warning,
+    self, human_bytes, AnlzOp, CacheLocator, ExportOptions, ExportPlan, FileOp, OpReason,
+    PlanError, Problem, Selection, Warning,
 };
 use crate::rbcache::{self, RbCache};
 use crate::TargetProfile;
@@ -57,10 +57,8 @@ pub fn plan_at(
     let cache = RbCache::scan(&rbcache::default_roots())?;
     let locator = CacheLocator::for_selection(lib, sel, cache)?;
     let mut plan = plan::plan(lib, sel, &dev, opts, &locator)?;
-    if opts.onelibrary {
-        let key = one::resolve_key();
-        plan::plan_onelibrary(&mut plan, onelibrary, key.as_ref(), lib)?;
-    }
+    let key = one::resolve_key();
+    plan::plan_onelibrary(&mut plan, onelibrary, key.as_ref(), lib)?;
     Ok(plan)
 }
 
@@ -98,6 +96,25 @@ pub struct DryRun {
     /// The OneLibrary step, when it is on and planned.
     #[serde(default)]
     pub onelibrary: Option<OneLibraryView>,
+    /// The stick's `exportLibrary.db` is deleted because this export writes
+    /// none ([`Warning::OneLibraryRemoved`]); the view asks for
+    /// [`ExportOptions::onelibrary_removal_confirmed`](crate::plan::ExportOptions::onelibrary_removal_confirmed).
+    #[serde(default)]
+    pub onelibrary_removal: Option<OneLibraryRemovalView>,
+}
+
+/// The stick loses its OneLibrary library: what, why, and for which players.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OneLibraryRemovalView {
+    pub title: String,
+    pub text: String,
+    /// The OneLibrary files deleted (also in [`DryRun::deletes`]).
+    pub files: FileGroup,
+    /// The confirmation's wording.
+    pub confirm_text: String,
+    /// The user confirmed it.
+    pub confirmed: bool,
 }
 
 /// What the experimental OneLibrary step writes and removes.
@@ -331,7 +348,7 @@ impl DryRun {
         }
         let mut warnings = Groups::default();
         for w in &plan.warnings {
-            if let Warning::StickHistory { .. } = w {
+            if let Warning::StickHistory { .. } | Warning::OneLibraryRemoved { .. } = w {
                 continue;
             }
             warnings.push(warning_kind(w), warning_item(w, &track, &playlist));
@@ -363,6 +380,7 @@ impl DryRun {
             problems: problems.finish(problem_title),
             warnings: warnings.finish(warning_title),
             onelibrary: onelibrary_view(plan),
+            onelibrary_removal: onelibrary_removal_view(plan),
             convertible: plan.convertible.clone(),
             convert_text: (!plan.convertible.is_empty()).then(|| {
                 format!(
@@ -645,6 +663,39 @@ fn onelibrary_view(plan: &ExportPlan) -> Option<OneLibraryView> {
     })
 }
 
+fn onelibrary_removal_view(plan: &ExportPlan) -> Option<OneLibraryRemovalView> {
+    let no_key = plan.warnings.iter().find_map(|w| match w {
+        Warning::OneLibraryRemoved { no_key, .. } => Some(*no_key),
+        _ => None,
+    })?;
+    let removed: Vec<FileOp> = plan
+        .deletes
+        .iter()
+        .filter(|f| f.reason == OpReason::OneLibraryRemoved)
+        .cloned()
+        .collect();
+    let why = if no_key {
+        "This build of reks has no OneLibrary key (use a release build or set \
+         REKS_ONELIBRARY_KEY), so it writes only the Device Library (export.pdb)"
+    } else {
+        "OneLibrary is off, so this export writes only the Device Library (export.pdb)"
+    };
+    Some(OneLibraryRemovalView {
+        title: "The stick's OneLibrary library is deleted".to_owned(),
+        text: format!(
+            "{why}, and the stick's exportLibrary.db is deleted with the files below. Players \
+             that read only OneLibrary ({}) will find no library on this stick. Players that \
+             read export.pdb are not affected.",
+            plan::ONELIBRARY_ONLY_PLAYERS.join(", ")
+        ),
+        files: file_group(&removed, false),
+        confirm_text: "I understand exportLibrary.db is deleted and OneLibrary-only players \
+                       won't find a library on this stick."
+            .to_owned(),
+        confirmed: plan.options.onelibrary_removal_confirmed,
+    })
+}
+
 fn history_view(plan: &ExportPlan) -> HistoryView {
     let h = &plan.history;
     let policy = plan.options.history;
@@ -871,6 +922,8 @@ fn warning_kind(w: &Warning) -> &'static str {
         Warning::StickHistory { .. } => "stickHistory",
         Warning::NoVolumeSerial => "noVolumeSerial",
         Warning::OneLibraryExperimental => "oneLibraryExperimental",
+        Warning::OneLibraryNoKey => "oneLibraryNoKey",
+        Warning::OneLibraryRemoved { .. } => "oneLibraryRemoved",
     }
 }
 
@@ -931,9 +984,9 @@ fn problem_kind(p: &Problem) -> &'static str {
         Problem::DiscardNotConfirmed => "discardNotConfirmed",
         Problem::HistoryNotImported { .. } => "historyNotImported",
         Problem::HistoryImportUnavailable { .. } => "historyImportUnavailable",
-        Problem::OneLibraryKeyMissing => "oneLibraryKeyMissing",
         Problem::OneLibraryUnavailable => "oneLibraryUnavailable",
         Problem::OneLibraryHistoryNotImported { .. } => "oneLibraryHistoryNotImported",
+        Problem::OneLibraryRemovalNotConfirmed => "oneLibraryRemovalNotConfirmed",
     }
 }
 
@@ -976,6 +1029,11 @@ fn problem_item(p: &Problem, track: &impl Fn(TrackId) -> String) -> String {
             "The stick's play history can't be imported ({message}). Back it up or discard it \
              instead."
         ),
+        Problem::OneLibraryRemovalNotConfirmed => "Deleting the stick's exportLibrary.db needs \
+                                                   your confirmation: tick the box under \
+                                                   \"The stick's OneLibrary library is \
+                                                   deleted\"."
+            .to_owned(),
         other => capitalise(&format!("{other}.")),
     }
 }

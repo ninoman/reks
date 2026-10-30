@@ -6,6 +6,8 @@ import type { ImportPreview, ImportReport } from "../lib/ipc";
 
 vi.mock("../lib/ipc", () => ({
   rbxmlPreview: vi.fn(),
+  pickFile: vi.fn(),
+  pickFolder: vi.fn(),
   rbxmlImportStart: vi.fn(),
   rbxmlImportCancel: vi.fn(),
   rbxmlForget: vi.fn(),
@@ -15,10 +17,8 @@ vi.mock("../lib/ipc", () => ({
   tagsGet: vi.fn(),
   tagsDuplicates: vi.fn(),
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
 const ipc = await import("../lib/ipc");
-const dialog = await import("@tauri-apps/plugin-dialog");
 const { useImportWizard } = await import("../store/importWizard");
 const { ImportWizard } = await import("./ImportWizard");
 
@@ -90,7 +90,7 @@ describe("ImportWizard", () => {
     expect(await screen.findByText(/Export Collection in xml format/)).toBeTruthy();
     expect(ipc.rbxmlPreview).not.toHaveBeenCalled();
 
-    vi.mocked(dialog.open).mockResolvedValue("/x/collection.xml");
+    vi.mocked(ipc.pickFile).mockResolvedValue("/x/collection.xml");
     fireEvent.click(screen.getByRole("button", { name: "Choose file…" }));
     expect(await screen.findByText("3,062")).toBeTruthy();
     expect(ipc.rbxmlPreview).toHaveBeenCalledWith("/x/collection.xml", []);
@@ -99,9 +99,9 @@ describe("ImportWizard", () => {
   it("cancelling the file picker stays on the instructions", async () => {
     render(<ImportWizard />);
     useImportWizard.getState().begin();
-    vi.mocked(dialog.open).mockResolvedValue(null);
+    vi.mocked(ipc.pickFile).mockResolvedValue(null);
     fireEvent.click(await screen.findByRole("button", { name: "Choose file…" }));
-    await vi.waitFor(() => expect(dialog.open).toHaveBeenCalled());
+    await vi.waitFor(() => expect(ipc.pickFile).toHaveBeenCalled());
     expect(useImportWizard.getState().step).toBe("choose");
   });
 
@@ -111,7 +111,7 @@ describe("ImportWizard", () => {
     expect(await screen.findByText("3,062")).toBeTruthy();
     expect(screen.getByText(/416 files not found in \/Music\/old/)).toBeTruthy();
 
-    vi.mocked(dialog.open).mockResolvedValue("/Volumes/new");
+    vi.mocked(ipc.pickFolder).mockResolvedValue("/Volumes/new");
     fireEvent.click(screen.getByRole("button", { name: "Map folder…" }));
     await vi.waitFor(() =>
       expect(ipc.rbxmlPreview).toHaveBeenLastCalledWith("/x/collection.xml", [

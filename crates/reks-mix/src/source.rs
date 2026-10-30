@@ -56,6 +56,12 @@ impl DeckSource {
         }
     }
 
+    /// Whether both sources play the same decoded audio (one is the other
+    /// with an edited grid), so swapping them mid-play cannot be heard.
+    pub fn shares_pcm(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.pcm, &other.pcm)
+    }
+
     /// Adds hot cues as `(slot, frame)`; a repeated slot keeps the first.
     pub fn with_hot_cues(mut self, mut cues: Vec<(u8, i64)>) -> Self {
         cues.sort_by_key(|c| c.0);

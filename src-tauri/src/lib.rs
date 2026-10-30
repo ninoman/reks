@@ -148,6 +148,7 @@ pub fn run() {
             commands::profile_selection,
             commands::profile_set_selection,
             commands::profile_status,
+            commands::export_default_options,
             commands::export_plan,
             commands::export_apply,
             commands::export_cancel,

@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 
+use crate::backup::BackupReason;
 use crate::db::Library;
 use crate::device::{get_device, DeviceId};
 use crate::error::{Error, Result};
@@ -71,6 +72,7 @@ impl Library {
     /// profile, in one transaction. A link whose playlist changed since the
     /// plan fails with [`Error::StaleAdoptPlan`] and writes nothing.
     pub fn adopt_playlists(&self, w: &AdoptWrite) -> Result<AdoptWritten> {
+        self.snapshot_before(BackupReason::Adopt);
         let mut conn = self.conn()?;
         let tx = conn.transaction()?;
         let now = now_utc();

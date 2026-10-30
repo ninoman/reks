@@ -26,6 +26,8 @@ pair passes WCAG AA in every theme (body text 7:1 or more, filled buttons
 | Path | What |
 |---|---|
 | [`src/styles/tokens.css`](../src/styles/tokens.css) | **The only place that sets the look**: palettes, semantic colours (one block per theme), type, radii, shadow, layers, motion, control sizes, row heights |
+| [`src/lib/ipc.ts`](../src/lib/ipc.ts) | The only module that calls Tauri: commands, and the native pickers `pickFolder`, `pickFile`, `pickSavePath` (they return `null` when cancelled); components and stores never import `@tauri-apps/*` |
+| [`ErrorBoundary`](../src/components/ErrorBoundary.tsx) | One per region in `App` (Header, Player, Sidebar, Library, Dialogs): a render error replaces only that region with "Try again" / "Report this"; the app-wide one in `main.tsx` is the last resort with Reload. A reload resets the mix store to stopped, so `releaseStaleEngine` (`store/mixEngine.ts`) stops the engine on mount rather than leaving it playing |
 | [`src/lib/theme.ts`](../src/lib/theme.ts) | Puts the theme on `<html>` (`data-theme`); `startThemeSync` in `store/settings.ts` calls it when the setting changes |
 | [`src/styles/base.css`](../src/styles/base.css) | Our reset (instead of Tailwind preflight) and element defaults (body, `user-select: none` for chrome, focus outline) |
 | [`src/styles/index.css`](../src/styles/index.css) | Entry: Tailwind, tokens, base |
@@ -736,7 +738,7 @@ the command returns the deck's cues and the store takes them.
   Drop", "Memory cue", "Memory loop", "Auto loop", "Cue point"; native
   title, `markAt` / `markTitle` in `lib/deckMarks.ts`).
 - **Export**: AUTO loops reach a USB stick only with **Active loops**
-  (UNVERIFIED badge, off by default) in the export wizard; see phase 5
+  (UNVERIFIED badge, on by default) in the export wizard; see phase 5
   task 17.
 - Shared pieces: `ui/InlineText.tsx` (`InlineText`, `InlineTextField`);
   `Pad` shows its `hint` in a tooltip even without a key and takes
@@ -839,7 +841,7 @@ One query, edited in the Filters drawer ([wireframe](wireframes/filters-drawer.h
 concept A): rows on a rail, ANDed until you ask for OR. It narrows whatever the
 tree shows (the chosen playlist is `library.playlistId`, outside the drawer).
 State is [`store/rules.ts`](../src/store/rules.ts); the draft and every edit are
-pure functions in [`ruleTree.ts`](../src/store/ruleTree.ts). `toRule` turns
+pure functions in [`store/ruleTree/`](../src/store/ruleTree) (`model`, `toRule`, `fromRule`, `legacy`, `query`, `edit`, `summary`). `toRule` turns
 the rows that filter into the `RuleNode` that `library.rule` sends with every
 query (D29), only while the Filters switch is on.
 
@@ -871,9 +873,12 @@ and loading / error-with-Retry / empty states). All but `RuleBuilder` and
   is red); Rating at least / exactly / at most; BPM and Plays two inputs,
   either side optional; Last played never / since a date (no relative "last
   N days"); File missing / present. Lists of more than one value are an "any"
-  group of single filters; tags "all" an "all" group of one-tag `tagAny`s;
-  rating at most / exactly are `ratingMin` with `not` / combined. `fromRule`
-  reads these shapes back as the same rows (no core change).
+  group of single filters. Rating and tag rows map 1:1 to core filters: at
+  least `ratingMin`, at most / exactly `ratingRange`, tags any / all
+  `tagAny` / `tagAll`; "none of" / exclude is `not`. `fromRule` reads them
+  back as the same rows. Rules saved before `ratingRange` / `tagAll` (exactly
+  as `ratingMin` pairs, all as a group of one-tag `tagAny`s) stay valid and
+  are still read (`legacy.ts`); no stored JSON changes, so no migration.
 - **Rail and connectors**: "and" / "or" between rows; a click switches the
   whole level (no mixed and/or on one level). Lit while both sides filter.
 - **Row menu** (`···`, or Shift+F10 on the row): Or… (wraps the row in an

@@ -22,14 +22,14 @@
 //!
 //! Everything else stays pending and goes through reks's analyser.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use reks_analysis::cache::{self, RekordboxEntry};
 use reks_anlz::rbwave::{read_waveforms, RbWaveError};
 use reks_core::analysis::file_content_hash;
 use reks_core::{Library, MappingCandidate, TrackId};
 
-use crate::rbcache::{AnlzQuery, Lookup, Missing, RbCache};
+use crate::rbcache::{self, AnlzQuery, Lookup, Missing, RbCache};
 
 /// PWV3 may differ from 150 columns/s of the library's length by this many
 /// columns (1 s, the export validator's tolerance).
@@ -68,6 +68,44 @@ pub enum MapError {
     Library(#[from] reks_core::Error),
     #[error(transparent)]
     Cache(#[from] cache::CacheError),
+    #[error(transparent)]
+    Scan(#[from] rbcache::Error),
+}
+
+/// One [`map_local`] pass.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MapRun {
+    /// Roots that existed; empty when rekordbox's analysis isn't here.
+    pub roots: Vec<PathBuf>,
+    pub files_indexed: usize,
+    pub scan_ms: u128,
+    pub total_ms: u128,
+    pub report: MapReport,
+}
+
+/// Scans rekordbox's analysis folders (`roots`, or [`rbcache::default_roots`]
+/// when empty) and maps every pending track found there with
+/// [`map_pending`] at the current analyser version. Shared by the app and
+/// the CLI.
+pub fn map_local(lib: &Library, roots: &[PathBuf]) -> Result<MapRun, MapError> {
+    let started = std::time::Instant::now();
+    let default;
+    let roots = if roots.is_empty() {
+        default = rbcache::default_roots();
+        &default[..]
+    } else {
+        roots
+    };
+    let rb = RbCache::scan(roots)?;
+    let scan_ms = started.elapsed().as_millis();
+    let report = map_pending(lib, &rb, reks_analysis::ANALYSER_VERSION)?;
+    Ok(MapRun {
+        roots: rb.roots().to_vec(),
+        files_indexed: rb.files_indexed(),
+        scan_ms,
+        total_ms: started.elapsed().as_millis(),
+        report,
+    })
 }
 
 /// Maps every pending track with rekordbox analysis in `rb` into the cache

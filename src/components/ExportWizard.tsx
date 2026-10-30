@@ -23,6 +23,7 @@ import type {
   HistoryPolicy,
   MissingAnalysis,
   NoticeGroup,
+  OneLibraryRemovalView,
   PlaylistNode,
   TargetProfile,
 } from "../lib/ipc";
@@ -410,6 +411,14 @@ function OptionsStep() {
   const o = useExportWizard((s) => s.options);
   const keyBuiltin = useSettings((s) => s.settings?.onelibraryKeyBuiltin ?? false);
   const set = (patch: Partial<ExportOptions>) => useExportWizard.getState().setOptions(patch);
+  if (o === null) {
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="m-0">Reading the export options…</p>
+        <Progress aria-label="Reading the export options" />
+      </div>
+    );
+  }
   return (
     <Card>
       <div className="px-4 py-3">
@@ -520,14 +529,14 @@ function OptionsStep() {
       </OptionRow>
       <OptionRow
         title="OneLibrary"
-        hint={`Also write exportLibrary.db, the library newer players read. Not tested on any player and not supported by AlphaTheta.${
+        hint={`Also write exportLibrary.db, the library newer players read, as rekordbox does. Turned off, the stick's exportLibrary.db is deleted. Not tested on any player and not supported by AlphaTheta.${
           keyBuiltin
             ? ""
-            : " This build of reks has no OneLibrary key: use a release build or set REKS_ONELIBRARY_KEY."
+            : " This build of reks has no OneLibrary key, so only export.pdb is written: use a release build or set REKS_ONELIBRARY_KEY."
         }`}
         badge={
-          <Badge variant="muted" title="Experimental: not tested on any player">
-            EXPERIMENTAL
+          <Badge variant="muted" title="Experimental: not yet tested on a CDJ or XDJ">
+            UNVERIFIED
           </Badge>
         }
       >
@@ -569,6 +578,33 @@ function OptionsStep() {
         )}
       </div>
     </Card>
+  );
+}
+
+/** The export deletes the stick's `exportLibrary.db`: what goes, for which players, and the confirmation. */
+function OnelibraryRemoval({
+  removal,
+  nodes,
+}: {
+  removal: OneLibraryRemovalView;
+  nodes: PlaylistNode[];
+}) {
+  return (
+    <Section title={removal.title} tone={removal.confirmed ? "warning" : "danger"}>
+      <p className="m-0 text-sm">{removal.text}</p>
+      <Files label="Delete" group={removal.files} />
+      <label className="flex items-start gap-2 text-sm">
+        <Checkbox
+          className="mt-0.5"
+          checked={removal.confirmed}
+          disabled={removal.confirmed}
+          onChange={(e) => {
+            if (e.target.checked) void useExportWizard.getState().confirmOnelibraryRemoval(nodes);
+          }}
+        />
+        <span>{removal.confirmText}</span>
+      </label>
+    </Section>
   );
 }
 
@@ -669,6 +705,10 @@ function DryRunView({ dryRun: d, nodes }: { dryRun: DryRun; nodes: PlaylistNode[
             <span className="text-xs text-fg-muted">Plan again after converting.</span>
           </div>
         </Section>
+      )}
+
+      {d.onelibraryRemoval !== null && (
+        <OnelibraryRemoval removal={d.onelibraryRemoval} nodes={nodes} />
       )}
 
       {d.onelibrary !== null && (

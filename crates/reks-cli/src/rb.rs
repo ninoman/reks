@@ -5,7 +5,8 @@
 //!              [--target nxs|nxs2|3000|xdj-xz|generic] [--missing-analysis skip|generate|without]
 //!              [--keep-stale] [--artwork] [--skip-unsupported]
 //!              [--import-history|--backup-history|--discard-history]
-//!              [--dividers] [--anlz-root <dir>]...
+//!              [--no-dividers] [--no-active-loops] [--no-onelibrary]
+//!              [--confirm-onelibrary-removal] [--anlz-root <dir>]...
 //!              [--anlz rekordbox-first|reks-first|rekordbox-only] [--cache-dir <dir>] [--json]
 //!     print the dry run; exits non-zero when the plan is blocked
 //! reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]
@@ -28,6 +29,11 @@
 //! only) or `--discard-history` (erase them, no backup) chooses; without
 //! unimported sessions the Phase 2 backup runs anyway.
 //! `--discard-history` is also the explicit confirmation `Discard` needs.
+//! Dividers, active loops and OneLibrary are on by default and UNVERIFIED on
+//! players (D7, D14, D22, 2026-10-30); the `--no-…` flags turn them off.
+//! OneLibrary needs a key (`REKS_ONELIBRARY_KEY` or a release build); without
+//! one, or with `--no-onelibrary`, a stick's `exportLibrary.db` is deleted and
+//! the plan blocks until `--confirm-onelibrary-removal`.
 //! `--anlz-root` replaces rekordbox's default analysis folders. `--anlz` says
 //! whose analysis wins when both rekordbox and reks have a track (default:
 //! the library's `export.anlz_preference` setting); reks's comes from the
@@ -45,16 +51,17 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
-use reks_core::{AnlzPreference, CancelToken, Library, PlaylistId, PlaylistNode};
+use reks_core::{AnlzPreference, CancelToken, Library, OneLibraryKey, PlaylistId, PlaylistNode};
+use reks_export_onelibrary::{OneLibraryWriter, RbVersion};
 use reks_export_rb::apply::{
-    ApplyEnv, ApplyEvent, ApplyStage, ExportReport, ExportStatus, ManifestStatus, StickCheck,
+    ApplyEnv, ApplyEvent, ApplyStage, ExportReport, ExportStatus, ManifestStatus, OneLibraryEnv,
+    StickCheck,
 };
 use reks_export_rb::device::{self, DeviceInfo, FsKind};
-use reks_export_rb::divider;
 use reks_export_rb::history::{self, HistoryPolicy, HistorySession, StickHistory};
+use reks_export_rb::onelibrary::resolve_key;
 use reks_export_rb::plan::{
-    self, human_bytes, AnlzOp, CacheLocator, ExportOptions, ExportPlan, MissingAnalysis, ReksCache,
-    Selection,
+    self, human_bytes, AnlzOp, CacheLocator, ExportOptions, ExportPlan, MissingAnalysis, Selection,
 };
 use reks_export_rb::rbcache::{self, RbCache};
 use reks_export_rb::validate::{self, ValidationReport};
@@ -65,7 +72,8 @@ use serde::Serialize;
 const USAGE: &str = "usage: reks rb plan <stick> --library <library.sqlite> \
 --playlist <id|Folder/Name>... [--target nxs|nxs2|3000|xdj-xz|generic] \
 [--missing-analysis skip|generate|without] [--keep-stale] [--artwork] [--skip-unsupported] \
-[--import-history|--backup-history|--discard-history] [--dividers] [--anlz-root <dir>]... [--json]
+[--import-history|--backup-history|--discard-history] [--no-dividers] [--no-active-loops] \
+[--no-onelibrary] [--confirm-onelibrary-removal] [--anlz-root <dir>]... [--json]
        reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]
        reks rb validate <stick> <plan flags>
        reks rb history <stick> [--json]
@@ -169,23 +177,17 @@ fn map(flags: &[String]) -> anyhow::Result<()> {
     if cache_dir.is_none() {
         lib.use_stored_cache_dir()?;
     }
-    if roots.is_empty() {
-        roots = rbcache::default_roots();
-    }
-    let started = std::time::Instant::now();
-    let cache = RbCache::scan(&roots)?;
-    let scanned = started.elapsed();
-    let report = reks_export_rb::rbmap::map_pending(&lib, &cache, reks_analysis::ANALYSER_VERSION)?;
+    let run = reks_export_rb::rbmap::map_local(&lib, &roots)?;
+    let report = &run.report;
     let mut reasons: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     for (_, skip) in &report.skipped {
         *reasons.entry(skip.to_string()).or_default() += 1;
     }
     println!(
         "rekordbox analysis files indexed: {} in {} ms ({})",
-        cache.files_indexed(),
-        scanned.as_millis(),
-        cache
-            .roots()
+        run.files_indexed,
+        run.scan_ms,
+        run.roots
             .iter()
             .map(|r| r.display().to_string())
             .collect::<Vec<_>>()
@@ -196,7 +198,7 @@ fn map(flags: &[String]) -> anyhow::Result<()> {
         report.candidates,
         report.mapped.len(),
         report.skipped.len(),
-        started.elapsed().as_millis()
+        run.total_ms
     );
     for (reason, n) in reasons {
         println!("  {n:>5}  {reason}");
@@ -245,7 +247,10 @@ fn export(args: &PlanArgs, st: &Stick) -> anyhow::Result<()> {
         library: &planned.lib,
         app_data_dir: &data_dir,
         stick: st.check,
-        onelibrary: None,
+        onelibrary: planned.key.as_ref().map(|key| OneLibraryEnv {
+            export: &ONELIBRARY,
+            key,
+        }),
     };
     let report = reks_export_rb::apply(plan, &writer, &env, &print_event, &CancelToken::new())?;
     if args.json {
@@ -297,6 +302,7 @@ fn print_event(e: ApplyEvent) {
                 ApplyStage::Write => "writing",
                 ApplyStage::OneLibrary => "writing exportLibrary.db (experimental)",
                 ApplyStage::Sync => "flushing to the stick",
+                ApplyStage::Delete => "deleting stale files",
                 ApplyStage::Validate => "reading the stick back",
                 ApplyStage::Manifest => "recording the export manifest",
             };
@@ -436,8 +442,11 @@ fn parse_plan_args(flags: &[String], cmd: Command) -> anyhow::Result<PlanArgs> {
             "--cache-dir" => cache_dir = Some(PathBuf::from(value()?)),
             "--keep-stale" => opts.keep_stale = true,
             "--artwork" => opts.artwork = true,
-            // UNVERIFIED on players (Phase 2.5 task 11).
-            "--dividers" => opts.dividers = true,
+            // On by default and UNVERIFIED on players (D7, D14, D22).
+            "--no-dividers" => opts.dividers = false,
+            "--no-active-loops" => opts.active_loops = false,
+            "--no-onelibrary" => opts.onelibrary = false,
+            "--confirm-onelibrary-removal" => opts.onelibrary_removal_confirmed = true,
             "--skip-unsupported" => opts.skip_unsupported = true,
             "--import-history" | "--backup-history" | "--discard-history" => {
                 let policy = match flag.as_str() {
@@ -477,11 +486,18 @@ fn parse_plan_args(flags: &[String], cmd: Command) -> anyhow::Result<PlanArgs> {
     })
 }
 
+/// The OneLibrary writer, in the newest rekordbox layout (as the app uses).
+const ONELIBRARY: OneLibraryWriter = OneLibraryWriter {
+    version: RbVersion::LATEST,
+};
+
 /// A plan and what it was made from (the writer needs both).
 struct Planned {
     lib: Library,
     sel: Selection,
     plan: ExportPlan,
+    /// The OneLibrary key, when the plan writes `exportLibrary.db`.
+    key: Option<OneLibraryKey>,
 }
 
 fn build_plan(
@@ -520,14 +536,16 @@ fn build_plan(
         cache.roots()
     );
     let locator = CacheLocator::for_selection(&lib, &sel, cache)?;
-    let mut sources = plan::load(&lib, &sel)?;
-    if opts.dividers {
-        divider::expand(&mut sources, &lib.cache_dir().join(divider::DIVIDER_DIR))?;
-    }
-    let reks = ReksCache::for_library(&lib)?;
-    let mut plan = plan::plan_sources(sources, dev, serial, &opts, &locator, &reks)?;
-    plan::guard_history(&mut plan, &lib)?;
-    Ok(Planned { lib, sel, plan })
+    let mut plan = plan::plan_with_serial(&lib, &sel, dev, serial, &opts, &locator)?;
+    let key = resolve_key();
+    plan::plan_onelibrary(&mut plan, &ONELIBRARY, key.as_ref(), &lib)?;
+    let key = key.filter(|_| plan.onelibrary.is_some());
+    Ok(Planned {
+        lib,
+        sel,
+        plan,
+        key,
+    })
 }
 
 /// `Folder/Name` path of every node, from the depth-first node list.
@@ -785,19 +803,14 @@ fn render_report(r: &ExportReport) -> String {
         let _ = writeln!(
             o,
             "Written   {} tracks in export.pdb; audio {} copied, {} kept; ANLZ {} written \
-             ({} generated), {} unchanged; {} stale files removed{}",
+             ({} generated), {} unchanged; {} stale files removed",
             w.tracks_in_database,
             w.audio_copied,
             w.audio_kept,
             w.anlz_written,
             w.anlz_generated,
             w.anlz_unchanged,
-            w.pruned,
-            if w.prune_skipped {
-                " (prune skipped: tracks failed)"
-            } else {
-                ""
-            }
+            r.stale_removed,
         );
         for f in &w.failures {
             let _ = writeln!(o, "  - failed: {}: {}", f.title, f.message);
@@ -1005,6 +1018,20 @@ mod tests {
         let d = parse_plan_args(&args("--library l --playlist x"), Command::Plan).unwrap();
         assert_eq!(d.opts, ExportOptions::default());
         assert_eq!(d.anlz_roots, None);
+        assert!(d.opts.dividers && d.opts.active_loops && d.opts.onelibrary);
+        let off = parse_plan_args(
+            &args(
+                "--library l --playlist x --no-dividers --no-active-loops --no-onelibrary \
+                 --confirm-onelibrary-removal",
+            ),
+            Command::Plan,
+        )
+        .unwrap();
+        assert!(!off.opts.dividers && !off.opts.active_loops && !off.opts.onelibrary);
+        assert!(off.opts.onelibrary_removal_confirmed);
+        assert!(
+            parse_plan_args(&args("--library l --playlist x --dividers"), Command::Plan).is_err()
+        );
         assert!(!d.yes && d.data_dir.is_none());
 
         // `--yes` and `--data-dir` belong to `rb export` only.
@@ -1265,7 +1292,8 @@ mod tests {
         fs::create_dir_all(&stick_root).unwrap();
         let a = parse_plan_args(
             &args(&format!(
-                "--library {} --playlist Gigs/Friday --missing-analysis generate --anlz-root {}",
+                "--library {} --playlist Gigs/Friday --missing-analysis generate --no-onelibrary \
+                 --anlz-root {}",
                 db.display(),
                 tmp.path().join("none").display()
             )),

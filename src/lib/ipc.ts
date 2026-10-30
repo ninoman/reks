@@ -4,6 +4,7 @@
  * (`serde_shapes`) pins the query side.
  */
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
 
 /** Resolves once the library is open (opened off the main thread at start-up);
  * rejects with the reason it could not be. Call before any other command. */
@@ -32,7 +33,11 @@ export type Filter =
   /** Last played on or after `date` (`YYYY-MM-DD`). */
   | { type: "playedSince"; date: string }
   /** The track has at least one of these My Tags. */
-  | { type: "tagAny"; ids: TagId[] };
+  | { type: "tagAny"; ids: TagId[] }
+  /** Rating within `min..=max`, inclusive. */
+  | { type: "ratingRange"; min: number; max: number }
+  /** Has every one of the tags. */
+  | { type: "tagAll"; ids: TagId[] };
 
 export type SortColumn =
   | "title"
@@ -445,8 +450,8 @@ export interface Track extends TrackRow {
   sampleRate: number | null;
   bitDepth: number | null;
   channels: number | null;
-  keySource: string | null;
-  bpmSource: string | null;
+  keySource: DataSource | null;
+  bpmSource: DataSource | null;
   rbTrackId: number | null;
   createdAt: string;
   updatedAt: string;
@@ -698,11 +703,15 @@ export interface BeatMark {
   beatInBar: number;
 }
 
+/** `reks_core::DataSource`: where a key, BPM, grid or cue came from. `stick`
+ * only for a plugged-in stick's own grid. */
+export type DataSource = "tag" | "rekordbox" | "analysis" | "manual" | "stick";
+
 export interface Beatgrid {
   /** Markers, sorted; each starts a tempo section. Empty: no grid yet. */
   anchors: GridAnchor[];
-  /** "rekordbox" | "analysis" | "manual"; null without a grid. */
-  source: string | null;
+  /** Null without a grid. */
+  source: DataSource | null;
   locked: boolean;
   /** Every beat line to the end of the track (Rust's beat rule). */
   beats: BeatMark[];
@@ -1388,7 +1397,11 @@ export type BackupReason =
   | "beforeRestore"
   | "xmlImport"
   | "convertReplace"
-  | "historyImport";
+  | "historyImport"
+  | "bulkEdit"
+  | "adopt"
+  | "relocate"
+  | "commentTags";
 
 export interface BackupContents {
   schemaVersion: number;
@@ -1772,7 +1785,7 @@ export type MissingAnalysis = "skip" | "generate" | "exportWithout";
  */
 export type HistoryPolicy = "import" | "backUp" | "discard";
 
-/** `plan::ExportOptions`. */
+/** `plan::ExportOptions`; its defaults come from `exportDefaultOptions`. */
 export interface ExportOptions {
   target: TargetProfile;
   keepStale: boolean;
@@ -1784,12 +1797,14 @@ export interface ExportOptions {
   discardHistoryConfirmed: boolean;
   /** `history` was picked in the export guard; without it unimported sessions block the plan. */
   historyChosen: boolean;
-  /** The `export.dividers` flag: playlist dividers as silent tracks (UNVERIFIED, D22). */
+  /** The `export.dividers` flag: playlist dividers as silent tracks (UNVERIFIED, on by default, D22). */
   dividers: boolean;
   /** Seeded from and saved to the `anlzPreference` setting by the wizard. */
   anlzPreference: AnlzPreference;
-  /** Also write `exportLibrary.db` (OneLibrary, experimental, phase 4). Off by default. */
+  /** Also write `exportLibrary.db` (OneLibrary, experimental and UNVERIFIED, on by default, D14). */
   onelibrary: boolean;
+  /** Required when the export writes no `exportLibrary.db` and the stick has one (it is deleted). */
+  onelibraryRemovalConfirmed: boolean;
   /** The `export.active_loops` flag: each track's earliest active memory loop as its active loop (UNVERIFIED). */
   activeLoops: boolean;
 }
@@ -1891,6 +1906,17 @@ export interface DryRun {
   convertText: string | null;
   /** The experimental OneLibrary step (`dryrun::OneLibraryView`); null when off or unplanned. */
   onelibrary: OneLibraryView | null;
+  /** The stick's `exportLibrary.db` is deleted (`dryrun::OneLibraryRemovalView`); null when not. */
+  onelibraryRemoval: OneLibraryRemovalView | null;
+}
+
+/** This export writes no `exportLibrary.db` and deletes the stick's; needs a confirmation. */
+export interface OneLibraryRemovalView {
+  title: string;
+  text: string;
+  files: DryRunFileGroup;
+  confirmText: string;
+  confirmed: boolean;
 }
 
 /** What the OneLibrary step writes (`exportLibrary.db`) and removes beside it. */
@@ -1899,6 +1925,11 @@ export interface OneLibraryView {
   text: string;
   write: DryRunFileRow;
   removes: DryRunFileGroup;
+}
+
+/** `plan::ExportOptions::default()`: the wizard opens with these. */
+export function exportDefaultOptions(): Promise<ExportOptions> {
+  return invoke("export_default_options");
 }
 
 /**
@@ -1922,6 +1953,7 @@ export type ApplyStage =
   | "write"
   | "oneLibrary"
   | "sync"
+  | "delete"
   | "validate"
   | "manifest";
 
@@ -2414,4 +2446,32 @@ export function reportSave(draft: ReportDraft, path: string): Promise<void> {
 /** Records a UI error in the app log, so reports include it. */
 export function logUiError(message: string, stack: string | null): Promise<void> {
   return invoke("log_ui_error", { message, stack });
+}
+
+/** Native folder picker; `null` when cancelled. */
+export async function pickFolder(title: string, defaultPath?: string): Promise<string | null> {
+  const dir = await open({ directory: true, title, defaultPath });
+  return typeof dir === "string" ? dir : null;
+}
+
+/** Native file picker for one file; `null` when cancelled. */
+export async function pickFile(
+  title: string,
+  filter?: { name: string; extensions: string[] },
+): Promise<string | null> {
+  const path = await open({ title, filters: filter ? [filter] : undefined });
+  return typeof path === "string" ? path : null;
+}
+
+/** Native save dialog; `null` when cancelled. */
+export async function pickSavePath(options: {
+  title: string;
+  defaultPath: string;
+  filter: { name: string; extensions: string[] };
+}): Promise<string | null> {
+  return save({
+    title: options.title,
+    defaultPath: options.defaultPath,
+    filters: [options.filter],
+  });
 }

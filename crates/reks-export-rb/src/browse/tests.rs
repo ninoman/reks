@@ -130,7 +130,7 @@ fn grid_comes_from_the_anlz() {
     assert_eq!(grid.anchors.len(), 1);
     assert_eq!(grid.anchors[0].bpm_x100, 12800);
     assert!(grid.locked);
-    assert_eq!(grid.source.as_deref(), Some("stick"));
+    assert_eq!(grid.source, Some(DataSource::Stick));
     // 128 BPM over the track: about two beats a second.
     let seconds = wav.duration_ms.unwrap() / 1000;
     assert!(grid.beats.len() as i64 >= 2 * seconds);

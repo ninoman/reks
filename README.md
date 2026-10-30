@@ -76,6 +76,7 @@ player has to confirm is marked UNVERIFIED. Open work is tracked on the
 | [`docs/research/`](docs/research/) | Raw research notes per topic |
 | [`docs/analysis-parity.md`](docs/analysis-parity.md) | reks analysis vs rekordbox on the maintainer's library: method, numbers, tuning plan |
 | [`docs/hw-test-log.md`](docs/hw-test-log.md) | Real-player test results |
+| [`docs/architecture-review.md`](docs/architecture-review.md) | Architecture review (2026-10-30): findings by priority with evidence, refactor roadmap, proposed decision changes |
 | [`docs/analysis-parity/`](docs/analysis-parity/waveforms.md) | Analysis vs rekordbox: waveform calibration (method, error, pictures) |
 | [`docs/ui.md`](docs/ui.md) | UI design system: tokens, size scale, components |
 | [`docs/mixer-dsp.md`](docs/mixer-dsp.md) | Mix-prep mixer DSP: EQ, filter, crossfader and limiter laws, sources, test tolerances |

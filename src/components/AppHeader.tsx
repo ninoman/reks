@@ -9,8 +9,7 @@
  * dialog is hidden, a button shows its progress and reopens it.
  */
 
-import { open } from "@tauri-apps/plugin-dialog";
-
+import { pickFolder } from "../lib/ipc";
 import { useConverter } from "../store/converter";
 import { useDevices } from "../store/devices";
 import { openExportWizard } from "../store/exportWizard";
@@ -38,8 +37,8 @@ export function AppHeader() {
   );
 
   async function scanFolder() {
-    const dir = await open({ directory: true, title: "Scan music folder" });
-    if (typeof dir !== "string") return;
+    const dir = await pickFolder("Scan music folder");
+    if (!dir) return;
     const root = await useSettings.getState().addRoot(dir);
     await useScan.getState().scan([root?.path ?? dir]);
     await useSettings.getState().loadRoots();

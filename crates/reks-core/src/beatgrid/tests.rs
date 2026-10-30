@@ -548,7 +548,7 @@ fn serde_shapes_match_ipc_ts() {
     }
     let g = Beatgrid {
         anchors: grid(1, 12000, 2),
-        source: Some("manual".into()),
+        source: Some(DataSource::Manual),
         locked: false,
         beats: vec![BeatMark {
             position_us: 1000,

@@ -484,7 +484,7 @@ fn stick_matches_the_plan() {
 }
 
 #[test]
-fn re_export_copies_nothing_and_prune_removes_exactly_the_stale_files() {
+fn re_export_copies_nothing_and_the_writer_deletes_nothing() {
     let w = World::new();
     let all = w.sel(&["Set"]);
     let first = w.plan(&all);
@@ -496,10 +496,10 @@ fn re_export_copies_nothing_and_prune_removes_exactly_the_stale_files() {
     assert_eq!(dsts(&again), dsts(&first));
     let (report, _) = w.write(&all, &again);
     assert_eq!((report.audio_copied, report.audio_kept), (0, 4));
-    assert_eq!(report.pruned, 0);
     assert_eq!(report.anlz_written, 0, "ANLZ bytes unchanged");
 
-    // Only Peak: the WAV (only in Chill) and its ANLZ go.
+    // Only Peak: the WAV (only in Chill) and its ANLZ are the plan's
+    // deletes, which only `apply` carries out (review F16).
     let peak = w.sel(&["Peak"]);
     let smaller = w.plan(&peak);
     assert_eq!(smaller.tracks.len(), 3);
@@ -512,11 +512,9 @@ fn re_export_copies_nothing_and_prune_removes_exactly_the_stale_files() {
         .into_iter()
         .chain(files_under(&w.stick, "/PIONEER/USBANLZ"))
         .collect();
-    let removed: BTreeSet<String> = before.difference(&after).cloned().collect();
-    let planned: BTreeSet<String> = smaller.deletes.iter().map(|d| d.dst_rel.clone()).collect();
-    assert!(!planned.is_empty());
-    assert_eq!(removed, planned);
-    assert_eq!(report.pruned, planned.len());
+    assert!(!smaller.deletes.is_empty());
+    assert!(after.is_superset(&before), "the writer removed files");
+    assert_eq!(report.tracks_in_database, 3);
     assert_eq!(read_pdb(&w.stick).tracks.len(), 3);
 }
 

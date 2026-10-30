@@ -31,6 +31,7 @@ pub mod rule;
 pub mod scan;
 pub mod secret;
 pub mod settings;
+pub mod source;
 pub mod tag;
 pub mod tag_comments;
 pub mod timefmt;
@@ -65,6 +66,7 @@ pub use settings::{
     AnlzPreference, DeckWaveform, FilterSaveTarget, LibraryRoot, MixerEq, MixerFilters, MixerView,
     RowDensity, Settings, SettingsPatch, Theme, UiState,
 };
+pub use source::{AnalysisSource, CueKind, DataSource};
 pub use tag::{TagCategory, TagId, TagInfo, TagOp, TagOutcome, TagTree};
 pub use tag_comments::{CommentTagsPreview, CommentTagsReport};
 pub use track::{

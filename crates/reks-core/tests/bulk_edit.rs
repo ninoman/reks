@@ -4,6 +4,7 @@
 // Test helpers outside `#[test]` fns are not covered by clippy's allow-unwrap-in-tests.
 #![allow(clippy::unwrap_used, clippy::panic)]
 
+use reks_core::DataSource;
 use reks_core::{BulkPatch, CommentEdit, Error, Library, TagOp};
 use rusqlite::Connection;
 
@@ -113,7 +114,7 @@ fn key_is_stored_canonical_and_marked_manual() {
     for id in ids {
         let t = e.detail(id).track;
         assert_eq!(t.row.key.as_deref(), Some("C"));
-        assert_eq!(t.key_source.as_deref(), Some("manual"));
+        assert_eq!(t.key_source, Some(DataSource::Manual));
     }
 }
 

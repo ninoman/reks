@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use reks_analysis::cache;
 use reks_analysis::{AnalysisQueue, ModelPaths, QueueEvent, QueueOptions, ANALYSER_VERSION};
+use reks_core::DataSource;
 use reks_core::{CancelToken, Library, TrackId};
 
 const LONG: Duration = Duration::from_secs(300);
@@ -144,7 +145,7 @@ fn queue_analyses_everything_and_caches_it() {
     for &id in &ids {
         let d = fx.lib.track(id).unwrap();
         assert_eq!(d.track.row.bpm_x100, Some(12_800));
-        assert_eq!(d.track.bpm_source.as_deref(), Some("analysis"));
+        assert_eq!(d.track.bpm_source, Some(DataSource::Analysis));
         let grid = d.beatgrid.unwrap();
         assert_eq!((grid.markers, grid.bpm_min_x100), (1, 12_800));
         // On a click (every 468.75 ms from sample 0); the clicks have no
@@ -285,7 +286,7 @@ fn manual_grid_and_key_survive_reanalysis() {
         assert!(q.wait_idle(LONG).unwrap());
         let d = fx.lib.track(id).unwrap();
         assert_eq!(d.track.row.key.as_deref(), Some("Dm"));
-        assert_eq!(d.track.key_source.as_deref(), Some("manual"));
+        assert_eq!(d.track.key_source, Some(DataSource::Manual));
         assert_eq!(d.track.row.bpm_x100, Some(12_650));
         let grid = d.beatgrid.unwrap();
         assert_eq!(

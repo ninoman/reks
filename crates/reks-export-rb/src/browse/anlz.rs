@@ -11,11 +11,7 @@ use reks_anlz::cue::library_colour;
 use reks_anlz::grid::anchors_from_pqtz;
 use reks_anlz::read::{cue_list, pqtz_beats, sections, ReadError, PCO2, PCOB, PQTZ};
 use reks_anlz::CueEntry;
-use reks_core::{Cue, GridAnchor};
-
-/// rekordbox cue `Type` ([`Cue::kind`]) of a point cue and of a loop.
-const KIND_CUE: i64 = 0;
-const KIND_LOOP: i64 = 4;
+use reks_core::{Cue, CueKind, GridAnchor};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct StickAnalysis {
@@ -55,10 +51,11 @@ fn cue(i: usize, e: &CueEntry) -> Cue {
         id: i as i64,
         slot,
         kind: if e.loop_end_ms.is_some() {
-            KIND_LOOP
+            CueKind::Loop
         } else {
-            KIND_CUE
-        },
+            CueKind::Cue
+        }
+        .code(),
         start_ms: f64::from(e.time_ms),
         end_ms: e.loop_end_ms.map(f64::from),
         name: Some(e.comment.clone()).filter(|c| !c.is_empty()),

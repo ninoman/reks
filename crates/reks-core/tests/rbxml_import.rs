@@ -1117,3 +1117,34 @@ fn unchanged_reimport_writes_no_track_rows() {
     env.import(&c, fixture_remap());
     assert_eq!(env.count("updates"), 1);
 }
+
+/// F10: a hot cue set in reks keeps its slot; the XML's cue for that slot is
+/// skipped with a warning instead of sharing it.
+#[test]
+fn a_reimport_skips_a_hot_cue_whose_slot_is_taken() {
+    let env = Env::new();
+    let c = small_collection();
+    env.import(&c, fixture_remap());
+    let id = env.track_id(2);
+    let slot_a = |env: &Env| -> Vec<(String, Option<String>)> {
+        let db = env.db();
+        let mut stmt = db
+            .prepare("SELECT source, name FROM cue WHERE track_id = ?1 AND slot = 0")
+            .unwrap();
+        stmt.query_map([id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    };
+    assert_eq!(slot_a(&env), [("rekordbox".into(), Some("Drop".into()))]);
+
+    let drop_id = env.lib.track(id).unwrap().cues[0].id;
+    env.lib.delete_cue(id, drop_id).unwrap();
+    env.lib.set_hot_cue(id, 0, 1_000.0).unwrap();
+    let report = env.import(&c, fixture_remap());
+    assert_eq!(slot_a(&env), [("manual".into(), None)]);
+    assert!(report
+        .warnings
+        .iter()
+        .any(|w| w.message.contains("hot cue A") && w.message.contains("skipped")));
+}

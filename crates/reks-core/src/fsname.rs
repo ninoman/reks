@@ -1,7 +1,7 @@
 //! FAT32-safe names for files written to removable media.
 //!
 //! Shared by the rekordbox legacy export (Phase 2) and the OneLibrary and
-//! Engine DJ exporters (Phases 4/5). Every path these functions produce is:
+//! Engine DJ exporter (Phase 6). Every path these functions produce is:
 //!
 //! - **ASCII-only.** Non-ASCII text is transliterated (`deunicode`: Cyrillic
 //!   `Кино` → `Kino`, kana → romaji, Han → Mandarin pinyin, emoji → words) after

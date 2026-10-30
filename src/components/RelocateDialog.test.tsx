@@ -7,6 +7,7 @@ import type { FoundFile, RelocatePlan, RelocateScan, RelocateTrack } from "../li
 vi.mock("../lib/ipc", () => ({
   DECKS: 4,
   relocatePlan: vi.fn(),
+  pickFolder: vi.fn(),
   relocateApply: vi.fn(),
   relocateCancel: vi.fn(),
   libraryFacets: vi.fn(),
@@ -15,7 +16,6 @@ vi.mock("../lib/ipc", () => ({
   libraryRoots: vi.fn(),
   scanStart: vi.fn(),
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
 const ipc = await import("../lib/ipc");
 const { useRelocate } = await import("../store/relocate");

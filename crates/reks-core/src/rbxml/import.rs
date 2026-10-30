@@ -11,7 +11,9 @@
 //!   baseline of tracks this import creates and are ignored for existing
 //!   ones; the cached play count and last played are then recomputed.
 //! - Grids and cues with `source = 'rekordbox'` are replaced; rows from any
-//!   other source are left alone. Playlists are matched by name within their
+//!   other source are left alone, except that `TEMPO` rows replace an
+//!   `analysis` grid (D10): two grids on one track would interleave. A grid
+//!   edited or locked in reks is never touched. Playlists are matched by name within their
 //!   folder; tracks a user added in reks stay after the XML's entries.
 //! - Files are read before the database is locked, on a small thread pool;
 //!   matching stays serial and in XML order. Every track, grid, cue and
@@ -28,7 +30,8 @@ use unicode_normalization::UnicodeNormalization;
 
 use super::colour::colour_name;
 use super::{location_to_path, Collection, NodeKind, Tempo, XmlNode, XmlTrack};
-use crate::beatgrid::USER_OWNED;
+use crate::backup::BackupReason;
+use crate::beatgrid::user_owned_sql;
 use crate::db::Library;
 use crate::error::Result;
 use crate::fileinfo::{self, kind_from_extension, library_path, probe_cols, FileInfo};
@@ -36,6 +39,7 @@ use crate::keys::Key;
 use crate::playlist::{self, Entry};
 use crate::pool;
 use crate::scan::{CancelToken, TrackId};
+use crate::source::DataSource;
 use crate::tag_comments::{self, CommentTagsPreview, CommentTagsReport};
 use crate::timefmt;
 
@@ -52,7 +56,7 @@ macro_rules! update_cols {
 }
 
 /// Grid and cue rows written by this import carry this `source`.
-const SOURCE: &str = "rekordbox";
+const SOURCE: DataSource = DataSource::Rekordbox;
 
 pub use crate::tag_comments::IMPORTED_TAG_CATEGORY;
 
@@ -310,6 +314,7 @@ pub fn import(
         return Ok(imp.report);
     }
 
+    lib.snapshot_before(BackupReason::XmlImport);
     let mut conn = lib.conn()?;
     let tx = conn.transaction()?;
     let mut row_of_xml: HashMap<u32, TrackId> = HashMap::new();
@@ -809,7 +814,10 @@ impl Import<'_> {
         // Skipped when nothing differs, so an unchanged re-import neither
         // bumps `updated_at` nor fires the FTS trigger (`track_fts_au`
         // re-indexes on any SET of its columns, equal or not).
-        tx.prepare_cached(concat!(
+        // The BPM of an edited or locked grid, or one set by hand, stays (F09).
+        let owned = user_owned_sql();
+        let cols = update_cols!();
+        tx.prepare_cached(&format!(
             "WITH new AS (SELECT
                :path AS path, :missing AS missing,
                coalesce(:size, file_size) AS file_size, coalesce(:mtime, file_mtime) AS file_mtime,
@@ -835,10 +843,12 @@ impl Import<'_> {
                coalesce(:comment, comment, :tag_comment) AS comment,
                coalesce(:rating, rating) AS rating,
                coalesce(:color, color) AS color,
-               CASE WHEN :key IS NULL THEN key_source ELSE 'rekordbox' END AS key_source,
+               CASE WHEN :key IS NULL THEN key_source ELSE :rekordbox END AS key_source,
                coalesce(:key, key) AS key,
-               CASE WHEN :bpm IS NULL THEN bpm_source ELSE 'rekordbox' END AS bpm_source,
-               coalesce(:bpm, bpm_x100) AS bpm_x100,
+               CASE WHEN :bpm IS NULL OR bpm_source IS :manual OR {owned}
+                 THEN bpm_source ELSE :rekordbox END AS bpm_source,
+               CASE WHEN bpm_source IS :manual OR {owned}
+                 THEN bpm_x100 ELSE coalesce(:bpm, bpm_x100) END AS bpm_x100,
                CASE WHEN :created THEN coalesce(:play_count, baseline_play_count)
                  ELSE baseline_play_count END AS baseline_play_count,
                coalesce(:date_added, date_added) AS date_added,
@@ -847,16 +857,8 @@ impl Import<'_> {
                coalesce(artwork_id, :artwork_id) AS artwork_id,
                :rb_track_id AS rb_track_id, coalesce(:rb_location, rb_location) AS rb_location
              FROM track WHERE id = :id)
-             UPDATE track SET (",
-            update_cols!(),
-            ", updated_at) = (SELECT ",
-            update_cols!(),
-            ", :now FROM new)
-             WHERE id = :id AND (",
-            update_cols!(),
-            ") IS NOT (SELECT ",
-            update_cols!(),
-            " FROM new)",
+             UPDATE track SET ({cols}, updated_at) = (SELECT {cols}, :now FROM new)
+             WHERE id = :id AND ({cols}) IS NOT (SELECT {cols} FROM new)"
         ))?
         .execute(named_params! {
             ":id": id, ":path": path, ":missing": missing, ":size": size, ":mtime": mtime,
@@ -891,6 +893,7 @@ impl Import<'_> {
             ":created": created,
             ":artwork_id": info.and_then(|i| i.artwork_id),
             ":rb_track_id": t.track_id, ":rb_location": t.location, ":now": now,
+            ":rekordbox": SOURCE, ":manual": DataSource::Manual,
         })?;
         Ok(())
     }
@@ -899,7 +902,10 @@ impl Import<'_> {
         // A grid edited or locked in reks stays (D10, "Grid editing"):
         // rekordbox rows beside manual ones would mix two grids.
         let owned: bool = tx
-            .prepare_cached(&format!("SELECT {USER_OWNED} FROM track WHERE id = ?1"))?
+            .prepare_cached(&format!(
+                "SELECT {} FROM track WHERE id = ?1",
+                user_owned_sql()
+            ))?
             .query_row([id], |r| r.get(0))?;
         if owned {
             if !t.tempos.is_empty() {
@@ -938,6 +944,12 @@ impl Import<'_> {
             ]);
         }
         self.report.beatgrid_rows += rows.len();
+        if !rows.is_empty() {
+            // Not user-owned, so no manual rows: drop the analysis grid the
+            // queue may have written before this import (D10).
+            tx.prepare_cached("DELETE FROM beatgrid WHERE track_id = ?1 AND source <> ?2")?
+                .execute(params![id, SOURCE])?;
+        }
         replace_rows(
             tx,
             "beatgrid",
@@ -948,6 +960,14 @@ impl Import<'_> {
     }
 
     fn write_cues(&mut self, tx: &Transaction<'_>, id: TrackId, t: &XmlTrack) -> Result<()> {
+        // Hot cue slots held by cues this import doesn't replace (set in reks).
+        let mut taken: Vec<u8> = {
+            let mut stmt = tx.prepare_cached(
+                "SELECT slot FROM cue WHERE track_id = ?1 AND source <> ?2 AND slot IS NOT NULL",
+            )?;
+            let slots = stmt.query_map(params![id, SOURCE], |r| r.get(0))?;
+            slots.collect::<rusqlite::Result<_>>()?
+        };
         let mut rows = Vec::with_capacity(t.position_marks.len());
         for m in &t.position_marks {
             let Some(slot) = cue_slot(m.num) else {
@@ -957,6 +977,20 @@ impl Import<'_> {
                 );
                 continue;
             };
+            if let Some(s) = slot {
+                if taken.contains(&s) {
+                    self.warn(
+                        Some(t.track_id),
+                        format!(
+                            "hot cue {} at {} s: the slot already holds a cue; skipped",
+                            hot_cue_letter(s),
+                            m.start
+                        ),
+                    );
+                    continue;
+                }
+                taken.push(s);
+            }
             if m.kind == 4 && m.end.is_none() {
                 self.warn(
                     Some(t.track_id),
@@ -1178,7 +1212,7 @@ fn replace_rows(
         "INSERT INTO {table} (track_id, source, {columns}) VALUES ({marks})"
     ))?;
     for row in rows {
-        let values = [Value::Integer(track), Value::Text(SOURCE.into())]
+        let values = [Value::Integer(track), Value::Text(SOURCE.as_str().into())]
             .into_iter()
             .chain(row.iter().cloned());
         insert.execute(rusqlite::params_from_iter(values))?;
@@ -1341,6 +1375,11 @@ fn rgb_int((r, g, b): (u8, u8, u8)) -> u32 {
 
 /// `Num` → hot-cue slot: −1 memory cue (`Some(None)`), 0..7 hot cue;
 /// anything else `None` (skipped).
+/// A–H for hot cue slots 0..7.
+fn hot_cue_letter(slot: u8) -> char {
+    char::from(b'A' + slot)
+}
+
 fn cue_slot(num: i32) -> Option<Option<u8>> {
     match num {
         -1 => Some(None),

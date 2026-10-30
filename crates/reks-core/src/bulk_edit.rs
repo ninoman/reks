@@ -12,6 +12,7 @@ use rusqlite::types::Value;
 use rusqlite::{params_from_iter, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
+use crate::backup::BackupReason;
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::query::{fill_tags, track_row, TrackRow, ROW_COLUMNS};
@@ -136,6 +137,7 @@ impl Library {
         let ids: BTreeSet<TrackId> = track_ids.iter().copied().collect();
         let ids: Vec<TrackId> = ids.into_iter().collect();
 
+        self.snapshot_before(BackupReason::BulkEdit);
         let mut conn = self.conn()?;
         let tx = conn.transaction()?;
         let now = now_utc();

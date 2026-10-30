@@ -12,6 +12,7 @@ vi.mock("../lib/ipc", () => ({
   libraryRootAdd: vi.fn(),
   libraryRootRemove: vi.fn(),
   cacheDirMove: vi.fn(),
+  pickFolder: vi.fn(),
   audioDevices: vi.fn(),
   mixDeviceOptions: vi.fn(),
   libraryQuery: vi.fn(),
@@ -22,10 +23,8 @@ vi.mock("../lib/ipc", () => ({
   backupRestart: vi.fn(),
   backupShowFolder: vi.fn(),
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 
 const ipc = await import("../lib/ipc");
-const dialog = await import("@tauri-apps/plugin-dialog");
 const { startThemeSync, useSettings } = await import("../store/settings");
 const { useMix } = await import("../store/mix");
 const { useBackups } = await import("../store/backups");
@@ -274,7 +273,7 @@ describe("SettingsDialog", () => {
   });
 
   it("asks before moving the cache", async () => {
-    vi.mocked(dialog.open).mockResolvedValue("/Volumes/SSD/cache");
+    vi.mocked(ipc.pickFolder).mockResolvedValue("/Volumes/SSD/cache");
     await openDialog();
     fireEvent.click(screen.getByRole("button", { name: "Move…" }));
     const move = await screen.findByRole("button", { name: "Move" });

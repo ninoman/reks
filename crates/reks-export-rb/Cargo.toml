@@ -16,9 +16,7 @@ test-util = []
 [dependencies]
 baken-core = { workspace = true }
 baken-export = { workspace = true }
-binrw = { workspace = true }
 blake3 = { workspace = true }
-rekordcrate = { workspace = true }
 reks-analysis = { workspace = true }
 reks-anlz = { workspace = true }
 reks-audio = { workspace = true }
@@ -42,4 +40,8 @@ windows-sys = { workspace = true }
 
 [dev-dependencies]
 baken-core = { workspace = true }
+binrw = { workspace = true }
 proptest = { workspace = true }
+# The independent PDB parser of the writer's round-trip tests; never used on
+# stick bytes in the app (D8, review F03).
+rekordcrate = { workspace = true }

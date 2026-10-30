@@ -8,14 +8,14 @@
  * `beatgrid/`, which is the real (tested) implementation.
  */
 
-import type { Beatgrid, BeatMark, GridAnchor, GridEdit } from "../lib/ipc";
+import type { Beatgrid, BeatMark, DataSource, GridAnchor, GridEdit } from "../lib/ipc";
 import columnsUrl from "./fixtures/sine-click-128.columns.bin?url";
 
 const DURATION_MS = 30_000;
 
 interface MockGrid {
   anchors: GridAnchor[];
-  source: string | null;
+  source: DataSource | null;
   locked: boolean;
 }
 

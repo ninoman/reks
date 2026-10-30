@@ -10,13 +10,12 @@
 //! (code + the player's RGB bytes, from the same exports).
 
 use reks_core::track::Cue;
+use reks_core::CueKind;
 use serde::{Deserialize, Serialize};
 
 use crate::grid::bpm_at;
 use crate::write::{CueEntry, PqtzBeat};
 
-/// rekordbox `Type` of a loop.
-const KIND_LOOP: i64 = 4;
 /// Hot cue slots (A–H).
 const HOT_SLOTS: u8 = 8;
 /// Hot cues A–C go into the `.DAT` `PCOB`, D–H into the `.EXT` one.
@@ -108,7 +107,7 @@ pub fn entry(cue: &Cue, beats: &[PqtzBeat]) -> CueEntry {
     // A loop must still end after it starts once rounded to whole ms.
     let loop_end = cue
         .end_ms
-        .filter(|&end| cue.kind == KIND_LOOP && ms(end) > time_ms);
+        .filter(|&end| cue.cue_kind() == Some(CueKind::Loop) && ms(end) > time_ms);
     let hot_cue = cue.slot.map_or(0, |s| u32::from(s) + 1);
     CueEntry {
         hot_cue,

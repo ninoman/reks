@@ -70,7 +70,7 @@ pub enum CueRouting { Outputs { master: [u16; 2], cue: [u16; 2] }, SplitMono, Of
 
 pub struct DeckSource { .. }      // built off the audio thread by the app layer:
 // DeckSource::new(pcm: Vec<i16>, sample_rate)   interleaved stereo, ~10 MB per minute
-//     .with_grid(&[GridAnchor { frame, bpm, beat_in_bar, beats_per_bar }])  // `beatgrid` rows, source frames
+//     .with_grid(&[GridBeat { frame, bpm, beat_in_bar, beats_per_bar }])  // one per beat, source frames
 //     .with_hot_cues(vec![(slot, frame)])
 
 impl Engine {
@@ -82,9 +82,9 @@ pub fn render(graph: &mut Graph, out: &mut [f32]);     // same graph, no device;
 
 pub enum Control {
     Load { deck: u8, src: Arc<DeckSource> }, Play { deck: u8 }, Pause { deck: u8 },
-    Cue { deck: u8 }, CueRelease { deck: u8 }, Seek { deck: u8, sample: i64 }, HotCue { deck: u8, slot: u8 },
+    Cue { deck: u8 }, CueRelease { deck: u8 }, Seek { deck: u8, frame: i64 }, HotCue { deck: u8, slot: u8 },
     Tempo { deck: u8, ratio: f64 }, Nudge { deck: u8, ratio: f64 },
-    Sync { deck: u8, on: bool, bar: bool }, Leader { deck: u8 },
+    Sync { deck: u8, on: bool, bar: bool }, TakeMaster { deck: u8 },
     Channel { ch: u8, param: ChannelParam, value: f32 },   // trim, eq_*, fader, filter/xfade assign, cue
     Filter { unit: FilterUnit, param: FilterParam, value: f32 },
     Crossfader { pos: f32, curve: f32 },
@@ -505,7 +505,8 @@ pub enum Control {
       (its issue #210; its test matches rekordbox 7 bytes), one per track
       (the earliest).
     - [x] Export, behind the `export.active_loops` flag (`ExportOptions::active_loops`,
-      wizard switch "Active loops", off by default, UNVERIFIED until a
+      wizard switch "Active loops", on by default since 2026-10-30 (D22
+      amendment), UNVERIFIED until a
       player enters the loop in a hardware test): the temp XML handed to
       baken prefixes the earliest AUTO memory loop's name with `[active]`
       (`rbxml::ActiveLoops::BakenMarker`), which baken strips. Our own ANLZ

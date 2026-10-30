@@ -382,14 +382,14 @@ fn a_bad_wav_header_and_target_dependent_audio_issues() {
     assert!(!has(&r, FindingKind::AudioFormat));
 }
 
-/// Row damage rekordcrate's page parser accepts but [`crate::pdbread`]'s
+/// Row damage the page walk accepts but [`crate::pdb`]'s
 /// strict read refuses (the Devices section shows an error for this stick).
 #[test]
 fn a_damaged_row_is_a_finding_and_the_rest_is_checked() {
     let mut rows = pdb_rows();
     rows[3].1.push(playlist_entry(1, 1, 99));
     let pdb = full_pdb(&rows);
-    assert!(crate::pdbread::read_pdb(&pdb).is_err());
+    assert!(crate::pdb::read_pdb(&pdb).is_err());
     let dir = write_stick(&with_pdb(track_files(), pdb));
     let r = run(dir.path(), &NoReader, Some(TargetProfile::Cdj3000));
     let damaged = group(&r, FindingKind::RowsDamaged);
@@ -641,7 +641,7 @@ fn rekordbox_reference_export() {
             }
         }
     }
-    let pdb = crate::pdbread::read_stick(&reference_root()).unwrap();
+    let pdb = crate::pdb::read_stick(&reference_root()).unwrap();
     for t in &pdb.tracks {
         let name = t.file_path.rsplit('/').next().unwrap();
         files.push((t.file_path.clone(), fixture_audio(name)));

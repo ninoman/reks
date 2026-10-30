@@ -15,6 +15,7 @@ vi.mock("../lib/ipc", async (original) => ({
   ...(await original<typeof import("../lib/ipc")>()),
   devicesList: vi.fn(),
   deviceEject: vi.fn(),
+  exportDefaultOptions: vi.fn(),
   exportPlan: vi.fn(),
   exportApply: vi.fn(),
   exportCancel: vi.fn(),
@@ -135,6 +136,7 @@ function dryRun(over: Partial<DryRun> = {}): DryRun {
     convertible: [],
     convertText: null,
     onelibrary: null,
+    onelibraryRemoval: null,
     ...over,
   };
 }
@@ -192,6 +194,21 @@ function pendingExport() {
 }
 
 beforeEach(() => {
+  vi.mocked(ipc.exportDefaultOptions).mockReset().mockResolvedValue({
+    target: "Generic",
+    keepStale: false,
+    missingAnalysis: "skip",
+    artwork: false,
+    skipUnsupported: false,
+    history: "backUp",
+    discardHistoryConfirmed: false,
+    historyChosen: false,
+    dividers: true,
+    activeLoops: true,
+    anlzPreference: "rekordboxFirst",
+    onelibrary: true,
+    onelibraryRemovalConfirmed: false,
+  });
   devicesList.mockReset().mockResolvedValue([stick]);
   deviceEject.mockReset().mockResolvedValue();
   exportPlan.mockReset();
@@ -397,15 +414,15 @@ describe("ExportWizard", () => {
     );
   });
 
-  it("playlist dividers and active loops are off by default and marked UNVERIFIED", async () => {
+  it("playlist dividers and active loops are on by default, marked UNVERIFIED, and turn off", async () => {
     exportPlan.mockResolvedValue(dryRun());
     await toOptions();
     const toggle = screen.getByRole("switch", { name: "Playlist dividers" });
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-    // Dividers and active loops each carry the badge.
-    expect(screen.getAllByText("UNVERIFIED")).toHaveLength(2);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    // Dividers, active loops and OneLibrary each carry the badge.
+    expect(screen.getAllByText("UNVERIFIED")).toHaveLength(3);
     const loops = screen.getByRole("switch", { name: "Active loops" });
-    expect(loops.getAttribute("aria-checked")).toBe("false");
+    expect(loops.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(toggle);
     fireEvent.click(loops);
 
@@ -414,12 +431,45 @@ describe("ExportWizard", () => {
     expect(exportPlan).toHaveBeenCalledWith(
       "/Volumes/REKS",
       { playlists: [3] },
-      expect.objectContaining({ dividers: true, activeLoops: true }),
+      expect.objectContaining({ dividers: false, activeLoops: false }),
       1,
     );
   });
 
-  it("OneLibrary is off by default, marked experimental, and its dry run lists the file", async () => {
+  it("asks to confirm deleting the stick's exportLibrary.db and plans again", async () => {
+    const removal = {
+      title: "The stick's OneLibrary library is deleted",
+      text: "OneLibrary is off. Players that read only OneLibrary (OPUS-QUAD, XDJ-AZ) will find no library on this stick.",
+      files: {
+        count: 1,
+        bytes: 3,
+        totalText: "1 file, 3 B",
+        files: [{ path: "/PIONEER/rekordbox/exportLibrary.db", from: null, sizeText: "3 B" }],
+      },
+      confirmText: "I understand exportLibrary.db is deleted.",
+      confirmed: false,
+    };
+    exportPlan
+      .mockResolvedValueOnce(dryRun({ ready: false, onelibraryRemoval: removal }))
+      .mockResolvedValueOnce(dryRun({ onelibraryRemoval: { ...removal, confirmed: true } }));
+    await toOptions();
+    fireEvent.click(button("Dry run"));
+    expect(await screen.findByText("The stick's OneLibrary library is deleted")).toBeTruthy();
+    expect(screen.getByText(/OPUS-QUAD, XDJ-AZ/)).toBeTruthy();
+    expect(screen.getByText("Delete: 1 file, 3 B")).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: /exportLibrary.db is deleted/ }));
+    await screen.findByText(/Ready to export/);
+    expect(exportPlan).toHaveBeenLastCalledWith(
+      "/Volumes/REKS",
+      { playlists: [3] },
+      expect.objectContaining({ onelibraryRemovalConfirmed: true }),
+      1,
+    );
+    const box = screen.getByRole("checkbox", { name: /exportLibrary.db is deleted/ });
+    expect((box as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("OneLibrary is on by default, marked UNVERIFIED, and its dry run lists the file", async () => {
     exportPlan.mockResolvedValue(
       dryRun({
         onelibrary: {
@@ -441,11 +491,9 @@ describe("ExportWizard", () => {
     );
     await toOptions();
     const toggle = screen.getByRole("switch", { name: "OneLibrary" });
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-    expect(screen.getByText("EXPERIMENTAL")).toBeTruthy();
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
     expect(screen.getByText(/not supported by AlphaTheta/)).toBeTruthy();
-    expect(screen.getByText(/has no OneLibrary key: use a release build/)).toBeTruthy();
-    fireEvent.click(toggle);
+    expect(screen.getByText(/has no OneLibrary key, so only export.pdb is written/)).toBeTruthy();
 
     fireEvent.click(button("Dry run"));
     await screen.findByText(/Ready to export/);

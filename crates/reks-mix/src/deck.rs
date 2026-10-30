@@ -357,7 +357,10 @@ impl Deck {
                 None
             }
             Control::SetGrid { src, .. } => {
-                if matches!(self.pending, Pending::Load(_)) || self.src.is_none() {
+                // Only a grid edit of the loaded track swaps in place; other
+                // audio would change with no fade (a click).
+                let same_audio = self.src.as_ref().is_some_and(|s| s.shares_pcm(&src));
+                if matches!(self.pending, Pending::Load(_)) || !same_audio {
                     return Some(src);
                 }
                 self.src.replace(src)
@@ -559,6 +562,10 @@ impl Deck {
 
     /// Back to the cue point and pause, after a fade-out when audible.
     fn return_to_cue(&mut self) {
+        // A pending load wins: the cue point is the old track's.
+        if matches!(self.pending, Pending::Load(_)) {
+            return;
+        }
         if self.audible() {
             self.pending = Pending::Cue;
             self.gate.target = 0.0;

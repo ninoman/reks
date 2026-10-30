@@ -15,6 +15,7 @@ use rusqlite::{params, OptionalExtension, Transaction};
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::scan::TrackId;
+use crate::source::{CueKind, DataSource};
 use crate::track::Cue;
 
 /// Hot cue slots A–H.
@@ -26,10 +27,6 @@ pub const MAX_CUE_NAME_CHARS: usize = 64;
 
 /// A memory cue this close (ms) to an existing one is the same cue.
 const SAME_CUE_MS: f64 = 1.0;
-
-/// rekordbox cue `Type` of a plain cue and of a loop ([`Cue::kind`]).
-const KIND_CUE: i64 = 0;
-const KIND_LOOP: i64 = 4;
 
 /// Colours new hot cues take, in order: entries of rekordbox's 16-colour hot
 /// cue palette (the RGB rekordbox shows), so an export maps each one to its
@@ -153,8 +150,8 @@ impl Library {
         let colour = next_hot_cue_colour(slot, &used);
         tx.execute(
             "INSERT INTO cue (track_id, slot, kind, start_ms, color_rgb, source)
-             VALUES (?1, ?2, 0, ?3, ?4, 'manual')",
-            params![id, slot, start_ms, colour],
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, slot, CueKind::Cue, start_ms, colour, DataSource::Manual],
         )?;
         let cue = read_cue(&tx, id, tx.last_insert_rowid())?;
         touch(&tx, id)?;
@@ -180,9 +177,9 @@ impl Library {
             }
         }
         let kind = if end_ms.is_some() {
-            KIND_LOOP
+            CueKind::Loop
         } else {
-            KIND_CUE
+            CueKind::Cue
         };
         let same: Option<i64> = tx
             .query_row(
@@ -198,8 +195,8 @@ impl Library {
             None => {
                 tx.execute(
                     "INSERT INTO cue (track_id, slot, kind, start_ms, end_ms, source)
-                     VALUES (?1, NULL, ?2, ?3, ?4, 'manual')",
-                    params![id, kind, start_ms, end_ms],
+                     VALUES (?1, NULL, ?2, ?3, ?4, ?5)",
+                    params![id, kind, start_ms, end_ms, DataSource::Manual],
                 )?;
                 touch(&tx, id)?;
                 tx.last_insert_rowid()
@@ -208,6 +205,15 @@ impl Library {
         let cue = read_cue(&tx, id, cue_id)?;
         tx.commit()?;
         Ok(cue)
+    }
+
+    /// MEMORY pressed at `at_ms`: while a loop plays (`looping` is its
+    /// `(start, end)`), it saves the loop (rekordbox), else a cue at `at_ms`.
+    pub fn save_memory(&self, id: TrackId, at_ms: f64, looping: Option<(f64, f64)>) -> Result<Cue> {
+        match looping {
+            Some((start, end)) => self.add_memory_cue(id, start, Some(end)),
+            None => self.add_memory_cue(id, at_ms, None),
+        }
     }
 
     /// Renames cue `cue` of track `id`; `None` or blank clears the name.
@@ -231,7 +237,7 @@ impl Library {
         let mut conn = self.conn()?;
         let tx = conn.transaction()?;
         let c = read_cue(&tx, id, cue)?;
-        if c.slot.is_some() || c.kind != KIND_LOOP || c.end_ms.is_none() {
+        if c.slot.is_some() || c.kind != CueKind::Loop.code() || c.end_ms.is_none() {
             return Err(Error::InvalidField {
                 field: "activeLoop",
                 reason: "only a memory loop can be active".into(),
@@ -247,15 +253,16 @@ impl Library {
         Ok(out)
     }
 
-    /// Deletes cue `cue` of track `id` (hot cue, memory cue or loop).
-    pub fn delete_cue(&self, id: TrackId, cue: i64) -> Result<()> {
+    /// Deletes cue `cue` of track `id` (hot cue, memory cue or loop). Returns
+    /// the hot cue slot it freed, if it was one.
+    pub fn delete_cue(&self, id: TrackId, cue: i64) -> Result<Option<u8>> {
         let mut conn = self.conn()?;
         let tx = conn.transaction()?;
-        read_cue(&tx, id, cue)?;
+        let slot = read_cue(&tx, id, cue)?.slot;
         tx.execute("DELETE FROM cue WHERE id = ?1", [cue])?;
         touch(&tx, id)?;
         tx.commit()?;
-        Ok(())
+        Ok(slot)
     }
 }
 

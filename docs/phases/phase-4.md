@@ -46,8 +46,8 @@ files, mirroring what rekordbox 7.2.11+ does on every export.
 - `reks-export-onelibrary` crate: schema DDL per observed rekordbox version,
   seed data, writer from the Phase 2 export plan, SQLCipher encryption, a
   reader for validation, and a "compare to reference export" tool.
-- Integration into the export planner: optional step "also write OneLibrary",
-  off by default, labelled Experimental.
+- Integration into the export planner: step "also write OneLibrary", on by
+  default since 2026-10-30 (D14 amendment) and labelled UNVERIFIED.
 - Key policy implementation (below).
 - Hardware test campaign on at least one OneLibrary-only player.
 
@@ -93,7 +93,7 @@ As built (tasks 2–7, 10); code in
   `write(plan, key, device_root)` builds and replaces the file (task 6).
 - `build::from_pdb(&PdbLibrary, created_date) -> OneLibrary`: pure mapping
   from the `export.pdb` baken just wrote (read by
-  [`reks_export_rb::pdbread`](../../crates/reks-export-rb/src/pdbread.rs))
+  [`reks_export_rb::pdb`](../../crates/reks-export-rb/src/pdb/library.rs))
   to typed rows (`rows.rs`); `store` inserts and reads them.
 - `schema::RbVersion` (`V7_2_19`): DDL and seed SQL in
   `crates/reks-export-onelibrary/data/<version>/`, `create_empty`.
@@ -189,20 +189,26 @@ empty in the reference, so their rows are UNVERIFIED (mapped like baken).
    removed, existing database's history, warnings/problems). The writer
    crate depends on reks-export-rb, so it implements the trait and the app
    picks the implementation (`OneLibraryWriter`, tasks 4–6).
-   `ExportOptions::onelibrary` (off by default, labelled Experimental) runs
-   [`plan_onelibrary`](../../crates/reks-export-rb/src/plan/onelibrary.rs)
-   after the export guard. It adds an experimental warning, blocks on a
-   missing key, and lists `exportLibrary.db` plus the auxiliary files
-   (baken's `ONELIBRARY_FILES` minus the database). Sessions the writer reads
-   in an existing `exportLibrary.db` go through the export guard
+   `ExportOptions::onelibrary` (on by default since 2026-10-30, labelled
+   UNVERIFIED) is read by
+   [`plan_onelibrary`](../../crates/reks-export-rb/src/plan/onelibrary.rs),
+   which every export runs after the export guard. With the option and a key
+   it adds an experimental warning and lists `exportLibrary.db` plus the
+   auxiliary files (baken's `ONELIBRARY_FILES` minus the database). Without
+   a key it warns and writes the Device Library only; with the option off or
+   no key, the stick's OneLibrary files are deletes and an `exportLibrary.db`
+   there needs `onelibrary_removal_confirmed` (review F02). Sessions in an
+   existing `exportLibrary.db` go through the export guard whenever a key
+   opens it (review F08)
    (`OneLibraryHistoryNotImported` until a choice; Import and Back up keep the
    file in the backup). A database it cannot read keeps the Phase 2 backup.
    The key (`reks_core::OneLibraryKey`: redacted `Debug`, no `Serialize`,
    zeroed on drop) comes from `resolve_key` (key policy above); the UI only
    learns `onelibraryKeyBuiltin`.
-   Apply side (2026-10-20): with the option on, `apply` takes the writer and
-   key in `ApplyEnv::onelibrary` (`OneLibraryEnv`, never in the plan) and
-   refuses without them (`NoOneLibraryWriter`, `NoOneLibraryPlan`). After the
+   Apply side (2026-10-20): when the plan writes `exportLibrary.db`, `apply`
+   takes the writer and key in `ApplyEnv::onelibrary` (`OneLibraryEnv`, never
+   in the plan) and refuses without them (`NoOneLibraryWriter`); a plan that
+   skipped the step is refused too (`NoOneLibraryPlan`). After the
    baken write (which removes rekordbox's OneLibrary files once the new
    `export.pdb` is in place), the `oneLibrary` stage removes what is left of
    the plan's auxiliary files and calls `OneLibraryExport::write`, before the
@@ -280,7 +286,8 @@ empty in the reference, so their rows are UNVERIFIED (mapped like baken).
   cues, key and BPM shown.
 - Plugging the stick into rekordbox 7 shows both "Device Library" and
   "OneLibrary" nodes with matching contents and no "out of matching" caution.
-- Feature off by default; release notes state it is experimental.
+- Feature on by default (D14, 2026-10-30) and labelled UNVERIFIED until this
+  passes; release notes state it is experimental.
 
 ## Tests
 

@@ -7,11 +7,8 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use reks_analysis::{
-    AnalysisQueue, ModelPaths, QueueEvent, QueueOptions, QueueStatus, ANALYSER_VERSION,
-};
+use reks_analysis::{AnalysisQueue, ModelPaths, QueueEvent, QueueOptions, QueueStatus};
 use reks_core::{Library, TrackId};
-use reks_export_rb::rbcache::{self, RbCache};
 use reks_export_rb::rbmap;
 use tauri::ipc::Channel;
 use tauri::State;
@@ -115,20 +112,11 @@ impl Analysis {
 
 /// One mapping pass over rekordbox's local analysis folders.
 fn map_rekordbox(lib: &Library) {
-    let started = std::time::Instant::now();
-    let rb = match RbCache::scan(&rbcache::default_roots()) {
-        Ok(rb) if !rb.roots().is_empty() => rb,
-        Ok(_) => return,
-        Err(err) => {
-            tracing::warn!(%err, "cannot read rekordbox's analysis folders");
-            return;
-        }
-    };
-    match rbmap::map_pending(lib, &rb, ANALYSER_VERSION) {
-        Ok(r) if r.candidates > 0 => tracing::info!(
-            candidates = r.candidates,
-            mapped = r.mapped.len(),
-            ms = started.elapsed().as_millis() as u64,
+    match rbmap::map_local(lib, &[]) {
+        Ok(run) if !run.roots.is_empty() && run.report.candidates > 0 => tracing::info!(
+            candidates = run.report.candidates,
+            mapped = run.report.mapped.len(),
+            ms = run.total_ms as u64,
             "rekordbox analysis mapped instead of analysed"
         ),
         Ok(_) => {}

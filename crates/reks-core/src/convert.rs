@@ -28,6 +28,7 @@ use std::path::{Path, PathBuf};
 use rusqlite::{named_params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
+use crate::backup::BackupReason;
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::fileinfo::{self, library_path, probe_cols, ProbeCols};
@@ -400,6 +401,9 @@ pub fn apply(
     events: &dyn Fn(ConvertEvent),
     cancel: &CancelToken,
 ) -> Result<ConvertReport> {
+    if plan.options.library == LibraryMode::Replace {
+        lib.snapshot_before(BackupReason::ConvertReplace);
+    }
     let mut report = ConvertReport {
         skipped: plan.skipped.clone(),
         ..ConvertReport::default()

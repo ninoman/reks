@@ -163,8 +163,8 @@ Divider rules
   no Tonality, AverageBpm, TEMPO or POSITION_MARK.
 - The planner gives it the stick path any track with no artist or album gets,
   `/Contents/Unknown Artist/Unknown Album/div-<playlist_id>-<n>.wav` (our
-  planner decides paths, not baken's layout). Stale dividers go with `prune`
-  like any file.
+  planner decides paths, not baken's layout). Stale dividers are plan
+  deletes like any file.
 - ANLZ: the planner sets `generate_analysis` when the plan has dividers. baken
   applies it only to tracks rekordbox never analysed, and the planner already
   leaves other unanalysed tracks out unless the user opted in. If baken can't
@@ -205,15 +205,15 @@ Divider rules
    table's scroll position.
 4. [x] **Divider export**: WAV generator (round-trip through Symphonia probe and
    `audiocheck`), planner expansion, temp XML rows, `generate_analysis`,
-   manifest kind, dry-run group, `export.dividers` flag (off with an UNVERIFIED
-   badge until task 11 passes). Temp-dir test: 30 tracks and 3 dividers →
+   manifest kind, dry-run group, `export.dividers` flag (UNVERIFIED badge
+   until task 11 passes; on by default since 2026-10-30, D22). Temp-dir test: 30 tracks and 3 dividers →
    33 playlist entries in order (rekordcrate), 3 WAVs with ANLZ, zero validator
    findings; a second identical export copies nothing; removing a divider and
    re-exporting deletes exactly its WAV and ANLZ.
    Done in [`divider.rs`](../../crates/reks-export-rb/src/divider.rs)
    (`wav_bytes`, `ensure_wav`, `expand`); the flag is
    `ExportOptions::dividers` (UI: "Playlist dividers" switch with an
-   UNVERIFIED badge; CLI: `reks rb plan|export --dividers`). `plan()` expands
+   UNVERIFIED badge; CLI: `reks rb plan|export`, `--no-dividers` to leave them out). `plan()` expands
    dividers into `PlannedTrack`s with `divider: Some(DividerInfo)` and synthetic
    track ids counting down from `u32::MAX` (refused if they would meet a
    library id); their ANLZ is always `Generated`, whatever
@@ -403,7 +403,7 @@ Divider rules
     (`check_stick(device, opts, onelibrary_reader, library)`, never fails):
     library files and their players ([`players.rs`](../../crates/reks-export-rb/src/check/players.rs),
     UNVERIFIED); `export.pdb` tables (the validator's check) and damaged
-    rows (`pdbread::read_pdb_lenient`); playlists and tracks in one library
+    rows (`pdb::read_pdb_lenient`); playlists and tracks in one library
     only or with other contents or order ([`playlists.rs`](../../crates/reks-export-rb/src/check/playlists.rs));
     per track ([`tracks.rs`](../../crates/reks-export-rb/src/check/tracks.rs)):
     path leaving the stick or failing `fsname::check_path`, audio missing or

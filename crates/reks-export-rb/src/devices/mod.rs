@@ -228,6 +228,19 @@ pub fn target(dev: &Device) -> TargetProfile {
     })
 }
 
+/// The export target of the stick with volume `serial`, for a check before
+/// a gig. `None` (an unknown stick, no serial, or an unreadable profile)
+/// means "check against the strictest players".
+pub fn target_for_serial(lib: &Library, serial: Option<&str>) -> Option<TargetProfile> {
+    match lib.device_by_serial(serial?) {
+        Ok(device) => device.as_ref().map(target),
+        Err(e) => {
+            tracing::warn!(error = %e, "stick profile not read; checking against the strictest players");
+            None
+        }
+    }
+}
+
 /// Stores the mounted stick `info` as a new device with an empty profile.
 /// `serial` is the volume ID [`identify`] reported.
 pub fn create(

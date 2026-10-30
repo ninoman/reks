@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { RuleNode } from "../lib/ipc";
+import type { Filter, RuleNode } from "../lib/ipc";
 import {
   activeRowCount,
   addField,
@@ -103,20 +103,16 @@ describe("toRule", () => {
     });
   });
 
-  it("tag categories: any is tagAny, all is an all group of single tags, none is not", () => {
+  it("tag categories: any is tagAny, all is tagAll, none is not", () => {
     expect(only(tags(2, [20, 21]))).toEqual({
       type: "filter",
       not: false,
       filter: { type: "tagAny", ids: [20, 21] },
     });
     expect(only(tags(2, [20, 21], true))).toEqual({
-      type: "group",
-      match: "all",
+      type: "filter",
       not: false,
-      rules: [
-        { type: "filter", not: false, filter: { type: "tagAny", ids: [20] } },
-        { type: "filter", not: false, filter: { type: "tagAny", ids: [21] } },
-      ],
+      filter: { type: "tagAll", ids: [20, 21] },
     });
     expect(only({ ...tags(2, [21]), not: true })).toEqual({
       type: "filter",
@@ -135,18 +131,15 @@ describe("toRule", () => {
     });
     expect(rating("atMost", 2)).toEqual({
       type: "filter",
+      not: false,
+      filter: { type: "ratingRange", min: 0, max: 2 },
+    });
+    expect(rating("exactly", 3, true)).toEqual({
+      type: "filter",
       not: true,
-      filter: { type: "ratingMin", rating: 3 },
+      filter: { type: "ratingRange", min: 3, max: 3 },
     });
-    expect(rating("exactly", 3)).toMatchObject({
-      type: "group",
-      match: "all",
-      rules: [
-        { not: false, filter: { rating: 3 } },
-        { not: true, filter: { rating: 4 } },
-      ],
-    });
-    expect(rating("exactly", 5)).toMatchObject({ type: "filter", filter: { rating: 5 } });
+    expect(rating("exactly", 5)).toMatchObject({ filter: { type: "ratingRange", min: 5, max: 5 } });
     // At most 5★ is every track: nothing to filter.
     expect(rating("atMost", 5)).toBeUndefined();
     expect(rating("atLeast", 0)).toBeUndefined();
@@ -242,6 +235,47 @@ describe("fromRule", () => {
     expect(back.rules[2]).toMatchObject({ value: { category: 1, ids: [10, 11], all: true } });
     expect(back.rules[5]).toMatchObject({ not: true, value: { op: "exactly", stars: 2 } });
     expect(back.rules[6]).toMatchObject({ not: false, value: { op: "atMost", stars: 2 } });
+  });
+
+  it("reads the shapes written before ratingRange and tagAll", () => {
+    const f = (filter: Filter, not = false): RuleNode => ({
+      type: "filter",
+      not,
+      filter,
+    });
+    const exactly = fromRule(
+      {
+        type: "group",
+        match: "all",
+        not: false,
+        rules: [f({ type: "ratingMin", rating: 3 }), f({ type: "ratingMin", rating: 4 }, true)],
+      },
+      categoryOf,
+    );
+    expect(exactly.rules[0]).toMatchObject({ value: { field: "rating", op: "exactly", stars: 3 } });
+    const all = fromRule(
+      {
+        type: "group",
+        match: "all",
+        not: false,
+        rules: [f({ type: "tagAny", ids: [10] }), f({ type: "tagAny", ids: [11] })],
+      },
+      categoryOf,
+    );
+    expect(all.rules[0]).toMatchObject({ value: { field: "tag", ids: [10, 11], all: true } });
+  });
+
+  it("reads a rating range of two bounds as two rows", () => {
+    const rule: RuleNode = {
+      type: "filter",
+      not: false,
+      filter: { type: "ratingRange", min: 2, max: 4 },
+    };
+    const back = fromRule(rule, categoryOf);
+    expect(back.rules.map((r) => r.kind === "row" && r.value)).toEqual([
+      { field: "rating", op: "atLeast", stars: 2 },
+      { field: "rating", op: "atMost", stars: 4 },
+    ]);
   });
 
   it("keeps groups and an any root", () => {

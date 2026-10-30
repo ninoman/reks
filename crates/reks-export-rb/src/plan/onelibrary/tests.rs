@@ -70,6 +70,14 @@ impl OneLibraryExport for Fake {
         })
     }
 
+    fn existing(
+        &self,
+        _device_root: &Path,
+        _key: &OneLibraryKey,
+    ) -> Result<ExistingLibrary, PlanError> {
+        Ok(self.existing.clone())
+    }
+
     fn write(
         &self,
         plan: &ExportPlan,
@@ -144,15 +152,17 @@ fn put_rekordbox_onelibrary(w: &World) {
 fn is_onelibrary(p: &Problem) -> bool {
     matches!(
         p,
-        Problem::OneLibraryKeyMissing
+        Problem::OneLibraryRemovalNotConfirmed
             | Problem::OneLibraryUnavailable
             | Problem::OneLibraryHistoryNotImported { .. }
     )
 }
 
 #[test]
-fn off_by_default_and_off_adds_nothing() {
-    assert!(!ExportOptions::default().onelibrary);
+fn on_by_default_and_off_on_a_clean_stick_only_marks_the_plan() {
+    let d = ExportOptions::default();
+    assert!(d.onelibrary && d.dividers && d.active_loops);
+    assert!(!d.onelibrary_removal_confirmed);
     let w = World::new();
     let mut p = planned(&w, &options(false));
     let before = p.clone();
@@ -163,21 +173,148 @@ fn off_by_default_and_off_adds_nothing() {
         &w.lib,
     )
     .unwrap();
+    assert!(p.onelibrary_planned);
+    p.onelibrary_planned = false;
     assert_eq!(p, before);
-    assert!(p.onelibrary.is_none());
+}
+
+/// The three OneLibrary files [`put_rekordbox_onelibrary`] leaves, as stick paths.
+const RB_FILES: [&str; 3] = [
+    "/PIONEER/rekordbox/exportLibrary.db",
+    "/PIONEER/rekordbox/exportLibrary.db-wal",
+    "/PIONEER/rekordbox/exportExt.pdb",
+];
+
+fn removed(p: &ExportPlan) -> Vec<&str> {
+    p.deletes
+        .iter()
+        .filter(|f| f.reason == OpReason::OneLibraryRemoved)
+        .map(|f| f.dst_rel.as_str())
+        .collect()
 }
 
 #[test]
-fn on_without_a_key_blocks_and_says_how_to_get_one() {
+fn on_without_a_key_writes_only_the_device_library() {
     let w = World::new();
     let mut p = planned(&w, &options(true));
     plan_onelibrary(&mut p, &Fake::new(ExistingLibrary::Absent), None, &w.lib).unwrap();
     assert!(p.onelibrary.is_none());
     assert!(p.warnings.contains(&Warning::OneLibraryExperimental));
-    assert_eq!(p.errors, [Problem::OneLibraryKeyMissing]);
-    assert!(Problem::OneLibraryKeyMissing
+    assert!(p.warnings.contains(&Warning::OneLibraryNoKey));
+    assert!(!p.is_blocked(), "{:?}", p.errors);
+    assert!(Warning::OneLibraryNoKey
         .to_string()
         .contains("release build"));
+    assert!(DryRun::new(&p, &TrackLabels::new())
+        .onelibrary_removal
+        .is_none());
+}
+
+#[test]
+fn no_key_and_a_database_on_the_stick_lists_its_deletion_and_needs_a_confirmation() {
+    let w = World::new();
+    put_rekordbox_onelibrary(&w);
+    let mut p = planned(&w, &options(true));
+    let free_before = p.bytes_free_after;
+    plan_onelibrary(&mut p, &Fake::new(ExistingLibrary::Absent), None, &w.lib).unwrap();
+
+    assert_eq!(removed(&p), RB_FILES);
+    let freed: u64 = RB_FILES.iter().map(|f| f.len() as u64 - 19).sum();
+    assert_eq!(p.bytes_free_after, free_before + freed as i64);
+    assert!(p.warnings.contains(&Warning::OneLibraryRemoved {
+        files: RB_FILES.map(str::to_owned).to_vec(),
+        no_key: true,
+    }));
+    assert_eq!(p.errors, [Problem::OneLibraryRemovalNotConfirmed]);
+
+    let d = DryRun::new(&p, &TrackLabels::new());
+    let view = d.onelibrary_removal.unwrap();
+    assert_eq!(view.files.count, 3);
+    assert!(!view.confirmed);
+    for player in ["OPUS-QUAD", "XDJ-AZ", "CDJ-3000X", "OMNIS-DUO"] {
+        assert!(view.text.contains(player), "{}", view.text);
+    }
+    assert!(view.text.contains("no OneLibrary key"));
+    // Shown once, in its own view, and among the deletes.
+    assert!(!d.warnings.iter().any(|g| g.kind == "oneLibraryRemoved"));
+    assert!(d.deletes.files.iter().any(|f| f.path == DB_PATH));
+    assert!(d
+        .problems
+        .iter()
+        .any(|g| g.kind == "oneLibraryRemovalNotConfirmed"));
+
+    // apply refuses the unconfirmed plan; the stick keeps its database.
+    let writer = BakenWriter::prepare(&w.lib, &w.sel(), &p, &w.tmp.path().join("work")).unwrap();
+    let result = apply(&p, &writer, &w.env(), &|_| {}, &CancelToken::new());
+    assert!(matches!(result, Err(ApplyError::Blocked(1))), "{result:?}");
+    assert!(w.stick.join("PIONEER/rekordbox/exportLibrary.db").exists());
+
+    // Confirmed, it runs; planning again replaces, not adds.
+    p.options.onelibrary_removal_confirmed = true;
+    plan_onelibrary(&mut p, &Fake::new(ExistingLibrary::Absent), None, &w.lib).unwrap();
+    let once = p.clone();
+    plan_onelibrary(&mut p, &Fake::new(ExistingLibrary::Absent), None, &w.lib).unwrap();
+    assert_eq!(p, once);
+    assert!(!p.is_blocked(), "{:?}", p.errors);
+    assert_eq!(removed(&p), RB_FILES);
+    assert_eq!(p.bytes_free_after, free_before + freed as i64);
+    assert!(
+        DryRun::new(&p, &TrackLabels::new())
+            .onelibrary_removal
+            .unwrap()
+            .confirmed
+    );
+}
+
+#[test]
+fn off_names_the_option_and_with_a_key_still_guards_the_database_history() {
+    let w = World::new();
+    put_rekordbox_onelibrary(&w);
+    let mut p = planned(&w, &options(false));
+    plan_onelibrary(
+        &mut p,
+        &Fake::new(onelibrary_history()),
+        Some(&key()),
+        &w.lib,
+    )
+    .unwrap();
+    assert!(p.onelibrary.is_none());
+    assert!(!p.warnings.contains(&Warning::OneLibraryExperimental));
+    assert!(p.warnings.contains(&Warning::OneLibraryRemoved {
+        files: RB_FILES.map(str::to_owned).to_vec(),
+        no_key: false,
+    }));
+    // F08: the export guard reads exportLibrary.db although nothing replaces it.
+    assert_eq!(p.guard.onelibrary_sessions.len(), 2);
+    assert!(p.onelibrary_history_import.is_some());
+    assert_eq!(
+        p.errors,
+        [
+            Problem::OneLibraryRemovalNotConfirmed,
+            Problem::OneLibraryHistoryNotImported { sessions: 2 }
+        ]
+    );
+    let view = DryRun::new(&p, &TrackLabels::new())
+        .onelibrary_removal
+        .unwrap();
+    assert!(view.text.contains("OneLibrary is off"));
+
+    // Without a key there is nothing to read: the Phase 2 backup only.
+    plan_onelibrary(&mut p, &Fake::new(onelibrary_history()), None, &w.lib).unwrap();
+    assert!(p.guard.onelibrary_sessions.is_empty());
+    assert_eq!(p.errors, [Problem::OneLibraryRemovalNotConfirmed]);
+}
+
+#[test]
+fn apply_refuses_a_plan_that_skipped_the_step() {
+    let w = World::new();
+    let p = planned(&w, &options(false));
+    let writer = BakenWriter::prepare(&w.lib, &w.sel(), &p, &w.tmp.path().join("work")).unwrap();
+    let result = apply(&p, &writer, &w.env(), &|_| {}, &CancelToken::new());
+    assert!(
+        matches!(result, Err(ApplyError::NoOneLibraryPlan)),
+        "{result:?}"
+    );
 }
 
 #[test]
@@ -252,12 +389,16 @@ fn the_stub_plans_the_file_but_blocks() {
         .iter()
         .any(|b| b.dst_rel == "/PIONEER/rekordbox/exportLibrary.db"));
 
-    // Turned off again, everything the step added goes.
+    // Turned off again, what the step wrote goes; the stick's files are
+    // now deletes that need a confirmation.
     p.options.onelibrary = false;
     plan_onelibrary(&mut p, &NoWriter, Some(&key()), &w.lib).unwrap();
     assert!(p.onelibrary.is_none());
-    assert!(!p.errors.iter().any(is_onelibrary));
+    assert_eq!(p.errors, [Problem::OneLibraryRemovalNotConfirmed]);
     assert!(!p.warnings.contains(&Warning::OneLibraryExperimental));
+    p.options.onelibrary_removal_confirmed = true;
+    plan_onelibrary(&mut p, &NoWriter, Some(&key()), &w.lib).unwrap();
+    assert!(!p.errors.iter().any(is_onelibrary));
 }
 
 /// Two sessions in the stick's `exportLibrary.db` (Phase 4 task 11): the
@@ -562,9 +703,10 @@ fn apply_refuses_a_onelibrary_plan_without_a_writer_or_its_step() {
         matches!(result, Err(ApplyError::NoOneLibraryWriter)),
         "{result:?}"
     );
-    // A plan read back from JSON without its OneLibrary step.
+    // A plan that never went through the OneLibrary step.
     let mut stripped = p.clone();
     stripped.onelibrary = None;
+    stripped.onelibrary_planned = false;
     let (result, _) = apply_onelibrary(&w, &stripped, Some(&fake));
     assert!(
         matches!(result, Err(ApplyError::NoOneLibraryPlan)),
