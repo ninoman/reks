@@ -577,6 +577,45 @@ mod tests {
     }
 
     #[test]
+    fn cue_release_during_a_pending_load_keeps_the_load() {
+        let mut g = Graph::new(RATE).unwrap();
+        g.apply(Control::Load {
+            deck: 0,
+            src: ramp_source(48_000),
+        });
+        // Hold CUE on the cue point: previews, then a load arrives mid-fade.
+        g.apply(Control::Cue { deck: 0 });
+        render_frames(&mut g, 1_000);
+        assert!(g.state().decks[0].playing);
+        g.apply(Control::Load {
+            deck: 0,
+            src: ramp_source(20_000),
+        });
+        g.apply(Control::CueRelease { deck: 0 });
+        render_frames(&mut g, 4 * RAMP);
+        let st = g.state().decks[0];
+        assert_eq!(st.frames, 20_000, "the new track loaded");
+        assert!(!st.playing);
+    }
+
+    #[test]
+    fn set_grid_refuses_a_source_with_other_audio() {
+        let mut g = Graph::new(RATE).unwrap();
+        let src = ramp_source(48_000);
+        g.apply(Control::Load {
+            deck: 0,
+            src: Arc::clone(&src),
+        });
+        let other = ramp_source(48_000);
+        let back = g.apply(Control::SetGrid {
+            deck: 0,
+            src: Arc::clone(&other),
+        });
+        assert!(back.is_some_and(|b| Arc::ptr_eq(&b, &other)));
+        assert_eq!(g.state().decks[0].frames, 48_000);
+    }
+
+    #[test]
     fn silent_until_play_and_stops_at_the_end() {
         let mut g = Graph::new(RATE).unwrap();
         g.apply(Control::Load {

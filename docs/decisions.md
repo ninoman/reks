@@ -408,7 +408,8 @@ Date of decisions: 2026-10-18.
     `mix_grid_edit`, which stores the grid and swaps it into the loaded
     deck (`reks_mix::Control::SetGrid`: the same PCM with a new `BeatMap`,
     position and playback kept; the old source is dropped off the audio
-    thread), so sync, beat jump, loops and quantise follow at once. Was:
+    thread; a source with other PCM, or any during a pending load, is
+    refused and handed back, since that swap would click), so sync, beat jump, loops and quantise follow at once. Was:
     the engine took a grid only at load. Rejected: four rekordbox-style
     interval buttons (stretch to the playhead does it in one press) and a
     metronome for now.
