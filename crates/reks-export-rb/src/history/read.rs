@@ -39,6 +39,18 @@ pub enum HistorySource {
     Backup(PathBuf),
 }
 
+impl HistorySource {
+    /// A folder the user picked: a backup when it holds the backup manifest
+    /// (canonicalised, so the path shown and stored is the real one), else a
+    /// stick root.
+    pub fn from_folder(path: &Path) -> Result<Self, HistoryError> {
+        if path.join(BACKUP_MANIFEST).is_file() {
+            return Ok(Self::Backup(fs::canonicalize(path).map_err(io_err(path))?));
+        }
+        Ok(Self::Stick(path.to_path_buf()))
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct HistoryReadOptions {
     /// Volume serial of a [`HistorySource::Stick`] (from
@@ -562,6 +574,21 @@ mod tests {
                 ],
             },
         ]
+    }
+
+    #[test]
+    fn a_folder_with_the_manifest_is_a_canonical_backup_else_a_stick() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            HistorySource::from_folder(dir.path()).unwrap(),
+            HistorySource::Stick(dir.path().to_path_buf())
+        );
+        fs::write(dir.path().join(BACKUP_MANIFEST), b"{}").unwrap();
+        let dotted = dir.path().join(".");
+        assert_eq!(
+            HistorySource::from_folder(&dotted).unwrap(),
+            HistorySource::Backup(fs::canonicalize(dir.path()).unwrap())
+        );
     }
 
     #[test]

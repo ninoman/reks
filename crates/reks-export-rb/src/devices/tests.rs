@@ -348,6 +348,19 @@ fn rename_and_target() {
     assert_eq!(target(&odd), TargetProfile::Generic);
 }
 
+#[test]
+fn target_for_serial_falls_back_to_none() {
+    let w = World::new();
+    let dev = w.device();
+    let serial = dev.volume_serial.clone().unwrap();
+    assert_eq!(
+        target_for_serial(&w.lib, Some(&serial)),
+        Some(TargetProfile::Cdj3000)
+    );
+    assert_eq!(target_for_serial(&w.lib, Some("0000-0000")), None);
+    assert_eq!(target_for_serial(&w.lib, None), None);
+}
+
 // ---- profile → selection → plan -------------------------------------------
 
 #[test]

@@ -12,7 +12,7 @@ use reks_core::history::{
 use reks_core::{OneLibraryKey, TrackId};
 use reks_export_onelibrary::history::{read_both, OneLibraryStatus};
 use reks_export_rb::device::{self, DeviceInfo};
-use reks_export_rb::history::{HistoryReadOptions, HistorySource, BACKUP_MANIFEST};
+use reks_export_rb::history::{HistoryReadOptions, HistorySource};
 use reks_export_rb::onelibrary::resolve_key;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -121,10 +121,7 @@ pub async fn history_scan(
             let serial = device::volume_serial(&device);
             (HistorySource::Stick(device.mount_point), serial)
         }
-        ScanSource::Folder { path } if path.join(BACKUP_MANIFEST).is_file() => {
-            (HistorySource::Backup(path), None)
-        }
-        ScanSource::Folder { path } => (HistorySource::Stick(path), None),
+        ScanSource::Folder { path } => (HistorySource::from_folder(&path)?, None),
     };
     let lib = Arc::clone(&state.library);
     let read_src = src.clone();
