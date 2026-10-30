@@ -4146,9 +4146,9 @@ dependencies = [
  "rtrb",
  "rubato 5.0.1",
  "serde",
+ "signalsmith-stretch",
  "tempfile",
  "thiserror 2.0.21",
- "timestretch",
  "tracing",
 ]
 

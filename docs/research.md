@@ -658,6 +658,11 @@ Findings that matter for a deck:
   against it), but R3 costs ~3–4× R2 and the binding is weeks old.
 - Under GPL-3.0-or-later all three are fine. Rubber Band's GPL would bind a
   future relicensing of reks; MIT options would not.
+- Outcome (2026-10-30): blind listening picked Signalsmith (mean 4.25 of 5,
+  ahead of Rubber Band R3 at 3.63 and `timestretch` Keylock at 2.25; D21,
+  phase 5 task 10). On the deck, seeking with 150 ms of history and running
+  one output latency (60 ms) primes it in ≈ 0.5 ms (M4 Pro, release); a
+  burst after a jump lands within 0.3 ms of the head position.
 
 Sources (all fetched 2026-10-21): crates.io API and crate downloads for
 `timestretch` 0.15.0, `signalsmith-stretch` 0.1.3, `rubberband` 0.1.5,

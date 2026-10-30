@@ -777,22 +777,40 @@ Date of decisions: 2026-10-18.
   (MIT, C++ built with `cc`), `rubberband` (GPL-2.0-or-later, crate weeks old),
   `soundtouch` (SPDX `LGPL-2.1`, needs a `deny.toml` note). Choose by listening test.
   Status 2026-10-21: licences and cost checked (R§9.3), `reks keylock-render`
-  ready; the choice is pending the maintainer's listening (phase 5 task 10).
-- Master tempo (status: **proposed** 2026-10-23, pending task 10's
-  listening): the deck's **M** turns on a key lock head built on
-  `timestretch` 0.15's real-time `Keylock` profile (two-band SOLA). Why this
-  one first: already in the tree and licence-checked (MIT, `cargo deny`
-  passes), pure Rust (no C++ toolchain or libclang on any platform), lowest
-  latency (≈ 12.7 ms) and no allocation measured in the callback (R§9.3).
-  It sits behind one module, [`keylock.rs`](../crates/reks-mix/src/keylock.rs),
-  so another engine is a local swap if listening prefers it. A jump primes
-  the engine synchronously (reset, preroll, output dropped until the target
-  leaves it), so the deck needs no latency compensation; leaving key lock
-  bakes the crossfade's fade-out from the engine, since its output is not the
-  source at the head. Limits: used where the step is 0.25–2 and the source
-  is at the engine's rate (the app resamples at load, D5), else varispeed;
-  the profile fades to varispeed beyond ±35% (WIDE). Each jump with M on
-  costs one priming run on the audio thread, so tiny loops cost more CPU.
+  ready. Chosen 2026-10-30: Signalsmith Stretch (next bullet).
+- Master tempo (status: **accepted** 2026-10-30, maintainer's blind listening,
+  phase 5 task 10; proposed 2026-10-23 on `timestretch`): the deck's **M**
+  turns on a key lock head built on Signalsmith Stretch 1.3.1 (default
+  preset, a phase vocoder) through `signalsmith-stretch` 0.1.3 (both MIT).
+  Listening: five engines behind shuffled letters, at 0.94 and 1.06, on a
+  psy track (rolling bass), a techno track (punchy kick), a trance track
+  (pads) and a vocal track from the maintainer's library. Mean score out of
+  5: Signalsmith 4.25, Rubber Band R3 3.63, R2 3.5, `timestretch` Keylock
+  2.25, WideKeylock 1.25 (per track in phase 5 task 10).
+  Why Signalsmith: 5/5 on the kick and the pads, 4 on the rolling bass,
+  the cheapest per deck (≈ 5 ms CPU per second of audio, R§9.3) and MIT.
+  Costs: building reks needs a C++ compiler and libclang (bindgen) on every
+  platform, and the engine's 60 ms output latency is primed away on each
+  jump (≈ 0.5 ms on the audio thread, M4 Pro).
+  One engine, no per-deck engine setting (maintainer's call, 2026-10-30):
+  R3 scored about one point higher on the rolling bass and the vocal but
+  lower on the kick and the pads; it costs 8× the CPU, would need our own
+  FFI (the `rubberband` binding allocates on every call) and its GPL would
+  bind a relicensing of reks. `timestretch` scored too low to offer.
+  Revisit if vocal-heavy material shows Signalsmith's weakness (it scored 3
+  on the vocal).
+  The engine sits behind one module, [`keylock.rs`](../crates/reks-mix/src/keylock.rs).
+  A jump primes it synchronously (reset, seek with the 150 ms before the
+  target, one output latency run and dropped), so what is heard is the head
+  position and the deck needs no latency compensation; the position comes
+  from a history of the engine's processing time, so it stays exact
+  through tempo changes. Leaving key lock bakes the crossfade's fade-out
+  from the engine, since its output is not the source at the head. Limits:
+  used where the step is 0.25–2 and the source is at the engine's rate (the
+  app resamples at load, D5), else varispeed. Each jump with M on costs one
+  priming run, so tiny loops cost more CPU. No allocation in the callback by
+  the Rust test; the C++ side sizes its buffers when configured (read from
+  the source, R§9.3; not measurable from Rust).
 - Rejected: live-performance scope (MIDI mapping, recording, stage reliability;
   a second product, needs its own decision); embedding Mixxx (C++/Qt
   application, not a library); WebView audio (D4); rodio for the mixer (no

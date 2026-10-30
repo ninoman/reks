@@ -1,59 +1,62 @@
 //! Key lock (master tempo) read head: plays a source at any speed with its
-//! pitch kept, through `timestretch`'s real-time Keylock engine (D21).
+//! pitch kept, through Signalsmith Stretch (MIT, C++, default preset; D21,
+//! chosen by listening in phase 5 task 10).
 //!
-//! The engine runs its own varispeed head plus a pitch corrector and delays
-//! the output by a fixed pipeline latency (≈ 12.7 ms at 44.1 kHz). A jump
-//! primes it synchronously: it resets, is fed from a preroll before the
-//! target and runs with the output thrown away until the frame about to
-//! leave it is the target. So what is heard lines up with [`KeyLock::position`]
-//! and the deck needs no latency compensation. The position comes from the
-//! engine's own source clock, so it stays exact through tempo changes.
+//! The engine is a phase vocoder: its processing time trails the input fed
+//! by an input latency, and its output trails the processing time by an
+//! output latency (≈ 60 ms). A jump primes it synchronously: it resets,
+//! seeks with the history before the target and runs one output latency
+//! with the output thrown away, so the next frame out is the target. So what
+//! is heard lines up with [`KeyLock::position`] and the deck needs no latency
+//! compensation. The position comes from a short history of processing
+//! times, so it stays exact through tempo changes.
 //!
-//! Built off the audio thread ([`KeyLock::new`] allocates); everything else
-//! is real-time safe (the engine measured no allocation in this profile,
-//! `docs/research.md` §9.3).
+//! Built off the audio thread ([`KeyLock::new`] allocates, in Rust and C++);
+//! everything else is real-time safe: the library sizes every buffer when it
+//! is configured (`docs/research.md` §9.3; its C++ heap is not visible to the
+//! no-allocation test).
 
-use timestretch::engine::{
-    Engine, EngineConfig, EngineController, EngineProcessor, EngineProfile, SourceProducer,
-    MAX_TEMPO_RATE, MIN_TEMPO_RATE,
-};
+use signalsmith_stretch::Stretch;
 
 use crate::source::DeckSource;
 
 /// Output frames per engine call: speed changes take effect within it.
-/// The engine's smallest block.
 const CHUNK: usize = 64;
-/// Largest engine call (priming runs in these).
-const MAX_BLOCK: usize = 1024;
-/// Source frames pushed into the engine's ring per feed step.
-const FEED: usize = 1024;
-/// Fastest step the ring is kept fed for.
-const FEED_RATE: f64 = 2.0;
+/// Step range the key lock head plays; outside it the deck uses varispeed.
+const MIN_STEP: f64 = 0.25;
+const MAX_STEP: f64 = 2.0;
+/// Seek history: the default preset's block (120 ms) plus one interval
+/// (30 ms), which the library asks for.
+const SEEK_MS: usize = 150;
 
 /// Steps the key lock head plays; outside them the deck uses varispeed.
 pub(crate) fn in_range(step: f64) -> bool {
-    (MIN_TEMPO_RATE..=FEED_RATE.min(MAX_TEMPO_RATE)).contains(&step)
+    (MIN_STEP..=MAX_STEP).contains(&step)
 }
 
 /// A pitch-keeping read head over a [`DeckSource`].
 pub(crate) struct KeyLock {
-    controller: EngineController,
-    processor: EngineProcessor,
-    source: SourceProducer,
-    /// Interleaved feed scratch.
-    feed_buf: Box<[f32]>,
+    stretch: Stretch,
+    /// Source frames fed beyond the engine's processing time.
+    in_latency: usize,
+    /// Output frames between the processing time and what leaves the engine.
+    out_latency: usize,
+    seek_frames: usize,
+    /// Interleaved input scratch: the seek history or one chunk's input.
+    in_buf: Box<[f32]>,
     /// The last chunk produced, interleaved.
     out: Box<[f32]>,
     /// Next frame of `out` to play; `CHUNK` when it is used up.
     next: usize,
-    /// Next source frame to push into the engine.
+    /// Next source frame to feed.
     feed: i64,
-    /// Source frame of the engine's position 0 (the first pushed after a reset).
-    origin: f64,
-    /// Source time of `out[0]`.
-    start: f64,
-    /// Source time of the frame after `out`.
-    end: f64,
+    /// Source time of the engine's processing time.
+    time: f64,
+    /// Processing time at the start of each recent chunk, by chunk number
+    /// modulo its length: enough to look back one output latency.
+    times: Box<[f64]>,
+    /// Chunks produced since the last jump.
+    chunks: usize,
     step: f64,
 }
 
@@ -67,68 +70,63 @@ impl std::fmt::Debug for KeyLock {
 }
 
 impl KeyLock {
-    /// Builds the engine and its buffers; `None` if `timestretch` rejects the
-    /// rate (it takes 8–192 kHz).
+    /// Builds the engine and its buffers; `None` outside 8–192 kHz.
     pub(crate) fn new(sample_rate: u32) -> Option<Self> {
-        let handles = Engine::build(EngineConfig {
-            sample_rate,
-            channels: 2,
-            profile: EngineProfile::Keylock,
-            initial_tempo_rate: 1.0,
-            max_block_frames: MAX_BLOCK,
-            ..EngineConfig::default()
-        })
-        .ok()?;
+        if !(8_000..=192_000).contains(&sample_rate) {
+            return None;
+        }
+        let stretch = Stretch::preset_default(2, sample_rate);
+        let in_latency = stretch.input_latency();
+        let out_latency = stretch.output_latency();
+        let seek_frames = sample_rate as usize * SEEK_MS / 1000;
+        let chunk_in = (CHUNK as f64 * MAX_STEP).ceil() as usize + 1;
         Some(Self {
-            controller: handles.controller,
-            processor: handles.processor,
-            source: handles.source,
-            feed_buf: vec![0.0; FEED * 2].into_boxed_slice(),
-            out: vec![0.0; MAX_BLOCK * 2].into_boxed_slice(),
+            stretch,
+            in_latency,
+            out_latency,
+            seek_frames,
+            in_buf: vec![0.0; seek_frames.max(chunk_in) * 2].into_boxed_slice(),
+            out: vec![0.0; CHUNK * 2].into_boxed_slice(),
             next: CHUNK,
             feed: 0,
-            origin: 0.0,
-            start: 0.0,
-            end: 0.0,
+            time: 0.0,
+            times: vec![0.0; out_latency / CHUNK + 4].into_boxed_slice(),
+            chunks: 0,
             step: 1.0,
         })
     }
 
-    /// Source time of the next frame [`Self::next`] returns.
+    /// Source time of the next frame [`Self::next`] returns: the processing
+    /// time one output latency of frames ago.
     pub(crate) fn position(&self) -> f64 {
-        self.start + (self.end - self.start) * self.next as f64 / CHUNK as f64
-    }
-
-    /// Source time of the frame about to leave the engine.
-    fn heard(&self) -> f64 {
-        self.origin + self.controller.source_position()
+        let played = (self.chunks * CHUNK + self.next).saturating_sub(CHUNK);
+        let q = played.saturating_sub(self.out_latency);
+        let (c, j) = (q / CHUNK, q % CHUNK);
+        let at = |c: usize| self.times[c % self.times.len()];
+        if j == 0 {
+            at(c)
+        } else {
+            at(c) + (at(c + 1) - at(c)) * j as f64 / CHUNK as f64
+        }
     }
 
     /// Restarts at source time `at`, playing on at `step`.
     pub(crate) fn jump(&mut self, src: &DeckSource, at: f64, step: f64) {
-        self.processor.reset();
         self.set_step(step);
-        self.controller.set_tempo_rate(step);
-        let preroll = self.processor.warm_start_preroll_frames()
-            + self.processor.varispeed_lookahead_frames();
-        self.feed = at.floor() as i64 - preroll as i64;
-        self.origin = self.feed as f64;
-        // Bounded: the preroll and the pipeline delay, in output frames,
-        // with room to spare.
-        let most = (preroll as f64 / step) as usize + self.processor.pipeline_latency_frames();
-        let mut run = 0;
-        while run <= 2 * most + MAX_BLOCK {
-            let left = (at - self.heard()) / step;
-            if left < 0.5 {
-                break;
-            }
-            let n = (left.round() as usize).clamp(1, MAX_BLOCK);
-            self.process(src, n);
-            run += n;
+        self.stretch.reset();
+        // The processing time is the input's end less the input latency.
+        self.feed = at.floor() as i64 + self.in_latency as i64;
+        let history = &mut self.in_buf[..self.seek_frames * 2];
+        src.read_f32(self.feed - self.seek_frames as i64, history);
+        self.stretch.seek(&*history, self.step);
+        self.time = at;
+        self.chunks = 0;
+        self.times[0] = at;
+        // Throw away one output latency; the frame after it is `at`.
+        for _ in 0..=self.out_latency / CHUNK {
+            self.process(src);
         }
-        self.start = self.heard();
-        self.end = self.start;
-        self.next = CHUNK;
+        self.next = self.out_latency % CHUNK;
     }
 
     /// Next stereo frame; `step` applies from the next chunk on.
@@ -136,11 +134,8 @@ impl KeyLock {
         if self.next >= CHUNK {
             if step != self.step {
                 self.set_step(step);
-                self.controller.set_tempo_rate(self.step);
             }
-            self.start = self.heard();
-            self.process(src, CHUNK);
-            self.end = self.heard();
+            self.process(src);
             self.next = 0;
         }
         let i = self.next * 2;
@@ -149,24 +144,22 @@ impl KeyLock {
     }
 
     fn set_step(&mut self, step: f64) {
-        self.step = step.clamp(MIN_TEMPO_RATE, FEED_RATE);
+        self.step = step.clamp(MIN_STEP, MAX_STEP);
     }
 
-    /// Tops the engine's ring up, then runs `frames` frames into `out`.
-    fn process(&mut self, src: &DeckSource, frames: usize) {
-        let demand = self.source.demand_hint(frames, FEED_RATE)
-            + self.processor.varispeed_lookahead_frames();
-        while self.source.occupied_frames() < demand {
-            let n = self.source.free_frames().min(FEED);
-            if n == 0 {
-                break;
-            }
-            let chunk = &mut self.feed_buf[..n * 2];
-            src.read_f32(self.feed, chunk);
-            let pushed = self.source.push(chunk);
-            self.feed += pushed as i64;
-        }
-        self.processor.process(&mut self.out[..frames * 2]);
+    /// Feeds one chunk's worth of input at the step and runs one chunk out.
+    fn process(&mut self, src: &DeckSource) {
+        let time = self.time + self.step * CHUNK as f64;
+        let end = time.floor() as i64 + self.in_latency as i64;
+        let n = (end - self.feed).max(0) as usize;
+        let input = &mut self.in_buf[..n * 2];
+        src.read_f32(self.feed, input);
+        self.stretch.process(&*input, &mut self.out[..]);
+        self.feed += n as i64;
+        self.time = time;
+        self.chunks += 1;
+        let len = self.times.len();
+        self.times[self.chunks % len] = time;
     }
 }
 
@@ -185,6 +178,57 @@ mod tests {
             })
             .collect();
         DeckSource::new(pcm, RATE)
+    }
+
+    /// Silence with a 10 ms Hann-windowed 2 kHz burst centred on `centre`.
+    fn burst(centre: usize, frames: usize) -> DeckSource {
+        let len = RATE as usize / 100;
+        let start = centre - len / 2;
+        let mut pcm = vec![0i16; frames * 2];
+        for i in 0..len {
+            let w = 0.5 - 0.5 * (2.0 * std::f64::consts::PI * i as f64 / len as f64).cos();
+            let x = w * (2.0 * std::f64::consts::PI * 2_000.0 * i as f64 / f64::from(RATE)).sin();
+            let v = (x * 16_000.0) as i16;
+            pcm[(start + i) * 2] = v;
+            pcm[(start + i) * 2 + 1] = v;
+        }
+        DeckSource::new(pcm, RATE)
+    }
+
+    /// Output frame at the centre of the loudest 5 ms window.
+    fn envelope_peak(left: &[f32]) -> usize {
+        let win = RATE as usize / 200;
+        let sq: Vec<f32> = left.iter().map(|x| x * x).collect();
+        let mut sum: f32 = sq[..win].iter().sum();
+        let (mut best, mut at) = (sum, 0);
+        for i in win..sq.len() {
+            sum += sq[i] - sq[i - win];
+            if sum > best {
+                best = sum;
+                at = i + 1 - win;
+            }
+        }
+        at + win / 2
+    }
+
+    /// What is heard after a jump is the source at the jump's target: a
+    /// burst 200 ms past it comes out 200 ms / step later, so the deck
+    /// needs no latency compensation.
+    #[test]
+    fn the_sound_lines_up_with_the_position() {
+        let centre = RATE as usize * 2;
+        let src = burst(centre, RATE as usize * 4);
+        let mut k = KeyLock::new(RATE).unwrap();
+        let lead = f64::from(RATE) * 0.2;
+        for step in [1.0, 0.94, 1.06] {
+            k.jump(&src, centre as f64 - lead, step);
+            let left: Vec<f32> = (0..RATE as usize / 2)
+                .map(|_| k.next(&src, step).0)
+                .collect();
+            let off = envelope_peak(&left) as f64 - lead / step;
+            // 1 ms: the analysis hop smears where the burst lands.
+            assert!(off.abs() < f64::from(RATE) * 0.001, "{step}: {off} frames");
+        }
     }
 
     #[test]

@@ -15,7 +15,7 @@ rtrb = { workspace = true }
 rubato = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-timestretch = { workspace = true }
+signalsmith-stretch = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

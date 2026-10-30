@@ -170,7 +170,7 @@ pub(crate) struct Deck {
 
 impl Deck {
     /// Allocates the varispeed and key lock heads; `None` if rubato or
-    /// timestretch refuses its setup.
+    /// Signalsmith refuses its setup.
     pub(crate) fn new(sample_rate: u32) -> Option<Self> {
         let xfade = (sample_rate * SEEK_XFADE_MS / 1000).max(1);
         let loop_xfade = (sample_rate * LOOP_XFADE_MS / 1000).max(1);
