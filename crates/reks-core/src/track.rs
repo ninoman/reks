@@ -4,6 +4,8 @@
 //! Edit rules: `docs/phases/phase-1.md` (task 9 notes). Edits change the
 //! library DB only; tags in the audio files are never written.
 
+use std::collections::HashMap;
+
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Connection, OptionalExtension};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -152,6 +154,74 @@ where
     T: Deserialize<'de>,
 {
     Option::<T>::deserialize(d).map(Some)
+}
+
+/// What the USB export planner reads per track: raw columns, no tags,
+/// artwork or cue and grid rows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportTrackFields {
+    pub path: String,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub kind: String,
+    pub duration_ms: Option<i64>,
+    pub bit_rate_kbps: Option<i64>,
+    pub sample_rate: Option<i64>,
+    pub bit_depth: Option<i64>,
+    pub channels: Option<i64>,
+    pub has_grid: bool,
+    pub cue_count: u32,
+}
+
+/// Ids per `IN (…)` list, well under SQLite's bound-variable limit.
+const IN_CHUNK: usize = 500;
+
+impl Library {
+    /// [`ExportTrackFields`] of many tracks in a few queries, instead of
+    /// [`Library::track`] per track. `Error::TrackNotFound` for an unknown id.
+    pub fn export_track_fields(
+        &self,
+        ids: &[TrackId],
+    ) -> Result<HashMap<TrackId, ExportTrackFields>> {
+        let conn = self.conn()?;
+        let mut out = HashMap::with_capacity(ids.len());
+        for chunk in ids.chunks(IN_CHUNK) {
+            let marks = vec!["?"; chunk.len()].join(",");
+            let mut stmt = conn.prepare(&format!(
+                "SELECT t.id, t.path, t.artist, t.album, t.kind, t.duration_ms,
+                        t.bit_rate_kbps, t.sample_rate, t.bit_depth, t.channels,
+                        EXISTS (SELECT 1 FROM beatgrid b WHERE b.track_id = t.id),
+                        (SELECT count(*) FROM cue c WHERE c.track_id = t.id)
+                 FROM track t WHERE t.id IN ({marks})"
+            ))?;
+            let rows = stmt.query_map(params_from_iter(chunk), |r| {
+                Ok((
+                    r.get::<_, TrackId>(0)?,
+                    ExportTrackFields {
+                        path: r.get(1)?,
+                        artist: r.get(2)?,
+                        album: r.get(3)?,
+                        kind: r.get(4)?,
+                        duration_ms: r.get(5)?,
+                        bit_rate_kbps: r.get(6)?,
+                        sample_rate: r.get(7)?,
+                        bit_depth: r.get(8)?,
+                        channels: r.get(9)?,
+                        has_grid: r.get(10)?,
+                        cue_count: r.get(11)?,
+                    },
+                ))
+            })?;
+            for row in rows {
+                let (id, fields) = row?;
+                out.insert(id, fields);
+            }
+        }
+        match ids.iter().find(|id| !out.contains_key(id)) {
+            Some(&id) => Err(Error::TrackNotFound(id)),
+            None => Ok(out),
+        }
+    }
 }
 
 impl Library {

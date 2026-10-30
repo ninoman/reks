@@ -6,7 +6,10 @@ use std::path::PathBuf;
 
 use reks_audio::{Kind, Probe};
 use reks_core::query::MAX_PAGE;
-use reks_core::{Filter, Library, PlaylistId, PlaylistNode, Sort, SortColumn, TrackId, TrackQuery};
+use reks_core::{
+    DividerRow, ExportTrackFields, Filter, Library, PlaylistId, PlaylistNode, Sort, SortColumn,
+    TrackId, TrackQuery,
+};
 
 use super::{PlannedPlaylist, Problem, Selection};
 use crate::divider::{DividerInfo, SourceDivider};
@@ -79,21 +82,46 @@ pub fn load(lib: &Library, sel: &Selection) -> reks_core::Result<Sources> {
     }
 
     let user_owned = lib.user_owned_grids()?;
+    // Static playlists read together; a smart playlist's tracks come from
+    // evaluating its rule, so those go through the track query one by one.
+    let static_ids: Vec<PlaylistId> = nodes
+        .iter()
+        .filter(|n| !n.is_folder && !n.smart && inside.contains(&n.id))
+        .map(|n| n.id)
+        .collect();
+    let mut stored = lib.static_playlist_entries(&static_ids)?;
+
+    let mut entries: Vec<Option<(Vec<TrackId>, Vec<SourceDivider>)>> = Vec::new();
     let mut seen: HashSet<TrackId> = HashSet::new();
-    for n in nodes.iter().filter(|n| wanted.contains(&n.id)) {
-        let mut track_ids = Vec::new();
+    let mut order: Vec<TrackId> = Vec::new();
+    let wanted_nodes: Vec<&PlaylistNode> =
+        nodes.iter().filter(|n| wanted.contains(&n.id)).collect();
+    for n in &wanted_nodes {
         // Ancestors that were not selected themselves contribute no tracks.
-        if !n.is_folder && inside.contains(&n.id) {
-            let dividers;
-            (track_ids, dividers) = playlist_entries(lib, n.id)?;
-            out.dividers.extend(dividers);
-            for &tid in &track_ids {
-                if seen.insert(tid) {
-                    out.tracks
-                        .push(source_track(lib, tid, user_owned.contains(&tid))?);
-                }
-            }
+        let e = if n.is_folder || !inside.contains(&n.id) {
+            None
+        } else if n.smart {
+            Some(smart_entries(lib, n.id)?)
+        } else {
+            let s = stored.remove(&n.id).unwrap_or_default();
+            Some((s.track_ids, to_source_dividers(n.id, &s.dividers)))
+        };
+        if let Some((ids, _)) = &e {
+            order.extend(ids.iter().copied().filter(|&t| seen.insert(t)));
         }
+        entries.push(e);
+    }
+
+    let fields = lib.export_track_fields(&order)?;
+    for tid in order {
+        if let Some(f) = fields.get(&tid) {
+            out.tracks
+                .push(source_track(tid, f, user_owned.contains(&tid)));
+        }
+    }
+    for (n, e) in wanted_nodes.into_iter().zip(entries) {
+        let (track_ids, dividers) = e.unwrap_or_default();
+        out.dividers.extend(dividers);
         out.playlists.push(PlannedPlaylist {
             id: n.id,
             parent_id: n.parent_id,
@@ -106,14 +134,12 @@ pub fn load(lib: &Library, sel: &Selection) -> reks_core::Result<Sources> {
     Ok(out)
 }
 
-/// The playlist's track entries in order, duplicates included, and its
-/// dividers.
-fn playlist_entries(
+/// A smart playlist's tracks (its rule, in its own sort); it has no dividers.
+fn smart_entries(
     lib: &Library,
     id: PlaylistId,
 ) -> reks_core::Result<(Vec<TrackId>, Vec<SourceDivider>)> {
     let mut ids = Vec::new();
-    let mut dividers = Vec::new();
     let mut offset = 0;
     loop {
         let page = lib.tracks(&TrackQuery {
@@ -126,73 +152,65 @@ fn playlist_entries(
             limit: MAX_PAGE,
             ..TrackQuery::default()
         })?;
-        if offset == 0 {
-            // Every page lists all dividers by entry position (dense, from 0),
-            // so a divider at position p has p minus earlier dividers tracks
-            // before it.
-            dividers = page
-                .dividers
-                .iter()
-                .enumerate()
-                .map(|(i, d)| SourceDivider {
-                    info: DividerInfo {
-                        playlist_id: id,
-                        ordinal: u32::try_from(i + 1).unwrap_or(u32::MAX),
-                        label: d.label.clone(),
-                    },
-                    tracks_before: usize::try_from(d.position).unwrap_or(0).saturating_sub(i),
-                })
-                .collect();
-        }
         let n = page.rows.len();
         ids.extend(page.rows.into_iter().map(|r| r.id));
         if n < MAX_PAGE as usize {
-            return Ok((ids, dividers));
+            return Ok((ids, Vec::new()));
         }
         offset += MAX_PAGE;
     }
 }
 
-fn source_track(
-    lib: &Library,
-    id: TrackId,
-    grid_user_owned: bool,
-) -> reks_core::Result<SourceTrack> {
-    let d = lib.track(id)?;
-    let t = &d.track;
+/// Dividers are listed by entry position (dense, from 0), so a divider at
+/// position p has p minus earlier dividers tracks before it.
+fn to_source_dividers(id: PlaylistId, dividers: &[DividerRow]) -> Vec<SourceDivider> {
+    dividers
+        .iter()
+        .enumerate()
+        .map(|(i, d)| SourceDivider {
+            info: DividerInfo {
+                playlist_id: id,
+                ordinal: u32::try_from(i + 1).unwrap_or(u32::MAX),
+                label: d.label.clone(),
+            },
+            tracks_before: usize::try_from(d.position).unwrap_or(0).saturating_sub(i),
+        })
+        .collect()
+}
+
+fn source_track(id: TrackId, f: &ExportTrackFields, grid_user_owned: bool) -> SourceTrack {
     let probe = match (
-        parse_kind(&t.row.kind),
-        t.sample_rate.and_then(|v| u32::try_from(v).ok()),
-        t.channels.and_then(|v| u8::try_from(v).ok()),
+        parse_kind(&f.kind),
+        f.sample_rate.and_then(|v| u32::try_from(v).ok()),
+        f.channels.and_then(|v| u8::try_from(v).ok()),
     ) {
         (Some(kind), Some(sample_rate), Some(channels)) => Some(Probe {
             kind,
-            duration_ms: t
-                .row
+            duration_ms: f
                 .duration_ms
                 .and_then(|v| u64::try_from(v).ok())
                 .unwrap_or(0),
             sample_rate,
             channels,
-            bit_depth: t.bit_depth.and_then(|v| u8::try_from(v).ok()),
-            bit_rate_kbps: t.row.bit_rate_kbps.and_then(|v| u32::try_from(v).ok()),
+            bit_depth: f.bit_depth.and_then(|v| u8::try_from(v).ok()),
+            bit_rate_kbps: f.bit_rate_kbps.and_then(|v| u32::try_from(v).ok()),
         }),
         _ => None,
     };
-    Ok(SourceTrack {
+    SourceTrack {
         track_id: id,
-        src: PathBuf::from(&t.path),
-        artist: t.row.artist.clone(),
-        album: t.row.album.clone(),
+        src: PathBuf::from(&f.path),
+        artist: f.artist.clone(),
+        album: f.album.clone(),
         probe,
-        has_grid: d.beatgrid.is_some(),
+        has_grid: f.has_grid,
         grid_user_owned,
-        cue_count: u8::try_from(d.cues.len()).unwrap_or(u8::MAX),
+        cue_count: u8::try_from(f.cue_count).unwrap_or(u8::MAX),
         divider: None,
-    })
+    }
 }
 
-fn parse_kind(s: &str) -> Option<Kind> {
+pub(super) fn parse_kind(s: &str) -> Option<Kind> {
     [
         Kind::Mp3,
         Kind::Aac,
