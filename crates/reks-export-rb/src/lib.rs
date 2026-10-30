@@ -14,7 +14,7 @@ pub mod divider;
 pub mod dryrun;
 pub mod history;
 pub mod onelibrary;
-pub mod pdbread;
+pub mod pdb;
 pub mod plan;
 pub mod rbcache;
 pub mod rbmap;

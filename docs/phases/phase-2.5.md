@@ -403,7 +403,7 @@ Divider rules
     (`check_stick(device, opts, onelibrary_reader, library)`, never fails):
     library files and their players ([`players.rs`](../../crates/reks-export-rb/src/check/players.rs),
     UNVERIFIED); `export.pdb` tables (the validator's check) and damaged
-    rows (`pdbread::read_pdb_lenient`); playlists and tracks in one library
+    rows (`pdb::read_pdb_lenient`); playlists and tracks in one library
     only or with other contents or order ([`playlists.rs`](../../crates/reks-export-rb/src/check/playlists.rs));
     per track ([`tracks.rs`](../../crates/reks-export-rb/src/check/tracks.rs)):
     path leaving the stick or failing `fsname::check_path`, audio missing or

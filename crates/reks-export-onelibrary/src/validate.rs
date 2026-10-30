@@ -7,7 +7,7 @@ use std::fmt;
 use std::path::Path;
 
 use reks_export_rb::onelibrary::DB_PATH;
-use reks_export_rb::pdbread::{self, PdbLibrary};
+use reks_export_rb::pdb::{self, PdbLibrary};
 use reks_export_rb::validate::locate;
 
 use crate::error::{Error, Result};
@@ -85,7 +85,7 @@ pub fn validate(device_root: &Path, key: &str) -> Result<Vec<Finding>> {
     if integrity != "ok" {
         findings.push(Finding::IntegrityCheck(integrity));
     }
-    let pdb = pdbread::read_stick(device_root).map_err(|e| Error::Pdb(e.to_string()))?;
+    let pdb = pdb::read_stick(device_root).map_err(|e| Error::Pdb(e.to_string()))?;
     let lib = reader.library()?;
     let anlz_exists = |rel: &str| locate(device_root, rel).ok().flatten().is_some();
     findings.extend(check(&lib, &pdb, anlz_exists));

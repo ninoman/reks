@@ -13,14 +13,12 @@
 //! `manifest.json` with each file's size and BLAKE3 hash. They live in the data
 //! dir, not the cache dir (D19): a backup can be the only copy.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{self, Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
-use binrw::{BinRead, BinWrite, Endian};
-use rekordcrate::pdb::string::DeviceSQLString;
-use rekordcrate::pdb::{Header, Page, PageType, Row, Table};
+use crate::pdb::{rows as pdb_rows, Pdb, Table};
 use serde::{Deserialize, Serialize};
 
 pub mod read;
@@ -510,54 +508,33 @@ struct HistoryCounts {
 
 /// Counts history playlist and entry rows (tables 11/12) in an `export.pdb`.
 fn count_history(bytes: &[u8]) -> Result<HistoryCounts, String> {
-    let mut counts = HistoryCounts::default();
-    walk_history(bytes, |row| match row {
-        Row::HistoryPlaylist(_) => counts.sessions += 1,
-        Row::HistoryEntry(_) => counts.entries += 1,
-        _ => {}
-    })?;
-    Ok(counts)
+    let pdb = Pdb::parse(bytes).map_err(|e| e.to_string())?;
+    let count = |t| {
+        pdb.rows_of(t)
+            .map(|rows| u32::try_from(rows.len()).unwrap_or(u32::MAX))
+            .map_err(|e| e.to_string())
+    };
+    Ok(HistoryCounts {
+        sessions: count(Table::HistoryPlaylists)?,
+        entries: count(Table::HistoryEntries)?,
+    })
 }
 
 /// The history sessions in an `export.pdb`, by id, with their entry counts.
+/// A row that does not decode is an error.
 fn parse_sessions(bytes: &[u8]) -> Result<Vec<HistorySession>, String> {
+    let pdb = Pdb::parse(bytes).map_err(|e| e.to_string())?;
+    let rows = |t| pdb.rows_of(t).map_err(|e| e.to_string());
     let mut names: HashMap<u32, String> = HashMap::new();
     let mut entries: HashMap<u32, u32> = HashMap::new();
-    let mut bad: Option<String> = None;
-    walk_history(bytes, |row| {
-        let mut raw = Cursor::new(Vec::new());
-        let written = match row {
-            Row::HistoryPlaylist(p) => p.write(&mut raw),
-            Row::HistoryEntry(e) => e.write(&mut raw),
-            _ => return,
-        };
-        if let Err(e) = written {
-            bad.get_or_insert(e.to_string());
-            return;
-        }
-        // rekordcrate keeps the fields private; re-read the row's bytes:
-        // playlist = id u32 + DeviceSQL name, entry = track, playlist, index.
-        let raw = raw.into_inner();
-        match row {
-            Row::HistoryPlaylist(_) => match history_playlist_fields(&raw) {
-                Ok((id, name)) => {
-                    names.insert(id, name);
-                    entries.entry(id).or_default();
-                }
-                Err(e) => {
-                    bad.get_or_insert(e);
-                }
-            },
-            _ => match raw.get(4..8).and_then(|b| b.try_into().ok()) {
-                Some(b) => *entries.entry(u32::from_le_bytes(b)).or_default() += 1,
-                None => {
-                    bad.get_or_insert("short history entry row".to_owned());
-                }
-            },
-        }
-    })?;
-    if let Some(e) = bad {
-        return Err(e);
+    for r in rows(Table::HistoryPlaylists)? {
+        let (id, name) = pdb_rows::history_playlist(r).map_err(|e| e.to_string())?;
+        names.insert(id, name);
+        entries.entry(id).or_default();
+    }
+    for r in rows(Table::HistoryEntries)? {
+        let (_, playlist, _) = pdb_rows::history_entry(r).map_err(|e| e.to_string())?;
+        *entries.entry(playlist).or_default() += 1;
     }
     let mut sessions: Vec<HistorySession> = entries
         .into_iter()
@@ -569,105 +546,6 @@ fn parse_sessions(bytes: &[u8]) -> Result<Vec<HistorySession>, String> {
         .collect();
     sessions.sort_by_key(|s| s.id);
     Ok(sessions)
-}
-
-fn history_playlist_fields(raw: &[u8]) -> Result<(u32, String), String> {
-    let id = raw
-        .get(..4)
-        .and_then(|b| b.try_into().ok())
-        .map(u32::from_le_bytes)
-        .ok_or("short history playlist row")?;
-    let name = DeviceSQLString::read(&mut Cursor::new(raw.get(4..).unwrap_or_default()))
-        .map_err(|e| format!("history playlist name: {e}"))?
-        .into_string()
-        .map_err(|e| format!("history playlist name: {e}"))?;
-    Ok((id, name))
-}
-
-/// Calls `f` for every row of the history tables (11/12) in an `export.pdb`.
-fn walk_history(bytes: &[u8], mut f: impl FnMut(&Row)) -> Result<(), String> {
-    walk_pages(
-        bytes,
-        &[PageType::HistoryPlaylists, PageType::HistoryEntries],
-        |page, _| {
-            for group in &page.row_groups {
-                for row in group.present_rows() {
-                    f(&row);
-                }
-            }
-        },
-    )
-}
-
-/// Calls `f` with every page (parsed, and its raw bytes) of the tables of
-/// `types` in an `export.pdb`, in header and page-chain order. Walks each
-/// table's page chain itself, bounded by the file size and with a cycle
-/// check, because a player- or tool-damaged file must not hang us.
-pub(crate) fn walk_pages(
-    bytes: &[u8],
-    types: &[PageType],
-    mut f: impl FnMut(&Page, &[u8]),
-) -> Result<(), String> {
-    let mut reader = Cursor::new(bytes);
-    let header = Header::read(&mut reader).map_err(|e| format!("PDB header: {e}"))?;
-    if !(512..=65_536).contains(&header.page_size) {
-        return Err(format!("implausible page size {}", header.page_size));
-    }
-    for table in &header.tables {
-        if types.contains(&table.page_type) {
-            walk_table(&mut reader, &header, table, &mut f)?;
-        }
-    }
-    Ok(())
-}
-
-fn walk_table(
-    reader: &mut Cursor<&[u8]>,
-    header: &Header,
-    table: &Table,
-    f: &mut impl FnMut(&Page, &[u8]),
-) -> Result<(), String> {
-    let page_size = u64::from(header.page_size);
-    let bytes: &[u8] = reader.get_ref();
-    let len = bytes.len() as u64;
-    let mut seen = HashSet::new();
-    let mut index = table.first_page.clone();
-    loop {
-        let offset = index.offset(header.page_size);
-        // Page 0 is the file header; a table page past the end is damage.
-        if offset < page_size || offset.saturating_add(page_size) > len {
-            return Err(format!(
-                "{:?} page at byte {offset} is outside the file",
-                table.page_type
-            ));
-        }
-        if !seen.insert(offset) {
-            return Err(format!(
-                "{:?} page chain loops at byte {offset}",
-                table.page_type
-            ));
-        }
-        reader
-            .seek(SeekFrom::Start(offset))
-            .map_err(|e| e.to_string())?;
-        let page = Page::read_options(reader, Endian::Little, (header.page_size,))
-            .map_err(|e| format!("{:?} page at byte {offset}: {e}", table.page_type))?;
-        if page.page_index != index || page.page_type != table.page_type {
-            return Err(format!(
-                "{:?} page at byte {offset} has the wrong index or type",
-                table.page_type
-            ));
-        }
-        // In bounds: checked against `len` above.
-        let raw = bytes
-            .get(offset as usize..(offset + page_size) as usize)
-            .unwrap_or_default();
-        f(&page, raw);
-        if page.page_index == table.last_page {
-            return Ok(());
-        }
-        index = page.next_page;
-    }
 }
 
 #[cfg(test)]

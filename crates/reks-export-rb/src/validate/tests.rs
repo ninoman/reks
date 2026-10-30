@@ -286,29 +286,20 @@ fn corrupt_ppth_is_reported() {
 /// has rows, the way a deleted row looks in `export.pdb`.
 fn drop_first_track_row(pdb: &Path) {
     let mut bytes = fs::read(pdb).unwrap();
-    let mut reader = Cursor::new(&bytes[..]);
-    let header = Header::read(&mut reader).unwrap();
-    let size = header.page_size as usize;
-    let table = header
-        .tables
+    let file = crate::pdb::Pdb::parse(&bytes).unwrap();
+    let size = file.page_size();
+    let table = file
+        .tables()
         .iter()
-        .find(|t| t.page_type == PageType::Tracks)
+        .find(|t| t.table == crate::pdb::Table::Tracks)
         .unwrap();
-    let mut index = table.first_page.clone();
-    let page_start = loop {
-        let offset = index.offset(header.page_size);
-        reader.seek(SeekFrom::Start(offset)).unwrap();
-        let page = Page::read_options(&mut reader, Endian::Little, (header.page_size,)).unwrap();
-        if page
-            .row_groups
-            .iter()
-            .any(|g| g.present_rows().next().is_some())
-        {
-            break offset as usize;
-        }
-        assert!(page.page_index != table.last_page, "no track rows");
-        index = page.next_page;
-    };
+    let page_start = file
+        .pages(table)
+        .unwrap()
+        .iter()
+        .find(|p| p.has_data() && !p.rows().is_empty())
+        .map(|p| p.index as usize * size)
+        .expect("no track rows");
     // Row group 0 ends the page: presence flags (u16) at the last 4 bytes.
     let at = page_start + size - 4;
     let flags = u16::from_le_bytes([bytes[at], bytes[at + 1]]);

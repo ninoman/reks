@@ -7,7 +7,7 @@
 //!   `exportLibrary.db`) and which players read each ([`players`]);
 //! - damage in `export.pdb`: missing tables (the validator's check) and rows
 //!   that do not decode, each a finding, the rest still checked
-//!   ([`crate::pdbread::read_pdb_lenient`]);
+//!   ([`crate::pdb::read_pdb_lenient`]);
 //! - playlists in one library but not the other, or with other contents
 //!   ([`playlists`]);
 //! - every track's audio file, path, ANLZ files (`.DAT`, `.EXT`, `.2EX`),
@@ -36,7 +36,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::device::{DeviceInfo, FsKind};
 use crate::history::{read_play_history, HistoryReadOptions, HistorySource};
-use crate::pdbread::{read_pdb_lenient, PdbLibrary};
+use crate::pdb::{read_pdb_lenient, PdbLibrary};
 use crate::plan::human_bytes;
 use crate::validate::{self, locate, Finding as ValidatorFinding};
 use crate::TargetProfile;

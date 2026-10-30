@@ -18,27 +18,23 @@
 //! - A byte summary of every file under `PIONEER/` ([`FileDiff`]); ANLZ
 //!   files of matched tracks are paired by track, everything else by path.
 //!
-//! Read-only on both sides. The PDB is read with rekordcrate 0.3.0 (page
-//! walk as in [`crate::history`]); row fields are decoded from the raw row
-//! bytes at crate-digger offsets, so the diff sees what is on disk rather
-//! than a re-serialisation. ANLZ goes through [`reks_anlz::read`] (D8).
-//! `exportExt.pdb` is only byte-compared: rekordcrate 0.3.0 maps its table
-//! types onto `export.pdb`'s and can't read its rows.
+//! Read-only on both sides. The PDB is read with [`crate::pdb`]; row fields
+//! are decoded from the raw row bytes at crate-digger offsets, so the diff
+//! sees what is on disk. ANLZ goes through [`reks_anlz::read`] (D8).
+//! `exportExt.pdb` is only byte-compared: its table types differ from
+//! `export.pdb`'s and its rows are undecoded.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fs;
-use std::io::{self, Cursor};
+use std::io;
 use std::path::{Path, PathBuf};
 
-use binrw::BinRead;
-use rekordcrate::pdb::string::DeviceSQLString;
-use rekordcrate::pdb::{Header, PageType};
 use reks_anlz::read as anlz;
 use serde::Serialize;
 
-use crate::history::read::raw_rows;
-use crate::history::walk_pages;
+use crate::pdb::rows::{self as pdb_rows, STR_ANALYZE_PATH, STR_FILE_PATH, TRACK_STRINGS};
+use crate::pdb::{self, u16_at, u32_at};
 use crate::validate::{self, locate, Finding, StickPlaylist, ValidateError, PDB_PATH};
 
 /// ANLZ files compared per track, beside `analyze_path` (`.DAT`).
@@ -336,22 +332,15 @@ struct RawTables {
 }
 
 fn read_pdb(bytes: &[u8]) -> Result<Pdb, String> {
-    let header = Header::read(&mut Cursor::new(bytes)).map_err(|e| format!("PDB header: {e}"))?;
-    let tables: Vec<u32> = header
-        .tables
-        .iter()
-        .map(|t| type_code(&t.page_type))
-        .collect();
-    let types: Vec<PageType> = header.tables.iter().map(|t| t.page_type).collect();
+    let file = pdb::Pdb::parse(bytes).map_err(|e| e.to_string())?;
+    let tables: Vec<u32> = file.tables().iter().map(|t| t.table.code()).collect();
     let mut rows: BTreeMap<u32, usize> = tables.iter().map(|&t| (t, 0)).collect();
     let mut raw = RawTables::default();
-    walk_pages(bytes, &types, |page, page_bytes| {
-        if !page.has_data() {
-            return;
-        }
-        let code = type_code(&page.page_type);
-        let present = raw_rows(page, page_bytes);
+    for t in file.tables() {
+        let code = t.table.code();
+        let present = file.rows(t).map_err(|e| e.to_string())?;
         *rows.entry(code).or_default() += present.len();
+        let present = present.into_iter().map(<[u8]>::to_vec);
         match code {
             TRACKS => raw.tracks.extend(present),
             GENRES | ARTISTS | ALBUMS | LABELS | KEYS | COLORS | ARTWORK => {
@@ -359,7 +348,7 @@ fn read_pdb(bytes: &[u8]) -> Result<Pdb, String> {
             }
             _ => {}
         }
-    })?;
+    }
     let names = Names::decode(&raw.names);
     let tracks = raw
         .tracks
@@ -381,26 +370,6 @@ const LABELS: u32 = 4;
 const KEYS: u32 = 5;
 const COLORS: u32 = 6;
 const ARTWORK: u32 = 13;
-
-fn type_code(t: &PageType) -> u32 {
-    match t {
-        PageType::Tracks => TRACKS,
-        PageType::Genres => GENRES,
-        PageType::Artists => ARTISTS,
-        PageType::Albums => ALBUMS,
-        PageType::Labels => LABELS,
-        PageType::Keys => KEYS,
-        PageType::Colors => COLORS,
-        PageType::PlaylistTree => 7,
-        PageType::PlaylistEntries => 8,
-        PageType::HistoryPlaylists => 11,
-        PageType::HistoryEntries => 12,
-        PageType::Artwork => ARTWORK,
-        PageType::Columns => 16,
-        PageType::History => 19,
-        PageType::Unknown(n) => *n,
-    }
-}
 
 /// `export.pdb` table names (crate-digger `page_type`).
 pub fn table_name(table: u32) -> &'static str {
@@ -435,25 +404,14 @@ impl Names {
             let names = out.entry(table).or_default();
             for r in rows {
                 let decoded = match table {
-                    // id, name.
-                    GENRES | LABELS | ARTWORK => u32_at(r, 0).zip(string_at(r, 4)),
-                    // id, id2, name.
-                    KEYS => u32_at(r, 0).zip(string_at(r, 8)),
-                    // 5 bytes, u16 id, 1 byte, name.
-                    COLORS => u16_at(r, 5).map(u32::from).zip(string_at(r, 8)),
-                    // subtype 0x60: u8 name offset at 9; 0x64: u16 at 0x0A.
-                    ARTISTS => u32_at(r, 4).zip(match u16_at(r, 0) {
-                        Some(0x64) => u16_at(r, 0x0A).and_then(|o| string_at(r, o.into())),
-                        _ => r.get(9).and_then(|&o| string_at(r, o.into())),
-                    }),
-                    // subtype 0x80: u8 name offset at 0x15; 0x84: u16 at 0x16.
-                    ALBUMS => u32_at(r, 12).zip(match u16_at(r, 0) {
-                        Some(0x84) => u16_at(r, 0x16).and_then(|o| string_at(r, o.into())),
-                        _ => r.get(0x15).and_then(|&o| string_at(r, o.into())),
-                    }),
-                    _ => None,
+                    GENRES | LABELS | ARTWORK => pdb_rows::named(r, 4),
+                    KEYS => pdb_rows::named(r, 8),
+                    COLORS => pdb_rows::color(r),
+                    ARTISTS => pdb_rows::artist(r),
+                    ALBUMS => pdb_rows::album(r).map(|(id, a)| (id, a.name)),
+                    _ => continue,
                 };
-                if let Some((id, name)) = decoded {
+                if let Ok((id, name)) = decoded {
                     names.entry(id).or_insert(name);
                 }
             }
@@ -516,33 +474,6 @@ const TRACK_FIELDS: &[(&str, Field)] = &[
     ("unknown_0x5c", Field::U16(0x5C)),
 ];
 
-/// The 21 strings, in offset-table order (crate-digger `track_row`).
-const TRACK_STRINGS: [&str; 21] = [
-    "isrc",
-    "texter",
-    "unknown_string_2",
-    "unknown_string_3",
-    "unknown_string_4",
-    "message",
-    "kuvo_public",
-    "autoload_hotcues",
-    "unknown_string_5",
-    "unknown_string_6",
-    "date_added",
-    "release_date",
-    "mix_name",
-    "unknown_string_7",
-    "analyze_path",
-    "analyze_date",
-    "comment",
-    "title",
-    "unknown_string_8",
-    "filename",
-    "file_path",
-];
-const STR_ANALYZE_PATH: usize = 14;
-const STR_FILE_PATH: usize = 20;
-
 /// `None` when the row is too short or its `file_path` does not decode
 /// ([`validate::read`] reports those rows as damage).
 fn decode_track(row: &[u8], names: &Names) -> Option<TrackRow> {
@@ -557,11 +488,11 @@ fn decode_track(row: &[u8], names: &Names) -> Option<TrackRow> {
         }?;
         fields.push((*name, value));
     }
-    let mut strings = Vec::with_capacity(TRACK_STRINGS.len());
-    for i in 0..TRACK_STRINGS.len() {
-        let ofs = u16_at(row, 0x5E + 2 * i)?;
-        strings.push(device_string(row, ofs.into()));
-    }
+    // The whole offset table must be there.
+    u16_at(row, 0x5E + 2 * (TRACK_STRINGS.len() - 1))?;
+    let strings: Vec<Result<String, String>> = (0..TRACK_STRINGS.len())
+        .map(|i| pdb_rows::track_string(row, i).map_err(|e| e.to_string()))
+        .collect();
     let file_path = strings[STR_FILE_PATH].clone().ok()?;
     let analyze_path = strings[STR_ANALYZE_PATH].clone().unwrap_or_default();
     for (name, s) in TRACK_STRINGS.iter().zip(strings) {
@@ -573,26 +504,6 @@ fn decode_track(row: &[u8], names: &Names) -> Option<TrackRow> {
         analyze_path,
         fields,
     })
-}
-
-fn device_string(raw: &[u8], at: usize) -> Result<String, String> {
-    let tail = raw.get(at..).ok_or("string offset outside the row")?;
-    DeviceSQLString::read(&mut Cursor::new(tail))
-        .map_err(|e| e.to_string())?
-        .into_string()
-        .map_err(|e| e.to_string())
-}
-
-fn string_at(raw: &[u8], at: usize) -> Option<String> {
-    device_string(raw, at).ok()
-}
-
-fn u16_at(b: &[u8], at: usize) -> Option<u16> {
-    b.get(at..at + 2)?.try_into().ok().map(u16::from_le_bytes)
-}
-
-fn u32_at(b: &[u8], at: usize) -> Option<u32> {
-    b.get(at..at + 4)?.try_into().ok().map(u32::from_le_bytes)
 }
 
 fn clamp_u32(v: usize) -> u32 {

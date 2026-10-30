@@ -23,9 +23,10 @@
 //! stick's profile in one transaction
 //! ([`reks_core::Library::adopt_playlists`]).
 //!
-//! rekordcrate reads the stick. Whether it reads a current rekordbox 7
-//! stick is open item S4: it reads rekordcrate's own real exports cleanly,
-//! but no rekordbox 7 fixture exists yet (**UNVERIFIED**).
+//! [`crate::pdb`] reads the stick. Whether it reads every current rekordbox 7
+//! stick is open item S4: it reads the rekordbox 7.2.19 reference export
+//! (`fixtures/onelibrary/ref-7.2.19`), but no played rekordbox 7 stick
+//! fixture exists yet (**UNVERIFIED**).
 
 #[cfg(test)]
 mod tests;

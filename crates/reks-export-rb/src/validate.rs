@@ -1,6 +1,6 @@
 //! Read-back validator (Phase 2 task 8): after the writer ran, read the stick
-//! with an independent parser (rekordcrate, not the writer's own code) and
-//! check it against the [`ExportPlan`], so a broken stick is caught on the
+//! with a parser independent of the writer (reks's own [`crate::pdb`], not
+//! baken's code) and check it against the [`ExportPlan`], so a broken stick is caught on the
 //! computer instead of on a CDJ.
 //!
 //! [`validate`] checks:
@@ -31,24 +31,26 @@
 //! crate-digger spec), not rekordcrate: its 0.3.0 ANLZ parser rejects point
 //! cues (type 1), so it fails on every real cue list (D8).
 //!
-//! rekordcrate 0.3.0 keeps most row fields private, so track, playlist-node
-//! and playlist-entry fields are read from the row re-serialised with
-//! rekordcrate's own writer, at the offsets of the crate-digger spec
-//! (`analysis.adoc`, "Track Rows"). Pages are walked here, bounded by the file
-//! size and cycle-checked, so a damaged file can't hang the validator.
+//! `export.pdb` is read with [`crate::pdb`], bounds-checked at the offsets of
+//! the crate-digger spec (`analysis.adoc`, "Track Rows"), page chains bounded
+//! by the file size and cycle-checked, so a damaged file can neither hang nor
+//! abort the validator (review F03). rekordcrate is not used here: its 0.3.0
+//! parser panics on some damaged strings (D8, amended 2026-10-30); it stays
+//! the independent parser of the writer's round-trip tests.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{self, Cursor, Seek, SeekFrom};
+use std::io;
 use std::path::{Path, PathBuf};
 
-use binrw::{BinRead, BinWrite, Endian};
-use rekordcrate::pdb::string::DeviceSQLString;
-use rekordcrate::pdb::{Header, Page, PageType, Row, Table};
 use reks_anlz::read::Summary;
 use reks_core::{ManifestItemKind, ManifestRow, PlaylistId, TrackId};
 use serde::{Deserialize, Serialize};
 
+use crate::pdb::rows::{
+    self as pdb_rows, RowError, STR_ANALYZE_PATH, STR_FILE_PATH, STR_TITLE, TRACK_ID_AT,
+};
+use crate::pdb::{u32_at, Pdb, Table};
 use crate::plan::{anlz_dir, AnlzSource, ExportPlan, PlannedPlaylist};
 
 /// `export.pdb`, relative to the stick root.
@@ -934,42 +936,44 @@ struct PdbContents {
     errors: Vec<Finding>,
 }
 
-/// Parses `export.pdb`. `Err` only when the header itself is unusable.
+/// Parses `export.pdb` ([`crate::pdb`]). `Err` only when the header itself
+/// is unusable; a broken page chain or a row that does not decode is a
+/// finding and the rest still reads.
 fn read_pdb(bytes: &[u8]) -> Result<PdbContents, String> {
-    let mut reader = Cursor::new(bytes);
-    let header = Header::read(&mut reader).map_err(|e| format!("PDB header: {e}"))?;
-    if !(512..=65_536).contains(&header.page_size) {
-        return Err(format!("implausible page size {}", header.page_size));
-    }
+    let file = Pdb::parse(bytes).map_err(|e| e.to_string())?;
     let mut out = PdbContents {
-        table_types: header
-            .tables
-            .iter()
-            .map(|t| type_id(&t.page_type))
-            .collect(),
+        table_types: file.tables().iter().map(|t| t.table.code()).collect(),
         tracks: Vec::new(),
         playlists: Vec::new(),
         entries: Vec::new(),
         errors: Vec::new(),
     };
     let mut entries: Vec<(u32, u32, u32)> = Vec::new(); // (playlist, index, track)
-    for table in &header.tables {
-        let rows = match table_rows(&mut reader, &header, table) {
+    for table in file.tables() {
+        let rows = match table.table {
+            Table::Tracks | Table::PlaylistTree | Table::PlaylistEntries => file.rows(table),
+            // Not decoded, but its page chain must read.
+            _ => file.pages(table).map(|_| Vec::new()),
+        };
+        let rows = match rows {
             Ok(rows) => rows,
-            Err(message) => {
-                out.errors.push(Finding::PdbUnreadable { message });
+            Err(e) => {
+                out.errors.push(Finding::PdbUnreadable {
+                    message: e.to_string(),
+                });
                 continue;
             }
         };
-        for row in rows {
-            let decoded = match &row {
-                Row::Track(_) => track_row(&row).map(|t| out.tracks.push(t)),
-                Row::PlaylistTreeNode(_) => playlist_row(&row).map(|p| out.playlists.push(p)),
-                Row::PlaylistEntry(_) => entry_row(&row).map(|e| entries.push(e)),
-                _ => Ok(()),
+        for r in rows {
+            let decoded = match table.table {
+                Table::Tracks => track_row(r).map(|t| out.tracks.push(t)),
+                Table::PlaylistTree => playlist_row(r).map(|p| out.playlists.push(p)),
+                _ => pdb_rows::playlist_entry(r).map(|e| entries.push(e)),
             };
-            if let Err(message) = decoded {
-                out.errors.push(Finding::TrackRowUnreadable { message });
+            if let Err(e) = decoded {
+                out.errors.push(Finding::TrackRowUnreadable {
+                    message: e.to_string(),
+                });
             }
         }
     }
@@ -983,145 +987,27 @@ fn read_pdb(bytes: &[u8]) -> Result<PdbContents, String> {
     Ok(out)
 }
 
-fn type_id(t: &PageType) -> u32 {
-    match t {
-        PageType::Tracks => 0,
-        PageType::Genres => 1,
-        PageType::Artists => 2,
-        PageType::Albums => 3,
-        PageType::Labels => 4,
-        PageType::Keys => 5,
-        PageType::Colors => 6,
-        PageType::PlaylistTree => 7,
-        PageType::PlaylistEntries => 8,
-        PageType::HistoryPlaylists => 11,
-        PageType::HistoryEntries => 12,
-        PageType::Artwork => 13,
-        PageType::Columns => 16,
-        PageType::History => 19,
-        PageType::Unknown(n) => *n,
-    }
-}
-
-/// Every present row of `table`, following its page chain.
-fn table_rows(
-    reader: &mut Cursor<&[u8]>,
-    header: &Header,
-    table: &Table,
-) -> Result<Vec<Row>, String> {
-    let page_size = u64::from(header.page_size);
-    let len = reader.get_ref().len() as u64;
-    let name = type_id(&table.page_type);
-    let mut seen = HashSet::new();
-    let mut index = table.first_page.clone();
-    let mut rows = Vec::new();
-    loop {
-        let offset = index.offset(header.page_size);
-        if offset < page_size || offset.saturating_add(page_size) > len {
-            return Err(format!(
-                "table {name}: page at byte {offset} is outside the file"
-            ));
-        }
-        if !seen.insert(offset) {
-            return Err(format!("table {name}: page chain loops at byte {offset}"));
-        }
-        reader
-            .seek(SeekFrom::Start(offset))
-            .map_err(|e| e.to_string())?;
-        let page = Page::read_options(reader, Endian::Little, (header.page_size,))
-            .map_err(|e| format!("table {name}: page at byte {offset}: {e}"))?;
-        if page.page_index != index || page.page_type != table.page_type {
-            return Err(format!(
-                "table {name}: page at byte {offset} has the wrong index or type"
-            ));
-        }
-        for group in &page.row_groups {
-            rows.extend(group.present_rows());
-        }
-        if page.page_index == table.last_page {
-            return Ok(rows);
-        }
-        index = page.next_page;
-    }
-}
-
-/// The row's bytes as rekordcrate writes them (its fields are private).
-fn row_bytes(row: &Row) -> Result<Vec<u8>, String> {
-    let mut cursor = Cursor::new(Vec::new());
-    match row {
-        Row::Track(t) => t.write_le(&mut cursor),
-        Row::PlaylistTreeNode(p) => p.write_le(&mut cursor),
-        Row::PlaylistEntry(e) => e.write_le(&mut cursor),
-        _ => return Err("unexpected row type".into()),
-    }
-    .map_err(|e| e.to_string())?;
-    Ok(cursor.into_inner())
-}
-
-fn u32_at(bytes: &[u8], at: usize) -> Result<u32, String> {
-    bytes
-        .get(at..at + 4)
-        .and_then(|b| b.try_into().ok())
-        .map(u32::from_le_bytes)
-        .ok_or_else(|| format!("row too short for a field at {at}"))
-}
-
-/// String `i` of a track row: offsets are `u16`s from 0x5E, relative to
-/// the row start (crate-digger "Track Rows").
-fn track_string(bytes: &[u8], i: usize) -> Result<String, String> {
-    let at = 0x5E + 2 * i;
-    let offset = bytes
-        .get(at..at + 2)
-        .map(|b| u16::from_le_bytes([b[0], b[1]]))
-        .ok_or("track row too short")?;
-    let mut cursor = Cursor::new(bytes);
-    cursor.set_position(u64::from(offset));
-    DeviceSQLString::read_le(&mut cursor)
-        .map_err(|e| e.to_string())?
-        .into_string()
-        .map_err(|e| format!("track string {i}: {e:?}"))
-}
-
-const TRACK_ID_AT: usize = 0x48;
-const STR_ANALYZE_PATH: usize = 14;
-const STR_TITLE: usize = 17;
-const STR_FILE_PATH: usize = 20;
-
-fn track_row(row: &Row) -> Result<StickTrack, String> {
-    let b = row_bytes(row)?;
+fn track_row(r: &[u8]) -> Result<StickTrack, RowError> {
     Ok(StickTrack {
-        pdb_id: u32_at(&b, TRACK_ID_AT)?,
-        title: track_string(&b, STR_TITLE)?,
-        file_path: track_string(&b, STR_FILE_PATH)?,
-        analyze_path: track_string(&b, STR_ANALYZE_PATH)?,
+        pdb_id: u32_at(r, TRACK_ID_AT).ok_or(RowError::Short("track"))?,
+        title: pdb_rows::track_string(r, STR_TITLE)?,
+        file_path: pdb_rows::track_string(r, STR_FILE_PATH)?,
+        analyze_path: pdb_rows::track_string(r, STR_ANALYZE_PATH)?,
         track_id: None,
         divider: false,
     })
 }
 
-fn playlist_row(row: &Row) -> Result<StickPlaylist, String> {
-    let Row::PlaylistTreeNode(node) = row else {
-        return Err("not a playlist tree row".into());
-    };
-    let b = row_bytes(row)?;
+fn playlist_row(r: &[u8]) -> Result<StickPlaylist, RowError> {
+    let p = pdb_rows::playlist_node(r)?;
     Ok(StickPlaylist {
-        pdb_id: node.id.0,
-        parent_id: node.parent_id.0,
-        sort_order: u32_at(&b, 8)?,
-        name: node
-            .name
-            .clone()
-            .into_string()
-            .map_err(|e| format!("playlist name: {e:?}"))?,
-        is_folder: node.is_folder(),
+        pdb_id: p.id,
+        parent_id: p.parent_id,
+        sort_order: p.sort_order,
+        name: p.name,
+        is_folder: p.is_folder,
         entries: Vec::new(),
     })
-}
-
-/// `(playlist id, entry index, track id)`.
-fn entry_row(row: &Row) -> Result<(u32, u32, u32), String> {
-    let b = row_bytes(row)?;
-    Ok((u32_at(&b, 8)?, u32_at(&b, 0)?, u32_at(&b, 4)?))
 }
 
 /// The file at stick path `rel` (`/`-separated), each component matched

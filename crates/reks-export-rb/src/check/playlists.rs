@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::{path_key, FindingItem, FindingKind, Findings, OneLibraryContents, Severity};
-use crate::pdbread::PdbLibrary;
+use crate::pdb::PdbLibrary;
 
 /// A folder or playlist, flattened.
 #[derive(Debug, Clone, PartialEq, Eq)]

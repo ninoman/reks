@@ -4,8 +4,8 @@
 //! Reads a stick or a Phase 2 backup folder ([`super::run_backups`] keeps the
 //! stick layout). Read-only: the stick is opened for reading only, once.
 //!
-//! Tables: 11 `history_playlists` and 12 `history_entries` through rekordcrate
-//! (R§10); 0 `tracks` and 2 `artists` for the entry's stick path, title,
+//! Tables: 11 `history_playlists` and 12 `history_entries` through
+//! [`crate::pdb`] (R§10); 0 `tracks` and 2 `artists` for the entry's stick path, title,
 //! artist and duration; 19 `history` for dates. Table 19's layout is undecoded
 //! (HIST1, R§10: rows "with ascending ids and ASCII `YYYY-MM-DD`"), so date
 //! decoding is a heuristic, **UNVERIFIED**, and off unless
@@ -20,19 +20,14 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
-use binrw::{BinRead, BinWrite};
-use rekordcrate::pdb::string::DeviceSQLString;
-use rekordcrate::pdb::{Page, PageType, Row};
 use reks_core::history::{HistoryLibrary, SourceEntry, SourceHistory, SourceSession};
 use serde::{Deserialize, Serialize};
 
-use super::{
-    find_ci, history_playlist_fields, io_err, rekordbox_dir, rel_of, walk_pages, BackupReport,
-    HistoryError, BACKUP_MANIFEST,
-};
+use crate::pdb::{rows as pdb_rows, Pdb, Table};
+
+use super::{find_ci, io_err, rekordbox_dir, rel_of, BackupReport, HistoryError, BACKUP_MANIFEST};
 
 /// Where to read history from (phase-2.5.md "Interfaces").
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -214,27 +209,12 @@ pub fn read_stick_tracks(device_root: &Path) -> Result<HashMap<u32, PdbTrack>, H
         return Ok(HashMap::new());
     };
     let bytes = fs::read(&pdb).map_err(io_err(&pdb))?;
-    let mut tracks: HashMap<u32, RawTrack> = HashMap::new();
-    let mut artists: HashMap<u32, String> = HashMap::new();
-    let (mut names, mut entries, mut bad) = (HashMap::new(), Vec::new(), None);
-    walk_pages(&bytes, &[PageType::Tracks, PageType::Artists], |page, _| {
-        for group in &page.row_groups {
-            for row in group.present_rows() {
-                visit_row(
-                    &row,
-                    &mut names,
-                    &mut entries,
-                    &mut tracks,
-                    &mut artists,
-                    &mut bad,
-                );
-            }
-        }
-    })
-    .map_err(|message| HistoryError::Unreadable {
+    let unreadable = |message: String| HistoryError::Unreadable {
         path: pdb.clone(),
         message,
-    })?;
+    };
+    let file = Pdb::parse(&bytes).map_err(|e| unreadable(e.to_string()))?;
+    let (tracks, artists) = tracks_and_artists(&file).map_err(unreadable)?;
     Ok(tracks
         .iter()
         .map(|(&id, t)| (id, t.resolve(&artists)))
@@ -281,44 +261,27 @@ struct Parsed {
 }
 
 fn parse_pdb(bytes: &[u8]) -> Result<Parsed, String> {
+    let file = Pdb::parse(bytes).map_err(|e| e.to_string())?;
+    let rows = |t| file.rows_of(t).map_err(|e| e.to_string());
     let mut names: HashMap<u32, String> = HashMap::new();
+    for r in rows(Table::HistoryPlaylists)? {
+        let (id, name) = pdb_rows::history_playlist(r).map_err(|e| e.to_string())?;
+        names.insert(id, name);
+    }
     // (playlist, entry_index, visit order, track id)
     let mut entries: Vec<(u32, u32, usize, u32)> = Vec::new();
-    let mut tracks: HashMap<u32, RawTrack> = HashMap::new();
-    let mut artists: HashMap<u32, String> = HashMap::new();
-    let mut date_rows: Option<Vec<Vec<u8>>> = None;
-    let mut bad: Option<String> = None;
-
-    let types = [
-        PageType::Tracks,
-        PageType::Artists,
-        PageType::HistoryPlaylists,
-        PageType::HistoryEntries,
-        PageType::History,
-    ];
-    walk_pages(bytes, &types, |page, raw| {
-        if page.page_type == PageType::History {
-            date_rows
-                .get_or_insert_with(Vec::new)
-                .extend(raw_rows(page, raw));
-            return;
-        }
-        for group in &page.row_groups {
-            for row in group.present_rows() {
-                visit_row(
-                    &row,
-                    &mut names,
-                    &mut entries,
-                    &mut tracks,
-                    &mut artists,
-                    &mut bad,
-                );
-            }
-        }
-    })?;
-    if let Some(e) = bad {
-        return Err(e);
+    for r in rows(Table::HistoryEntries)? {
+        let (track, playlist, index) = pdb_rows::history_entry(r).map_err(|e| e.to_string())?;
+        entries.push((playlist, index, entries.len(), track));
     }
+    let (tracks, artists) = tracks_and_artists(&file)?;
+    let date_rows = file
+        .tables()
+        .iter()
+        .any(|t| t.table == Table::History)
+        .then(|| rows(Table::History))
+        .transpose()?
+        .map(|rows| rows.into_iter().map(<[u8]>::to_vec).collect());
 
     let mut by_playlist: HashMap<u32, Vec<(u32, usize, u32)>> = HashMap::new();
     for (playlist, index, order, track) in entries {
@@ -356,73 +319,45 @@ fn parse_pdb(bytes: &[u8]) -> Result<Parsed, String> {
     })
 }
 
-fn visit_row(
-    row: &Row,
-    names: &mut HashMap<u32, String>,
-    entries: &mut Vec<(u32, u32, usize, u32)>,
-    tracks: &mut HashMap<u32, RawTrack>,
-    artists: &mut HashMap<u32, String>,
-    bad: &mut Option<String>,
-) {
-    // rekordcrate keeps the fields private; re-read the row's bytes as its
-    // writer lays them out (crate-digger offsets, see `parse_track`).
-    let mut raw = Cursor::new(Vec::new());
-    let written = match row {
-        Row::HistoryPlaylist(p) => p.write(&mut raw),
-        Row::HistoryEntry(e) => e.write(&mut raw),
-        Row::Track(t) => t.write(&mut raw),
-        Row::Artist(a) => a.write(&mut raw),
-        _ => return,
-    };
-    let raw = raw.into_inner();
-    match (row, written) {
-        (Row::HistoryPlaylist(_) | Row::HistoryEntry(_), Err(e)) => {
-            bad.get_or_insert(e.to_string());
-        }
-        (Row::HistoryPlaylist(_), Ok(())) => match history_playlist_fields(&raw) {
-            Ok((id, name)) => {
-                names.insert(id, name);
-            }
-            Err(e) => {
-                bad.get_or_insert(e);
-            }
-        },
-        (Row::HistoryEntry(_), Ok(())) => match (u32_at(&raw, 0), u32_at(&raw, 4), u32_at(&raw, 8))
-        {
-            (Some(track), Some(playlist), Some(index)) => {
-                entries.push((playlist, index, entries.len(), track));
-            }
-            _ => {
-                bad.get_or_insert("short history entry row".to_owned());
-            }
-        },
-        (Row::Track(_), result) => match result
-            .map_err(|e| e.to_string())
-            .and_then(|()| parse_track(&raw))
-        {
-            // A later row with the same id replaces an earlier one.
+/// The track and artist rows the history entries resolve against. A row
+/// that does not decode is left out (logged): its entries stay unresolved.
+/// A later row with the same id replaces an earlier one.
+#[allow(clippy::type_complexity)]
+fn tracks_and_artists(
+    file: &Pdb<'_>,
+) -> Result<(HashMap<u32, RawTrack>, HashMap<u32, String>), String> {
+    let mut tracks = HashMap::new();
+    for r in file.rows_of(Table::Tracks).map_err(|e| e.to_string())? {
+        match pdb_rows::track(r) {
             Ok(t) => {
-                tracks.insert(t.id, t);
+                tracks.insert(
+                    t.id,
+                    RawTrack {
+                        artist_id: t.artist_id,
+                        duration_s: t.duration,
+                        title: t.title,
+                        file_path: t.file_path,
+                    },
+                );
             }
             Err(e) => {
                 tracing::warn!(error = %e, "unreadable track row; its history entries stay unresolved")
             }
-        },
-        (Row::Artist(_), result) => match result
-            .map_err(|e| e.to_string())
-            .and_then(|()| parse_artist(&raw))
-        {
+        }
+    }
+    let mut artists = HashMap::new();
+    for r in file.rows_of(Table::Artists).map_err(|e| e.to_string())? {
+        match pdb_rows::artist(r) {
             Ok((id, name)) => {
                 artists.insert(id, name);
             }
             Err(e) => tracing::warn!(error = %e, "unreadable artist row"),
-        },
-        _ => {}
+        }
     }
+    Ok((tracks, artists))
 }
 
 struct RawTrack {
-    id: u32,
     artist_id: u32,
     duration_s: u16,
     title: String,
@@ -440,101 +375,6 @@ impl RawTrack {
             duration_ms: (self.duration_s != 0).then(|| i64::from(self.duration_s) * 1000),
         }
     }
-}
-
-/// Track row (crate-digger `track_row`): `artist_id` at 0x44, `id` at 0x48,
-/// `duration` (s) at 0x54, 21 u16 string offsets from 0x5E; title is string
-/// 17, file path 20.
-fn parse_track(raw: &[u8]) -> Result<RawTrack, String> {
-    let short = || "short track row".to_owned();
-    let string = |i: usize| -> Result<String, String> {
-        let ofs = u16_at(raw, 0x5E + 2 * i).ok_or_else(short)?;
-        device_string(raw, usize::from(ofs)).map_err(|e| format!("track string {i}: {e}"))
-    };
-    Ok(RawTrack {
-        id: u32_at(raw, 0x48).ok_or_else(short)?,
-        artist_id: u32_at(raw, 0x44).ok_or_else(short)?,
-        duration_s: u16_at(raw, 0x54).ok_or_else(short)?,
-        title: string(17)?,
-        file_path: string(20)?,
-    })
-}
-
-/// Artist row: subtype `0x60` has a u8 name offset at 9, `0x64` a u16 at 0x0A.
-fn parse_artist(raw: &[u8]) -> Result<(u32, String), String> {
-    let short = || "short artist row".to_owned();
-    let id = u32_at(raw, 4).ok_or_else(short)?;
-    let ofs = match u16_at(raw, 0).ok_or_else(short)? {
-        0x64 => usize::from(u16_at(raw, 0x0A).ok_or_else(short)?),
-        _ => usize::from(*raw.get(9).ok_or_else(short)?),
-    };
-    Ok((
-        id,
-        device_string(raw, ofs).map_err(|e| format!("artist name: {e}"))?,
-    ))
-}
-
-fn device_string(raw: &[u8], at: usize) -> Result<String, String> {
-    let tail = raw.get(at..).ok_or("string offset outside the row")?;
-    DeviceSQLString::read(&mut Cursor::new(tail))
-        .map_err(|e| e.to_string())?
-        .into_string()
-        .map_err(|e| e.to_string())
-}
-
-fn u16_at(b: &[u8], at: usize) -> Option<u16> {
-    b.get(at..at + 2)?.try_into().ok().map(u16::from_le_bytes)
-}
-
-fn u32_at(b: &[u8], at: usize) -> Option<u32> {
-    b.get(at..at + 4)?.try_into().ok().map(u32::from_le_bytes)
-}
-
-/// Heap starts after the 0x28-byte page header.
-const HEAP: usize = 0x28;
-/// A row group: 16 u16 row offsets, a u16 presence mask, a u16 (unknown).
-const GROUP: usize = 0x24;
-
-/// The present rows of a page rekordcrate can't parse (table 19), as raw
-/// bytes in row order. A row's extent is up to the next row's start, or
-/// to the end of the used heap.
-pub(crate) fn raw_rows(page: &Page, raw: &[u8]) -> Vec<Vec<u8>> {
-    let num_rows = usize::from(page.num_rows());
-    let groups = num_rows.div_ceil(16);
-    let used = u16_at(raw, 0x1E).map_or(0, usize::from);
-    let heap_end = (HEAP + used).min(raw.len().saturating_sub(groups * GROUP));
-    let mut offsets = Vec::new();
-    for i in 0..num_rows {
-        let group_end = raw.len().saturating_sub((i / 16) * GROUP);
-        let present = group_end
-            .checked_sub(4)
-            .and_then(|at| u16_at(raw, at))
-            .unwrap_or(0);
-        if present & (1 << (i % 16)) == 0 {
-            continue;
-        }
-        let ofs = group_end
-            .checked_sub(4 + 2 * (i % 16 + 1))
-            .and_then(|at| u16_at(raw, at));
-        if let Some(ofs) = ofs {
-            offsets.push(HEAP + usize::from(ofs));
-        }
-    }
-    let mut starts = offsets.clone();
-    starts.sort_unstable();
-    starts.dedup();
-    offsets
-        .iter()
-        .map(|&start| {
-            let end = starts
-                .iter()
-                .copied()
-                .find(|&s| s > start)
-                .unwrap_or(heap_end)
-                .min(heap_end);
-            raw.get(start..end).map(<[u8]>::to_vec).unwrap_or_default()
-        })
-        .collect()
 }
 
 /// The HIST1 heuristic (module docs). Sets `played_on` on every named
@@ -810,11 +650,13 @@ mod tests {
             T_HISTORY,
             vec![vec![b"aaaa".to_vec(), b"bbbbbbbb".to_vec(), b"cc".to_vec()]],
         )]);
-        let mut rows = Vec::new();
-        walk_pages(&pdb, &[PageType::History], |page, raw| {
-            rows.extend(raw_rows(page, raw))
-        })
-        .unwrap();
+        let file = Pdb::parse(&pdb).unwrap();
+        let rows: Vec<Vec<u8>> = file
+            .rows_of(Table::History)
+            .unwrap()
+            .into_iter()
+            .map(<[u8]>::to_vec)
+            .collect();
         // Rows are padded to 4 bytes in the heap.
         assert_eq!(
             rows,
