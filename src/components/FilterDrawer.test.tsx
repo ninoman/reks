@@ -151,13 +151,7 @@ describe("FilterDrawer", () => {
     expect(within(row("Genre (My Tags)")).getByText("all")).toBeTruthy();
     await waitFor(() =>
       expect(lastRule()).toMatchObject({
-        rules: [
-          {
-            type: "group",
-            match: "all",
-            rules: [{ filter: { type: "tagAny", ids: [10] } }, { filter: { ids: [11] } }],
-          },
-        ],
+        rules: [{ type: "filter", filter: { type: "tagAll", ids: [10, 11] } }],
       }),
     );
   });
@@ -177,7 +171,7 @@ describe("FilterDrawer", () => {
     fireEvent.click(screen.getByRole("button", { name: "3 stars" }));
     await waitFor(() =>
       expect(lastRule()).toMatchObject({
-        rules: [{ type: "filter", not: true, filter: { type: "ratingMin", rating: 4 } }],
+        rules: [{ type: "filter", not: false, filter: { type: "ratingRange", min: 0, max: 3 } }],
       }),
     );
   });

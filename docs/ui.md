@@ -835,7 +835,7 @@ One query, edited in the Filters drawer ([wireframe](wireframes/filters-drawer.h
 concept A): rows on a rail, ANDed until you ask for OR. It narrows whatever the
 tree shows (the chosen playlist is `library.playlistId`, outside the drawer).
 State is [`store/rules.ts`](../src/store/rules.ts); the draft and every edit are
-pure functions in [`ruleTree.ts`](../src/store/ruleTree.ts). `toRule` turns
+pure functions in [`store/ruleTree/`](../src/store/ruleTree) (`model`, `toRule`, `fromRule`, `legacy`, `query`, `edit`, `summary`). `toRule` turns
 the rows that filter into the `RuleNode` that `library.rule` sends with every
 query (D29), only while the Filters switch is on.
 
@@ -867,9 +867,12 @@ and loading / error-with-Retry / empty states). All but `RuleBuilder` and
   is red); Rating at least / exactly / at most; BPM and Plays two inputs,
   either side optional; Last played never / since a date (no relative "last
   N days"); File missing / present. Lists of more than one value are an "any"
-  group of single filters; tags "all" an "all" group of one-tag `tagAny`s;
-  rating at most / exactly are `ratingMin` with `not` / combined. `fromRule`
-  reads these shapes back as the same rows (no core change).
+  group of single filters. Rating and tag rows map 1:1 to core filters: at
+  least `ratingMin`, at most / exactly `ratingRange`, tags any / all
+  `tagAny` / `tagAll`; "none of" / exclude is `not`. `fromRule` reads them
+  back as the same rows. Rules saved before `ratingRange` / `tagAll` (exactly
+  as `ratingMin` pairs, all as a group of one-tag `tagAny`s) stay valid and
+  are still read (`legacy.ts`); no stored JSON changes, so no migration.
 - **Rail and connectors**: "and" / "or" between rows; a click switches the
   whole level (no mixed and/or on one level). Lit while both sides filter.
 - **Row menu** (`···`, or Shift+F10 on the row): Or… (wraps the row in an

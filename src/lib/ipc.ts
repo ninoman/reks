@@ -32,7 +32,11 @@ export type Filter =
   /** Last played on or after `date` (`YYYY-MM-DD`). */
   | { type: "playedSince"; date: string }
   /** The track has at least one of these My Tags. */
-  | { type: "tagAny"; ids: TagId[] };
+  | { type: "tagAny"; ids: TagId[] }
+  /** Rating within `min..=max`, inclusive. */
+  | { type: "ratingRange"; min: number; max: number }
+  /** Has every one of the tags. */
+  | { type: "tagAll"; ids: TagId[] };
 
 export type SortColumn =
   | "title"

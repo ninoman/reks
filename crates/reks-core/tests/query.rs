@@ -279,6 +279,12 @@ fn filters() {
     );
     assert_eq!(m(Filter::RatingMin { rating: 4 }), [1, 5]);
     assert_eq!(m(Filter::RatingMin { rating: 0 }), [1, 2, 3, 4, 5]);
+    assert_eq!(m(Filter::RatingRange { min: 4, max: 5 }), [1, 5]);
+    assert_eq!(m(Filter::RatingRange { min: 0, max: 5 }), [1, 2, 3, 4, 5]);
+    assert_eq!(
+        m(Filter::RatingRange { min: 5, max: 5 }),
+        m(Filter::RatingMin { rating: 5 })
+    );
     assert_eq!(m(Filter::Playlist { id: 11 }), [1, 3]);
     assert_eq!(m(Filter::Playlist { id: 12 }), [2]);
     assert_eq!(
@@ -700,15 +706,19 @@ fn serde_shapes() {
             {"type": "neverPlayed"},
             {"type": "playCountRange", "min": 1, "max": 5},
             {"type": "playedSince", "date": "2026-01-01"},
-            {"type": "tagAny", "ids": [3, 4]}
+            {"type": "tagAny", "ids": [3, 4]},
+            {"type": "ratingRange", "min": 2, "max": 4},
+            {"type": "tagAll", "ids": [3, 4]}
         ],
         "sort": {"column": "dateAdded", "descending": true},
         "offset": 200,
         "limit": 200
     }"#;
     let q: TrackQuery = serde_json::from_str(json).unwrap();
-    assert_eq!(q.filters.len(), 11);
+    assert_eq!(q.filters.len(), 13);
     assert_eq!(q.filters[10], Filter::TagAny { ids: vec![3, 4] });
+    assert_eq!(q.filters[11], Filter::RatingRange { min: 2, max: 4 });
+    assert_eq!(q.filters[12], Filter::TagAll { ids: vec![3, 4] });
     assert_eq!(q.filters[7], Filter::NeverPlayed);
     assert_eq!(
         q.filters[1],

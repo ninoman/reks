@@ -84,6 +84,10 @@ pub enum Filter {
     PlayedSince { date: String },
     /// Has at least one of these My Tags (none listed: matches nothing).
     TagAny { ids: Vec<TagId> },
+    /// Rating within `min..=max` (0..5).
+    RatingRange { min: u8, max: u8 },
+    /// Has every one of these My Tags (none listed: matches nothing).
+    TagAll { ids: Vec<TagId> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
