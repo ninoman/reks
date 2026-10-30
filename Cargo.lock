@@ -3958,7 +3958,7 @@ dependencies = [
 
 [[package]]
 name = "reks-analysis"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "beat-this",
  "hound",
@@ -3977,7 +3977,7 @@ dependencies = [
 
 [[package]]
 name = "reks-anlz"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "binrw",
  "png 0.18.1",
@@ -3994,7 +3994,7 @@ dependencies = [
 
 [[package]]
 name = "reks-app"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "reks-analysis",
  "reks-anlz",
@@ -4018,7 +4018,7 @@ dependencies = [
 
 [[package]]
 name = "reks-audio"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "flacenc",
@@ -4035,7 +4035,7 @@ dependencies = [
 
 [[package]]
 name = "reks-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "libc",
@@ -4058,7 +4058,7 @@ dependencies = [
 
 [[package]]
 name = "reks-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "baken-export",
  "blake3",
@@ -4088,11 +4088,11 @@ dependencies = [
 
 [[package]]
 name = "reks-export-engine"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "reks-export-onelibrary"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "reks-core",
  "reks-export-rb",
@@ -4106,7 +4106,7 @@ dependencies = [
 
 [[package]]
 name = "reks-export-rb"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "baken-core",
  "baken-export",
@@ -4132,14 +4132,14 @@ dependencies = [
 
 [[package]]
 name = "reks-fixtures-gen"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "hound",
 ]
 
 [[package]]
 name = "reks-mix"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cpal",
  "reks-audio",

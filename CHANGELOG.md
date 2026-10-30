@@ -3,6 +3,43 @@
 User-facing changes to reks, written by `npm run release` from commit messages.
 Versioning rules: [docs/releasing.md](docs/releasing.md#versioning).
 
+## 0.3.0 (2026-10-30)
+
+### Breaking changes
+
+- **core:** An XML import replaces an analysis beatgrid instead of mixing with it
+- **core:** XML re-import keeps manual BPMs and occupied hot cue slots; empty analysis keeps BPM
+- **export-rb:** UNVERIFIED stick features on by default; warn before deleting exportLibrary.db
+
+### Features
+
+- **ui:** One-channel mixer beside the player deck in 1-deck mode (#85)
+- **mix:** Grid mode on the deck replaces the grid editor dialog (#84)
+- **ui:** Synced decks show BPM, tempo % and SYNC in cyan
+- **mix:** Sync matches beats only; nudge and part-beat jumps switch to BPM sync
+- **mix:** Drag a track from one deck to another as it plays
+- **mix:** Master tempo plays through Signalsmith Stretch, picked by blind listening
+- **core:** RatingRange and tagAll filters; split the rule-tree codec
+
+### Fixes
+
+- **ui:** Beat jump pads no longer show an active outline
+- **export-rb:** Stop flagging hot cues D–H as a cue count mismatch after export
+- **core:** Run library migrations with foreign keys off and check them per step
+- **core:** Every bulk operation backs up the library first, in the app and the CLI
+- **export-rb:** Read every export.pdb with our own bounds-checked reader
+- **export-rb:** Delete only the files the dry run listed, after flushing the new ones
+- **mix:** CUE release no longer drops a pending load; SetGrid refuses other audio
+- **ui:** Error boundary per region; a reload stops the running engine
+
+### Performance
+
+- **export-rb:** Flush the stick once instead of per file, and stop leaving ._ files on it
+- **export-rb:** Read far less of each source file when planning and building ANLZ
+- **export-rb:** Load playlist entries and track fields in batches
+- **core:** Read files in parallel during import and scan
+- **ui:** Select-all loads its pages in one pass; cap dry-run file lists; parse the import XML once
+
 ## 0.2.0 (2026-10-29)
 
 ### Features
