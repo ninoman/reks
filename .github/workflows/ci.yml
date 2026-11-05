@@ -44,14 +44,15 @@ jobs:
 
       # libclang-dev: bindgen for the key lock engine (D21). macOS has it with
       # Xcode; the Windows image ships LLVM.
-      - name: Install Linux system dependencies (Tauri prerequisites, libclang)
+      # libasound2-dev: ALSA headers for cpal's alsa-sys (playback, D5), Linux only.
+      - name: Install Linux system dependencies (Tauri prerequisites, libclang, ALSA)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
-            libclang-dev
+            libclang-dev libasound2-dev
 
       - uses: actions/setup-node@v4
         with:
