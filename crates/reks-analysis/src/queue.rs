@@ -412,13 +412,12 @@ fn worker(shared: &Shared) {
 
         let outcome = run(shared, &mut tracker, item, epoch);
 
-        let (event, status) = {
+        let event = {
             let Ok(mut st) = shared.state.lock() else {
                 return;
             };
-            st.running -= 1;
             st.running_ids.remove(&item.track_id);
-            let event = match outcome {
+            match outcome {
                 Outcome::Analysed { cached, stored } => {
                     st.done += 1;
                     Some(QueueEvent::Analysed {
@@ -435,16 +434,25 @@ fn worker(shared: &Shared) {
                     })
                 }
                 Outcome::Dropped => None,
+            }
+        };
+        // Deliver the event before this job stops counting as running, so
+        // whoever `wait_idle` wakes has seen every result. Not under the lock:
+        // the sink may call back into the queue.
+        if let Some(event) = event {
+            (shared.sink)(&event);
+        }
+        let status = {
+            let Ok(mut st) = shared.state.lock() else {
+                return;
             };
+            st.running -= 1;
             let status = st.status();
             if status.is_idle() {
                 shared.idle.notify_all();
             }
-            (event, status)
+            status
         };
-        if let Some(event) = event {
-            (shared.sink)(&event);
-        }
         shared.emit_status(status);
     }
 }

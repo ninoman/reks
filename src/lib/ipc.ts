@@ -2450,7 +2450,11 @@ export function logUiError(message: string, stack: string | null): Promise<void>
 
 /** Native folder picker; `null` when cancelled. */
 export async function pickFolder(title: string, defaultPath?: string): Promise<string | null> {
-  const dir = await open({ directory: true, title, defaultPath });
+  const dir = await open({
+    directory: true,
+    title,
+    ...(defaultPath !== undefined && { defaultPath }),
+  });
   return typeof dir === "string" ? dir : null;
 }
 
@@ -2459,7 +2463,7 @@ export async function pickFile(
   title: string,
   filter?: { name: string; extensions: string[] },
 ): Promise<string | null> {
-  const path = await open({ title, filters: filter ? [filter] : undefined });
+  const path = await open({ title, ...(filter && { filters: [filter] }) });
   return typeof path === "string" ? path : null;
 }
 
