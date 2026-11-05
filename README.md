@@ -90,7 +90,8 @@ Prerequisites: Rust (see `rust-toolchain.toml`), Node 24, the Tauri 2
 system prerequisites for your OS (https://tauri.app/start/prerequisites/), and
 a C++ compiler with libclang for the key lock engine (D21): Xcode command line
 tools on macOS, `clang` + `libclang-dev` on Linux, LLVM on Windows (set
-`LIBCLANG_PATH` if bindgen cannot find it).
+`LIBCLANG_PATH` if bindgen cannot find it). On Linux, playback also needs the
+ALSA headers (`libasound2-dev`).
 
 ```sh
 npm ci

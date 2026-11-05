@@ -582,7 +582,7 @@ function deckMove(deck: number, from: number): number | null {
   const view: DeckView = {
     ...src.view,
     sync: prev.view.sync,
-    syncBar: prev.view.syncBar,
+    bpmSync: prev.view.bpmSync,
     quantise: prev.view.quantise,
     locked: false,
     master: false,
