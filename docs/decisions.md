@@ -1683,6 +1683,65 @@ Date of decisions: 2026-10-18.
   Merge commits are skipped, so work merged without a Conventional subject
   on its commits is missing from the changelog.
 
+## D42. Simpler USB export: one Sticks entry point, settings out of the wizard, track problems never block
+
+- Date: 2026-11-05. Status: proposed. Wireframe:
+  [`wireframes/export-simplified.html`](wireframes/export-simplified.html).
+  Changes Phase 2 task 4's blocking rule and task 10's wizard, and the UI
+  side of D27 (Devices view). D23 (history) and the plan/apply split are
+  unchanged.
+- Decision:
+  - **One entry point.** The header's "Export to USB…" button and the USB
+    icon merge into one "Sticks" button with a plugged-in count. With
+    exactly one known stick plugged in, the header shows only
+    "Sync <name>" (one click to the review; its menu holds Edit
+    playlists…, Eject, All sticks…).
+  - **Sticks view** (today's Devices dialog) holds stick cards (capacity,
+    sync status, Eject, Sync), the picked stick's "Plays on" and its
+    playlist ticks with live status. The ticks are the D27 profile, so the
+    wizard's Stick and Playlists steps go. The wizard is Review → Writing →
+    Done; "dry run" is renamed Review.
+  - **Options leave the wizard.** "Oldest player" becomes the stick's
+    "Plays on" (already stored per device). A new Settings › Export tab
+    holds analysis source, tracks without analysis (default: export with
+    approximate analysis), artwork, "Clean up unused files" (today's
+    `keep_stale`, inverted, default on), and an Experimental group with one
+    UNVERIFIED badge: playlist dividers (default on), "Start the first loop
+    automatically" (today's active loops, default off), OneLibrary
+    (default off). The review shows the settings in use as one read-only
+    line with "Change…".
+  - **Play history is always backed up.** The Back up / Discard switch goes;
+    the un-imported-sessions guard stays in the review, Discard behind
+    "More" with its confirm.
+  - **Track problems never block.** `SourceMissing`, `SourceUnreadable` and
+    `Unsupported` leave that track out and the rest is written;
+    `skip_unsupported` is removed. Still blocking: unsupported file
+    system, not enough space, `BadPath`. Left-out tracks are grouped per
+    reason (`Warning::Skipped` with track ids), counted on the primary
+    button ("Export 412 of 424 tracks") and repeated in the report.
+  - **Fix in place.** Each warning card has its fixes (Find files…,
+    Convert…, Analyse now, Remove from playlists…) and "Keep as it is";
+    the review has "Keep all as they are". Each fix replans. "Remove from
+    playlists" removes the ticked tracks only from this stick's ticked
+    library playlists, after a confirm, through a new command reusing the
+    `removeEntries` playlist edit; smart-playlist rows have no checkbox.
+- Rationale: the wizard asked ten technical questions on every run, most of
+  which describe the library or the stick, not the export. Three entry
+  points did the same thing. A user can't decide "leave out unsupported
+  files" before seeing which files; one missing file must not stop a stick
+  being written before a gig.
+- Rejected: keeping an "Advanced" disclosure in the wizard (still asked
+  every run); per-stick copies of every option (only the player target
+  differs per stick); silently leaving tracks out (violates "a stick that
+  fails on stage"; the count and report keep it visible).
+- Risks: dividers default on while UNVERIFIED goes against conservative
+  defaults (maintainer's call; badge stays until a logged hardware test);
+  a stick written with left-out tracks may surprise if the user skims the
+  review (mitigated by the button count and report); the settings migration
+  must keep existing users' current option values.
+- Open: keep Discard for history at all; OneLibrary global or per stick;
+  whether to keep "Start the first loop automatically" in the UI.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

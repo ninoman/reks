@@ -220,7 +220,8 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    `/PIONEER/Artwork` is the writer's and no deletes are listed there.
    Per-track blockers (missing source, audiocheck errors) block the plan
    unless `skip_unsupported`; tracks without analysis follow
-   `MissingAnalysis` (default `Skip`). ANLZ comes from an `AnlzLocator`
+   `MissingAnalysis` (default `Skip`). D42 (proposed) changes this: per-track
+   problems never block and the default becomes `Generate`. ANLZ comes from an `AnlzLocator`
    (`CacheLocator` for rekordbox's cache, task 5; `NoAnlz` in tests); its
    `why_missing` text goes into the `Skipped` warning. `history`/`backups`:
    task 12. `Warning`/`Problem` implement `Display` (dry-run wording for the
