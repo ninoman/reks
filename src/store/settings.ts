@@ -55,7 +55,7 @@ export function hiddenColumns(ui: UiState, columns: ColumnDefaults): string[] {
 let columnsVersion = 0;
 
 /** The Settings dialog's tabs, in sidebar order. */
-export type SettingsTab = "library" | "playback" | "display" | "decks" | "mixer";
+export type SettingsTab = "library" | "playback" | "display" | "decks" | "mixer" | "export";
 
 export interface SettingsStore {
   settings: Settings | null;

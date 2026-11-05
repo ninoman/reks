@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use reks_core::{CancelToken, TrackPatch};
 
 use super::*;
-use crate::plan::{plan_sources, MissingAnalysis, NoAnlz, PlannedPlaylist, SourceTrack, Sources};
+use crate::plan::{
+    plan_sources, MissingAnalysis, NoAnlz, PlannedPlaylist, SkipReason, SourceTrack, Sources,
+};
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/audio");
 
@@ -105,6 +107,7 @@ fn sources(tracks: Vec<SourceTrack>) -> Sources {
                 is_folder: true,
                 track_ids: vec![],
                 smart: false,
+                left_out: Vec::new(),
             },
             PlannedPlaylist {
                 id: 11,
@@ -113,6 +116,7 @@ fn sources(tracks: Vec<SourceTrack>) -> Sources {
                 is_folder: false,
                 track_ids: tracks.iter().map(|t| t.track_id).collect(),
                 smart: false,
+                left_out: Vec::new(),
             },
         ],
         tracks,
@@ -224,7 +228,7 @@ fn stale_files_are_listed_as_deletes() {
 }
 
 #[test]
-fn blocked_plan_groups_problems_with_track_names() {
+fn missing_tracks_are_issues_and_space_still_blocks() {
     let mut w = World::new();
     w.free_bytes = 10;
     let a = w.add("sine-click-128.wav", "a.wav");
@@ -243,19 +247,39 @@ fn blocked_plan_groups_problems_with_track_names() {
     assert!(!dry.ready);
     assert_eq!(
         dry.status,
-        "Blocked by 3 problems. Fix them or change the options; nothing has been written."
+        "Blocked by 1 problem. Fix it first; nothing has been written."
     );
-    assert_eq!(kinds(&dry.problems), ["sourceMissing", "notEnoughSpace"]);
-    let missing = &dry.problems[0];
-    assert_eq!(missing.title, "2 tracks: file not found");
+    assert_eq!(kinds(&dry.problems), ["notEnoughSpace"]);
+    let missing = &dry.issues[0];
+    assert_eq!(missing.kind, IssueKind::Missing);
+    assert_eq!(missing.title, "2 tracks are missing");
+    assert_eq!(missing.track_ids, [1, 2]);
     assert_eq!(
-        missing.items,
+        missing.actions,
+        [IssueAction::FindFiles, IssueAction::RemoveFromPlaylists]
+    );
+    let rows: Vec<(String, String)> = missing
+        .tracks
+        .iter()
+        .map(|t| (t.label.clone(), t.detail.clone()))
+        .collect();
+    assert_eq!(
+        rows,
         [
-            format!("Alpha – First: {}", w.music.join("gone-1.mp3").display()),
-            format!("Alpha – Second: {}", w.music.join("gone-2.mp3").display()),
+            (
+                "Alpha – First".to_owned(),
+                w.music.join("gone-1.mp3").display().to_string()
+            ),
+            (
+                "Alpha – Second".to_owned(),
+                w.music.join("gone-2.mp3").display().to_string()
+            ),
         ]
     );
-    let space = &dry.problems[1];
+    assert_eq!(missing.tracks[0].playlists, [11]);
+    assert_eq!(dry.overview.export_label, "Export 1 of 3 tracks");
+    assert_eq!(dry.overview.headline, "Can't export to REKS yet");
+    let space = &dry.problems[0];
     assert!(space.items.is_empty());
     assert!(
         space
@@ -287,12 +311,16 @@ fn warnings_are_grouped_and_unknown_tracks_get_their_id() {
         is_folder: false,
         track_ids: vec![7],
         smart: false,
+        left_out: Vec::new(),
     });
     let plan = plan_sources(
         src,
         &w.dev(),
         None,
-        &ExportOptions::default(),
+        &ExportOptions {
+            missing_analysis: MissingAnalysis::Skip,
+            ..ExportOptions::default()
+        },
         &|t: &SourceTrack| {
             (t.track_id == 1).then(|| {
                 fs::write(w.cache.join("1.DAT"), [1u8; 10]).unwrap();
@@ -305,10 +333,7 @@ fn warnings_are_grouped_and_unknown_tracks_get_their_id() {
     let dry = DryRun::new(&plan, &labels());
 
     assert!(dry.ready);
-    assert_eq!(
-        kinds(&dry.warnings),
-        ["noVolumeSerial", "skipped", "emptyPlaylist"]
-    );
+    assert_eq!(kinds(&dry.warnings), ["noVolumeSerial", "emptyPlaylist"]);
     let serial = &dry.warnings[0];
     assert!(serial.items.is_empty());
     assert!(
@@ -318,20 +343,28 @@ fn warnings_are_grouped_and_unknown_tracks_get_their_id() {
     );
     assert!(serial.title.ends_with('.'));
 
-    let skipped = &dry.warnings[1];
-    assert_eq!(skipped.title, "2 tracks left out");
+    let skipped = &dry.issues[0];
+    assert_eq!(skipped.kind, IssueKind::NoAnalysis);
+    assert_eq!(skipped.title, "2 tracks have no analysis");
+    let rows: Vec<(&str, &str, &str)> = skipped
+        .tracks
+        .iter()
+        .map(|t| (t.label.as_str(), t.detail.as_str(), t.in_text.as_str()))
+        .collect();
+    let why = "no rekordbox analysis found; reks has not analysed it yet";
     assert_eq!(
-        skipped.items,
+        rows,
         [
-            "Alpha – Second: no rekordbox analysis found; reks has not analysed it yet",
-            "track 7: no rekordbox analysis found; reks has not analysed it yet",
+            ("Alpha – Second", why, "In: Friday"),
+            ("track 7", why, "In: Friday, Saturday"),
         ]
     );
+    assert_eq!(dry.overview.export_label, "Export 1 of 3 tracks");
     assert_eq!(
-        dry.warnings[2].title,
+        dry.warnings[1].title,
         "1 playlist ends up empty after leaving tracks out"
     );
-    assert_eq!(dry.warnings[2].items, ["Saturday"]);
+    assert_eq!(dry.warnings[1].items, ["Saturday"]);
     assert_eq!(
         fact(&dry.summary, "Tracks"),
         "1: 1 to copy, 0 already on the stick"
@@ -434,10 +467,10 @@ fn discard_needs_confirmation_before_the_plan_is_ready() {
     assert_eq!(kinds(&dry.problems), ["discardNotConfirmed"]);
     assert!(dry.problems[0]
         .title
-        .contains("tick the box in the options"));
+        .contains("confirmation under the play history"));
     assert_eq!(
         dry.history.action_text.as_deref(),
-        Some("Discarding it needs your confirmation in the options.")
+        Some("Discarding it needs your confirmation.")
     );
     assert_eq!(dry.history.backups.count, 0);
 
@@ -530,15 +563,17 @@ fn track_labels_come_from_the_library() {
     plan.warnings = vec![
         Warning::Skipped {
             track_id: first,
-            reason: "x".into(),
+            reason: SkipReason::Unsupported,
+            detail: "x".into(),
         },
         Warning::Audio {
             track_id: 999,
             message: "y".into(),
         },
     ];
-    plan.errors = vec![Problem::Unsupported {
+    plan.errors = vec![Problem::BadPath {
         track_id: second,
+        path: "/p".into(),
         message: "z".into(),
     }];
     let labels = track_labels(&lib, &plan);
@@ -547,19 +582,32 @@ fn track_labels_come_from_the_library() {
     assert_eq!(labels[&second], second_file);
 
     let dry = DryRun::build(&lib, &plan);
-    assert_eq!(dry.warnings[0].items, ["Кино – Звезда: x"]);
-    assert_eq!(dry.warnings[1].items, ["track 999: y"]);
-    assert_eq!(dry.problems[0].items, [format!("{second_file}: z")]);
+    // Left-out tracks are issues, not warnings.
+    assert_eq!(dry.warnings[0].items, ["track 999: y"]);
+    assert_eq!(dry.issues[0].kind, IssueKind::Unsupported);
+    assert_eq!(dry.issues[0].tracks[0].label, "Кино – Звезда");
+    assert_eq!(dry.issues[0].tracks[0].detail, "x");
+    assert_eq!(dry.problems[0].items, [format!("{second_file}: /p: z")]);
     assert!(dry.convertible.is_empty());
     assert_eq!(dry.convert_text, None);
 
+    // A left-out track's Convert is on its issue, not in the general offer.
     plan.convertible = vec![first, second];
     let dry = DryRun::build(&lib, &plan);
-    assert_eq!(dry.convertible, [first, second]);
+    assert_eq!(dry.convertible, [second]);
     assert!(dry
         .convert_text
         .as_deref()
-        .is_some_and(|t| t.starts_with("2 tracks can be converted")));
+        .is_some_and(|t| t.starts_with("1 track can be converted")));
+    assert_eq!(
+        dry.issues[0].actions,
+        [
+            IssueAction::Convert {
+                track_ids: vec![first]
+            },
+            IssueAction::RemoveFromPlaylists
+        ]
+    );
 }
 
 #[test]

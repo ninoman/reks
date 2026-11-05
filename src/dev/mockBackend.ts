@@ -31,10 +31,12 @@ import type {
   PlaylistOp,
   PlaylistStatus,
   ProfileStatus,
+  ReviewIssue,
   Settings,
   SettingsPatch,
   SortColumn,
   TagOp,
+  TargetProfile,
   TrackDetail,
   TrackQuery,
   TrackRow,
@@ -240,6 +242,13 @@ function mutate(op: PlaylistOp) {
   const handled = smart.mutate(op);
   if (handled !== undefined) return handled;
   const done = { type: "done", createdId: null, added: 0, skipped: 0 } as const;
+  if (op.type === "removeTracks") {
+    const drop = new Set(op.trackIds);
+    for (const id of op.playlistIds) {
+      PLAYLISTS[id] = (PLAYLISTS[id] ?? []).filter((e) => typeof e !== "number" || !drop.has(e));
+    }
+    return done;
+  }
   if (!("playlistId" in op)) return done;
   const list = PLAYLISTS[op.playlistId] ?? [];
   switch (op.type) {
@@ -290,6 +299,14 @@ let settings: Settings = {
   mixerFilters: "show",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
+  export: {
+    missingAnalysis: "generate",
+    artwork: false,
+    cleanUp: true,
+    dividers: true,
+    activeLoops: false,
+    onelibrary: false,
+  },
   backupKeep: 10,
   tagsInComments: false,
   // Like a release build.
@@ -695,8 +712,13 @@ function profileStatus(id: number, mountPoint: string | null): ProfileStatus {
 }
 
 let planId = 0;
-let lastPlan: { mountPoint: string; label: string; played: boolean; opts: ExportOptions } | null =
-  null;
+let lastPlan: {
+  mountPoint: string;
+  label: string;
+  played: boolean;
+  opts: ExportOptions;
+  issues: ReviewIssue[];
+} | null = null;
 let cancelled = false;
 
 /** Writes "12 tracks" in steps, then reports like `report::ReportView`. */
@@ -762,7 +784,13 @@ async function exportApply(onEvent: Channel<ExportProgress>): Promise<ExportRepo
           folder: null,
           files: [],
         };
-  const base = { mountPoint: plan.mountPoint, deviceName: plan.label, history, warnings: [] };
+  const base = {
+    mountPoint: plan.mountPoint,
+    deviceName: plan.label,
+    history,
+    warnings: [],
+    leftOut: plan.issues,
+  };
   if (cancelled) {
     return {
       ...base,
@@ -817,22 +845,52 @@ async function exportApply(onEvent: Channel<ExportProgress>): Promise<ExportRepo
 }
 
 /** A dry run in the shape `dryrun::DryRun` gives: GIGS holds play history, Backup is blocked. */
-/** `ExportOptions::default()` in Rust (the mock's stand-in for `export_default_options`). */
-const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
-  target: "Generic",
-  keepStale: false,
-  missingAnalysis: "skip",
-  artwork: false,
-  skipUnsupported: false,
-  history: "backUp",
-  discardHistoryConfirmed: false,
-  historyChosen: false,
-  dividers: true,
-  activeLoops: true,
-  anlzPreference: "rekordboxFirst",
-  onelibrary: true,
-  onelibraryRemovalConfirmed: false,
-};
+/** `ExportOptions::from_settings` in Rust (the mock's `export_default_options`). */
+function defaultExportOptions(target: TargetProfile | null): ExportOptions {
+  const e = settings.export;
+  return {
+    target: target ?? "Generic",
+    keepStale: !e.cleanUp,
+    missingAnalysis: e.missingAnalysis,
+    artwork: e.artwork,
+    history: "backUp",
+    discardHistoryConfirmed: false,
+    historyChosen: false,
+    dividers: e.dividers,
+    activeLoops: e.activeLoops,
+    anlzPreference: settings.anlzPreference,
+    onelibrary: e.onelibrary,
+    onelibraryRemovalConfirmed: false,
+  };
+}
+
+/** The mock's missing file: the first ticked playlist's first track, while a ticked playlist holds it. */
+let missingId: number | null = null;
+function missingIssue(lists: PlaylistNode[]): ReviewIssue | null {
+  missingId ??= lists.map((p) => tracksIn(p.id)[0]).find((id) => id !== undefined) ?? null;
+  const t = TRACKS.find((r) => r.id === missingId);
+  if (t === undefined) return null;
+  const holding = lists.filter((p) => !p.smart && (PLAYLISTS[p.id] ?? []).includes(t.id));
+  if (holding.length === 0) return null;
+  return {
+    kind: "missing",
+    title: "1 track is missing",
+    detail:
+      "Their files are gone or moved. They are left out of this export and stay in your playlists.",
+    keptText: "1 track left out, still in your playlists",
+    trackIds: [t.id],
+    tracks: [
+      {
+        trackId: t.id,
+        label: `${t.artist ?? ""} – ${t.title ?? ""}`,
+        detail: `/Volumes/Ext/DJ/${t.title}.mp3`,
+        playlists: holding.map((p) => p.id),
+        inText: `In: ${holding.map((p) => p.name).join(", ")}`,
+      },
+    ],
+    actions: [{ type: "findFiles" }, { type: "removeFromPlaylists" }],
+  };
+}
 
 function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): DryRun {
   const dev = devices.find((d) => d.mountPoint === mountPoint) ?? (devices[0] as DeviceInfo);
@@ -881,14 +939,47 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
   }
   const none = { count: 0, bytes: 0, totalText: "None", files: [] };
   const write = copies.length * 9_400_000;
-  lastPlan = { mountPoint: dev.mountPoint, label: dev.label, played, opts };
+  const missing = missingIssue(lists);
+  const issues = missing === null ? [] : [missing];
+  const exported = copies.length;
+  const total = exported + (missing === null ? 0 : 1);
+  lastPlan = { mountPoint: dev.mountPoint, label: dev.label, played, opts, issues };
   return {
     planId: ++planId,
     ready: problems.length === 0,
+    overview: {
+      headline:
+        problems.length > 0
+          ? `Can't export to ${dev.label} yet`
+          : missing !== null
+            ? "Ready to export · 1 track will be left out"
+            : `Ready to export to ${dev.label}`,
+      playlistsText: `${lists.length} ${lists.length === 1 ? "playlist" : "playlists"}`,
+      copyText: `${copies.length} tracks to copy`,
+      copyDetail: `${(write / 1e6).toFixed(1)} MB`,
+      spaceText: `${((dev.freeBytes - write) / 1e9).toFixed(1)} GB free after export`,
+      spaceDetail: "",
+      tracksExported: exported,
+      tracksTotal: total,
+      exportLabel: missing !== null ? `Export ${exported} of ${total} tracks` : "Export",
+    },
+    issues,
+    settings: [
+      opts.target === "Generic" ? "Any player" : opts.target,
+      "rekordbox analysis, then reks",
+      opts.missingAnalysis === "skip"
+        ? "Unanalysed tracks left out"
+        : "Unanalysed tracks approximated",
+      ...(opts.artwork ? ["Artwork"] : []),
+      opts.keepStale ? "Keeps unused files" : "Cleans up unused files",
+      ...(opts.dividers ? ["Dividers"] : []),
+      ...(opts.activeLoops ? ["First loop starts by itself"] : []),
+      ...(opts.onelibrary ? ["OneLibrary"] : []),
+    ],
     status:
       problems.length === 0
         ? "Ready to export. Nothing has been written to the stick yet."
-        : `Blocked by ${problems.length} problem${problems.length === 1 ? "" : "s"}. Fix ${problems.length === 1 ? "it" : "them"} or change the options; nothing has been written.`,
+        : `Blocked by ${problems.length} problem${problems.length === 1 ? "" : "s"}. Fix ${problems.length === 1 ? "it" : "them"} first; nothing has been written.`,
     device: {
       mountPoint: dev.mountPoint,
       name: dev.label,
@@ -966,7 +1057,7 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
                 ? "Before writing anything, reks copies 1 database file (412.0 KB) to its data folder and checks the copies; if the backup fails, nothing is written. The report after the export shows where the copies are."
                 : opts.discardHistoryConfirmed
                   ? "You chose to discard it: no backup is made."
-                  : "Discarding it needs your confirmation in the options.",
+                  : "Discarding it needs your confirmation.",
           backups:
             opts.history !== "discard"
               ? {
@@ -996,15 +1087,6 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
               kind: "smartPlaylistFixed",
               title: `${lists.filter((p) => p.smart).length === 1 ? "1 smart playlist is" : `${lists.filter((p) => p.smart).length} smart playlists are`} written with the tracks matched now. Players have no smart playlists, so the stick won't update by itself.`,
               items: lists.filter((p) => p.smart).map((p) => p.name),
-            },
-          ]
-        : []),
-      ...(copies.length > 0
-        ? [
-            {
-              kind: "skipped",
-              title: "1 track left out",
-              items: [`${copies[0]?.path ?? ""}: never analysed by rekordbox`],
             },
           ]
         : []),
@@ -1262,7 +1344,7 @@ mockIPC((cmd, payload) => {
     case "profile_status":
       return profileStatus(args.id as number, args.mountPoint as string | null);
     case "export_default_options":
-      return DEFAULT_EXPORT_OPTIONS;
+      return defaultExportOptions((args.target as TargetProfile | null) ?? null);
     case "export_plan":
       return new Promise((resolve) =>
         setTimeout(

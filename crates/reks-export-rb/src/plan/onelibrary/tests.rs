@@ -159,9 +159,9 @@ fn is_onelibrary(p: &Problem) -> bool {
 }
 
 #[test]
-fn on_by_default_and_off_on_a_clean_stick_only_marks_the_plan() {
+fn off_by_default_and_off_on_a_clean_stick_only_marks_the_plan() {
     let d = ExportOptions::default();
-    assert!(d.onelibrary && d.dividers && d.active_loops);
+    assert!(!d.onelibrary && d.dividers && !d.active_loops);
     assert!(!d.onelibrary_removal_confirmed);
     let w = World::new();
     let mut p = planned(&w, &options(false));

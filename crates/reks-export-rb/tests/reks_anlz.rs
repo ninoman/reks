@@ -183,6 +183,7 @@ impl World {
         let opts = ExportOptions {
             anlz_preference: pref,
             onelibrary: false,
+            missing_analysis: plan::MissingAnalysis::Skip,
             ..ExportOptions::default()
         };
         let sources = plan::load(&self.lib, &self.sel).unwrap();
@@ -259,7 +260,7 @@ fn preference_picks_the_source() {
         .warnings
         .iter()
         .find_map(|w| match w {
-            Warning::Skipped { reason, .. } => Some(reason.clone()),
+            Warning::Skipped { detail, .. } => Some(detail.clone()),
             _ => None,
         })
         .unwrap();

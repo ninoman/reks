@@ -39,7 +39,7 @@ concerned.
 | Play history | Sessions players logged on the stick that your library has not imported yet (import them from Histories → +). |
 
 **Which players:** audio is checked against the stick profile's oldest
-player (Export to USB → Options → "Oldest player the stick must work on").
+player (Sticks → the stick → "Plays on").
 For a stick without a profile,
 or on the command line without `--target`, it is checked against the
 CDJ-2000NXS, the strictest: FLAC and ALAC are problems there.

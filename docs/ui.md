@@ -321,7 +321,7 @@ rekordbox and Traktor (2026-10-22; it was along the bottom):
 is [`deviceBrowser.ts`](../src/store/deviceBrowser.ts); everything in it is
 read-only.
 
-- Root row "Devices" with a gear that opens the USB devices dialog. While it
+- Root row "Devices" with a gear that opens the Sticks view. While it
   is open, the drive list refreshes every two seconds (`useDevicePolling`), so
   a stick shows up when it is plugged in; a drive that goes away is forgotten
   and its open list closes.
@@ -352,6 +352,22 @@ read-only.
   an empty hot cue pad stays dark and cue edits say the cues are the stick's.
 - Dev: `npm run dev` serves the REKS stick (and its check report) from
   [`mockBrowse.ts`](../src/dev/mockBrowse.ts).
+
+## USB export (D42)
+
+- One entry point in the header: **Sticks** (with a count when more than one
+  drive is plugged in), or **Sync <name>** with a ▾ menu (Edit playlists…,
+  Eject, All sticks…) when exactly one known stick is plugged in; an unknown
+  single stick shows **Set up <label>**. `useStickWatch` keeps the drive list
+  fresh for it.
+- The Sticks view (`DevicesDialog`): plugged-in drives with Eject and Sync,
+  the identify prompt for new sticks, then the picked stick's "Plays on",
+  playlist ticks (saved as they change) and sync status.
+- The export dialog (`ExportWizard` + `export/`): Review → Writing → Done.
+  Track problems are `IssueCard`s that never block; each fix replans, a fix
+  in another dialog (find files, convert, analyse, Settings › Export) hides
+  the review until it closes. Technical details sit in a closed
+  `<details>`. Options live in Settings › Export (`settings/ExportSettings`).
 
 ## Mix panel (phase 5)
 
@@ -737,9 +753,9 @@ the command returns the deck's cues and the store takes them.
   bar thicker. Hovering a mark on either waveform names it ("Hot cue A:
   Drop", "Memory cue", "Memory loop", "Auto loop", "Cue point"; native
   title, `markAt` / `markTitle` in `lib/deckMarks.ts`).
-- **Export**: AUTO loops reach a USB stick only with **Active loops**
-  (UNVERIFIED badge, on by default) in the export wizard; see phase 5
-  task 17.
+- **Export**: AUTO loops reach a USB stick only with **Start the first loop
+  automatically** (Settings › Export › Experimental, UNVERIFIED, off by
+  default since D42); see phase 5 task 17.
 - Shared pieces: `ui/InlineText.tsx` (`InlineText`, `InlineTextField`);
   `Pad` shows its `hint` in a tooltip even without a key and takes
   `remove` (the corner ×); hint tooltips are
@@ -947,8 +963,8 @@ and loading / error-with-Retry / empty states). All but `RuleBuilder` and
   rule (unused default fields empty around it), shows the whole collection
   as a live preview and puts Save rules / Cancel in a banner (`setRule`).
   Dropping tracks on it, "Insert divider" and "Remove from" are refused, with
-  the reason beside them. The export wizard marks smart lists and the dry
-  run notes that they are written as fixed lists.
+  the reason beside them. The Sticks view marks smart lists and the export
+  review notes that they are written as fixed lists.
 - Dev: `mockSmart.ts` evaluates rules and smart lists like the core;
   `mockPresets.ts` keeps saved filters like `filter_preset.rs`.
 

@@ -289,7 +289,7 @@ rekordbox keys (D10, "Queue"). A track rekordbox analysed has a rekordbox entry 
     spot), so planning and the writer read only files changed since the scan; `ExportOptions::anlz_preference`
     = the app setting `export.anlz_preference` (`AnlzPreference`:
     `rekordboxFirst` default, `reksFirst`, `rekordboxOnly`; picked and saved
-    in the export wizard's options step, `--anlz` in `reks rb`); tracks with
+    in Settings › Export since D42, `--anlz` in `reks rb`); tracks with
     neither still follow `missing_analysis`. A user-owned grid (locked or
     edited; `SourceTrack::grid_user_owned`, one `Library::user_owned_grids`
     query per export) puts reks first under `rekordboxFirst` too, so the edit

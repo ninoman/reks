@@ -25,6 +25,11 @@ use crate::plan::{
 use crate::rbcache::{self, RbCache};
 use crate::TargetProfile;
 
+mod review;
+
+pub(crate) use review::issues;
+pub use review::{Issue, IssueAction, IssueKind, IssueTrack, Overview};
+
 #[derive(Debug, thiserror::Error)]
 pub enum DryRunError {
     #[error(transparent)]
@@ -68,6 +73,12 @@ pub fn plan_at(
 pub struct DryRun {
     /// No blocking problems: the export may run.
     pub ready: bool,
+    /// The headline and the three numbers (D42).
+    pub overview: Overview,
+    /// Track problems and what can be done about them; none blocks.
+    pub issues: Vec<Issue>,
+    /// The settings in use, one short phrase each.
+    pub settings: Vec<String>,
     /// One sentence on the outcome.
     pub status: String,
     pub device: DeviceView,
@@ -84,10 +95,11 @@ pub struct DryRun {
     /// Blockers, grouped by kind in order of first appearance.
     pub problems: Vec<NoticeGroup>,
     /// Everything else to know, grouped the same way. The history warning is
-    /// in [`Self::history`] instead.
+    /// in [`Self::history`] instead, left-out tracks in [`Self::issues`].
     pub warnings: Vec<NoticeGroup>,
-    /// Tracks whose audio warning or problem the converter's Older players
-    /// preset fixes ([`ExportPlan::convertible`]); the view offers "Convert…".
+    /// Exported tracks whose audio warning the converter's Older players
+    /// preset fixes ([`ExportPlan::convertible`]); the view offers
+    /// "Convert…". Left-out ones are in their issue's action.
     #[serde(default)]
     pub convertible: Vec<TrackId>,
     /// One sentence on them, `None` when there are none.
@@ -270,14 +282,16 @@ pub fn track_labels(lib: &Library, plan: &ExportPlan) -> TrackLabels {
     labels
 }
 
-/// Labels for every track of `plan`, for the export's progress and report.
+/// Labels for every track of `plan` and the ones it leaves out, for the
+/// export's progress and report.
 pub fn plan_track_labels(lib: &Library, plan: &ExportPlan) -> TrackLabels {
     let mut labels = labels_for(
         lib,
         plan.tracks
             .iter()
             .filter(|t| !t.is_divider())
-            .map(|t| t.track_id),
+            .map(|t| t.track_id)
+            .chain(plan.warnings.iter().filter_map(warning_track)),
     );
     labels.extend(divider_labels(plan));
     labels
@@ -348,7 +362,10 @@ impl DryRun {
         }
         let mut warnings = Groups::default();
         for w in &plan.warnings {
-            if let Warning::StickHistory { .. } | Warning::OneLibraryRemoved { .. } = w {
+            if let Warning::StickHistory { .. }
+            | Warning::OneLibraryRemoved { .. }
+            | Warning::Skipped { .. } = w
+            {
                 continue;
             }
             warnings.push(warning_kind(w), warning_item(w, &track, &playlist));
@@ -360,16 +377,27 @@ impl DryRun {
             "Ready to export. Nothing has been written to the stick yet.".to_owned()
         } else {
             format!(
-                "Blocked by {}. Fix {} or change the options; nothing has been written.",
+                "Blocked by {}. Fix {} first; nothing has been written.",
                 count(n_problems, "problem", "problems"),
                 if n_problems == 1 { "it" } else { "them" }
             )
         };
 
+        let device = device_view(&plan.device, plan.history.volume_serial.clone());
+        let left_out: HashSet<TrackId> = plan.warnings.iter().filter_map(skipped_track).collect();
+        let convertible: Vec<TrackId> = plan
+            .convertible
+            .iter()
+            .copied()
+            .filter(|id| !left_out.contains(id))
+            .collect();
         Self {
             ready,
+            overview: review::overview(plan, &device.name),
+            issues: review::issues(plan, labels),
+            settings: review::settings_line(plan),
             status,
-            device: device_view(&plan.device, plan.history.volume_serial.clone()),
+            device,
             target: target_label(plan.options.target).to_owned(),
             summary: summary(plan),
             playlists: playlist_rows(plan),
@@ -381,14 +409,14 @@ impl DryRun {
             warnings: warnings.finish(warning_title),
             onelibrary: onelibrary_view(plan),
             onelibrary_removal: onelibrary_removal_view(plan),
-            convertible: plan.convertible.clone(),
-            convert_text: (!plan.convertible.is_empty()).then(|| {
+            convert_text: (!convertible.is_empty()).then(|| {
                 format!(
                     "{} can be converted to a format older players load (AIFF, up to \
                      24-bit / 48 kHz). The library track keeps its cues, grid and playlists.",
-                    count(plan.convertible.len(), "track", "tracks")
+                    count(convertible.len(), "track", "tracks")
                 )
             }),
+            convertible,
         }
     }
 }
@@ -758,9 +786,7 @@ fn history_view(plan: &ExportPlan) -> HistoryView {
         HistoryPolicy::Discard if confirmed => {
             "You chose to discard it: it is erased without a backup.".to_owned()
         }
-        HistoryPolicy::Discard => {
-            "Discarding it needs your confirmation in the options.".to_owned()
-        }
+        HistoryPolicy::Discard => "Discarding it needs your confirmation.".to_owned(),
     };
     HistoryView {
         at_risk: true,
@@ -898,12 +924,16 @@ fn warning_track(w: &Warning) -> Option<TrackId> {
     }
 }
 
+fn skipped_track(w: &Warning) -> Option<TrackId> {
+    match w {
+        Warning::Skipped { track_id, .. } => Some(*track_id),
+        _ => None,
+    }
+}
+
 fn problem_track(p: &Problem) -> Option<TrackId> {
     match p {
-        Problem::SourceMissing { track_id, .. }
-        | Problem::SourceUnreadable { track_id, .. }
-        | Problem::Unsupported { track_id, .. }
-        | Problem::BadPath { track_id, .. } => Some(*track_id),
+        Problem::BadPath { track_id, .. } => Some(*track_id),
         _ => None,
     }
 }
@@ -934,7 +964,11 @@ fn warning_item(
 ) -> String {
     match w {
         Warning::Audio { track_id, message } => format!("{}: {message}", track(*track_id)),
-        Warning::Skipped { track_id, reason } => format!("{}: {reason}", track(*track_id)),
+        Warning::Skipped {
+            track_id,
+            reason,
+            detail,
+        } => format!("{}: {reason}: {detail}", track(*track_id)),
         Warning::EmptyPlaylist { id } | Warning::SmartPlaylistFixed { id } => playlist(*id),
         Warning::ExFat { target } => format!(
             "The stick is exFAT, which older players don't read; FAT32 is the safe choice \
@@ -976,9 +1010,6 @@ fn problem_kind(p: &Problem) -> &'static str {
         Problem::NothingSelected => "nothingSelected",
         Problem::PlaylistNotFound { .. } => "playlistNotFound",
         Problem::UnsupportedFilesystem { .. } => "unsupportedFilesystem",
-        Problem::SourceMissing { .. } => "sourceMissing",
-        Problem::SourceUnreadable { .. } => "sourceUnreadable",
-        Problem::Unsupported { .. } => "unsupported",
         Problem::BadPath { .. } => "badPath",
         Problem::NotEnoughSpace { .. } => "notEnoughSpace",
         Problem::DiscardNotConfirmed => "discardNotConfirmed",
@@ -992,15 +1023,6 @@ fn problem_kind(p: &Problem) -> &'static str {
 
 fn problem_item(p: &Problem, track: &impl Fn(TrackId) -> String) -> String {
     match p {
-        Problem::SourceMissing { track_id, path } => {
-            format!("{}: {}", track(*track_id), path.display())
-        }
-        Problem::SourceUnreadable {
-            track_id,
-            path,
-            message,
-        } => format!("{}: {}: {message}", track(*track_id), path.display()),
-        Problem::Unsupported { track_id, message } => format!("{}: {message}", track(*track_id)),
         Problem::BadPath {
             track_id,
             path,
@@ -1012,8 +1034,8 @@ fn problem_item(p: &Problem, track: &impl Fn(TrackId) -> String) -> String {
             human_bytes(*free)
         ),
         Problem::DiscardNotConfirmed => "Discarding the stick's play history needs your \
-                                         confirmation: tick the box in the options, or back \
-                                         it up instead."
+                                         confirmation under the play history, or back it up \
+                                         instead."
             .to_owned(),
         Problem::HistoryNotImported { sessions } => format!(
             "The stick holds {} not imported into your library. Choose what happens to {} \
@@ -1042,9 +1064,6 @@ fn problem_title(kind: &str, items: &[String]) -> Option<String> {
     let n = items.len();
     let tracks = count(n, "track", "tracks");
     match kind {
-        "sourceMissing" => Some(format!("{tracks}: file not found")),
-        "sourceUnreadable" => Some(format!("{tracks}: file can't be read")),
-        "unsupported" => Some(format!("{tracks} the target player can't play")),
         "badPath" => Some(format!("{tracks} with a stick path players can't use")),
         _ => None,
     }

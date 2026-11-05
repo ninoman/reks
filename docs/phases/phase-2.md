@@ -72,8 +72,9 @@ pub enum HistoryPolicy { BackUp /* default */, Discard /* only after an explicit
 
 pub fn plan(lib: &Library, sel: &Selection, dev: &DeviceInfo, opts: &ExportOptions, anlz: &dyn AnlzLocator)
     -> Result<ExportPlan, PlanError>;   // done: crates/reks-export-rb/src/plan/
-// ExportOptions { target, keep_stale, missing_analysis, artwork, skip_unsupported, history: HistoryPolicy,
-//                 discard_history_confirmed, dividers /* Phase 2.5 */, anlz_preference /* Phase 3 */ }
+// ExportOptions { target, keep_stale, missing_analysis, artwork, history: HistoryPolicy,
+//                 discard_history_confirmed, dividers /* Phase 2.5 */, anlz_preference /* Phase 3 */, ... }
+//   built from Settings › Export + the stick's target: ExportOptions::from_settings (D42)
 pub struct CacheLocator;   // AnlzLocator over rbcache: CacheLocator::for_selection(lib, sel, RbCache::scan(roots)?)
 pub fn apply(plan: &ExportPlan, writer: &dyn RekordboxWriter, env: &ApplyEnv /* library, app_data_dir, StickCheck */,
              progress: &(dyn Fn(ApplyEvent) + Sync), cancel: &CancelToken)
@@ -184,8 +185,8 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
      the UI can't name a non-removable one). UI: header button "USB devices"
      opens [DevicesDialog.tsx](../../src/components/DevicesDialog.tsx) (file
      system, free space, a note for exFAT / HFS+ / unreadable file systems,
-     Eject; refreshes every 2 s while open). `DeviceList` with
-     `selected`/`onSelect` is the wizard's device step (task 10). Volumes
+     Eject; refreshes every 2 s while open). Since D42 the header button is
+     "Sticks" and the dialog is the Sticks view (task 10). Volumes
      the OS reports as fixed (some USB SSDs on Windows, R§6) are not listed.
    - [ ] Eject on Windows and Linux, and `volume_serial` on all three OSes,
      against a real stick. ([#17](https://github.com/ninoman/reks/issues/17))
@@ -218,10 +219,11 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    never overwrite: `dedupe` is seeded with every path on the stick. Stale
    ANLZ is found through `anlz_dir` (path hash, R§4); with `artwork` on,
    `/PIONEER/Artwork` is the writer's and no deletes are listed there.
-   Per-track blockers (missing source, audiocheck errors) block the plan
-   unless `skip_unsupported`; tracks without analysis follow
-   `MissingAnalysis` (default `Skip`). D42 (proposed) changes this: per-track
-   problems never block and the default becomes `Generate`. ANLZ comes from an `AnlzLocator`
+   Per-track problems (missing or unreadable source, audiocheck errors, no
+   analysis under `MissingAnalysis::Skip`) never block (D42): the track is
+   left out with a `Warning::Skipped { reason: SkipReason, .. }` and its
+   playlists list it in `left_out`. `MissingAnalysis` defaults to `Generate`.
+   Still blocking: file system, space, `BadPath`. ANLZ comes from an `AnlzLocator`
    (`CacheLocator` for rekordbox's cache, task 5; `NoAnlz` in tests); its
    `why_missing` text goes into the `Skipped` warning. `history`/`backups`:
    task 12. `Warning`/`Problem` implement `Display` (dry-run wording for the
@@ -342,7 +344,25 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
    after the dry run, pre-flight and writer refusals write nothing.
 10. [x] **Export UI**: wizard (device → playlists → options → dry-run table with
     warnings/errors/deletes → progress → report with "Eject"). The device's
-    selection is its stick profile (task 15).
+    selection is its stick profile (task 15). Simplified by D42 (below): the
+    sub-items that follow describe the first version where they differ.
+    - [x] D42 simpler export: one entry point (header "Sticks", or
+      "Sync <name>" with one known stick plugged in, menu: Edit playlists…,
+      Eject, All sticks…; [AppHeader.tsx](../../src/components/AppHeader.tsx),
+      [useStickWatch.ts](../../src/components/useStickWatch.ts)). The Sticks
+      view ([DevicesDialog.tsx](../../src/components/DevicesDialog.tsx)) holds
+      Sync per stick, "Plays on" and the playlist ticks, saved as they change
+      ([profiles.ts](../../src/store/profiles.ts)). The wizard is Review →
+      Writing → Done ([export/](../../src/components/export/), store
+      [exportWizard.ts](../../src/store/exportWizard.ts)): overview tiles,
+      issue cards with fixes (Find files…, Convert…, Analyse now, Leave them
+      out, Remove from playlists… with a confirm, Keep as it is / Keep all),
+      the history guard with Discard behind More, the settings in use with
+      "Change…", technical details collapsed; the button counts left-out
+      tracks ("Export 412 of 424 tracks"). A fix in another dialog hides the
+      review and plans again when it closes. Options moved to Settings ›
+      Export ([ExportSettings.tsx](../../src/components/settings/ExportSettings.tsx)).
+      Checked in the browser with the mock backend.
     - [x] Wizard through the dry run:
       [ExportWizard.tsx](../../src/components/ExportWizard.tsx), opened from
       the header and the USB devices dialog. Steps: stick (`DeviceList`),
@@ -504,11 +524,11 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
       its stick name or the identify prompt ("Is this '<name>'?", "New stick",
       the foreign-library note); "Your sticks" lists known sticks (plugged-in
       first) with the selected one's status list, "frees X MB" per ticked
-      entry, capacity bar and "Edit and sync…". Tauri commands `profile_*`.
-    - [x] Export wizard takes its selection from the stick's profile: the
-      device step needs a known stick, its profile ticks the playlists (an
-      empty profile keeps the sidebar's selection), Next on the playlists step
-      saves the ticks (`set_selection`) and on the options step the target.
+      entry, capacity bar and Sync (D42: also "Plays on" and the ticks).
+      Tauri commands `profile_*`.
+    - [x] The export takes its selection and target from the stick's
+      profile (D42: edited in the Sticks view, saved as they change; the
+      review needs a known stick with ticked playlists).
     - [x] Sync calls `devices::record_sync` after `apply`:
       `report::export(.., profile)` records any export that replaced the
       database (not cancelled or refused); the report shows a "Stick profile"

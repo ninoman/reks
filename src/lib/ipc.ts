@@ -183,6 +183,8 @@ export type PlaylistOp =
       duplicates: DuplicateMode;
     }
   | { type: "removeEntries"; playlistId: number; positions: number[] }
+  /** Every entry of these tracks, from each of these (non-smart) playlists. */
+  | { type: "removeTracks"; playlistIds: number[]; trackIds: number[] }
   | { type: "reorderEntries"; playlistId: number; positions: number[]; before: number }
   /** Before the entry at `position`; absent or null = appended. Label rules in reks-core. */
   | { type: "insertDivider"; playlistId: number; position?: number | null; label: string }
@@ -1192,6 +1194,8 @@ export interface Settings {
   ui: UiState;
   /** Whose analysis a USB export writes when rekordbox and reks both have a track. */
   anlzPreference: AnlzPreference;
+  /** How USB exports write sticks (Settings › Export, D42). */
+  export: ExportSettings;
   /** Recent library backups kept (1..=100); one per week for 8 weeks stays besides. */
   backupKeep: number;
   /** Tag edits keep each track's `/* A / B *\/` comment block in step (D39). */
@@ -1214,6 +1218,8 @@ export interface SettingsPatch {
   mixerFilters?: MixerFilters;
   ui?: UiState;
   anlzPreference?: AnlzPreference;
+  /** Replaces all export settings. */
+  export?: ExportSettings;
   backupKeep?: number;
   tagsInComments?: boolean;
 }
@@ -1779,29 +1785,41 @@ export type AnlzPreference = "rekordboxFirst" | "reksFirst" | "rekordboxOnly";
 /** Tracks with no analysis at all (`MissingAnalysis`). The writer refuses `exportWithout`. */
 export type MissingAnalysis = "skip" | "generate" | "exportWithout";
 
+/** `reks_core::settings::ExportSettings`: set once, used by every export (D42). */
+export interface ExportSettings {
+  missingAnalysis: MissingAnalysis;
+  artwork: boolean;
+  /** Delete files the stick no longer uses (the planner's `keepStale`, inverted). */
+  cleanUp: boolean;
+  /** Playlist dividers as silent tracks (UNVERIFIED). */
+  dividers: boolean;
+  /** "Start the first loop automatically" (UNVERIFIED). */
+  activeLoops: boolean;
+  /** Also write `exportLibrary.db` (experimental, UNVERIFIED). */
+  onelibrary: boolean;
+}
+
 /**
  * What an export does with the stick's play history (`HistoryPolicy`, D23). `import` (the
  * export guard's "Import now") imports the sessions the library lacks, then backs up.
  */
 export type HistoryPolicy = "import" | "backUp" | "discard";
 
-/** `plan::ExportOptions`; its defaults come from `exportDefaultOptions`. */
+/** `plan::ExportOptions`; an export starts from `exportDefaultOptions` (the settings + the stick's target). */
 export interface ExportOptions {
   target: TargetProfile;
   keepStale: boolean;
   missingAnalysis: MissingAnalysis;
   artwork: boolean;
-  skipUnsupported: boolean;
   history: HistoryPolicy;
   /** Required for `discard` on a stick that holds history. */
   discardHistoryConfirmed: boolean;
   /** `history` was picked in the export guard; without it unimported sessions block the plan. */
   historyChosen: boolean;
-  /** The `export.dividers` flag: playlist dividers as silent tracks (UNVERIFIED, on by default, D22). */
+  /** Playlist dividers as silent tracks (UNVERIFIED). */
   dividers: boolean;
-  /** Seeded from and saved to the `anlzPreference` setting by the wizard. */
   anlzPreference: AnlzPreference;
-  /** Also write `exportLibrary.db` (OneLibrary, experimental and UNVERIFIED, on by default, D14). */
+  /** Also write `exportLibrary.db` (OneLibrary, experimental and UNVERIFIED). */
   onelibrary: boolean;
   /** Required when the export writes no `exportLibrary.db` and the stick has one (it is deleted). */
   onelibraryRemovalConfirmed: boolean;
@@ -1852,11 +1870,69 @@ export interface HistoryGuardView {
   canImport: boolean;
 }
 
+/** The review's headline and three numbers (`dryrun::Overview`). */
+export interface ReviewOverview {
+  headline: string;
+  playlistsText: string;
+  copyText: string;
+  copyDetail: string;
+  spaceText: string;
+  /** `frees 640 MB`; empty when nothing is deleted. */
+  spaceDetail: string;
+  tracksExported: number;
+  tracksTotal: number;
+  /** `Export`, or `Export 412 of 424 tracks`. */
+  exportLabel: string;
+}
+
+export type IssueKind =
+  | "missing"
+  | "unreadable"
+  | "unsupported"
+  | "noAnalysis"
+  | "approximateAnalysis";
+
+/** A fix an issue card offers (`dryrun::IssueAction`); each replans afterwards. */
+export type IssueAction =
+  | { type: "findFiles" }
+  | { type: "convert"; trackIds: number[] }
+  | { type: "analyse" }
+  | { type: "leaveOut" }
+  | { type: "removeFromPlaylists" };
+
+export interface IssueTrack {
+  trackId: number;
+  label: string;
+  /** The last known path, or the check that failed. */
+  detail: string;
+  /** Library playlists on this stick it can be removed from (smart ones are not listed). */
+  playlists: number[];
+  /** `In: Peak time, Classics (smart)`. */
+  inText: string;
+}
+
+/** Track problems never block (D42): each card says what happens and offers fixes. */
+export interface ReviewIssue {
+  kind: IssueKind;
+  title: string;
+  detail: string;
+  /** The line the card collapses to after "Keep as it is". */
+  keptText: string;
+  trackIds: number[];
+  /** The first rows of `trackIds`, for display. */
+  tracks: IssueTrack[];
+  actions: IssueAction[];
+}
+
 /** The dry-run view of an export plan (`dryrun::DryRun`); every string is final. */
 export interface DryRun {
   /** The kept plan this shows; `exportApply` writes exactly it. */
   planId: number;
   ready: boolean;
+  overview: ReviewOverview;
+  issues: ReviewIssue[];
+  /** The settings in use, one short phrase each. */
+  settings: string[];
   status: string;
   device: {
     mountPoint: string;
@@ -1900,7 +1976,7 @@ export interface DryRun {
   };
   problems: NoticeGroup[];
   warnings: NoticeGroup[];
-  /** Tracks whose audio issue the converter's Older players preset fixes (phase 2.6). */
+  /** Exported tracks whose audio warning the converter's Older players preset fixes (phase 2.6). */
   convertible: number[];
   /** One sentence on them; null when there are none. */
   convertText: string | null;
@@ -1927,9 +2003,9 @@ export interface OneLibraryView {
   removes: DryRunFileGroup;
 }
 
-/** `plan::ExportOptions::default()`: the wizard opens with these. */
-export function exportDefaultOptions(): Promise<ExportOptions> {
-  return invoke("export_default_options");
+/** The options an export to a stick with `target` starts from: Settings › Export + the analysis source. */
+export function exportDefaultOptions(target: TargetProfile | null = null): Promise<ExportOptions> {
+  return invoke("export_default_options", { target });
 }
 
 /**
@@ -1990,6 +2066,8 @@ export interface ExportReportView {
   };
   problems: NoticeGroup[];
   warnings: NoticeGroup[];
+  /** Tracks the plan left out, as the review showed them. */
+  leftOut: ReviewIssue[];
 }
 
 /**

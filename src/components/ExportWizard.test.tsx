@@ -9,6 +9,7 @@ import type {
   ExportProgress,
   ExportReportView,
   PlaylistNode,
+  ReviewIssue,
 } from "../lib/ipc";
 
 vi.mock("../lib/ipc", async (original) => ({
@@ -24,6 +25,8 @@ vi.mock("../lib/ipc", async (original) => ({
   profileSelection: vi.fn(),
   profileSetSelection: vi.fn(),
   profileSetTarget: vi.fn(),
+  playlistsMutate: vi.fn(),
+  playlistsGet: vi.fn(),
 }));
 
 const ipc = await import("../lib/ipc");
@@ -34,8 +37,9 @@ const exportApply = vi.mocked(ipc.exportApply);
 const exportCancel = vi.mocked(ipc.exportCancel);
 const profileIdentify = vi.mocked(ipc.profileIdentify);
 const profileSelection = vi.mocked(ipc.profileSelection);
-const profileSetSelection = vi.mocked(ipc.profileSetSelection);
+const playlistsMutate = vi.mocked(ipc.playlistsMutate);
 const { useConverter } = await import("../store/converter");
+const { useSettings } = await import("../store/settings");
 const { useExportWizard } = await import("../store/exportWizard");
 const { usePlaylists } = await import("../store/playlists");
 const { useProfiles } = await import("../store/profiles");
@@ -88,10 +92,51 @@ const NODES = [
 
 const group = { count: 0, bytes: 0, totalText: "None", files: [] };
 
+const OVERVIEW: DryRun["overview"] = {
+  headline: "Ready to export to REKS",
+  playlistsText: "1 playlist",
+  copyText: "1 track to copy",
+  copyDetail: "9.0 MB",
+  spaceText: "18.4 GB free after export",
+  spaceDetail: "",
+  tracksExported: 12,
+  tracksTotal: 12,
+  exportLabel: "Export",
+};
+
+const MISSING: ReviewIssue = {
+  kind: "missing",
+  title: "2 tracks are missing",
+  detail:
+    "Their files are gone or moved. They are left out of this export and stay in your playlists.",
+  keptText: "2 tracks left out, still in your playlists",
+  trackIds: [40, 41],
+  tracks: [
+    {
+      trackId: 40,
+      label: "Artist A – Track A",
+      detail: "/music/a.aiff",
+      playlists: [2],
+      inText: "In: Friday",
+    },
+    {
+      trackId: 41,
+      label: "Artist C – Track C",
+      detail: "/music/c.wav",
+      playlists: [],
+      inText: "In: Classics (smart)",
+    },
+  ],
+  actions: [{ type: "findFiles" }, { type: "removeFromPlaylists" }],
+};
+
 function dryRun(over: Partial<DryRun> = {}): DryRun {
   return {
     planId: 7,
     ready: true,
+    overview: OVERVIEW,
+    issues: [],
+    settings: ["Any player", "rekordbox analysis, then reks", "Cleans up unused files"],
     status: "Ready to export. Nothing has been written to the stick yet.",
     device: {
       mountPoint: "/Volumes/REKS",
@@ -174,6 +219,7 @@ function report(over: Partial<ExportReportView> = {}): ExportReportView {
     history: backedUp,
     problems: [],
     warnings: [],
+    leftOut: [],
     ...over,
   };
 }
@@ -197,16 +243,15 @@ beforeEach(() => {
   vi.mocked(ipc.exportDefaultOptions).mockReset().mockResolvedValue({
     target: "Generic",
     keepStale: false,
-    missingAnalysis: "skip",
+    missingAnalysis: "generate",
     artwork: false,
-    skipUnsupported: false,
     history: "backUp",
     discardHistoryConfirmed: false,
     historyChosen: false,
     dividers: true,
-    activeLoops: true,
+    activeLoops: false,
     anlzPreference: "rekordboxFirst",
-    onelibrary: true,
+    onelibrary: false,
     onelibraryRemovalConfirmed: false,
   });
   devicesList.mockReset().mockResolvedValue([stick]);
@@ -216,109 +261,147 @@ beforeEach(() => {
   exportCancel.mockReset().mockResolvedValue();
   vi.mocked(ipc.profilesList).mockReset().mockResolvedValue([DEVICE]);
   profileIdentify.mockReset().mockResolvedValue({ type: "known", device: DEVICE });
-  profileSelection.mockReset().mockResolvedValue({ playlists: [] });
-  profileSetSelection.mockReset().mockResolvedValue();
+  profileSelection.mockReset().mockResolvedValue({ playlists: [2] });
+  vi.mocked(ipc.profileSetSelection).mockReset().mockResolvedValue();
   vi.mocked(ipc.profileSetTarget).mockReset();
-  useProfiles.setState({ known: [], mounted: {}, selectedId: null, status: null, error: null });
+  playlistsMutate.mockReset().mockResolvedValue({
+    type: "done",
+    createdId: null,
+    added: 0,
+    skipped: 0,
+  });
+  vi.mocked(ipc.playlistsGet).mockReset().mockResolvedValue({ nodes: NODES });
+  useProfiles.setState({
+    known: [DEVICE],
+    mounted: {
+      [stick.mountPoint]: { info: stick, match: { type: "known", device: DEVICE }, error: null },
+    },
+    selectedId: null,
+    status: null,
+    error: null,
+  });
   usePlaylists.setState({ nodes: NODES });
+  useExportWizard.setState({ step: "closed" });
   useExportWizard.getState().close();
 });
 afterEach(cleanup);
 
 const button = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
 
-/** Picks the REKS stick and waits until it is identified (Next enabled). */
-async function pickStick() {
-  fireEvent.click(await screen.findByRole("radio", { name: "REKS" }));
-  await waitFor(() => expect(button("Next").disabled).toBe(false));
-}
-
-/** Opens the wizard and walks to the options step. */
-async function toOptions() {
-  useExportWizard.getState().open();
+/** Opens the review for the REKS stick and waits for the plan. */
+async function toReview(plan: DryRun = dryRun()) {
+  exportPlan.mockResolvedValue(plan);
   render(<ExportWizard />);
-  await pickStick();
-  fireEvent.click(button("Next"));
-  await screen.findByText("Step 2 of 6: Playlists");
-  fireEvent.click(screen.getByRole("checkbox", { name: /Other/ }));
-  fireEvent.click(button("Next"));
-  await screen.findByText("Step 3 of 6: Options");
-  expect(profileSetSelection).toHaveBeenCalledWith(1, [3]);
+  await act(() => useExportWizard.getState().open(stick.mountPoint));
+  await screen.findByText(plan.overview.headline);
 }
 
 describe("ExportWizard", () => {
-  it("ticks the stick's saved playlists", async () => {
-    profileSelection.mockResolvedValue({ playlists: [1] });
-    useExportWizard.getState().open();
-    render(<ExportWizard />);
-    await pickStick();
-    fireEvent.click(button("Next"));
-    await screen.findByText("Step 2 of 6: Playlists");
-    expect(screen.getByText(/Pick playlists and folders for Main/)).toBeTruthy();
-    expect((screen.getByRole("checkbox", { name: /Gigs/ }) as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByRole("checkbox", { name: /Other/ }) as HTMLInputElement).checked).toBe(
-      false,
-    );
-  });
-
-  it("asks to name a stick it does not know before going on", async () => {
-    profileIdentify.mockResolvedValue({
-      type: "new",
-      volumeSerial: "AAAA-0001",
-      suggestedName: "REKS",
-      prompt: "This stick is new to reks.",
-      note: "Name it and tick the playlists it should carry.",
-    });
-    useExportWizard.getState().open();
-    render(<ExportWizard />);
-    fireEvent.click(await screen.findByRole("radio", { name: "REKS" }));
-    expect(await screen.findByText("This stick is new to reks.")).toBeTruthy();
-    expect(button("Next").disabled).toBe(true);
-  });
-
-  it("needs a stick and a playlist before going on", async () => {
-    useExportWizard.getState().open();
-    render(<ExportWizard />);
-    expect(screen.getByText("Step 1 of 6: Stick")).toBeTruthy();
-    expect(button("Next").disabled).toBe(true);
-    await pickStick();
-    expect(screen.getByText("Stick: Main")).toBeTruthy();
-    fireEvent.click(button("Next"));
-
-    expect(await screen.findByText("Step 2 of 6: Playlists")).toBeTruthy();
-    expect(button("Next").disabled).toBe(true);
-    // Ticking a folder ticks (and locks) what is under it.
-    fireEvent.click(screen.getByRole("checkbox", { name: /Gigs/ }));
-    const friday = screen.getByRole("checkbox", { name: /Friday/ }) as HTMLInputElement;
-    expect(friday.checked).toBe(true);
-    expect(friday.disabled).toBe(true);
-    expect(button("Next").disabled).toBe(false);
-
-    fireEvent.click(button("Back"));
-    expect(screen.getByText("Step 1 of 6: Stick")).toBeTruthy();
-  });
-
-  it("Discard needs the explicit confirmation", async () => {
-    exportPlan.mockResolvedValue(dryRun());
-    await toOptions();
-    expect(screen.queryByRole("checkbox", { name: /erased without a backup/ })).toBeNull();
-    fireEvent.click(screen.getByRole("radio", { name: "Discard" }));
-    const confirm = screen.getByRole("checkbox", { name: /erased without a backup/ });
-    expect(button("Dry run").disabled).toBe(true);
-    fireEvent.click(confirm);
-    expect(button("Dry run").disabled).toBe(false);
-
-    fireEvent.click(button("Dry run"));
-    await screen.findByText(/Ready to export/);
+  it("opens on the review with the stick's playlists, its target and the settings", async () => {
+    await toReview();
+    expect(screen.getByText("Sync Main")).toBeTruthy();
+    expect(screen.getByText("Step 1 of 3: Review")).toBeTruthy();
+    expect(vi.mocked(ipc.exportDefaultOptions)).toHaveBeenCalledWith("Generic");
     expect(exportPlan).toHaveBeenCalledWith(
       "/Volumes/REKS",
-      { playlists: [3] },
-      expect.objectContaining({ history: "discard", discardHistoryConfirmed: true }),
+      { playlists: [2] },
+      expect.objectContaining({ missingAnalysis: "generate", onelibrary: false }),
       1,
     );
+    const summary = screen.getByLabelText("Summary");
+    expect(within(summary).getByText("1 track to copy")).toBeTruthy();
+    expect(within(summary).getByText("18.4 GB free after export")).toBeTruthy();
+    const chips = screen.getByLabelText("Writing with");
+    expect(within(chips).getByText("Cleans up unused files")).toBeTruthy();
+    expect(screen.getByText("No play history on this stick.")).toBeTruthy();
+    // Technical details are collapsed but there.
+    expect(screen.getByText(/Technical details/)).toBeTruthy();
+    expect(button("Export").disabled).toBe(false);
   });
 
-  it("stops on unimported play history until a choice, then plans again", async () => {
+  it("says when the stick has no playlists ticked", async () => {
+    profileSelection.mockResolvedValue({ playlists: [] });
+    render(<ExportWizard />);
+    await act(() => useExportWizard.getState().open(stick.mountPoint));
+    expect(await screen.findByText(/No playlists are ticked for Main/)).toBeTruthy();
+    expect(exportPlan).not.toHaveBeenCalled();
+    expect(button("Export").disabled).toBe(true);
+  });
+
+  it("left-out tracks don't block: the button counts them", async () => {
+    await toReview(
+      dryRun({
+        issues: [MISSING],
+        overview: {
+          ...OVERVIEW,
+          headline: "Ready to export · 2 tracks will be left out",
+          exportLabel: "Export 10 of 12 tracks",
+        },
+      }),
+    );
+    const card = screen.getByRole("region", { name: "2 tracks are missing" });
+    expect(within(card).getByText("Artist A – Track A")).toBeTruthy();
+    expect(within(card).getByText("In: Friday · /music/a.aiff")).toBeTruthy();
+    // A smart playlist's track has no checkbox.
+    expect(within(card).getAllByRole("checkbox")).toHaveLength(1);
+    expect(button("Export 10 of 12 tracks").disabled).toBe(false);
+  });
+
+  it("Keep as it is collapses a card without planning again", async () => {
+    await toReview(dryRun({ issues: [MISSING] }));
+    fireEvent.click(button("Keep as it is"));
+    expect(screen.getByText("✓ 2 tracks left out, still in your playlists")).toBeTruthy();
+    expect(exportPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes ticked tracks from this stick's playlists after a confirm, then plans again", async () => {
+    await toReview(dryRun({ issues: [MISSING] }));
+    exportPlan.mockResolvedValue(dryRun());
+    fireEvent.click(button("Remove from playlists…"));
+    expect(screen.getByText(/Remove 1 track from 1 playlist\?/)).toBeTruthy();
+    fireEvent.click(button("Cancel"));
+    expect(playlistsMutate).not.toHaveBeenCalled();
+
+    fireEvent.click(button("Remove from playlists…"));
+    fireEvent.click(button("Remove"));
+    await waitFor(() =>
+      expect(playlistsMutate).toHaveBeenCalledWith({
+        type: "removeTracks",
+        playlistIds: [2],
+        trackIds: [40],
+      }),
+    );
+    await waitFor(() => expect(exportPlan).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Ready to export to REKS")).toBeTruthy();
+  });
+
+  it("a fix in another dialog hides the review and plans again when it closes", async () => {
+    const convert: ReviewIssue = {
+      ...MISSING,
+      kind: "unsupported",
+      title: "1 track won't play on this stick's players",
+      actions: [{ type: "convert", trackIds: [40] }, { type: "removeFromPlaylists" }],
+    };
+    await toReview(dryRun({ issues: [convert] }));
+    fireEvent.click(button("Convert…"));
+    expect(useConverter.getState().step).toBe("settings");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    act(() => useConverter.setState({ step: "closed" }));
+    await waitFor(() => expect(exportPlan).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("Change… opens Settings › Export and plans again with the new settings", async () => {
+    await toReview();
+    fireEvent.click(button("Change…"));
+    expect(useSettings.getState().dialogOpen).toBe(true);
+    expect(useSettings.getState().dialogTab).toBe("export");
+    act(() => useSettings.getState().setDialogOpen(false));
+    await waitFor(() => expect(exportPlan).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(ipc.exportDefaultOptions)).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops on unimported play history; Discard is behind More and needs its confirmation", async () => {
     const guard = {
       title: "2 sessions on this stick are not in your library",
       text: "Exporting erases them from the stick.",
@@ -328,82 +411,26 @@ describe("ExportWizard", () => {
     };
     const blocked = dryRun({
       ready: false,
-      status: "Blocked by 1 problem. Fix it or change the options; nothing has been written.",
-      history: {
-        atRisk: true,
-        policy: "backUp",
-        title: "This stick holds play history",
-        text: "The stick's export.pdb holds 2 history sessions with 3 played tracks.",
-        actionText: null,
-        backups: group,
-        guard,
-      },
+      overview: { ...OVERVIEW, headline: "Can't export to REKS yet" },
+      history: { ...dryRun().history, atRisk: true, guard },
     });
-    exportPlan.mockResolvedValueOnce(blocked).mockResolvedValue(
-      dryRun({
-        history: {
-          ...blocked.history,
-          policy: "import",
-          actionText: "Before writing anything, reks imports 2 sessions (3 plays)…",
-          guard: { ...guard, chosen: true },
-        },
-      }),
-    );
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    const section = await screen.findByRole("region", { name: guard.title });
-    expect(within(section).getByText("HISTORY 001: 2 plays")).toBeTruthy();
+    await toReview(blocked);
     expect(button("Export").disabled).toBe(true);
-
-    fireEvent.click(within(section).getByRole("button", { name: "Import now" }));
-    await screen.findByText("You chose: Import now.");
-    expect(exportPlan).toHaveBeenLastCalledWith(
-      "/Volumes/REKS",
-      { playlists: [3] },
-      expect.objectContaining({ history: "import", historyChosen: true }),
-      1,
-    );
-    expect(button("Export").disabled).toBe(false);
-  });
-
-  it("Continue and discard needs its own confirmation", async () => {
-    exportPlan.mockResolvedValue(
-      dryRun({
-        ready: false,
-        history: {
-          atRisk: true,
-          policy: "backUp",
-          title: "This stick holds play history",
-          text: "",
-          actionText: null,
-          backups: group,
-          guard: {
-            title: "1 session on this stick is not in your library",
-            text: "",
-            sessions: [],
-            chosen: false,
-            canImport: false,
-          },
-        },
-      }),
-    );
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    const section = await screen.findByRole("region", {
-      name: "1 session on this stick is not in your library",
-    });
-    expect(within(section).queryByRole("button", { name: "Import now" })).toBeNull();
-    fireEvent.click(within(section).getByRole("button", { name: "Continue and discard…" }));
-    const discard = within(section).getByRole("button", {
-      name: "Discard and continue",
-    }) as HTMLButtonElement;
+    expect(screen.queryByRole("button", { name: "Discard…" })).toBeNull();
+    fireEvent.click(button("More"));
+    fireEvent.click(button("Discard…"));
+    const discard = button("Discard and continue");
     expect(discard.disabled).toBe(true);
-    fireEvent.click(within(section).getByRole("checkbox", { name: /can't be imported later/ }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /erased from the stick without a backup/ }),
+    );
+
+    exportPlan.mockResolvedValue(dryRun());
     fireEvent.click(discard);
     await waitFor(() =>
       expect(exportPlan).toHaveBeenLastCalledWith(
         "/Volumes/REKS",
-        { playlists: [3] },
+        { playlists: [2] },
         expect.objectContaining({
           history: "discard",
           historyChosen: true,
@@ -414,360 +441,121 @@ describe("ExportWizard", () => {
     );
   });
 
-  it("playlist dividers and active loops are on by default, marked UNVERIFIED, and turn off", async () => {
-    exportPlan.mockResolvedValue(dryRun());
-    await toOptions();
-    const toggle = screen.getByRole("switch", { name: "Playlist dividers" });
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    // Dividers, active loops and OneLibrary each carry the badge.
-    expect(screen.getAllByText("UNVERIFIED")).toHaveLength(3);
-    const loops = screen.getByRole("switch", { name: "Active loops" });
-    expect(loops.getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(toggle);
-    fireEvent.click(loops);
-
-    fireEvent.click(button("Dry run"));
-    await screen.findByText(/Ready to export/);
-    expect(exportPlan).toHaveBeenCalledWith(
-      "/Volumes/REKS",
-      { playlists: [3] },
-      expect.objectContaining({ dividers: false, activeLoops: false }),
-      1,
-    );
-  });
-
   it("asks to confirm deleting the stick's exportLibrary.db and plans again", async () => {
     const removal = {
       title: "The stick's OneLibrary library is deleted",
-      text: "OneLibrary is off. Players that read only OneLibrary (OPUS-QUAD, XDJ-AZ) will find no library on this stick.",
-      files: {
-        count: 1,
-        bytes: 3,
-        totalText: "1 file, 3 B",
-        files: [{ path: "/PIONEER/rekordbox/exportLibrary.db", from: null, sizeText: "3 B" }],
-      },
+      text: "OneLibrary is off, so this export writes only the Device Library.",
+      files: group,
       confirmText: "I understand exportLibrary.db is deleted.",
       confirmed: false,
     };
-    exportPlan
-      .mockResolvedValueOnce(dryRun({ ready: false, onelibraryRemoval: removal }))
-      .mockResolvedValueOnce(dryRun({ onelibraryRemoval: { ...removal, confirmed: true } }));
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    expect(await screen.findByText("The stick's OneLibrary library is deleted")).toBeTruthy();
-    expect(screen.getByText(/OPUS-QUAD, XDJ-AZ/)).toBeTruthy();
-    expect(screen.getByText("Delete: 1 file, 3 B")).toBeTruthy();
-    fireEvent.click(screen.getByRole("checkbox", { name: /exportLibrary.db is deleted/ }));
-    await screen.findByText(/Ready to export/);
-    expect(exportPlan).toHaveBeenLastCalledWith(
-      "/Volumes/REKS",
-      { playlists: [3] },
-      expect.objectContaining({ onelibraryRemovalConfirmed: true }),
-      1,
+    await toReview(dryRun({ ready: false, onelibraryRemoval: removal }));
+    fireEvent.click(screen.getByRole("checkbox", { name: removal.confirmText }));
+    await waitFor(() =>
+      expect(exportPlan).toHaveBeenLastCalledWith(
+        "/Volumes/REKS",
+        { playlists: [2] },
+        expect.objectContaining({ onelibraryRemovalConfirmed: true }),
+        1,
+      ),
     );
-    const box = screen.getByRole("checkbox", { name: /exportLibrary.db is deleted/ });
-    expect((box as HTMLInputElement).checked).toBe(true);
   });
 
-  it("OneLibrary is on by default, marked UNVERIFIED, and its dry run lists the file", async () => {
-    exportPlan.mockResolvedValue(
-      dryRun({
-        onelibrary: {
-          title: "OneLibrary (experimental)",
-          text: "Also writes exportLibrary.db for players that read OneLibrary.",
-          write: {
-            path: "/PIONEER/rekordbox/exportLibrary.db",
-            from: null,
-            sizeText: "size not known yet",
-          },
-          removes: {
-            count: 1,
-            bytes: 3,
-            totalText: "1 file, 3 B",
-            files: [{ path: "/PIONEER/rekordbox/exportExt.pdb", from: null, sizeText: "3 B" }],
-          },
-        },
-      }),
-    );
-    await toOptions();
-    const toggle = screen.getByRole("switch", { name: "OneLibrary" });
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByText(/not supported by AlphaTheta/)).toBeTruthy();
-    expect(screen.getByText(/has no OneLibrary key, so only export.pdb is written/)).toBeTruthy();
-
-    fireEvent.click(button("Dry run"));
-    await screen.findByText(/Ready to export/);
-    expect(exportPlan).toHaveBeenCalledWith(
-      "/Volumes/REKS",
-      { playlists: [3] },
-      expect.objectContaining({ onelibrary: true }),
-      1,
-    );
-    expect(screen.getByText("OneLibrary (experimental)")).toBeTruthy();
-    expect(screen.getByText(/Write \/PIONEER\/rekordbox\/exportLibrary.db/)).toBeTruthy();
-    expect(screen.getByText("Remove: 1 file, 3 B")).toBeTruthy();
-  });
-
-  it("shows the dry run with the history backup", async () => {
-    exportPlan.mockResolvedValue(
-      dryRun({
-        history: {
-          atRisk: true,
-          policy: "backUp",
-          title: "This stick holds play history",
-          text: "The stick's export.pdb holds 2 history sessions with 3 played tracks.",
-          actionText: "Before writing anything, reks copies 1 database file (4.1 KB)…",
-          backups: {
-            count: 1,
-            bytes: 4096,
-            totalText: "1 file, 4.1 KB",
-            files: [{ path: "/PIONEER/rekordbox/export.pdb", from: null, sizeText: "4.1 KB" }],
-          },
-          guard: null,
-        },
-        warnings: [{ kind: "skipped", title: "1 track left out", items: ["A – B: no analysis"] }],
-      }),
-    );
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    expect((await screen.findByRole("status")).textContent).toMatch(/Ready to export/);
-
-    expect(screen.getByText("This stick holds play history")).toBeTruthy();
-    expect(screen.getByText(/reks copies 1 database file/)).toBeTruthy();
-    expect(screen.getByText("Backed up: 1 file, 4.1 KB")).toBeTruthy();
-    expect(screen.getByText("1 track left out")).toBeTruthy();
-    expect(screen.getByText("A – B: no analysis")).toBeTruthy();
-    expect(screen.getByText("Copy: 1 file, 9.0 MB")).toBeTruthy();
-    expect(button("Export").disabled).toBe(false);
-
-    fireEvent.click(button("Back"));
-    expect(screen.getByText("Step 3 of 6: Options")).toBeTruthy();
-  });
-
-  it("lists the rows it was sent and says how many more there are", async () => {
-    exportPlan.mockResolvedValue(
-      dryRun({
-        copies: {
-          count: 30_000,
-          bytes: 9e10,
-          totalText: "30,000 files, 90 GB",
-          files: [{ path: "/Contents/A/B/a.mp3", from: "/music/a.mp3", sizeText: "9.0 MB" }],
-        },
-      }),
-    );
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    await screen.findByText(/Ready to export/);
-    expect(screen.getByText("Copy: 30,000 files, 90 GB")).toBeTruthy();
-    expect(screen.getByText("…and 29999 more")).toBeTruthy();
-  });
-
-  it("offers the converter for tracks it fixes", async () => {
-    exportPlan.mockResolvedValue(
-      dryRun({
-        convertible: [4, 9],
-        convertText: "2 tracks can be converted to a format older players load.",
-      }),
-    );
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    expect(await screen.findByText(/2 tracks can be converted/)).toBeTruthy();
-    useConverter.getState().set({ target: "wav" });
-    fireEvent.click(button("Convert…"));
-    const c = useConverter.getState();
-    expect(c.step).toBe("settings");
-    expect(c.trackIds).toEqual([4, 9]);
-    expect(c.settings).toMatchObject({ target: "aiff", rate: "keepMax48" });
-    c.close();
-  });
-
-  it("a blocked plan says why and can't proceed", async () => {
-    exportPlan.mockResolvedValue(
+  it("a stick-wide problem blocks and says why", async () => {
+    await toReview(
       dryRun({
         ready: false,
-        status: "Blocked by 2 problems. Fix them or change the options; nothing has been written.",
+        overview: { ...OVERVIEW, headline: "Can't export to REKS yet" },
         problems: [
           {
-            kind: "sourceMissing",
-            title: "1 track: file not found",
-            items: ["Alpha – First: /music/gone.mp3"],
-          },
-          {
             kind: "notEnoughSpace",
-            title: "Not enough space: the export writes 40.0 GB, the stick has 18.4 GB free.",
+            title: "Not enough space: the export writes 9.0 MB, the stick has 10 B free.",
             items: [],
           },
         ],
       }),
     );
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/^Blocked by 2 problems/);
-    const problems = screen.getByRole("region", { name: "Must be fixed first" });
-    expect(within(problems).getByText("1 track: file not found")).toBeTruthy();
-    expect(within(problems).getByText("Alpha – First: /music/gone.mp3")).toBeTruthy();
-    expect(within(problems).getByText(/^Not enough space/)).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toBe("Can't export to REKS yet");
+    expect(screen.getByText(/Not enough space/)).toBeTruthy();
     expect(button("Export").disabled).toBe(true);
   });
 
   it("shows a planning error with a retry", async () => {
-    exportPlan.mockRejectedValueOnce("volume not found").mockResolvedValue(dryRun());
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    expect((await screen.findByRole("alert")).textContent).toBe("Could not plan: volume not found");
+    exportPlan.mockRejectedValueOnce("stick gone");
+    render(<ExportWizard />);
+    await act(() => useExportWizard.getState().open(stick.mountPoint));
+    expect(await screen.findByText(/Could not plan: stick gone/)).toBeTruthy();
+    exportPlan.mockResolvedValue(dryRun());
     fireEvent.click(button("Try again"));
-    await waitFor(() => expect(screen.getByText(/Ready to export/)).toBeTruthy());
+    expect(await screen.findByText("Ready to export to REKS")).toBeTruthy();
   });
 
-  it("exports with progress, then reports the backup folder and ejects", async () => {
-    exportPlan.mockResolvedValue(dryRun());
+  it("exports with progress, then shows the report and ejects", async () => {
     const run = pendingExport();
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    await screen.findByText(/Ready to export/);
+    await toReview();
     fireEvent.click(button("Export"));
 
-    expect(screen.getByText("Step 5 of 6: Writing")).toBeTruthy();
+    expect(screen.getByText("Step 2 of 3: Writing")).toBeTruthy();
     expect(exportApply).toHaveBeenCalledWith(7, expect.any(Function));
-    expect(screen.getByRole("status").textContent).toBe("Starting the export…");
-    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
-    run.send(
-      progress({
-        detail: "Track 3 of 12: Alpha – First",
-        done: 3,
-        total: 12,
-        warnings: ["rekordbox is running; quit it while exporting so it does not touch the stick."],
-      }),
-    );
+    run.send(progress({ detail: "Track 3 of 12: Alpha – First", done: 3, total: 12 }));
     expect(screen.getByRole("status").textContent).toBe("Writing tracks");
-    expect(screen.getByText("Track 3 of 12: Alpha – First")).toBeTruthy();
     const bar = screen.getByRole("progressbar", { name: "Export progress" }) as HTMLProgressElement;
     expect([bar.value, bar.max]).toEqual([3, 12]);
-    expect(screen.getByText(/rekordbox is running/)).toBeTruthy();
 
     // Escape doesn't close a running export.
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-    expect(screen.getByText("Step 5 of 6: Writing")).toBeTruthy();
+    expect(screen.getByText("Step 2 of 3: Writing")).toBeTruthy();
 
-    await act(async () => run.finish(report()));
-    expect(screen.getByText("Step 6 of 6: Report")).toBeTruthy();
+    await act(async () => run.finish(report({ leftOut: [MISSING] })));
+    expect(screen.getByText("Step 3 of 3: Done")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe("Export finished");
-    expect(screen.getByText("12 tracks recorded as on this stick")).toBeTruthy();
-    const history = screen.getByRole("region", { name: "Play history backed up" });
-    expect(within(history).getByText(backedUp.folder)).toBeTruthy();
-    expect(within(history).getByText("/PIONEER/rekordbox/export.pdb")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Plan again" })).toBeNull();
+    // Left-out tracks are repeated in the report.
+    expect(screen.getByRole("region", { name: "2 tracks are missing" })).toBeTruthy();
+    expect(screen.getByText(backedUp.folder)).toBeTruthy();
 
     fireEvent.click(button("Eject"));
     expect(deviceEject).toHaveBeenCalledWith("/Volumes/REKS");
     expect(await screen.findByText("REKS ejected. You can remove it.")).toBeTruthy();
-    expect(button("Eject").disabled).toBe(true);
-
-    fireEvent.click(button("Done"));
+    fireEvent.click(button("Close"));
     expect(useExportWizard.getState().step).toBe("closed");
   });
 
   it("cancels until the new database is being written", async () => {
-    exportPlan.mockResolvedValue(dryRun());
     const run = pendingExport();
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    await screen.findByText(/Ready to export/);
+    await toReview();
     fireEvent.click(button("Export"));
-
-    run.send(progress({ done: 1, total: 12 }));
+    run.send(progress({ cancellable: true }));
     fireEvent.click(button("Cancel export"));
-    await waitFor(() => expect(exportCancel).toHaveBeenCalledTimes(1));
+    expect(exportCancel).toHaveBeenCalledTimes(1);
+    run.send(progress({ cancellable: false }));
     expect(button("Cancel export").disabled).toBe(true);
-    expect(screen.getByText("Cancelling…")).toBeTruthy();
+  });
 
+  it("after problems, goes back to a fresh review", async () => {
+    const run = pendingExport();
+    await toReview();
+    fireEvent.click(button("Export"));
     await act(async () =>
       run.finish(
         report({
-          outcome: "cancelled",
-          title: "Export cancelled",
-          status: "The stick keeps its previous database.",
-          facts: [],
+          outcome: "problems",
+          title: "Export finished with problems",
+          problems: [{ kind: "trackFailed", title: "1 track could not be written", items: ["x"] }],
         }),
       ),
     );
-    expect(screen.getByRole("status").textContent).toBe("Export cancelled");
-    expect(screen.getByText("The stick keeps its previous database.")).toBeTruthy();
-
-    // Plan again goes back to a fresh dry run.
-    exportPlan.mockResolvedValue(dryRun({ planId: 8 }));
-    fireEvent.click(button("Plan again"));
-    await screen.findByText(/Ready to export/);
-    expect(screen.getByText("Step 4 of 6: Dry run")).toBeTruthy();
-    expect(exportPlan).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("alert").textContent).toBe("Export finished with problems");
+    fireEvent.click(button("Back to review"));
+    await waitFor(() => expect(exportPlan).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Step 1 of 3: Review")).toBeTruthy();
   });
 
-  it("can't cancel once the database is being written", async () => {
-    exportPlan.mockResolvedValue(dryRun());
-    const run = pendingExport();
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    await screen.findByText(/Ready to export/);
-    fireEvent.click(button("Export"));
-    run.send(
-      progress({
-        title: "Writing the stick's database and removing stale files",
-        cancellable: false,
-      }),
-    );
-    expect(button("Cancel export").disabled).toBe(true);
-    // No count: an indeterminate bar.
-    expect(screen.getByRole("progressbar").hasAttribute("value")).toBe(false);
-  });
-
-  it("reports problems and failures", async () => {
-    exportPlan.mockResolvedValue(dryRun());
-    exportApply.mockResolvedValueOnce(
-      report({
-        outcome: "problems",
-        title: "Export finished with problems",
-        problems: [
-          {
-            kind: "trackFailed",
-            title: "1 track could not be written",
-            items: ["Alpha – First: source unreadable"],
-          },
-          {
-            kind: "databaseFinding",
-            title: "Read back: 1 problem with the database",
-            items: ["No export.pdb on the stick"],
-          },
-        ],
-        warnings: [{ kind: "applyWarning", title: "rekordbox is running.", items: [] }],
-      }),
-    );
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    await screen.findByText(/Ready to export/);
-    fireEvent.click(button("Export"));
-
-    expect((await screen.findByRole("alert")).textContent).toBe("Export finished with problems");
-    const problems = screen.getByRole("region", { name: "Problems" });
-    expect(within(problems).getByText("1 track could not be written")).toBeTruthy();
-    expect(within(problems).getByText("Alpha – First: source unreadable")).toBeTruthy();
-    expect(within(problems).getByText("No export.pdb on the stick")).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Warnings" }).textContent).toBe(
-      "Warningsrekordbox is running.",
-    );
-    expect(button("Plan again")).toBeTruthy();
-  });
-
-  it("shows a refused export", async () => {
-    exportPlan.mockResolvedValue(dryRun());
-    exportApply.mockRejectedValueOnce("this dry run is out of date or was already exported");
-    await toOptions();
-    fireEvent.click(button("Dry run"));
-    await screen.findByText(/Ready to export/);
-    fireEvent.click(button("Export"));
-    expect((await screen.findByRole("alert")).textContent).toBe(
-      "Could not export: this dry run is out of date or was already exported",
-    );
-    expect(button("Plan again")).toBeTruthy();
+  it("Back to Sticks closes the review and opens the Sticks view", async () => {
+    const { useDevices } = await import("../store/devices");
+    await toReview();
+    fireEvent.click(button("Back to Sticks"));
+    expect(useExportWizard.getState().step).toBe("closed");
+    expect(useDevices.getState().dialogOpen).toBe(true);
+    useDevices.getState().setDialogOpen(false);
   });
 });

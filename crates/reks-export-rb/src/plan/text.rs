@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-use super::{Problem, Warning};
+use super::{Problem, SkipReason, Warning};
 use crate::history::HistoryPolicy;
 
 /// `1.5 MB`-style size (decimal units, as file managers show sticks).
@@ -40,7 +40,11 @@ impl fmt::Display for Warning {
                 found.join(", ")
             ),
             Self::Audio { track_id, message } => write!(f, "track {track_id}: {message}"),
-            Self::Skipped { track_id, reason } => write!(f, "track {track_id} left out: {reason}"),
+            Self::Skipped {
+                track_id,
+                reason,
+                detail,
+            } => write!(f, "track {track_id} left out ({reason}): {detail}"),
             Self::StaleKept { files, bytes } => write!(
                 f,
                 "{files} stale files ({}) stay on the stick",
@@ -112,6 +116,17 @@ impl fmt::Display for Warning {
     }
 }
 
+impl fmt::Display for SkipReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Missing => "file not found",
+            Self::Unreadable => "file can't be read",
+            Self::Unsupported => "the target player can't play it",
+            Self::NoAnalysis => "no analysis",
+        })
+    }
+}
+
 impl fmt::Display for Problem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -121,19 +136,6 @@ impl fmt::Display for Problem {
                 f,
                 "players cannot read the {fs_name} file system; format the stick as FAT32"
             ),
-            Self::SourceMissing { track_id, path } => {
-                write!(f, "track {track_id}: file not found: {}", path.display())
-            }
-            Self::SourceUnreadable {
-                track_id,
-                path,
-                message,
-            } => write!(
-                f,
-                "track {track_id}: cannot read {}: {message}",
-                path.display()
-            ),
-            Self::Unsupported { track_id, message } => write!(f, "track {track_id}: {message}"),
             Self::BadPath {
                 track_id,
                 path,

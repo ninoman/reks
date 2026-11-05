@@ -155,6 +155,7 @@ fn stick_from(
             is_folder,
             track_ids,
             smart: false,
+            left_out: Vec::new(),
         };
     let plan = ExportPlan {
         device: DeviceInfo {
@@ -433,6 +434,7 @@ fn playlist_tree_differences_are_reported() {
         is_folder: false,
         track_ids: vec![],
         smart: false,
+        left_out: Vec::new(),
     });
     let r = s.validate();
     assert!(has(

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   Device,
+  DeviceInfo,
   DryRun,
   ExportOptions,
   ExportProgress,
@@ -20,7 +21,8 @@ vi.mock("../lib/ipc", async (original) => ({
   profileSelection: vi.fn(),
   profileSetSelection: vi.fn(),
   profileSetTarget: vi.fn(),
-  settingsSet: vi.fn(),
+  profileStatus: vi.fn(),
+  analysisReanalyse: vi.fn(),
 }));
 
 const ipc = await import("../lib/ipc");
@@ -32,25 +34,23 @@ const deviceEject = vi.mocked(ipc.deviceEject);
 vi.mocked(ipc.devicesList).mockResolvedValue([]);
 const profileSelection = vi.mocked(ipc.profileSelection);
 const profileSetSelection = vi.mocked(ipc.profileSetSelection);
-const profileSetTarget = vi.mocked(ipc.profileSetTarget);
-const settingsSet = vi.mocked(ipc.settingsSet);
-const { useSettings } = await import("./settings");
-const { coveredIds, selectionOf, useExportWizard } = await import("./exportWizard");
+const { useAnalysis } = await import("./analysis");
+const { useProfiles, coveredIds, selectionOf } = await import("./profiles");
+const { useExportWizard } = await import("./exportWizard");
 
-/** What `export_default_options` returns (stands in for Rust's defaults). */
+/** What `export_default_options` returns (stands in for Settings › Export). */
 const DEFAULTS: ExportOptions = {
   target: "Generic",
   keepStale: false,
-  missingAnalysis: "skip",
+  missingAnalysis: "generate",
   artwork: false,
-  skipUnsupported: false,
   history: "backUp",
   discardHistoryConfirmed: false,
   historyChosen: false,
   dividers: true,
-  activeLoops: true,
+  activeLoops: false,
   anlzPreference: "rekordboxFirst",
-  onelibrary: true,
+  onelibrary: false,
   onelibraryRemovalConfirmed: false,
 };
 
@@ -68,26 +68,21 @@ const node = (id: number, parentId: number | null, isFolder = false): PlaylistNo
 /** Gigs/ (1) → Friday (2), Old/ (3) → Older (4); Other (5). Depth first. */
 const NODES = [node(1, null, true), node(2, 1), node(3, 1, true), node(4, 3), node(5, null)];
 
-/** The known stick at /Volumes/REKS. */
 const DEVICE: Device = {
   id: 1,
   volumeSerial: "4993-1CFB",
   label: "REKS",
   sizeBytes: 32_000_000_000,
   name: "Main",
-  target: "Generic",
+  target: "Cdj2000Nxs2",
   createdAt: "2026-10-19T12:00:00.000Z",
   lastSyncedAt: null,
 };
 
-/** Opens the wizard on the known stick /Volumes/REKS (empty profile) with `playlists` ticked. */
-async function openOnStick(playlists: number[]) {
-  await useExportWizard.getState().open({ mountPoint: "/Volumes/REKS", playlists });
-  await useExportWizard.getState().takeProfile(DEVICE);
-}
+const INFO = { mountPoint: "/Volumes/REKS", label: "REKS" } as DeviceInfo;
 
-const plan = (status: string): DryRun => ({ status }) as DryRun;
-const ready = (planId: number): DryRun => ({ planId, ready: true, status: "ready" }) as DryRun;
+const ready = (planId: number): DryRun =>
+  ({ planId, ready: true, issues: [] }) as unknown as DryRun;
 
 const progress = (p: Partial<ExportProgress>): ExportProgress => ({
   stage: "write",
@@ -103,404 +98,202 @@ const progress = (p: Partial<ExportProgress>): ExportProgress => ({
 const report = (over: Partial<ExportReportView> = {}): ExportReportView =>
   ({ outcome: "success", mountPoint: "/Volumes/REKS", ...over }) as ExportReportView;
 
-/** Opens the wizard on a ready dry run with plan id `planId`. */
-async function toDryRun(planId = 7) {
-  const w = useExportWizard.getState;
-  exportPlan.mockResolvedValue(ready(planId));
-  await openOnStick([5]);
-  await w().next(NODES);
-  await w().next(NODES);
-  await w().next(NODES);
-  expect(w().step).toBe("dryRun");
-}
+const w = useExportWizard.getState;
 
 beforeEach(() => {
   exportDefaultOptions.mockReset().mockResolvedValue(DEFAULTS);
-  exportPlan.mockReset();
+  exportPlan.mockReset().mockResolvedValue(ready(7));
   exportApply.mockReset();
   exportCancel.mockReset().mockResolvedValue();
   deviceEject.mockReset();
-  profileSelection.mockReset().mockResolvedValue({ playlists: [] });
+  profileSelection.mockReset().mockResolvedValue({ playlists: [5] });
   profileSetSelection.mockReset().mockResolvedValue();
-  profileSetTarget.mockReset().mockImplementation(async (_id, target) => ({ ...DEVICE, target }));
-  useExportWizard.getState().close();
+  vi.mocked(ipc.profileStatus)
+    .mockReset()
+    .mockResolvedValue(null as never);
+  useProfiles.setState({
+    known: [DEVICE],
+    mounted: {
+      [INFO.mountPoint]: { info: INFO, match: { type: "known", device: DEVICE }, error: null },
+    },
+    selectedId: null,
+    ticks: null,
+    status: null,
+  });
+  useExportWizard.setState({ step: "closed" });
+  w().close();
 });
 
 describe("selection", () => {
   it("a ticked folder covers everything under it", () => {
-    expect([...coveredIds(NODES, new Set([1]))].sort()).toEqual([2, 3, 4]);
-    expect(selectionOf(NODES, new Set([1, 2, 4, 5]))).toEqual({ playlists: [1, 5] });
-    expect(selectionOf(NODES, new Set([4, 2]))).toEqual({ playlists: [2, 4] });
-    expect(selectionOf(NODES, new Set())).toEqual({ playlists: [] });
+    const checked = new Set([1, 2, 4, 5]);
+    expect([...coveredIds(NODES, checked)]).toEqual([2, 3, 4]);
+    expect(selectionOf(NODES, checked)).toEqual({ playlists: [1, 5] });
   });
 });
 
 describe("useExportWizard", () => {
-  it("opens on the device step with the given stick, playlists and Rust's defaults", async () => {
-    const opened = useExportWizard.getState().open({ mountPoint: "/Volumes/REKS", playlists: [2] });
-    const s = useExportWizard.getState();
-    expect(s.step).toBe("device");
-    expect(s.mountPoint).toBe("/Volumes/REKS");
-    expect([...s.checked]).toEqual([2]);
-    // Nothing goes on until the defaults arrive.
-    expect(s.options).toBeNull();
-    await opened;
-    expect(exportDefaultOptions).toHaveBeenCalledOnce();
-    expect(useExportWizard.getState().options).toEqual(DEFAULTS);
+  it("opens on the review with the profile, the settings for the stick's target, and plans", async () => {
+    await w().open("/Volumes/REKS");
+    expect(w().step).toBe("review");
+    expect(w().device).toEqual(DEVICE);
+    expect(exportDefaultOptions).toHaveBeenCalledWith("Cdj2000Nxs2");
+    expect(exportPlan).toHaveBeenCalledWith("/Volumes/REKS", { playlists: [5] }, DEFAULTS, 1);
+    expect(w().dryRun).toEqual(ready(7));
   });
 
-  it("keeps a stick's target that arrives before the defaults, and drops late defaults", async () => {
-    const w = useExportWizard.getState;
-    let resolve: (o: ExportOptions) => void = () => {};
-    exportDefaultOptions.mockReturnValueOnce(
-      new Promise((r) => {
-        resolve = r;
-      }),
-    );
-    const opened = w().open({ mountPoint: "/Volumes/REKS", playlists: [5] });
-    await w().takeProfile({ ...DEVICE, target: "Cdj3000" });
-    resolve(DEFAULTS);
-    await opened;
-    expect(w().options?.target).toBe("Cdj3000");
-
-    exportDefaultOptions.mockReturnValueOnce(
-      new Promise((r) => {
-        resolve = r;
-      }),
-    );
-    const late = w().open();
-    w().close();
-    resolve(DEFAULTS);
-    await late;
-    expect(w().options).toBeNull();
-  });
-
-  it("says when the defaults can't be read", async () => {
-    exportDefaultOptions.mockRejectedValueOnce("no backend");
-    await useExportWizard.getState().open();
-    expect(useExportWizard.getState().error).toBe("Could not read the export options: no backend");
-  });
-
-  it("the OneLibrary removal confirmation plans again and going back withdraws it", async () => {
-    const w = useExportWizard.getState;
-    exportPlan.mockResolvedValue({ planId: 1 } as DryRun);
-    await openOnStick([5]);
-    useExportWizard.setState({ step: "dryRun" });
-    await w().confirmOnelibraryRemoval(NODES);
-    expect(exportPlan).toHaveBeenLastCalledWith(
-      "/Volumes/REKS",
-      { playlists: [5] },
-      expect.objectContaining({ onelibraryRemovalConfirmed: true }),
-      1,
-    );
-    w().back();
-    expect(w().options?.onelibraryRemovalConfirmed).toBe(false);
-    w().setOptions({ onelibraryRemovalConfirmed: true });
-    w().setOptions({ onelibrary: false });
-    expect(w().options?.onelibraryRemovalConfirmed).toBe(false);
-  });
-
-  it("does not go on until the step is complete", async () => {
-    const w = useExportWizard.getState;
-    await w().open();
-    await w().next(NODES);
-    expect(w().step).toBe("device");
-    w().setDevice("/Volumes/REKS");
-    // Not identified as a known stick yet.
-    await w().next(NODES);
-    expect(w().step).toBe("device");
-    await w().takeProfile(DEVICE);
-    await w().next(NODES);
-    expect(w().step).toBe("playlists");
-    await w().next(NODES);
-    expect(w().step).toBe("playlists");
-    w().toggle(5);
-    await w().next(NODES);
-    expect(w().step).toBe("options");
-
-    w().setOptions({ history: "discard" });
-    await w().next(NODES);
-    expect(w().step).toBe("options");
+  it("refuses a stick that isn't set up", async () => {
+    await w().open("/Volumes/OTHER");
+    expect(w().error).toBe("Set this stick up in Sticks first.");
     expect(exportPlan).not.toHaveBeenCalled();
   });
 
-  it("plans on entering the dry run with the selection and options", async () => {
-    const w = useExportWizard.getState;
-    exportPlan.mockResolvedValue(plan("ready"));
-    await openOnStick([1, 2]);
-    await w().next(NODES);
-    await w().next(NODES);
-    w().setOptions({ history: "discard", discardHistoryConfirmed: true, artwork: true });
-    await w().next(NODES);
-    expect(w().step).toBe("dryRun");
-    expect(exportPlan).toHaveBeenCalledWith(
-      "/Volumes/REKS",
-      { playlists: [1] },
-      {
-        ...DEFAULTS,
-        history: "discard",
-        discardHistoryConfirmed: true,
-        artwork: true,
-      },
-      1,
-    );
-    expect(w().dryRun?.status).toBe("ready");
-
-    w().back();
-    expect(w().step).toBe("options");
-    expect(w().dryRun).toBeNull();
+  it("says when the settings can't be read", async () => {
+    exportDefaultOptions.mockRejectedValue("db locked");
+    await w().open("/Volumes/REKS");
+    expect(w().error).toBe("Could not read the stick's settings: db locked");
   });
 
-  it("ticks the stick's profile and takes its target", async () => {
-    const w = useExportWizard.getState;
-    profileSelection.mockResolvedValue({ playlists: [2, 5] });
-    await w().open({ mountPoint: "/Volumes/REKS", playlists: [4] });
-    await w().takeProfile({ ...DEVICE, target: "Cdj3000" });
-    expect(profileSelection).toHaveBeenCalledWith(1);
-    expect([...w().checked]).toEqual([2, 5]);
-    expect(w().options?.target).toBe("Cdj3000");
-    // A new stick keeps the sidebar's selection.
-    profileSelection.mockResolvedValue({ playlists: [] });
-    await w().open({ mountPoint: "/Volumes/REKS", playlists: [4] });
-    await w().takeProfile(DEVICE);
-    expect([...w().checked]).toEqual([4]);
+  it("keeps only the newest plan and reports failures", async () => {
+    await w().open("/Volumes/REKS");
+    let first: (d: DryRun) => void = () => {};
+    exportPlan.mockReturnValueOnce(new Promise((r) => (first = r)));
+    const a = w().replan();
+    exportPlan.mockResolvedValueOnce(ready(9));
+    await w().replan();
+    first(ready(8));
+    await a;
+    expect(w().dryRun).toEqual(ready(9));
+
+    exportPlan.mockRejectedValueOnce("stick gone");
+    await w().replan();
+    expect(w().error).toBe("Could not plan: stick gone");
   });
 
-  it("saves the ticks and the target as the stick's profile", async () => {
-    const w = useExportWizard.getState;
-    exportPlan.mockResolvedValue(plan("ready"));
-    await openOnStick([1, 2, 5]);
-    await w().next(NODES);
-    expect(profileSetSelection).not.toHaveBeenCalled();
-    await w().next(NODES);
-    // The folder covers its children: saved as folder + the other playlist.
-    expect(profileSetSelection).toHaveBeenCalledWith(1, [1, 5]);
-    expect(profileSetTarget).not.toHaveBeenCalled();
-    w().setOptions({ target: "Cdj2000Nxs2" });
-    await w().next(NODES);
-    expect(profileSetTarget).toHaveBeenCalledWith(1, "Cdj2000Nxs2");
-    expect(w().device?.target).toBe("Cdj2000Nxs2");
-    expect(exportPlan).toHaveBeenCalledWith(
+  it("Leave them out plans this run without the unanalysed tracks", async () => {
+    await w().open("/Volumes/REKS");
+    await w().leaveOutUnanalysed();
+    expect(exportPlan).toHaveBeenLastCalledWith(
       "/Volumes/REKS",
-      { playlists: [1, 5] },
-      expect.objectContaining({ target: "Cdj2000Nxs2" }),
+      { playlists: [5] },
+      { ...DEFAULTS, missingAnalysis: "skip" },
       1,
     );
   });
 
-  it("stays on the step when saving the profile fails", async () => {
-    const w = useExportWizard.getState;
-    profileSetSelection.mockRejectedValue("database is locked");
-    await openOnStick([5]);
-    await w().next(NODES);
-    await w().next(NODES);
-    expect(w().step).toBe("playlists");
-    expect(w().error).toBe("Could not save the stick's profile: database is locked");
+  it("keep collapses one card or all of them", async () => {
+    exportPlan.mockResolvedValue({
+      ...ready(7),
+      issues: [{ kind: "missing" }, { kind: "unsupported" }],
+    } as DryRun);
+    await w().open("/Volumes/REKS");
+    w().keep("missing");
+    expect([...w().kept]).toEqual(["missing"]);
+    w().keep(null);
+    expect([...w().kept].sort()).toEqual(["missing", "unsupported"]);
   });
 
-  it("picking another stick forgets the profile", async () => {
-    const w = useExportWizard.getState;
-    await openOnStick([5]);
-    w().setDevice("/Volumes/REKS");
-    expect(w().device?.id).toBe(1);
-    w().setDevice("/Volumes/GIGS");
-    expect(w().device).toBeNull();
+  it("Analyse now waits for the analysis, then plans again", async () => {
+    vi.mocked(ipc.analysisReanalyse).mockResolvedValue({} as never);
+    useAnalysis.setState({ status: { queued: 1, running: 1 } as never, error: null });
+    await w().open("/Volumes/REKS");
+    const fix = w().runFix("analyse", [40]);
+    await vi.waitFor(() => expect(w().away).toBe("analyse"));
+    expect(exportPlan).toHaveBeenCalledTimes(1);
+    useAnalysis.setState({ status: { queued: 0, running: 0 } as never });
+    await fix;
+    expect(w().away).toBeNull();
+    expect(exportPlan).toHaveBeenCalledTimes(2);
   });
 
-  it("the history guard's choice plans again and going back withdraws it", async () => {
-    const w = useExportWizard.getState;
-    exportPlan.mockResolvedValue({ planId: 1 } as DryRun);
-    await openOnStick([5]);
-    useExportWizard.setState({ step: "dryRun" });
-    await w().chooseHistory("import", NODES);
+  it("the history guard's choice plans again", async () => {
+    await w().open("/Volumes/REKS");
+    await w().chooseHistory("import");
     expect(exportPlan).toHaveBeenLastCalledWith(
       "/Volumes/REKS",
       { playlists: [5] },
       expect.objectContaining({ history: "import", historyChosen: true }),
       1,
     );
-    w().back();
-    expect(w().step).toBe("options");
-    expect(w().options).toMatchObject({ history: "backUp", historyChosen: false });
-
-    w().setOptions({ historyChosen: true });
-    w().setOptions({ keepStale: true });
-    expect(w().options?.historyChosen).toBe(false);
   });
 
-  it("opens with the analysis setting and saves a change to it", async () => {
-    const settings = {
-      audioDevice: null,
-      audioSampleRate: null,
-      audioBufferFrames: null,
-      audioCue: null,
-      keyNotation: "classical",
-      deckWaveform: "threeBand",
-      theme: "graphite",
-      mixerEq: "fourBand",
-      mixerView: "simple",
-      mixerFilters: "show",
-      cacheDir: "/cache",
-      ui: {
-        hiddenColumns: null,
-        filterBarOpen: true,
-        filtersEnabled: true,
-        infoOpen: false,
-        volume: 1,
-        rowDensity: "default",
-        columnsVersion: 1,
-        columnWidths: {},
-        sidebarWidth: null,
-        sheetWidth: null,
-        filterFields: null,
-        filterSaveTarget: "filter",
-      },
-      anlzPreference: "reksFirst",
-      backupKeep: 10,
-      tagsInComments: false,
-      onelibraryKeyBuiltin: false,
-    } as const;
-    useSettings.setState({ settings });
-    const w = useExportWizard.getState;
-    await w().open();
-    expect(w().options?.anlzPreference).toBe("reksFirst");
-
-    settingsSet.mockResolvedValueOnce({ ...settings, anlzPreference: "rekordboxOnly" });
-    w().setOptions({ anlzPreference: "rekordboxOnly" });
-    expect(w().options?.anlzPreference).toBe("rekordboxOnly");
-    expect(settingsSet).toHaveBeenCalledWith({ anlzPreference: "rekordboxOnly" });
-    await vi.waitFor(() =>
-      expect(useSettings.getState().settings?.anlzPreference).toBe("rekordboxOnly"),
-    );
-    // Other options don't touch the setting.
-    settingsSet.mockClear();
-    w().setOptions({ keepStale: true });
-    expect(settingsSet).not.toHaveBeenCalled();
-    useSettings.setState({ settings: null });
-  });
-
-  it("leaving discard withdraws the confirmation", async () => {
-    const w = useExportWizard.getState;
-    await w().open();
-    w().setOptions({ history: "discard", discardHistoryConfirmed: true });
-    w().setOptions({ history: "backUp" });
-    expect(w().options?.discardHistoryConfirmed).toBe(false);
-  });
-
-  it("keeps only the newest plan and reports failures", async () => {
-    const w = useExportWizard.getState;
-    let first: (d: DryRun) => void = () => {};
-    exportPlan
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          first = resolve;
-        }),
-      )
-      .mockResolvedValueOnce(plan("second"))
-      .mockRejectedValueOnce("stick unplugged");
-    await w().open({ mountPoint: "/Volumes/REKS", playlists: [5] });
-    const a = w().replan(NODES);
-    await w().replan(NODES);
-    first(plan("first"));
-    await a;
-    expect(w().dryRun?.status).toBe("second");
-
-    await w().replan(NODES);
-    expect(w().dryRun).toBeNull();
-    expect(w().error).toBe("Could not plan: stick unplugged");
-  });
-
-  it("exports the shown plan, streams progress and lands on the report", async () => {
-    const w = useExportWizard.getState;
-    await toDryRun(7);
+  it("exports the shown plan, streams progress and lands on done", async () => {
+    await w().open("/Volumes/REKS");
     let send: (p: ExportProgress) => void = () => {};
     let finish: (r: ExportReportView) => void = () => {};
-    exportApply.mockImplementation((_id, onEvent) => {
-      send = onEvent;
-      return new Promise((resolve) => {
-        finish = resolve;
-      });
+    exportApply.mockImplementation((_id, on) => {
+      send = on;
+      return new Promise((r) => (finish = r));
     });
     const run = w().startExport();
+    expect(w().step).toBe("writing");
     expect(exportApply).toHaveBeenCalledWith(7, expect.any(Function));
-    expect(w().step).toBe("writing");
-    send(progress({ done: 2, total: 12 }));
-    expect(w().progress?.done).toBe(2);
-
-    // Neither closing nor Back leaves a running export.
+    send(progress({ done: 1, total: 3 }));
+    expect(w().progress?.done).toBe(1);
+    // Closing while writing does nothing.
     w().close();
-    w().back();
     expect(w().step).toBe("writing");
-
     finish(report());
     await run;
-    expect(w().step).toBe("report");
-    expect(w().report?.outcome).toBe("success");
-    w().close();
-    expect(w().step).toBe("closed");
-  });
-
-  it("only exports a ready plan", async () => {
-    const w = useExportWizard.getState;
-    exportPlan.mockResolvedValue({ planId: 3, ready: false } as DryRun);
-    await openOnStick([5]);
-    await w().next(NODES);
-    await w().next(NODES);
-    await w().next(NODES);
-    await w().startExport();
-    expect(exportApply).not.toHaveBeenCalled();
-    expect(w().step).toBe("dryRun");
+    expect(w().step).toBe("done");
   });
 
   it("cancels once, and not after the database is being written", async () => {
-    const w = useExportWizard.getState;
-    await toDryRun();
-    let send: (p: ExportProgress) => void = () => {};
-    exportApply.mockImplementation((_id, onEvent) => {
-      send = onEvent;
-      return new Promise(() => {});
-    });
+    await w().open("/Volumes/REKS");
+    exportApply.mockImplementation(() => new Promise(() => {}));
     void w().startExport();
-    send(progress({ cancellable: false }));
-    await w().cancelExport();
-    expect(exportCancel).not.toHaveBeenCalled();
-
-    send(progress({ cancellable: true }));
     await w().cancelExport();
     await w().cancelExport();
     expect(exportCancel).toHaveBeenCalledTimes(1);
-    expect(w().cancelling).toBe(true);
+    useExportWizard.setState({ cancelling: false, progress: progress({ cancellable: false }) });
+    await w().cancelExport();
+    expect(exportCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a rejected export as an error and plans again from the report", async () => {
-    const w = useExportWizard.getState;
-    await toDryRun();
-    exportApply.mockRejectedValue("this dry run is out of date");
+  it("back to review withdraws the run's choices and plans again", async () => {
+    await w().open("/Volumes/REKS");
+    await w().chooseHistory("import");
+    exportApply.mockResolvedValue(report({ outcome: "problems" }));
     await w().startExport();
-    expect(w().step).toBe("report");
-    expect(w().error).toBe("Could not export: this dry run is out of date");
-
-    exportPlan.mockResolvedValue(ready(8));
-    await w().planAgain(NODES);
-    expect(w().step).toBe("dryRun");
-    expect(w().error).toBeNull();
-    expect(w().dryRun?.planId).toBe(8);
+    await w().backToReview();
+    expect(w().step).toBe("review");
+    expect(exportPlan).toHaveBeenLastCalledWith(
+      "/Volumes/REKS",
+      { playlists: [5] },
+      expect.objectContaining({ history: "backUp", historyChosen: false }),
+      1,
+    );
   });
 
   it("ejects the reported stick", async () => {
-    const w = useExportWizard.getState;
-    await toDryRun();
-    exportApply.mockResolvedValue(report({ mountPoint: "/Volumes/GIGS", deviceName: "GIGS" }));
+    await w().open("/Volumes/REKS");
+    exportApply.mockResolvedValue(report());
     await w().startExport();
+    deviceEject.mockResolvedValue();
+    await w().ejectStick();
+    expect(deviceEject).toHaveBeenCalledWith("/Volumes/REKS");
+    expect(w().eject.state).toBe("done");
+  });
+});
 
-    deviceEject.mockRejectedValueOnce("busy").mockResolvedValueOnce();
-    await w().ejectStick();
-    expect(w().eject).toEqual({ state: "failed", message: "Could not eject GIGS: busy" });
-    await w().ejectStick();
-    expect(deviceEject).toHaveBeenLastCalledWith("/Volumes/GIGS");
-    expect(w().eject).toEqual({
-      state: "done",
-      message: "GIGS ejected. You can remove it.",
-    });
+describe("stick ticks", () => {
+  it("loads the picked stick's ticks and saves each change as the profile", async () => {
+    profileSelection.mockResolvedValue({ playlists: [2] });
+    useProfiles.getState().select(1);
+    await vi.waitFor(() => expect(useProfiles.getState().ticks).not.toBeNull());
+    expect([...(useProfiles.getState().ticks ?? [])]).toEqual([2]);
+    await useProfiles.getState().toggleTick(1, NODES);
+    // The folder covers Friday: only the folder is saved.
+    expect(profileSetSelection).toHaveBeenCalledWith(1, [1]);
+  });
+
+  it("puts the ticks back when saving fails", async () => {
+    profileSelection.mockResolvedValue({ playlists: [2] });
+    useProfiles.getState().select(1);
+    await vi.waitFor(() => expect(useProfiles.getState().ticks).not.toBeNull());
+    profileSetSelection.mockRejectedValue("db locked");
+    await useProfiles.getState().toggleTick(5, NODES);
+    expect([...(useProfiles.getState().ticks ?? [])]).toEqual([2]);
+    expect(useProfiles.getState().error).toBe("Could not save the stick's playlists: db locked");
   });
 });

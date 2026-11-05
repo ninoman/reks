@@ -3,7 +3,8 @@
  * (library folders, cache folder, library backups), Playback (output device, sample rate,
  * buffer, headphone cue: `OutputSettings`), Display (theme, key notation),
  * Decks (the waveform style of the player deck and the Mix view, what SYNC
- * aligns), Mixer (the EQ layout and which mixer controls the Mix view shows).
+ * aligns), Mixer (the EQ layout and which mixer controls the Mix view shows),
+ * Export (how USB exports write sticks, D42).
  * Display, Decks and Mixer live in `settings/`, their choices as picture
  * tiles (`ChoiceTiles`). Values live in Rust (`useSettings`); the library
  * window's own state (columns, panels, volume) is saved without asking.
@@ -20,6 +21,7 @@ import { changeLibraryFolder, findMissingFiles } from "./relocateActions";
 import { BackupSettings } from "./settings/BackupSettings";
 import { DeckSettings } from "./settings/DeckSettings";
 import { DisplaySettings } from "./settings/DisplaySettings";
+import { ExportSettings } from "./settings/ExportSettings";
 import { MixerSettings } from "./settings/MixerSettings";
 import { settingItemClass as item } from "./settings/SettingItem";
 import { TagSettings } from "./settings/TagSettings";
@@ -101,6 +103,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "display", label: "Display" },
   { id: "decks", label: "Decks" },
   { id: "mixer", label: "Mixer" },
+  { id: "export", label: "Export" },
 ];
 
 function SettingsBody({
@@ -156,6 +159,13 @@ function SettingsBody({
                 eq={settings.mixerEq}
                 view={settings.mixerView}
                 filters={settings.mixerFilters}
+              />
+            </Panel>
+            <Panel value="export">
+              <ExportSettings
+                value={settings.export}
+                anlzPreference={settings.anlzPreference}
+                keyBuiltin={settings.onelibraryKeyBuiltin}
               />
             </Panel>
           </>

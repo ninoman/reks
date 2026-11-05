@@ -1,14 +1,14 @@
 /**
- * USB devices (phase 2 task 1) and stick profiles (task 15, D27): the
- * removable volumes the OS reports, with their file system, free space,
- * Eject and what each is to the library (a known stick, or the identify
- * prompt: "Is this '<name>'?" / "New stick"); then the known sticks with
- * their profile status, "frees X MB" per ticked entry and a capacity bar.
- * The list refreshes every two seconds while open, so a stick shows up when
- * it is plugged in. `DeviceList` is also the export wizard's device step
- * (task 10): pass `selected` and `onSelect` to pick one. Whether a file
- * system will do for a given player is the export planner's call; the notes
- * here only flag it. Status and prompts are worded in Rust.
+ * The Sticks view (phase 2 tasks 1 and 15, D27, D42): the removable volumes
+ * the OS reports, with their file system, free space, Eject, Sync and what
+ * each is to the library (a known stick, or the identify prompt: "Is this
+ * '<name>'?" / "New stick"); then the known sticks and the picked one's
+ * profile: "Plays on", the playlist ticks (saved as they change), its
+ * status, "frees X MB" per ticked entry and a capacity bar. Sync opens the
+ * export's review. The list refreshes every two seconds while open, so a
+ * stick shows up when it is plugged in. Whether a file system will do for a
+ * given player is the export planner's call; the notes here only flag it.
+ * Status and prompts are worded in Rust.
  */
 import { type FormEvent, useEffect, useState } from "react";
 
@@ -22,15 +22,19 @@ import type {
   PlaylistStatus,
   ProfileStatus,
   SyncState,
+  TargetProfile,
 } from "../lib/ipc";
 import { useAdopt } from "../store/adopt";
 import { deviceName, useDevices } from "../store/devices";
 import { openExportWizard } from "../store/exportWizard";
-import { mountOf, sortedKnown, useProfiles } from "../store/profiles";
+import { usePlaylists } from "../store/playlists";
+import { coveredIds, mountOf, sortedKnown, useProfiles } from "../store/profiles";
 import { ErrorMessage } from "./ErrorMessage";
 import { EjectIcon } from "./icons";
+import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
+import { Checkbox } from "./ui/Checkbox";
 import {
   Dialog,
   DialogBody,
@@ -40,10 +44,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/Dialog";
+import { Field } from "./ui/Field";
 import { Input } from "./ui/Input";
 import { Progress } from "./ui/Progress";
+import { Select } from "./ui/Select";
 
 const REFRESH_MS = 2000;
+
+/** "Plays on": the oldest player the stick must work on (the profile's target). */
+const TARGETS: { value: TargetProfile; label: string }[] = [
+  { value: "Generic", label: "Any player (safest)" },
+  { value: "Cdj2000Nxs", label: "CDJ-2000NXS and newer" },
+  { value: "Cdj2000Nxs2", label: "CDJ-2000NXS2 and newer" },
+  { value: "Cdj3000", label: "CDJ-3000 and newer" },
+  { value: "XdjXz", label: "XDJ-XZ" },
+];
+
+/** Indent per tree level, as in the sidebar tree. */
+const INDENT = 18;
 
 function fsLabel(fs: FsKind): string {
   switch (fs.kind) {
@@ -84,10 +102,10 @@ export function DevicesDialog() {
     >
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>USB devices</DialogTitle>
+          <DialogTitle>Sticks</DialogTitle>
           <DialogDescription>
-            Removable drives connected to this computer, and the playlists each of your sticks
-            carries.
+            Pick a stick and tick its playlists. Ticks are saved as you go; nothing is written until
+            you press Export in the review.
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
@@ -95,31 +113,15 @@ export function DevicesDialog() {
           <Sticks />
         </DialogBody>
         <DialogFooter>
-          <Button
-            onClick={() => {
-              useDevices.getState().setDialogOpen(false);
-              openExportWizard();
-            }}
-          >
-            Export to USB…
-          </Button>
-          <Button variant="primary" onClick={() => useDevices.getState().setDialogOpen(false)}>
-            Close
-          </Button>
+          <Button onClick={() => useDevices.getState().setDialogOpen(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-export interface DeviceListProps {
-  /** Mount point of the chosen device; with `onSelect`, rows become a radio group. */
-  selected?: string | null;
-  onSelect?: (device: DeviceInfo) => void;
-}
-
-/** The device list, refreshed while mounted. */
-export function DeviceList({ selected = null, onSelect }: DeviceListProps) {
+/** The plugged-in volumes, refreshed while mounted. */
+export function DeviceList() {
   const devices = useDevices((s) => s.devices);
   const loaded = useDevices((s) => s.loaded);
   const error = useDevices((s) => s.error);
@@ -148,34 +150,26 @@ export function DeviceList({ selected = null, onSelect }: DeviceListProps) {
       {loaded && devices.length === 0 ? (
         <p className="m-0 text-fg-muted">No USB drive found. Plug one in and it shows up here.</p>
       ) : (
-        <Card role={onSelect ? "radiogroup" : "list"} aria-label="USB devices">
-          {devices.map((d) => (
-            <DeviceRow
-              key={d.mountPoint}
-              device={d}
-              selected={d.mountPoint === selected}
-              onSelect={onSelect}
-            />
-          ))}
+        <Card asChild>
+          <ul aria-label="Plugged in" className="m-0 list-none p-0">
+            {devices.map((d) => (
+              <DeviceRow key={d.mountPoint} device={d} />
+            ))}
+          </ul>
         </Card>
       )}
     </div>
   );
 }
 
-function DeviceRow({
-  device,
-  selected,
-  onSelect,
-}: {
-  device: DeviceInfo;
-  selected: boolean;
-  onSelect?: ((device: DeviceInfo) => void) | undefined;
-}) {
+function DeviceRow({ device }: { device: DeviceInfo }) {
   const ejecting = useDevices((s) => s.ejecting);
-  const name = deviceName(device);
+  const known = useProfiles((s) => {
+    const match = s.mounted[device.mountPoint]?.match;
+    return match?.type === "known" ? match.device : null;
+  });
+  const name = known?.name ?? deviceName(device);
   const note = fsNote(device.fs);
-  const pickable = onSelect !== undefined;
 
   const info = (
     <>
@@ -198,27 +192,9 @@ function DeviceRow({
   );
 
   return (
-    <div
-      role={pickable ? undefined : "listitem"}
-      data-selected={selected || undefined}
-      className="flex flex-col gap-2 px-4 py-3 data-[selected]:bg-selected data-[selected]:text-selected-fg"
-    >
+    <li className="flex flex-col gap-2 px-4 py-3">
       <div className="flex items-center gap-3">
-        {pickable ? (
-          <label className="flex min-w-0 flex-1 items-center gap-3">
-            <input
-              type="radio"
-              name="reks-device"
-              aria-label={name}
-              checked={selected}
-              onChange={() => onSelect(device)}
-              className="shrink-0 accent-accent-solid"
-            />
-            <span className="min-w-0 flex-1">{info}</span>
-          </label>
-        ) : (
-          <div className="min-w-0 flex-1 select-text">{info}</div>
-        )}
+        <div className="min-w-0 flex-1 select-text">{info}</div>
         <Button
           size="sm"
           variant="outline"
@@ -229,9 +205,20 @@ function DeviceRow({
           <EjectIcon />
           {ejecting === device.mountPoint ? "Ejecting…" : "Eject"}
         </Button>
+        {known !== null && (
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={ejecting !== null}
+            aria-label={`Sync ${known.name}`}
+            onClick={() => openExportWizard(device.mountPoint)}
+          >
+            Sync
+          </Button>
+        )}
       </div>
       <StickIdentity mountPoint={device.mountPoint} />
-    </div>
+    </li>
   );
 }
 
@@ -469,19 +456,32 @@ export function StatusView({
           )}
           <Button
             size="sm"
+            variant="primary"
             className="shrink-0"
             disabled={mountPoint === null}
-            title={mountPoint === null ? "Plug this stick in to change or sync it" : undefined}
+            title={mountPoint === null ? "Plug this stick in to sync it" : undefined}
             onClick={() => {
-              if (mountPoint === null) return;
-              useDevices.getState().setDialogOpen(false);
-              openExportWizard(mountPoint);
+              if (mountPoint !== null) openExportWizard(mountPoint);
             }}
           >
-            Edit and sync…
+            Sync {s.device.name}
           </Button>
         </div>
       </div>
+
+      <Field label="Plays on" hint="The oldest player this stick must work on.">
+        <Select
+          aria-label="Plays on"
+          value={s.device.target}
+          onChange={(e) => void useProfiles.getState().setTarget(e.target.value as TargetProfile)}
+        >
+          {TARGETS.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </Select>
+      </Field>
 
       <div className="flex flex-col gap-1">
         <Progress
@@ -507,22 +507,7 @@ export function StatusView({
         </ul>
       )}
 
-      {s.entries.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <h4 className="m-0 text-xs font-semibold text-fg-muted">Ticked</h4>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Ticked playlists">
-            {s.entries.map((e) => (
-              <li key={e.playlistId} className="flex items-baseline justify-between gap-4">
-                <span className="min-w-0 truncate text-sm">
-                  {e.pathText}
-                  {e.isFolder ? "/" : ""}
-                </span>
-                <span className="shrink-0 text-xs text-fg-muted tabular-nums">{e.freesText}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <PlaylistTicks status={s} />
 
       {s.playlists.length > 0 && (
         <div className="flex flex-col gap-1">
@@ -537,6 +522,53 @@ export function StatusView({
         </div>
       )}
     </Card>
+  );
+}
+
+/** The library's playlists with the selected stick's ticks; a ticked folder covers what's under it. */
+function PlaylistTicks({ status: s }: { status: ProfileStatus }) {
+  const nodes = usePlaylists((p) => p.nodes);
+  const ticks = useProfiles((p) => p.ticks);
+  if (nodes.length === 0) {
+    return <p className="m-0 text-sm text-fg-muted">The library has no playlists yet.</p>;
+  }
+  if (ticks === null) return <Progress aria-label="Reading the stick's playlists" />;
+  const covered = coveredIds(nodes, ticks);
+  const frees = new Map(s.entries.map((e) => [e.playlistId, e.freesText]));
+  return (
+    <div className="flex flex-col gap-1">
+      <h4 className="m-0 text-xs font-semibold text-fg-muted">Playlists on this stick</h4>
+      <Card role="group" aria-label="Playlists on this stick" divided={false} className="py-1">
+        {nodes.map((n) => {
+          const implied = covered.has(n.id);
+          return (
+            <label
+              key={n.id}
+              className="flex h-(--row-h) items-center gap-2 pr-2 text-md"
+              style={{ paddingLeft: 8 + n.depth * INDENT }}
+              title={
+                n.isFolder ? "A folder takes every playlist under it, also later ones" : undefined
+              }
+            >
+              <Checkbox
+                checked={implied || ticks.has(n.id)}
+                disabled={implied}
+                onChange={() => void useProfiles.getState().toggleTick(n.id, nodes)}
+              />
+              <span className="flex-1 truncate">{n.name}</span>
+              {n.smart && (
+                <Badge variant="muted" title="Written as a fixed list of its current tracks">
+                  Smart
+                </Badge>
+              )}
+              <span className="text-xs text-fg-subtle tabular-nums">
+                {frees.get(n.id) ?? (n.isFolder ? "folder" : n.entries)}
+              </span>
+            </label>
+          );
+        })}
+      </Card>
+    </div>
   );
 }
 

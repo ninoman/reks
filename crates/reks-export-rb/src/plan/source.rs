@@ -130,6 +130,7 @@ pub fn load(lib: &Library, sel: &Selection) -> reks_core::Result<Sources> {
             is_folder: n.is_folder,
             track_ids,
             smart: n.smart && inside.contains(&n.id),
+            left_out: Vec::new(),
         });
     }
     Ok(out)

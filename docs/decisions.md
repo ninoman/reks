@@ -1685,7 +1685,7 @@ Date of decisions: 2026-10-18.
 
 ## D42. Simpler USB export: one Sticks entry point, settings out of the wizard, track problems never block
 
-- Date: 2026-11-05. Status: proposed. Wireframe:
+- Date: 2026-11-05. Status: accepted and implemented (2026-11-05). Wireframe:
   [`wireframes/export-simplified.html`](wireframes/export-simplified.html).
   Changes Phase 2 task 4's blocking rule and task 10's wizard, and the UI
   side of D27 (Devices view). D23 (history) and the plan/apply split are
@@ -1739,8 +1739,34 @@ Date of decisions: 2026-10-18.
   a stick written with left-out tracks may surprise if the user skims the
   review (mitigated by the button count and report); the settings migration
   must keep existing users' current option values.
+- Implementation (2026-11-05):
+  - Settings live in one row, `export.settings` (`reks_core::settings::ExportSettings`);
+    `ExportOptions::from_settings` and `export_default_options(target)` build an
+    export's options from it, the analysis source and the stick's target.
+    `MissingAnalysis` moved to `reks-core` beside `AnlzPreference`.
+  - Defaults for a fresh library: tracks without analysis get approximate
+    analysis (`Generate`), OneLibrary and active loops off, dividers on,
+    clean-up on, artwork off (unchanged). This changes D14's and D22's "on by
+    default" for OneLibrary and active loops. Migration 16 seeds the row with
+    both on for a library that already has tracks or sticks, so existing
+    users' exports keep what they had.
+  - `Warning::Skipped { track_id, reason: SkipReason, detail }`, one per
+    track; the dry run groups them per reason into `DryRun::issues`
+    (`Issue { kind, title, detail, kept_text, track_ids, tracks, actions }`,
+    `IssueAction` a tagged union), with `PlannedPlaylist::left_out` saying
+    which playlists each left-out track is missing from. `Problem::SourceMissing`,
+    `SourceUnreadable` and `Unsupported` are gone. Tracks with generated
+    analysis are an `approximateAnalysis` issue (Analyse now / Leave them out).
+  - "Remove from playlists" is a new playlist edit, `PlaylistOp::RemoveTracks`,
+    on the existing `playlists_mutate` command; a smart playlist or folder
+    refuses the whole edit.
+  - CLI: `--skip-unsupported`, `--no-active-loops` and `--no-onelibrary` are
+    gone; `--active-loops` and `--onelibrary` turn them on.
+  - The report repeats left-out tracks (`ReportView::left_out`) without the
+    fix buttons; fixing from the report is left for later.
 - Open: keep Discard for history at all; OneLibrary global or per stick;
-  whether to keep "Start the first loop automatically" in the UI.
+  whether to keep "Start the first loop automatically" in the UI; fixes in
+  the report.
 
 ## Open risks (cross-cutting)
 

@@ -1,20 +1,18 @@
 /**
- * USB export wizard (phase 2 task 10): device → playlists → options → dry
- * run → writing → report. The stick must be a known stick (task 15, D27):
- * its saved profile ticks the playlists, leaving the playlists step saves
- * the ticks as its profile (`profile_set_selection`), and leaving the
- * options step saves the target. Entering the dry-run step asks Rust for the
- * plan (`export_plan`); going back and forward plans again, and a newer plan
- * drops older answers. Export writes exactly the plan the dry run shows
+ * USB export (phase 2 task 10, D42): review → writing → done, for one known
+ * stick. The stick's playlists (its profile, D27) and "Plays on" are set in
+ * the Sticks view; the other options come from Settings › Export
+ * (`export_default_options`). Opening plans at once (`export_plan`); a newer
+ * plan drops older answers. Export writes exactly the plan the review shows
  * (`export_apply` with its `planId`) and records the sync in the stick's
- * profile; the wizard can't be closed while it runs. When the dry run finds
- * play history sessions the library has not imported (the export guard,
- * Phase 2.5), `chooseHistory` records the user's choice and plans again;
- * going back withdraws it. The options open as Rust's defaults
- * (`export_default_options`), with the analysis source (`anlzPreference`)
- * from the app setting; changing it saves the setting. When the export
- * would delete the stick's `exportLibrary.db`, `confirmOnelibraryRemoval`
- * records the user's confirmation and plans again.
+ * profile; the dialog can't be closed while it runs.
+ *
+ * Track problems never block: the review lists them as issues with fixes.
+ * A fix that runs elsewhere (find files, convert, analyse) hides the dialog
+ * while it runs and plans again when it is done; "Remove from playlists"
+ * edits the library and plans again; "Keep as it is" only collapses a card.
+ * The export guard (unimported play history) and the OneLibrary removal
+ * confirmation stay choices made in the review.
  */
 import { create } from "zustand";
 
@@ -31,51 +29,48 @@ import {
   exportDefaultOptions,
   exportPlan,
   type HistoryPolicy,
-  type PlaylistNode,
+  type IssueKind,
+  type IssueTrack,
+  pickFolder,
   profileSelection,
-  profileSetSelection,
-  profileSetTarget,
 } from "../lib/ipc";
+import { isIdle, useAnalysis } from "./analysis";
+import { useConverter } from "./converter";
 import { useDevices } from "./devices";
 import { usePlaylists } from "./playlists";
+import { useProfiles } from "./profiles";
+import { useRelocate } from "./relocate";
 import { useSettings } from "./settings";
 
-export type ExportStep =
-  | "closed"
-  | "device"
-  | "playlists"
-  | "options"
-  | "dryRun"
-  | "writing"
-  | "report";
+export type ExportStep = "closed" | "review" | "writing" | "done";
 
-export const EXPORT_STEPS: Exclude<ExportStep, "closed">[] = [
-  "device",
-  "playlists",
-  "options",
-  "dryRun",
-  "writing",
-  "report",
-];
+export const EXPORT_STEPS: Exclude<ExportStep, "closed">[] = ["review", "writing", "done"];
 
-/** Ejecting the stick from the report step. */
+/** Ejecting the stick from the done step. */
 export interface EjectState {
   state: "idle" | "ejecting" | "done" | "failed";
   /** "REKS ejected. You can remove it." or the error. */
   message: string | null;
 }
 
+/** A fix that runs in another dialog; the export dialog waits hidden. */
+export type ExternalFix = "findFiles" | "convert" | "analyse" | "settings";
+
 interface ExportWizardState {
   step: ExportStep;
   mountPoint: string | null;
-  /** The known stick at `mountPoint` (its profile); null until identified. */
+  /** The known stick at `mountPoint`. */
   device: Device | null;
-  /** Ticked playlists and folders. */
-  checked: ReadonlySet<number>;
-  /** null until Rust's defaults arrive. */
+  /** The stick's ticked playlists (its profile). */
+  selection: ExportSelection | null;
+  /** null until the defaults arrive. */
   options: ExportOptions | null;
   dryRun: DryRun | null;
   planning: boolean;
+  /** Issue cards collapsed with "Keep as it is". */
+  kept: ReadonlySet<IssueKind>;
+  /** A fix running in another dialog; the export dialog is hidden meanwhile. */
+  away: ExternalFix | null;
   /** Latest progress of the running export. */
   progress: ExportProgress | null;
   cancelling: boolean;
@@ -83,81 +78,48 @@ interface ExportWizardState {
   eject: EjectState;
   error: string | null;
 
-  open(init?: { mountPoint?: string | null; playlists?: number[] }): Promise<void>;
+  /** Opens the review for the known stick at `mountPoint`. */
+  open(mountPoint: string): Promise<void>;
   close(): void;
-  setDevice(mountPoint: string): void;
-  /** The stick at `mountPoint` is `device`: tick its profile and take its target. */
-  takeProfile(device: Device): Promise<void>;
-  /** Ticks or unticks a playlist or folder. */
-  toggle(id: number): void;
-  setOptions(patch: Partial<ExportOptions>): void;
+  /** Plans again with the current options (after a fix). */
+  replan(): Promise<void>;
+  /** "Keep as it is" on one card, or every card when `kind` is null. */
+  keep(kind: IssueKind | null): void;
+  /** Leaves this run's tracks without analysis out (the approximate-analysis card). */
+  leaveOutUnanalysed(): Promise<void>;
+  /** Removes `tracks` from the stick's playlists they are in (the confirmed card action). */
+  removeFromPlaylists(tracks: IssueTrack[]): Promise<void>;
+  /** Runs a fix in its own dialog, then plans again. */
+  runFix(fix: Exclude<ExternalFix, "settings">, trackIds: number[]): Promise<void>;
+  /** "Change…": Settings › Export, then plans again with the new settings. */
+  changeSettings(): Promise<void>;
   /**
-   * Export guard (dry-run step): what happens to the stick's unimported sessions. `discard`
-   * counts as its explicit confirmation. Plans again.
+   * Export guard: what happens to the stick's unimported sessions. `discard` counts as its
+   * explicit confirmation. Plans again.
    */
-  chooseHistory(policy: HistoryPolicy, nodes: PlaylistNode[]): Promise<void>;
-  /** Dry-run step: the user confirmed deleting the stick's `exportLibrary.db`. Plans again. */
-  confirmOnelibraryRemoval(nodes: PlaylistNode[]): Promise<void>;
-  next(nodes: PlaylistNode[]): Promise<void>;
-  back(): void;
-  /** Plans again (dry-run step). */
-  replan(nodes: PlaylistNode[]): Promise<void>;
-  /** Writes the shown plan (dry-run step, when it is ready). */
+  chooseHistory(policy: HistoryPolicy): Promise<void>;
+  /** The user confirmed deleting the stick's `exportLibrary.db`. Plans again. */
+  confirmOnelibraryRemoval(): Promise<void>;
+  /** Writes the shown plan (when it is ready). */
   startExport(): Promise<void>;
   /** Asks the running export to stop. */
   cancelExport(): Promise<void>;
-  /** Report step: back to a fresh dry run. */
-  planAgain(nodes: PlaylistNode[]): Promise<void>;
-  /** Report step: ejects the stick. */
+  /** Done step, after problems: back to a fresh review. */
+  backToReview(): Promise<void>;
+  /** Done step: ejects the stick. */
   ejectStick(): Promise<void>;
-}
-
-/** Ids that a ticked folder above them already covers. */
-export function coveredIds(nodes: PlaylistNode[], checked: ReadonlySet<number>): Set<number> {
-  const covered = new Set<number>();
-  // Depth first: a parent comes before its children.
-  for (const n of nodes) {
-    if (n.parentId !== null && (checked.has(n.parentId) || covered.has(n.parentId))) {
-      covered.add(n.id);
-    }
-  }
-  return covered;
-}
-
-/** The ticked nodes no ticked folder covers, in tree order: the `Selection`. */
-export function selectionOf(nodes: PlaylistNode[], checked: ReadonlySet<number>): ExportSelection {
-  const covered = coveredIds(nodes, checked);
-  return {
-    playlists: nodes.filter((n) => checked.has(n.id) && !covered.has(n.id)).map((n) => n.id),
-  };
-}
-
-/** Whether `step` has what it needs to go on. */
-export function canContinue(
-  s: Pick<ExportWizardState, "step" | "mountPoint" | "device" | "checked" | "options">,
-  nodes: PlaylistNode[],
-): boolean {
-  if (s.options === null) return false;
-  switch (s.step) {
-    case "device":
-      return s.mountPoint !== null && s.device !== null;
-    case "playlists":
-      return selectionOf(nodes, s.checked).playlists.length > 0;
-    case "options":
-      return s.options.history !== "discard" || s.options.discardHistoryConfirmed;
-    default:
-      return false;
-  }
 }
 
 const idle = {
   step: "closed" as ExportStep,
   mountPoint: null,
   device: null as Device | null,
-  checked: new Set<number>() as ReadonlySet<number>,
+  selection: null as ExportSelection | null,
   options: null as ExportOptions | null,
   dryRun: null,
   planning: false,
+  kept: new Set<IssueKind>() as ReadonlySet<IssueKind>,
+  away: null as ExternalFix | null,
   progress: null,
   cancelling: false,
   report: null,
@@ -166,30 +128,60 @@ const idle = {
 };
 
 let generation = 0;
-/** Bumped by `open` and `close`, so late defaults never reach another opening. */
-let opening = 0;
+
+/** The known stick plugged in at `mountPoint`, if identified. */
+function knownAt(mountPoint: string): Device | null {
+  const match = useProfiles.getState().mounted[mountPoint]?.match;
+  return match?.type === "known" ? match.device : null;
+}
+
+/** Resolves once `done` holds for `store`'s state (checked on every change). */
+function waitFor<S>(
+  store: { getState(): S; subscribe(f: (s: S) => void): () => void },
+  done: (s: S) => boolean,
+): Promise<void> {
+  return new Promise((resolve) => {
+    if (done(store.getState())) return resolve();
+    const stop = store.subscribe((s) => {
+      if (done(s)) {
+        stop();
+        resolve();
+      }
+    });
+  });
+}
 
 export const useExportWizard = create<ExportWizardState>((set, get) => ({
   ...idle,
 
-  async open(init) {
-    generation++;
-    const mine = ++opening;
-    set({
-      ...idle,
-      step: "device",
-      mountPoint: init?.mountPoint ?? null,
-      checked: new Set(init?.playlists ?? []),
-    });
+  async open(mountPoint) {
+    if (get().step === "writing") return;
+    const mine = ++generation;
+    const device = knownAt(mountPoint);
+    set({ ...idle, step: "review", mountPoint, device, planning: true });
+    if (device === null) {
+      set({ planning: false, error: "Set this stick up in Sticks first." });
+      return;
+    }
     try {
-      const defaults = await exportDefaultOptions();
-      if (mine !== opening) return;
-      const anlzPreference =
-        useSettings.getState().settings?.anlzPreference ?? defaults.anlzPreference;
-      const target = get().device?.target ?? defaults.target;
-      set({ options: { ...defaults, anlzPreference, target } });
+      const [selection, options] = await Promise.all([
+        profileSelection(device.id),
+        exportDefaultOptions(device.target),
+      ]);
+      if (mine !== generation) return;
+      set({ selection, options });
+      if (selection.playlists.length === 0) {
+        set({
+          planning: false,
+          error: `No playlists are ticked for ${device.name}. Tick some in Sticks.`,
+        });
+        return;
+      }
+      await get().replan();
     } catch (e) {
-      if (mine === opening) set({ error: `Could not read the export options: ${String(e)}` });
+      if (mine === generation) {
+        set({ planning: false, error: `Could not read the stick's settings: ${String(e)}` });
+      }
     }
   },
 
@@ -197,55 +189,101 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
     // The export runs to its end; the user can cancel it instead.
     if (get().step === "writing") return;
     generation++;
-    opening++;
     set(idle);
   },
 
-  setDevice(mountPoint) {
-    if (mountPoint !== get().mountPoint) set({ mountPoint, device: null });
-  },
-
-  async takeProfile(device) {
-    if (get().device?.id === device.id) return;
+  async replan() {
+    const { mountPoint, device, selection, options } = get();
+    if (mountPoint === null || selection === null || options === null) return;
     const mine = ++generation;
-    const options = get().options;
-    // Before the defaults arrive, `open` takes the target from `device`.
-    set({ device, options: options && { ...options, target: device.target }, error: null });
+    set({ planning: true, error: null });
     try {
-      const sel = await profileSelection(device.id);
-      // An empty profile keeps what the wizard opened with (the sidebar's selection).
-      if (mine === generation && sel.playlists.length > 0) {
-        set({ checked: new Set(sel.playlists) });
-      }
+      const dryRun = await exportPlan(mountPoint, selection, options, device?.id ?? null);
+      if (mine === generation) set({ dryRun, planning: false });
     } catch (e) {
-      if (mine === generation) set({ error: `Could not read the stick's playlists: ${String(e)}` });
+      if (mine === generation) set({ planning: false, error: `Could not plan: ${String(e)}` });
     }
   },
 
-  toggle(id) {
-    const checked = new Set(get().checked);
-    if (!checked.delete(id)) checked.add(id);
-    set({ checked });
+  keep(kind) {
+    const kinds = kind === null ? (get().dryRun?.issues.map((i) => i.kind) ?? []) : [kind];
+    set({ kept: new Set([...get().kept, ...kinds]) });
   },
 
-  setOptions(patch) {
-    const current = get().options;
-    if (current === null) return;
-    const options = { ...current, ...patch };
-    // Leaving `discard` withdraws the confirmation; it is given for one choice.
-    if (options.history !== "discard") options.discardHistoryConfirmed = false;
-    // The guard's choice and the OneLibrary confirmation are made in the dry run, knowing the stick.
-    if (patch.historyChosen === undefined) options.historyChosen = false;
-    if (patch.onelibraryRemovalConfirmed === undefined) options.onelibraryRemovalConfirmed = false;
-    set({ options });
-    if (patch.anlzPreference !== undefined) {
-      void useSettings.getState().update({ anlzPreference: patch.anlzPreference });
-    }
-  },
-
-  async chooseHistory(policy, nodes) {
+  async leaveOutUnanalysed() {
     const options = get().options;
-    if (get().step !== "dryRun" || get().planning || options === null) return;
+    if (options === null || get().planning) return;
+    set({ options: { ...options, missingAnalysis: "skip" } });
+    await get().replan();
+  },
+
+  async removeFromPlaylists(tracks) {
+    if (get().planning) return;
+    const playlistIds = [...new Set(tracks.flatMap((t) => t.playlists))];
+    const trackIds = tracks.filter((t) => t.playlists.length > 0).map((t) => t.trackId);
+    if (playlistIds.length === 0 || trackIds.length === 0) return;
+    const outcome = await usePlaylists
+      .getState()
+      .mutate({ type: "removeTracks", playlistIds, trackIds });
+    if (outcome === null) {
+      set({ error: `Could not remove the tracks: ${usePlaylists.getState().error ?? ""}` });
+      return;
+    }
+    await get().replan();
+  },
+
+  async runFix(fix, trackIds) {
+    if (get().step !== "review" || get().planning || get().away !== null) return;
+    set({ away: fix });
+    if (fix === "findFiles") {
+      // The folder picker comes first; cancelling it opens nothing.
+      const dir = await pickFolder("Find missing files in…");
+      if (dir) {
+        await useRelocate.getState().start({ kind: "tracks", ids: trackIds }, dir);
+        await waitFor(useRelocate, (s) => s.step === "closed");
+      }
+    } else if (fix === "convert") {
+      useConverter.getState().open(trackIds, "olderPlayers");
+      await waitFor(useConverter, (s) => s.step === "closed");
+    } else {
+      await useAnalysis.getState().reanalyse(trackIds);
+      // No status: analysis is off; nothing to wait for.
+      await waitFor(useAnalysis, (s) => s.error !== null || s.status === null || isIdle(s.status));
+    }
+    if (get().away !== fix) return;
+    set({ away: null });
+    await get().replan();
+  },
+
+  async changeSettings() {
+    const { step, planning, away, device, options } = get();
+    if (step !== "review" || planning || away !== null || device === null) return;
+    set({ away: "settings" });
+    useSettings.getState().setDialogOpen(true, "export");
+    await waitFor(useSettings, (s) => !s.dialogOpen);
+    if (get().away !== "settings") return;
+    try {
+      const fresh = await exportDefaultOptions(device.target);
+      // The run's own choices stay; everything the settings decide is fresh.
+      set({
+        away: null,
+        options: options && {
+          ...fresh,
+          history: options.history,
+          historyChosen: options.historyChosen,
+          discardHistoryConfirmed: options.discardHistoryConfirmed,
+        },
+      });
+    } catch (e) {
+      set({ away: null, error: `Could not read the export settings: ${String(e)}` });
+      return;
+    }
+    await get().replan();
+  },
+
+  async chooseHistory(policy) {
+    const options = get().options;
+    if (get().step !== "review" || get().planning || options === null) return;
     set({
       options: {
         ...options,
@@ -254,75 +292,30 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
         discardHistoryConfirmed: policy === "discard",
       },
     });
-    await get().replan(nodes);
+    await get().replan();
   },
 
-  async confirmOnelibraryRemoval(nodes) {
+  async confirmOnelibraryRemoval() {
     const options = get().options;
-    if (get().step !== "dryRun" || get().planning || options === null) return;
+    if (get().step !== "review" || get().planning || options === null) return;
     set({ options: { ...options, onelibraryRemovalConfirmed: true } });
-    await get().replan(nodes);
-  },
-
-  async next(nodes) {
-    const s = get();
-    if (!canContinue(s, nodes)) return;
-    const i = EXPORT_STEPS.indexOf(s.step as (typeof EXPORT_STEPS)[number]);
-    const step = EXPORT_STEPS[i + 1];
-    if (step === undefined) return;
-    if (!(await saveProfile(s, nodes))) return;
-    set({ step, error: null });
-    if (step === "dryRun") await get().replan(nodes);
-  },
-
-  back() {
-    if (get().step === "writing" || get().step === "report") return;
-    const i = EXPORT_STEPS.indexOf(get().step as (typeof EXPORT_STEPS)[number]);
-    const step = EXPORT_STEPS[i - 1];
-    if (step === undefined) return;
-    generation++;
-    // Going back withdraws the dry run's choices; `import` has no option of its own.
-    const o = get().options;
-    const options: ExportOptions | null = o && {
-      ...o,
-      history: o.history === "import" ? "backUp" : o.history,
-      historyChosen: false,
-      onelibraryRemovalConfirmed: false,
-    };
-    set({ step, options, dryRun: null, planning: false, error: null });
-  },
-
-  async replan(nodes) {
-    const { mountPoint, device, checked, options } = get();
-    if (mountPoint === null || options === null) return;
-    const mine = ++generation;
-    set({ planning: true, dryRun: null, error: null });
-    try {
-      const dryRun = await exportPlan(
-        mountPoint,
-        selectionOf(nodes, checked),
-        options,
-        device?.id ?? null,
-      );
-      if (mine === generation) set({ dryRun, planning: false });
-    } catch (e) {
-      if (mine === generation) set({ planning: false, error: `Could not plan: ${String(e)}` });
-    }
+    await get().replan();
   },
 
   async startExport() {
     const { step, dryRun, planning } = get();
-    if (step !== "dryRun" || planning || dryRun === null || !dryRun.ready) return;
+    if (step !== "review" || planning || dryRun === null || !dryRun.ready) return;
     const mine = ++generation;
     set({ step: "writing", progress: null, cancelling: false, report: null, error: null });
     try {
       const report = await exportApply(dryRun.planId, (progress) => {
         if (mine === generation) set({ progress });
       });
-      if (mine === generation) set({ step: "report", report });
+      if (mine === generation) set({ step: "done", report });
     } catch (e) {
-      if (mine === generation) set({ step: "report", error: `Could not export: ${String(e)}` });
+      if (mine === generation) set({ step: "done", error: `Could not export: ${String(e)}` });
     }
+    void useProfiles.getState().loadStatus();
   },
 
   async cancelExport() {
@@ -336,22 +329,31 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
     }
   },
 
-  async planAgain(nodes) {
-    if (get().step !== "report") return;
+  async backToReview() {
+    if (get().step !== "done") return;
+    const options = get().options;
     set({
-      step: "dryRun",
+      step: "review",
       report: null,
       progress: null,
       eject: idle.eject,
       error: null,
+      kept: idle.kept,
+      // The guard's and the OneLibrary choices were for the run just made.
+      options: options && {
+        ...options,
+        history: options.history === "import" ? "backUp" : options.history,
+        historyChosen: false,
+        onelibraryRemovalConfirmed: false,
+      },
     });
-    await get().replan(nodes);
+    await get().replan();
   },
 
   async ejectStick() {
     const { step, report, mountPoint, eject } = get();
     const target = report?.mountPoint ?? mountPoint;
-    if (step !== "report" || target === null || eject.state === "ejecting") return;
+    if (step !== "done" || target === null || eject.state === "ejecting") return;
     const name = report?.deviceName ?? target;
     set({ eject: { state: "ejecting", message: null } });
     try {
@@ -364,36 +366,8 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
   },
 }));
 
-/**
- * Saves what the step being left set on the stick's profile: the ticks
- * (playlists step) or the target (options step). False, with the error
- * shown, when saving failed.
- */
-async function saveProfile(
-  s: Pick<ExportWizardState, "step" | "device" | "checked" | "options">,
-  nodes: PlaylistNode[],
-): Promise<boolean> {
-  const device = s.device;
-  if (device === null) return true;
-  try {
-    if (s.step === "playlists") {
-      await profileSetSelection(device.id, selectionOf(nodes, s.checked).playlists);
-    } else if (s.step === "options" && s.options !== null && s.options.target !== device.target) {
-      const saved = await profileSetTarget(device.id, s.options.target);
-      useExportWizard.setState({ device: saved });
-    }
-    return true;
-  } catch (e) {
-    useExportWizard.setState({ error: `Could not save the stick's profile: ${String(e)}` });
-    return false;
-  }
-}
-
-/** Opens the wizard with the sidebar's selected playlist or folder ticked. */
-export function openExportWizard(mountPoint: string | null = null) {
-  const selected = usePlaylists.getState().tree.selectedId;
-  void useExportWizard.getState().open({
-    mountPoint,
-    playlists: selected === null ? [] : [selected],
-  });
+/** Opens the review for the known stick at `mountPoint` (closing the Sticks view). */
+export function openExportWizard(mountPoint: string) {
+  useDevices.getState().setDialogOpen(false);
+  void useExportWizard.getState().open(mountPoint);
 }

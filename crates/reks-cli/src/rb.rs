@@ -3,9 +3,9 @@
 //! ```text
 //! reks rb plan <stick> --library <library.sqlite> --playlist <id | Folder/Name>...
 //!              [--target nxs|nxs2|3000|xdj-xz|generic] [--missing-analysis skip|generate|without]
-//!              [--keep-stale] [--artwork] [--skip-unsupported]
+//!              [--keep-stale] [--artwork]
 //!              [--import-history|--backup-history|--discard-history]
-//!              [--no-dividers] [--no-active-loops] [--no-onelibrary]
+//!              [--no-dividers] [--active-loops] [--onelibrary]
 //!              [--confirm-onelibrary-removal] [--anlz-root <dir>]...
 //!              [--anlz rekordbox-first|reks-first|rekordbox-only] [--cache-dir <dir>] [--json]
 //!     print the dry run; exits non-zero when the plan is blocked
@@ -29,10 +29,12 @@
 //! only) or `--discard-history` (erase them, no backup) chooses; without
 //! unimported sessions the Phase 2 backup runs anyway.
 //! `--discard-history` is also the explicit confirmation `Discard` needs.
-//! Dividers, active loops and OneLibrary are on by default and UNVERIFIED on
-//! players (D7, D14, D22, 2026-10-30); the `--no-…` flags turn them off.
+//! Dividers are on by default (`--no-dividers` turns them off); active loops
+//! and OneLibrary are off (`--active-loops`, `--onelibrary`, D42). All three
+//! are UNVERIFIED on players. Tracks with missing, unreadable or unsupported
+//! files are left out and listed; they never block (D42).
 //! OneLibrary needs a key (`REKS_ONELIBRARY_KEY` or a release build); without
-//! one, or with `--no-onelibrary`, a stick's `exportLibrary.db` is deleted and
+//! one, or without `--onelibrary`, a stick's `exportLibrary.db` is deleted and
 //! the plan blocks until `--confirm-onelibrary-removal`.
 //! `--anlz-root` replaces rekordbox's default analysis folders. `--anlz` says
 //! whose analysis wins when both rekordbox and reks have a track (default:
@@ -71,9 +73,9 @@ use serde::Serialize;
 
 const USAGE: &str = "usage: reks rb plan <stick> --library <library.sqlite> \
 --playlist <id|Folder/Name>... [--target nxs|nxs2|3000|xdj-xz|generic] \
-[--missing-analysis skip|generate|without] [--keep-stale] [--artwork] [--skip-unsupported] \
-[--import-history|--backup-history|--discard-history] [--no-dividers] [--no-active-loops] \
-[--no-onelibrary] [--confirm-onelibrary-removal] [--anlz-root <dir>]... [--json]
+[--missing-analysis skip|generate|without] [--keep-stale] [--artwork] \
+[--import-history|--backup-history|--discard-history] [--no-dividers] [--active-loops] \
+[--onelibrary] [--confirm-onelibrary-removal] [--anlz-root <dir>]... [--json]
        reks rb export <stick> <plan flags> [--yes] [--data-dir <dir>]
        reks rb validate <stick> <plan flags>
        reks rb history <stick> [--json]
@@ -442,12 +444,11 @@ fn parse_plan_args(flags: &[String], cmd: Command) -> anyhow::Result<PlanArgs> {
             "--cache-dir" => cache_dir = Some(PathBuf::from(value()?)),
             "--keep-stale" => opts.keep_stale = true,
             "--artwork" => opts.artwork = true,
-            // On by default and UNVERIFIED on players (D7, D14, D22).
+            // UNVERIFIED on players; dividers on by default, the others off (D42).
             "--no-dividers" => opts.dividers = false,
-            "--no-active-loops" => opts.active_loops = false,
-            "--no-onelibrary" => opts.onelibrary = false,
+            "--active-loops" => opts.active_loops = true,
+            "--onelibrary" => opts.onelibrary = true,
             "--confirm-onelibrary-removal" => opts.onelibrary_removal_confirmed = true,
-            "--skip-unsupported" => opts.skip_unsupported = true,
             "--import-history" | "--backup-history" | "--discard-history" => {
                 let policy = match flag.as_str() {
                     "--import-history" => HistoryPolicy::Import,
@@ -1018,17 +1019,17 @@ mod tests {
         let d = parse_plan_args(&args("--library l --playlist x"), Command::Plan).unwrap();
         assert_eq!(d.opts, ExportOptions::default());
         assert_eq!(d.anlz_roots, None);
-        assert!(d.opts.dividers && d.opts.active_loops && d.opts.onelibrary);
-        let off = parse_plan_args(
+        assert!(d.opts.dividers && !d.opts.active_loops && !d.opts.onelibrary);
+        let flipped = parse_plan_args(
             &args(
-                "--library l --playlist x --no-dividers --no-active-loops --no-onelibrary \
+                "--library l --playlist x --no-dividers --active-loops --onelibrary \
                  --confirm-onelibrary-removal",
             ),
             Command::Plan,
         )
         .unwrap();
-        assert!(!off.opts.dividers && !off.opts.active_loops && !off.opts.onelibrary);
-        assert!(off.opts.onelibrary_removal_confirmed);
+        assert!(!flipped.opts.dividers && flipped.opts.active_loops && flipped.opts.onelibrary);
+        assert!(flipped.opts.onelibrary_removal_confirmed);
         assert!(
             parse_plan_args(&args("--library l --playlist x --dividers"), Command::Plan).is_err()
         );
@@ -1292,7 +1293,7 @@ mod tests {
         fs::create_dir_all(&stick_root).unwrap();
         let a = parse_plan_args(
             &args(&format!(
-                "--library {} --playlist Gigs/Friday --missing-analysis generate --no-onelibrary \
+                "--library {} --playlist Gigs/Friday --missing-analysis generate \
                  --anlz-root {}",
                 db.display(),
                 tmp.path().join("none").display()

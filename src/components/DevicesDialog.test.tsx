@@ -13,6 +13,11 @@ vi.mock("../lib/ipc", () => ({
   profileCreate: vi.fn(),
   profileLink: vi.fn(),
   profileStatus: vi.fn(),
+  profileSelection: vi.fn(),
+  profileSetSelection: vi.fn(),
+  profileSetTarget: vi.fn(),
+  exportDefaultOptions: vi.fn(),
+  exportPlan: vi.fn(),
   playlistsGet: vi.fn(),
 }));
 
@@ -28,7 +33,8 @@ const { useDevices } = await import("../store/devices");
 const { useProfiles } = await import("../store/profiles");
 const { useExportWizard } = await import("../store/exportWizard");
 const { useAdopt } = await import("../store/adopt");
-const { DeviceList, DevicesDialog } = await import("./DevicesDialog");
+const { usePlaylists } = await import("../store/playlists");
+const { DevicesDialog } = await import("./DevicesDialog");
 
 const stick = (over: Partial<DeviceInfo> = {}): DeviceInfo => ({
   mountPoint: "/Volumes/REKS",
@@ -117,7 +123,58 @@ beforeEach(() => {
   profileCreate.mockReset();
   profileLink.mockReset();
   profileStatus.mockReset().mockResolvedValue(status());
-  useProfiles.setState({ known: [], mounted: {}, selectedId: null, status: null, error: null });
+  vi.mocked(ipc.profileSelection)
+    .mockReset()
+    .mockResolvedValue({ playlists: [1] });
+  vi.mocked(ipc.profileSetSelection).mockReset().mockResolvedValue();
+  vi.mocked(ipc.profileSetTarget)
+    .mockReset()
+    .mockImplementation(async (_id, target) => device({ target }));
+  vi.mocked(ipc.exportDefaultOptions)
+    .mockReset()
+    .mockReturnValue(new Promise(() => {}));
+  usePlaylists.setState({
+    nodes: [
+      {
+        id: 1,
+        parentId: null,
+        name: "Set",
+        isFolder: true,
+        depth: 0,
+        position: 0,
+        entries: 0,
+        smart: false,
+      },
+      {
+        id: 2,
+        parentId: 1,
+        name: "Peak",
+        isFolder: false,
+        depth: 1,
+        position: 0,
+        entries: 2,
+        smart: false,
+      },
+      {
+        id: 5,
+        parentId: null,
+        name: "Other",
+        isFolder: false,
+        depth: 0,
+        position: 1,
+        entries: 4,
+        smart: false,
+      },
+    ],
+  });
+  useProfiles.setState({
+    known: [],
+    mounted: {},
+    selectedId: null,
+    status: null,
+    ticks: null,
+    error: null,
+  });
   useExportWizard.getState().close();
   useDevices.setState({
     dialogOpen: true,
@@ -190,19 +247,6 @@ describe("DevicesDialog", () => {
   });
 });
 
-describe("DeviceList as a picker", () => {
-  it("is a radio group that reports the chosen drive", async () => {
-    devicesList.mockResolvedValue([stick(), stick({ mountPoint: "/Volumes/GIGS", label: "GIGS" })]);
-    const onSelect = vi.fn();
-    render(<DeviceList selected="/Volumes/REKS" onSelect={onSelect} />);
-    const gigs = await screen.findByRole("radio", { name: "GIGS" });
-    expect((screen.getByRole("radio", { name: "REKS" }) as HTMLInputElement).checked).toBe(true);
-    expect((gigs as HTMLInputElement).checked).toBe(false);
-    fireEvent.click(gigs);
-    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ mountPoint: "/Volumes/GIGS" }));
-  });
-});
-
 describe("stick profiles", () => {
   it("shows a known stick's status, frees and capacity", async () => {
     devicesList.mockResolvedValue([stick()]);
@@ -220,11 +264,33 @@ describe("stick profiles", () => {
     expect(rows.getByText("Removed from the stick at the next sync")).toBeTruthy();
     expect(screen.getByText("Plugged in")).toBeTruthy();
 
-    // Edit and sync opens the wizard on this stick.
-    fireEvent.click(screen.getByRole("button", { name: "Edit and sync…" }));
-    expect(useExportWizard.getState().step).toBe("device");
+    // Sync opens the review on this stick.
+    // On the plugged-in drive's row and on the stick's profile.
+    const syncs = screen.getAllByRole("button", { name: "Sync Main" });
+    expect(syncs).toHaveLength(2);
+    fireEvent.click(syncs[0] as HTMLElement);
+    expect(useExportWizard.getState().step).toBe("review");
     expect(useExportWizard.getState().mountPoint).toBe("/Volumes/REKS");
     expect(useDevices.getState().dialogOpen).toBe(false);
+  });
+
+  it("ticks playlists and sets Plays on, saving each change", async () => {
+    devicesList.mockResolvedValue([stick()]);
+    profilesList.mockResolvedValue([device()]);
+    profileIdentify.mockResolvedValue({ type: "known", device: device() });
+    render(<DevicesDialog />);
+    const ticks = within(await screen.findByRole("group", { name: "Playlists on this stick" }));
+    // The ticked folder covers (and locks) what's under it, and shows what unticking frees.
+    const peak = ticks.getByRole("checkbox", { name: /Peak/ }) as HTMLInputElement;
+    expect(peak.checked && peak.disabled).toBe(true);
+    expect(ticks.getByText("Unticking frees 120.4 MB")).toBeTruthy();
+    fireEvent.click(ticks.getByRole("checkbox", { name: /Other/ }));
+    await waitFor(() => expect(vi.mocked(ipc.profileSetSelection)).toHaveBeenCalledWith(1, [1, 5]));
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Plays on" }), {
+      target: { value: "Cdj3000" },
+    });
+    await waitFor(() => expect(vi.mocked(ipc.profileSetTarget)).toHaveBeenCalledWith(1, "Cdj3000"));
   });
 
   it("an unplugged stick shows the last sync and can't be synced", async () => {
@@ -242,7 +308,7 @@ describe("stick profiles", () => {
     expect(await screen.findByText("As of the last sync, 2026-10-19 14:03 UTC")).toBeTruthy();
     expect(profileStatus).toHaveBeenLastCalledWith(1, null);
     expect(screen.getByText(/more than the stick's/).className).toContain("text-danger");
-    const sync = screen.getByRole("button", { name: "Edit and sync…" }) as HTMLButtonElement;
+    const sync = screen.getByRole("button", { name: "Sync Main" }) as HTMLButtonElement;
     expect(sync.disabled).toBe(true);
   });
 
