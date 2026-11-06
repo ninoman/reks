@@ -81,7 +81,7 @@ export function previewPixels(
   width: number,
   height: number,
   palette: PreviewPalette,
-): Uint8ClampedArray {
+): Uint8ClampedArray<ArrayBuffer> {
   const px = new Uint8ClampedArray(width * height * 4);
   const mid = height / 2;
   previewBars(payload, width, palette).forEach((bar, x) => {

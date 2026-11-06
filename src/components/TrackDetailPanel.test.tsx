@@ -51,6 +51,7 @@ function track(patch: Partial<Track> = {}): Track {
     artworkId: null,
     entryPosition: null,
     tags: [],
+    hotCues: [],
     path: "/music/old.mp3",
     fileSize: 1234,
     fileMtime: "2026-01-01T00:00:00.000Z",

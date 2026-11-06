@@ -48,6 +48,7 @@ function row(id: number, patch: Partial<TrackRow> = {}): TrackRow {
     artworkId: null,
     entryPosition: null,
     tags: [],
+    hotCues: [],
     ...patch,
   };
 }
