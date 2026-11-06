@@ -367,6 +367,7 @@ export function TrackTable({ columns: visible }: { columns: ColumnSpec[] }) {
                 {c.sort !== null && sort.column === c.sort ? (sort.descending ? " ▼" : " ▲") : ""}
                 <ResizeHandle
                   label={`Resize ${c.header || c.id} column`}
+                  rest="line"
                   min={COLUMN_MIN_WIDTH}
                   max={COLUMN_MAX_WIDTH}
                   value={c.width}

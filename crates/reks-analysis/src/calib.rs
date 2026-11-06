@@ -99,7 +99,9 @@ pub struct WaveformCalibration {
     /// Whiteness of a column with no band energy at all.
     pub silent_whiteness: u8,
     /// PWV5 colour: each band through its curve, then scaled so the largest
-    /// component is 7 (rekordbox's colours are normalised per column).
+    /// component is 7 (rekordbox's colours are normalised per column). The
+    /// UI's RGB waveform mixes with the same curves (`src/lib/waveDraw.ts`
+    /// `BAND_CURVES`); keep the two in step.
     pub color: [Curve; 3],
     /// PWV4 byte 0 (0..=127) from the mono peak over the preview column.
     pub pwv4_height: Curve,

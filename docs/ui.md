@@ -164,7 +164,7 @@ menu items `--menu-item-h`.
 | `Sheet` + `SheetHeader` | right-hand slide-over (non-modal, inside its parent) | Web Animations |
 | `ScrollArea` | themed scrollbars; not for the virtualised table | Radix ScrollArea |
 | `scroll-pane` (utility, `index.css`) | a native vertical scroller that keeps `--scrollbar-space` free at its end, so macOS overlay scrollbars never cover content; use it on anything that scrolls on its own (not the track table) | — |
-| `ResizeHandle` | drag-to-resize edge of its (positioned) parent: `edge`: right, left; `min`, `max`, `value`; arrow keys step 16 px, double-click resets; reports widths, the caller stores them | own (`role="separator"`) |
+| `ResizeHandle` | drag-to-resize edge of its (positioned) parent: `edge`: right, left; `rest`: hidden (default), line (hairline at rest); `min`, `max`, `value`; arrow keys step 16 px, double-click resets; reports widths, the caller stores them | own (`role="separator"`) |
 | `Separator` | `orientation` (decorative) | – |
 | `Field` | `orientation`: vertical, horizontal, inline; `active`; `hint`, `error` | – |
 | `Card` | `variant`: subtle, surface; `divided` | – |
@@ -210,7 +210,12 @@ rekordbox `PWV7`/`PWV3` via `reks_anlz::deckwave::entry_columns`;
 at a time decodes a track that has none, so an unanalysed track never holds
 up the rest.
 
-Column edges in the header drag to resize (`ResizeHandle`); a dragged column
+A header click sorts by that column ascending, the next descending, the third
+back to the view's own order (playlist position, else date added; `nextSort`
+in `store/library.ts`).
+
+Column edges in the header drag to resize (`ResizeHandle`, `rest="line"`: a
+hairline marks each edge at rest); a dragged column
 keeps its width (`fixed` in `fitColumnWidths`) while the others share the
 spare width, and a double-click gives back the default. The sidebar's right
 edge and the right-hand drawers' left edge (info panel, My Tags, Filters: one
@@ -480,7 +485,8 @@ Decks are one size in both modes
   the legend, [fx-select-knob.html](wireframes/fx-select-knob.html) (A).
 - Waveform style (Settings → Decks, `display.deck_waveform`), applied to both
   views live, on the player deck too: **RGB** (default since D30; mono height,
-  colour mixed from `waveform-rgb-low/mid/high` by band level), **3-band**
+  colour mixed from `waveform-rgb-low/mid/high` by band level through
+  rekordbox's fitted PWV5 colour curves, so mids read orange as on rekordbox), **3-band**
   (low/mid/high overlaid, `waveform-low/mid/high`) and **Blue** (mono height in `waveform-blue`, lightening to
   `waveform-blue-high` as highs dominate). All three come from the same
   analysis columns (close zoom: from the deck's detail, where 3-band mixes

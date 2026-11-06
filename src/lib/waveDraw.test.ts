@@ -25,10 +25,13 @@ describe("hexRgb", () => {
 });
 
 describe("mixColour", () => {
-  it("weights the colours by sharpened level and scales the top channel to the peak", () => {
+  it("weights the colours by rekordbox's band curves and scales the top channel to the peak", () => {
     const rgb = [hexRgb("#ff0000"), hexRgb("#00ff00"), hexRgb("#0000ff")];
     expect(mixColour(rgb, [0.5, 0, 0])).toBe("rgb(217 0 0)");
-    expect(mixColour(rgb, [0.4, 0.2, 0])).toBe("rgb(217 27 0)");
+    // Half the bass in the mids reads orange, not red.
+    expect(mixColour(rgb, [0.4, 0.2, 0])).toBe("rgb(217 106 0)");
+    // Highs are boosted (gain 1.66), as rekordbox's are.
+    expect(mixColour(rgb, [0.4, 0, 0.2])).toBe("rgb(215 0 217)");
     expect(mixColour(rgb, [0, 0, 0])).toBe("rgb(0 0 0)");
   });
 });

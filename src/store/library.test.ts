@@ -6,6 +6,7 @@ import {
   defaultSort,
   entryPosition,
   itemAt,
+  nextSort,
   PAGE_SIZE,
   type QueryInputs,
   rowAt,
@@ -138,5 +139,27 @@ describe("trackPages", () => {
     expect(trackPages(v, [0])).toEqual([]);
     expect(trackPages(v, [PAGE_SIZE])).toEqual([0]);
     expect(trackPages(v, [PAGE_SIZE + 1])).toEqual([1]);
+  });
+});
+
+describe("nextSort", () => {
+  const bpm = (descending: boolean) => ({ column: "bpm" as const, descending });
+  const position = { column: "playlistPosition" as const, descending: false };
+
+  it("cycles another column ascending, descending, then back to the view's order", () => {
+    expect(nextSort(defaultSort, "bpm", defaultSort)).toEqual(bpm(false));
+    expect(nextSort(bpm(false), "bpm", defaultSort)).toEqual(bpm(true));
+    expect(nextSort(bpm(true), "bpm", defaultSort)).toEqual(defaultSort);
+    expect(nextSort(bpm(true), "bpm", position)).toEqual(position);
+  });
+
+  it("flips the view's own column", () => {
+    expect(nextSort(defaultSort, "dateAdded", defaultSort)).toEqual({
+      column: "dateAdded",
+      descending: false,
+    });
+    expect(nextSort({ column: "dateAdded", descending: false }, "dateAdded", defaultSort)).toEqual(
+      defaultSort,
+    );
   });
 });
