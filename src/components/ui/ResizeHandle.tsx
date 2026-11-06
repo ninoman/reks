@@ -25,8 +25,16 @@ export const resizeHandleVariants = cva(
         right: "right-0 after:right-0",
         left: "left-0 after:left-0",
       },
+      /**
+       * `line`: a hairline at rest too, where nothing else marks the edge
+       * (table headers), centred in the grab area so it shows where to grab.
+       */
+      rest: {
+        hidden: "",
+        line: "after:inset-y-1.5 after:right-auto after:left-1/2 after:-translate-x-1/2 after:bg-border after:opacity-100 hover:after:bg-accent focus-visible:after:bg-accent data-[dragging]:after:bg-accent",
+      },
     },
-    defaultVariants: { edge: "right" },
+    defaultVariants: { edge: "right", rest: "hidden" },
   },
 );
 
@@ -36,6 +44,7 @@ const STEP = 16;
 export function ResizeHandle({
   label,
   edge = "right",
+  rest = "hidden",
   min,
   max,
   value,
@@ -45,6 +54,7 @@ export function ResizeHandle({
 }: {
   label: string;
   edge?: "left" | "right";
+  rest?: "hidden" | "line";
   min: number;
   max: number;
   /** The current width, when the caller knows it (else the parent is measured). */
@@ -100,7 +110,7 @@ export function ResizeHandle({
       tabIndex={0}
       title="Drag to resize, double-click to reset"
       data-dragging={dragging || undefined}
-      className={cn(resizeHandleVariants({ edge }), className)}
+      className={cn(resizeHandleVariants({ edge, rest }), className)}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}

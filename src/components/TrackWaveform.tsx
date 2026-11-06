@@ -58,7 +58,7 @@ export function TrackWaveform({
   return (
     <div
       ref={setBox}
-      className="relative size-full cursor-pointer py-1.5"
+      className="relative size-full cursor-pointer py-2.5"
       aria-hidden="true"
       onMouseDown={onMouseDown}
       onDoubleClick={(e) => e.stopPropagation()}
