@@ -74,21 +74,36 @@ function css([r, g, b]: [number, number, number]): string {
 }
 
 /**
- * Band levels are raised to this power before mixing so the dominant band sets
- * the hue; a linear mix of three similar levels washes out towards white.
+ * rekordbox's colour per band level: `clamp(gain × level)^gamma` for low,
+ * mid and high, then normalised so the loudest channel leads. These are the
+ * PWV5 colour curves fitted against rekordbox's own analysis
+ * (`reks-analysis::calib::CALIBRATION.color`, docs/analysis-parity/waveforms.md);
+ * keep the two in step. Near-linear: mids show as orange to yellow next to
+ * the bass, as on rekordbox, instead of the bass swamping them.
  */
-const MIX_SHARPNESS = 3;
+const BAND_CURVES: readonly [gain: number, gamma: number][] = [
+  [1.0, 1.121],
+  [0.906, 1.022],
+  [1.66, 0.922],
+];
 /** The strongest channel's level after mixing (0..255), below full to keep it from glaring. */
 const MIX_PEAK = 217;
 
+function bandWeight(band: number, level: number): number {
+  const [gain, gamma] = BAND_CURVES[band] ?? [1, 1];
+  const v = Math.min(1, Math.max(0, gain * level));
+  return v > 0 ? v ** gamma : 0;
+}
+
 /**
- * The band colours weighted by the band levels, scaled so the strongest
- * channel is `MIX_PEAK`: the hue says which bands dominate, the height says how loud.
+ * The band colours weighted by rekordbox's colour curves of the band levels,
+ * scaled so the strongest channel is `MIX_PEAK`: the hue says which bands
+ * dominate, the height says how loud.
  */
 export function mixColour(colours: [number, number, number][], weights: number[]): string {
   const rgb: [number, number, number] = [0, 0, 0];
   colours.forEach((c, i) => {
-    const w = (weights[i] ?? 0) ** MIX_SHARPNESS;
+    const w = bandWeight(i, weights[i] ?? 0);
     for (let k = 0; k < 3; k++) rgb[k] = (rgb[k] ?? 0) + w * (c[k] ?? 0);
   });
   const top = Math.max(...rgb);
