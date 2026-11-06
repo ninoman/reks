@@ -573,6 +573,30 @@ fn row_fields() {
 }
 
 #[test]
+fn rows_carry_hot_cues_by_slot() {
+    let env = seeded();
+    let c = env.lib.set_hot_cue(1, 2, 4_000.6).unwrap();
+    env.lib.set_hot_cue(1, 0, 1_000.0).unwrap();
+    // A memory cue (no slot) is not marked.
+    env.db()
+        .execute(
+            "INSERT INTO cue (track_id, slot, kind, start_ms, source) VALUES (1, NULL, 0, 500, 'reks')",
+            [],
+        )
+        .unwrap();
+    let rows = env.lib.tracks(&TrackQuery::default()).unwrap().rows;
+    let one = rows.iter().find(|r| r.id == 1).unwrap();
+    let marks: Vec<(u8, i64)> = one
+        .hot_cues
+        .iter()
+        .map(|m| (m.slot, m.position_ms))
+        .collect();
+    assert_eq!(marks, [(0, 1_000), (2, 4_001)]);
+    assert_eq!(one.hot_cues[1].color_rgb, c.color_rgb);
+    assert!(rows.iter().find(|r| r.id == 2).unwrap().hot_cues.is_empty());
+}
+
+#[test]
 fn sort_orders() {
     use SortColumn::*;
     let env = seeded();
@@ -826,6 +850,7 @@ fn serde_shapes() {
             "durationMs",
             "entryPosition",
             "genre",
+            "hotCues",
             "id",
             "key",
             "kind",

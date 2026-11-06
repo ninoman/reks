@@ -112,6 +112,17 @@ export interface TrackRow {
   entryPosition: number | null;
   /** My Tags on the track, ordered by category then tag display order. */
   tags: TagId[];
+  /** Hot cues by slot, marked on the waveform thumbnail. */
+  hotCues: HotCueMark[];
+}
+
+/** A hot cue as the track list marks it (reks-core `HotCueMark`). */
+export interface HotCueMark {
+  /** 0..7 = A..H. */
+  slot: number;
+  positionMs: number;
+  /** 0xRRGGBB, null for the default hot cue colour. */
+  colorRgb: number | null;
 }
 
 /** A divider entry in a playlist (D22); `position` numbers entries like `entryPosition`. */
@@ -781,11 +792,13 @@ export function waveformColumns(id: number): Promise<ArrayBuffer> {
 }
 
 /**
- * `waveformColumns` reduced to at most `width` columns (track-list thumbnails).
- * Without `decode`, only from caches and analyses on disk: empty when none has them.
+ * A track's colour preview for its waveform thumbnail: 1200 columns of
+ * `[height, low, mid, high]`, each 0..=127 (`reks-anlz::preview`, drawn by
+ * `previewDraw.ts`). Without `decode`, only from analyses and caches on disk:
+ * empty when none has them.
  */
-export function waveformOverview(id: number, width: number, decode: boolean): Promise<ArrayBuffer> {
-  return invoke("waveform_overview", { id, width, decode });
+export function waveformOverview(id: number, decode: boolean): Promise<ArrayBuffer> {
+  return invoke("waveform_overview", { id, decode });
 }
 
 /** `mix_*`: the Phase 5 mixer (src-tauri `mix.rs`, reks-mix `Control`). */

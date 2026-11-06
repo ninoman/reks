@@ -199,22 +199,34 @@ export function mockGrid(
       return columns.then((b) => b.slice(0));
     case "waveform_overview":
       columns ??= fetch(columnsUrl).then((r) => r.arrayBuffer());
-      return columns.then((b) => downsample(new Uint8Array(b), args.width as number));
+      return columns.then((b) => mockPreview(new Uint8Array(b)));
     default:
       return undefined;
   }
 }
 
-/** Run peaks down to `width` columns, as reks-analysis `columns::downsample`. */
-function downsample(cols: Uint8Array, width: number): ArrayBuffer {
+/**
+ * A rough stand-in for `reks-anlz::preview` (the PWV4 encoder needs Rust):
+ * run peaks over 1200 columns, mono height and half-scale bands.
+ */
+function mockPreview(cols: Uint8Array): ArrayBuffer {
+  const width = 1200;
   const n = cols.length / 4;
-  if (n <= width) return cols.slice().buffer;
   const out = new Uint8Array(width * 4);
   for (let x = 0; x < width; x++) {
+    const peak = [0, 0, 0, 0];
     for (let c = Math.floor((x * n) / width); c < Math.floor(((x + 1) * n) / width); c++) {
-      for (let k = 0; k < 4; k++)
-        out[4 * x + k] = Math.max(out[4 * x + k] ?? 0, cols[4 * c + k] ?? 0);
+      for (let k = 0; k < 4; k++) peak[k] = Math.max(peak[k] ?? 0, cols[4 * c + k] ?? 0);
     }
+    out.set(
+      [
+        Math.round(((peak[3] ?? 0) * 127) / 31),
+        (peak[0] ?? 0) >> 1,
+        (peak[1] ?? 0) >> 1,
+        (peak[2] ?? 0) >> 1,
+      ],
+      4 * x,
+    );
   }
   return out.buffer;
 }

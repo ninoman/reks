@@ -374,7 +374,7 @@ Date of decisions: 2026-10-18.
   columns. Our encoders (peak-hold envelope, per-track gain, gamma curves,
   3–7-bit fields) are not invertible, so columns rebuilt from them would
   only approximate rekordbox's bytes. Keeping the bytes is exact, and
-  nothing that reads columns needs them from the cache. (2026-10-30 correction: `reks-analysis::columns::stored_columns` does read columns from the rekordbox cache, converting the bytes on demand without caching them, when the columns and reks analysis caches have none.) When reks builds
+  nothing that reads columns needs them from the cache. (2026-10-30 correction: `reks-analysis::columns::stored_columns` does read columns from the rekordbox cache, converting the bytes on demand without caching them, when the columns and reks analysis caches have none. 2026-11-06: that reader is gone; nothing in the UI draws from the rekordbox cache now, the track list's thumbnails use reks's own columns, `reks-anlz::preview`.) When reks builds
   ANLZ for a mapped track (`reksFirst`, or a grid the user edited or locked,
   D7), [`reksanlz`](../crates/reks-export-rb/src/reksanlz.rs) writes
   rekordbox's waveform payloads unchanged with the library's grid and cues.

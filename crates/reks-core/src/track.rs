@@ -14,7 +14,7 @@ use crate::artwork::ArtworkId;
 use crate::db::Library;
 use crate::error::{Error, Result};
 use crate::keys::Key;
-use crate::query::{fill_tags, track_row, TrackRow, ROW_COLUMNS};
+use crate::query::{fill_lists, track_row, TrackRow, ROW_COLUMNS};
 use crate::rbxml::TRACK_COLOURS;
 use crate::scan::TrackId;
 use crate::source::{CueKind, DataSource};
@@ -340,7 +340,7 @@ fn detail(conn: &Connection, id: TrackId) -> Result<TrackDetail> {
         )
         .optional()?
         .ok_or(Error::TrackNotFound(id))?;
-    fill_tags(conn, std::slice::from_mut(&mut track.row))?;
+    fill_lists(conn, std::slice::from_mut(&mut track.row))?;
 
     let cues = conn
         .prepare_cached(

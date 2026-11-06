@@ -152,6 +152,10 @@
   --wave-blue: #1f6fff;
   --wave-blue-high: #d6e8ff;
   --wave-blue-deep: #0a2a6b;
+  /* Track-list previews: rekordbox's colour preview maps its low/mid/high levels to pure R, G, B. */
+  --wave-preview-low: #ff0000;
+  --wave-preview-mid: #00ff00;
+  --wave-preview-high: #0000ff;
 
   /* rekordbox track colours (names from reks-core rbxml::TRACK_COLOURS); data, not theme. */
   --rb-pink: #ff007f;
@@ -222,6 +226,9 @@
   --color-waveform-rgb-high: var(--wave-rgb-high);
   --color-waveform-blue: var(--wave-blue);
   --color-waveform-blue-high: var(--wave-blue-high);
+  --color-waveform-preview-low: var(--wave-preview-low);
+  --color-waveform-preview-mid: var(--wave-preview-mid);
+  --color-waveform-preview-high: var(--wave-preview-high);
   --color-grid-beat: rgb(235 235 240 / 38%);
   --color-grid-downbeat: var(--red-500);
   /* Grid mode's two points (PIN's thin lines): pin 1 red (the pinned
@@ -234,6 +241,8 @@
   /* Deck markers: cue point and hot cues. */
   --color-deck-cue: var(--amber-500);
   --color-deck-hotcue: var(--green-500);
+  /* A hot cue's letter on its colour (track-list flags): dark on every cue colour. */
+  --color-cue-flag-fg: var(--graphite-950);
   /* Memory cues without a library colour, and the active loop's band. */
   --color-deck-memory: var(--red-500);
   --color-deck-loop: rgb(212 154 69 / 28%);
@@ -291,6 +300,7 @@
   --text-lg--line-height: 1.4;
   --tracking-caption: 0.08em;
 
+  --radius-2xs: 2px;
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -510,6 +520,9 @@
   --sheet-w: 300px;
   /* Grab area of a drag-to-resize edge (sidebar, drawers, table columns). */
   --resize-handle-w: 6px;
+  /* Hot cue flags on track-list waveforms. */
+  --cue-flag-size: 11px;
+  --cue-flag-text: 9px;
   /* Filters drawer query (D35): the rail rows hang off, its dots, the field label column. */
   --query-rail-w: 22px;
   --query-dot: 7px;

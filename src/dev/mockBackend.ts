@@ -147,7 +147,20 @@ const TRACKS: TrackRow[] = Array.from({ length: 3000 }, (_, i) => ({
   artworkId: rand() < 0.7 ? i + 1 : null,
   entryPosition: null,
   tags: [],
+  hotCues: [],
 }));
+
+// Hot cues on about half the tracks (own generator: the library above stays as it was).
+const cueRand = rng(11);
+for (const t of TRACKS) {
+  if (cueRand() < 0.5 || t.durationMs === null) continue;
+  const count = 1 + Math.floor(cueRand() * 3);
+  t.hotCues = Array.from({ length: count }, (_, slot) => ({
+    slot,
+    positionMs: Math.round((t.durationMs ?? 0) * (0.05 + 0.3 * slot + cueRand() * 0.2)),
+    colorRgb: cueRand() < 0.6 ? null : 0x30d5c8,
+  }));
+}
 
 // Baseline play counts (as from rekordbox XML), before the mock sessions add theirs.
 for (const t of TRACKS) {
