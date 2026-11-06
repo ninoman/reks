@@ -1966,6 +1966,8 @@ export interface DryRun {
   };
   history: {
     atRisk: boolean;
+    /** One plain sentence for the review; empty when there is nothing to say. */
+    summary: string;
     policy: HistoryPolicy;
     title: string;
     text: string;
@@ -1975,7 +1977,10 @@ export interface DryRun {
     guard: HistoryGuardView | null;
   };
   problems: NoticeGroup[];
+  /** What to know before exporting; the rest is in `notes`. */
   warnings: NoticeGroup[];
+  /** Technical notices, for the details. */
+  notes: NoticeGroup[];
   /** Exported tracks whose audio warning the converter's Older players preset fixes (phase 2.6). */
   convertible: number[];
   /** One sentence on them; null when there are none. */

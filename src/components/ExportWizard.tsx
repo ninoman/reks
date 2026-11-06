@@ -1,9 +1,11 @@
 /**
- * USB export (phase 2 task 10, D42): Review → Writing → Done for one stick.
- * The stick and its playlists are picked in the Sticks view, the options in
- * Settings › Export; this lays out the steps (`export/`) and the footer.
- * While a fix runs in another dialog (find files, convert, analyse,
- * settings) this one is hidden, and the review plans again afterwards.
+ * USB export (phase 2 task 10, D42): Review → Writing → Done for one stick,
+ * opened from the Sticks view (where its playlists are ticked); the options
+ * are Settings › Export. This lays out the steps (`export/`) and the footer.
+ * It shares one dialog with the Sticks view (`SticksDialog`), so going
+ * between them resizes the dialog instead of swapping it. While a fix runs in
+ * another dialog (find files, convert, analyse, settings) it is hidden, and
+ * the review plans again afterwards.
  */
 import { useDevices } from "../store/devices";
 import { EXPORT_STEPS, type ExportStep, useExportWizard } from "../store/exportWizard";
@@ -11,9 +13,7 @@ import { ReviewStep } from "./export/ReviewStep";
 import { DoneStep, WritingStep } from "./export/WritingDoneSteps";
 import { Button } from "./ui/Button";
 import {
-  Dialog,
   DialogBody,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -26,52 +26,44 @@ const STEP_TITLES: Record<Exclude<ExportStep, "closed">, string> = {
   done: "Done",
 };
 
-export function ExportWizard() {
+/** The export's header, steps and footer; `SticksDialog` hosts it. */
+export function ExportPanel() {
   const step = useExportWizard((s) => s.step);
-  const away = useExportWizard((s) => s.away);
   const device = useExportWizard((s) => s.device);
-  if (step === "closed" || away !== null) return null;
-  const w = useExportWizard.getState();
+  if (step === "closed") return null;
   const index = EXPORT_STEPS.indexOf(step);
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) w.close();
-      }}
-    >
-      <DialogContent size="lg">
-        <DialogHeader>
-          <DialogTitle>Sync {device?.name ?? "stick"}</DialogTitle>
-          <DialogDescription>
-            Step {index + 1} of {EXPORT_STEPS.length}: {STEP_TITLES[step]}
-          </DialogDescription>
-          <ol className="m-0 flex list-none gap-1 p-0" aria-label="Steps">
-            {EXPORT_STEPS.map((s, i) => (
-              <li
-                key={s}
-                aria-current={s === step ? "step" : undefined}
-                data-done={i < index || undefined}
-                className="flex-1 border-t-2 border-border pt-1 text-xs text-fg-subtle aria-[current=step]:border-accent aria-[current=step]:text-fg data-[done]:border-fg-subtle"
-              >
-                {STEP_TITLES[s]}
-              </li>
-            ))}
-          </ol>
-        </DialogHeader>
-        <DialogBody className="min-h-60">
-          {step === "review" && <ReviewStep />}
-          {step === "writing" && <WritingStep />}
-          {step === "done" && <DoneStep />}
-        </DialogBody>
-        <DialogFooter className="items-center">
-          {step === "review" && <ReviewFooter />}
-          {step === "writing" && <WritingFooter />}
-          {step === "done" && <DoneFooter />}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <>
+      <DialogHeader>
+        <DialogTitle>Sync {device?.name ?? "stick"}</DialogTitle>
+        <DialogDescription>
+          Step {index + 1} of {EXPORT_STEPS.length}: {STEP_TITLES[step]}
+        </DialogDescription>
+        <ol className="m-0 flex list-none gap-1 p-0" aria-label="Steps">
+          {EXPORT_STEPS.map((s, i) => (
+            <li
+              key={s}
+              aria-current={s === step ? "step" : undefined}
+              data-done={i < index || undefined}
+              className="flex-1 border-t-2 border-border pt-1 text-xs text-fg-subtle aria-[current=step]:border-accent aria-[current=step]:text-fg data-[done]:border-fg-subtle"
+            >
+              {STEP_TITLES[s]}
+            </li>
+          ))}
+        </ol>
+      </DialogHeader>
+      <DialogBody>
+        {step === "review" && <ReviewStep />}
+        {step === "writing" && <WritingStep />}
+        {step === "done" && <DoneStep />}
+      </DialogBody>
+      <DialogFooter className="items-center">
+        {step === "review" && <ReviewFooter />}
+        {step === "writing" && <WritingFooter />}
+        {step === "done" && <DoneFooter />}
+      </DialogFooter>
+    </>
   );
 }
 

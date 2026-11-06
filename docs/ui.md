@@ -159,9 +159,11 @@ menu items `--menu-item-h`.
 | `DropdownMenu*` | Content, Item (`variant`: default, danger; `inset` lines it up with checkbox items), CheckboxItem, Group / Label, Separator | Radix DropdownMenu |
 | `ContextMenu*` | Content, Item, CheckboxItem (`checked="indeterminate"` shows a dash), Sub / SubTrigger / SubContent, Group / Label, Separator; wrap the whole area, not each row | Radix ContextMenu |
 | `Popover*` | Content (`align`, `sideOffset`) | Radix Popover |
-| `Dialog*` | Content `size`: sm, md, lg, xl (960 px), `closeOnOutsideClick`; Header, Title, Description, Body, Footer | Radix Dialog |
+| `Dialog*` | Content `size`: sm, md, lg, xl (960 px); `height` cap: auto, md (648 px), lg (720 px), always within the window; `closeOnOutsideClick`; Header, Title, Description, Body, Footer. A dialog is as tall as its content; height changes animate (`useAnimatedSize`, `--duration-resize`) and it fades in and out (`useDialogMotion`, `--duration-dialog-*`) | Radix Dialog |
+| `Skeleton` | grey placeholder block while content loads; size it with classes | — |
 | `Sheet` + `SheetHeader` | right-hand slide-over (non-modal, inside its parent) | Web Animations |
 | `ScrollArea` | themed scrollbars; not for the virtualised table | Radix ScrollArea |
+| `scroll-pane` (utility, `index.css`) | a native vertical scroller that keeps `--scrollbar-space` free at its end, so macOS overlay scrollbars never cover content; use it on anything that scrolls on its own (not the track table) | — |
 | `ResizeHandle` | drag-to-resize edge of its (positioned) parent: `edge`: right, left; `min`, `max`, `value`; arrow keys step 16 px, double-click resets; reports widths, the caller stores them | own (`role="separator"`) |
 | `Separator` | `orientation` (decorative) | – |
 | `Field` | `orientation`: vertical, horizontal, inline; `active`; `hint`, `error` | – |
@@ -356,18 +358,24 @@ read-only.
 ## USB export (D42)
 
 - One entry point in the header: **Sticks** (with a count when more than one
-  drive is plugged in), or **Sync <name>** with a ▾ menu (Edit playlists…,
-  Eject, All sticks…) when exactly one known stick is plugged in; an unknown
-  single stick shows **Set up <label>**. `useStickWatch` keeps the drive list
-  fresh for it.
-- The Sticks view (`DevicesDialog`): plugged-in drives with Eject and Sync,
-  the identify prompt for new sticks, then the picked stick's "Plays on",
-  playlist ticks (saved as they change) and sync status.
-- The export dialog (`ExportWizard` + `export/`): Review → Writing → Done.
-  Track problems are `IssueCard`s that never block; each fix replans, a fix
-  in another dialog (find files, convert, analyse, Settings › Export) hides
-  the review until it closes. Technical details sit in a closed
-  `<details>`. Options live in Settings › Export (`settings/ExportSettings`).
+  drive is plugged in), or **Sync <name>** when exactly one known stick is
+  plugged in (opens the Sticks view on it); an unknown single stick shows
+  **Set up <label>**. `useStickWatch` keeps the drive list fresh for it.
+- One dialog (`SticksDialog`) hosts the Sticks view (`SticksPanel` in
+  `DevicesDialog.tsx`) and the export (`ExportPanel` in `ExportWizard.tsx`),
+  so Sync resizes it rather than swapping dialogs.
+- The Sticks view: one list of sticks (plugged-in ones, new drives with the
+  identify prompt, then the rest); the picked one expands to its mount
+  point, "Plays on", capacity and sync status. Its playlist ticks
+  (`PlaylistTicks`, saved as they change) fill the right column; Sync is in
+  the footer.
+- The export (`export/`): Review → Writing → Done. The review is short: the
+  headline and three tiles (skeletons while it plans), issue cards, one line
+  on play history, "Good to know" only for what affects the export, and the
+  settings in use with "Change…". Track problems are `IssueCard`s that never
+  block; each fix replans, a fix in another dialog (find files, convert,
+  analyse, Settings › Export) hides the export until it closes. Options live
+  in Settings › Export (`settings/ExportSettings`).
 
 ## Mix panel (phase 5)
 

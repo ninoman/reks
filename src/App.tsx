@@ -20,11 +20,9 @@ import { AdoptDialog } from "./components/AdoptDialog";
 import { AppHeader } from "./components/AppHeader";
 import { ConvertDialog } from "./components/ConvertDialog";
 import { COLUMN_DEFAULTS } from "./components/columns";
-import { DevicesDialog } from "./components/DevicesDialog";
 import { DeviceTree } from "./components/DeviceTree";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ErrorMessage } from "./components/ErrorMessage";
-import { ExportWizard } from "./components/ExportWizard";
 import { HistoryImportDialog } from "./components/HistoryImportDialog";
 import { HistoryTree } from "./components/HistoryTree";
 import { ImportWizard } from "./components/ImportWizard";
@@ -42,6 +40,7 @@ import { SessionView } from "./components/SessionView";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { StickCheckView } from "./components/StickCheckView";
 import { StickListView } from "./components/StickListView";
+import { SticksDialog } from "./components/SticksDialog";
 import { TagOrganizer } from "./components/TagOrganizer";
 import { ToastHost } from "./components/ToastHost";
 import { TrackLists } from "./components/TrackLists";
@@ -188,11 +187,10 @@ export default function App() {
         <ImportWizard />
         <TagOrganizer />
         <SettingsDialog />
-        <DevicesDialog />
+        <SticksDialog />
         <AdoptDialog />
         <RelocateDialog />
         <RemapDialog />
-        <ExportWizard />
         <ConvertDialog />
         <HistoryImportDialog />
       </ErrorBoundary>

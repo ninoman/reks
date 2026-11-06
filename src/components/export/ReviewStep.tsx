@@ -1,7 +1,7 @@
 /**
  * Export step 1, Review (D42): one headline and three numbers, the track
  * issues with their fixes (none blocks), the play-history line or guard,
- * the settings in use with "Change…", and everything technical collapsed.
+ * and the settings in use with "Change…".
  * Nothing is written before Export. All wording comes from Rust (`DryRun`).
  */
 import { useState } from "react";
@@ -14,11 +14,9 @@ import { Card } from "../ui/Card";
 import { Checkbox } from "../ui/Checkbox";
 import { Chip } from "../ui/Chip";
 import { Progress } from "../ui/Progress";
+import { Skeleton } from "../ui/Skeleton";
 import { IssueCard } from "./IssueCard";
-import { Facts, Files, Notices, Section } from "./parts";
-
-/** Indent per tree level, as in the sidebar tree. */
-const INDENT = 18;
+import { Files, Notices, Section } from "./parts";
 
 export function ReviewStep() {
   const dryRun = useExportWizard((s) => s.dryRun);
@@ -34,14 +32,7 @@ export function ReviewStep() {
       </div>
     );
   }
-  if (dryRun === null) {
-    return (
-      <div className="flex flex-col gap-2">
-        <p className="m-0">Reading the stick and checking your files…</p>
-        <Progress aria-label="Planning" />
-      </div>
-    );
-  }
+  if (dryRun === null) return <ReviewSkeleton />;
   return <ReviewView dryRun={dryRun} planning={planning} />;
 }
 
@@ -105,10 +96,8 @@ function ReviewView({ dryRun: d, planning }: { dryRun: DryRun; planning: boolean
       {d.history.guard !== null && (
         <HistoryGuard guard={d.history.guard} policy={d.history.policy} disabled={planning} />
       )}
-      {d.history.guard === null && (
-        <p className="m-0 text-sm text-fg-muted">
-          {d.history.atRisk ? (d.history.actionText ?? d.history.text) : `${d.history.title}.`}
-        </p>
+      {d.history.guard === null && d.history.summary !== "" && (
+        <p className="m-0 text-sm text-fg-muted">{d.history.summary}</p>
       )}
 
       {d.onelibraryRemoval !== null && (
@@ -118,19 +107,20 @@ function ReviewView({ dryRun: d, planning }: { dryRun: DryRun; planning: boolean
       {d.warnings.length > 0 && (
         <Section title="Good to know" tone="warning">
           <Notices groups={d.warnings} />
-          {d.convertText !== null && (
-            <div className="flex items-center gap-2">
-              <p className="m-0 text-sm">{d.convertText}</p>
-              <Button
-                size="sm"
-                disabled={planning}
-                onClick={() => void w.runFix("convert", d.convertible)}
-              >
-                Convert…
-              </Button>
-            </div>
-          )}
         </Section>
+      )}
+
+      {d.convertText !== null && (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5">
+          <p className="m-0 text-sm">{d.convertText}</p>
+          <Button
+            size="sm"
+            disabled={planning}
+            onClick={() => void w.runFix("convert", d.convertible)}
+          >
+            Convert…
+          </Button>
+        </div>
       )}
 
       <section className="flex flex-wrap items-center gap-1.5" aria-label="Writing with">
@@ -147,48 +137,26 @@ function ReviewView({ dryRun: d, planning }: { dryRun: DryRun; planning: boolean
           Change…
         </Button>
       </section>
+    </div>
+  );
+}
 
-      <details>
-        <summary className="text-sm">
-          Technical details: files to copy and delete, paths, file system
-        </summary>
-        <Card className="mt-2 flex flex-col gap-2 px-4 py-3" divided={false}>
-          <p className="m-0 text-xs text-fg-muted">
-            {d.device.name} · {d.device.fsText} · {d.device.spaceText} · target {d.target}
-          </p>
-          <p className="m-0 text-xs text-fg-muted">{d.status}</p>
-          <Facts facts={d.summary} />
-          <Facts facts={d.space.facts} />
-          <Files label="Copy" group={d.copies} />
-          <Files label="Delete" group={d.deletes} />
-          <Files label="Play history backed up" group={d.history.backups} />
-          {d.onelibrary !== null && (
-            <>
-              <p className="m-0 text-sm">{d.onelibrary.text}</p>
-              <p className="m-0 font-mono text-xs [overflow-wrap:anywhere]">
-                Write {d.onelibrary.write.path}{" "}
-                <span className="text-fg-muted">({d.onelibrary.write.sizeText})</span>
-              </p>
-              <Files label="Remove" group={d.onelibrary.removes} />
-            </>
-          )}
-          <details>
-            <summary className="text-sm">Playlists on the stick</summary>
-            <ul className="m-0 mt-1 list-none p-0 text-xs">
-              {d.playlists.map((p) => (
-                <li key={p.id} style={{ paddingLeft: p.depth * INDENT }}>
-                  {p.name}
-                  {p.isFolder ? "/" : ""}
-                  {p.detail !== "" && <span className="text-fg-muted"> · {p.detail}</span>}
-                  {p.smart && (
-                    <span className="text-fg-muted"> · smart, written as a fixed list</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </details>
-        </Card>
-      </details>
+/** The review's shape while the plan loads, so the dialog grows into it. */
+function ReviewSkeleton() {
+  return (
+    <div
+      className="flex flex-col gap-3"
+      role="status"
+      aria-label="Checking the stick and your files"
+    >
+      <Skeleton className="h-5 w-64" />
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <Skeleton className="h-14" />
+        <Skeleton className="h-14" />
+        <Skeleton className="h-14" />
+      </div>
+      <Skeleton className="h-4 w-80" />
+      <Skeleton className="h-6 w-full" />
     </div>
   );
 }

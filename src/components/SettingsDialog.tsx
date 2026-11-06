@@ -67,8 +67,8 @@ function SettingsWindow() {
     >
       <DialogContent
         size="lg"
-        // Fits the tallest tab (Mixer's tiles) without scrolling; shorter windows scroll.
-        className="h-[648px]"
+        // As tall as the tab, up to the tallest (Mixer's tiles); shorter windows scroll.
+        height="md"
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           // Opened on a tab (not the first): its first control, else Close.

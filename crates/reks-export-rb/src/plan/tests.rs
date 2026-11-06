@@ -745,7 +745,7 @@ fn smart_playlist_is_planned_as_a_fixed_list() {
     let view = crate::dryrun::DryRun::new(&plan, &Default::default());
     assert!(view.playlists[0].smart);
     let note = view
-        .warnings
+        .notes
         .iter()
         .find(|g| g.kind == "smartPlaylistFixed")
         .unwrap();

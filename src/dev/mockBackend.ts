@@ -1040,6 +1040,7 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
     history: played
       ? {
           atRisk: true,
+          summary: "Your stick's play history is saved to your library before anything is written.",
           policy: opts.history,
           title: "This stick holds play history",
           text: "The stick's export.pdb holds 2 history sessions with 31 played tracks. Exporting rebuilds the stick's database, which erases it.",
@@ -1072,6 +1073,7 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
         }
       : {
           atRisk: false,
+          summary: "",
           policy: opts.history,
           title: "No play history on this stick",
           text: "Players have not logged any sessions here, so the export loses nothing.",
@@ -1080,7 +1082,8 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
           guard: null,
         },
     problems,
-    warnings: [
+    warnings: [],
+    notes: [
       ...(lists.some((p) => p.smart)
         ? [
             {

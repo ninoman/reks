@@ -347,22 +347,25 @@ CREATE INDEX export_manifest_track_idx ON export_manifest(track_id);  -- for ON 
     selection is its stick profile (task 15). Simplified by D42 (below): the
     sub-items that follow describe the first version where they differ.
     - [x] D42 simpler export: one entry point (header "Sticks", or
-      "Sync <name>" with one known stick plugged in, menu: Edit playlists…,
-      Eject, All sticks…; [AppHeader.tsx](../../src/components/AppHeader.tsx),
-      [useStickWatch.ts](../../src/components/useStickWatch.ts)). The Sticks
-      view ([DevicesDialog.tsx](../../src/components/DevicesDialog.tsx)) holds
-      Sync per stick, "Plays on" and the playlist ticks, saved as they change
-      ([profiles.ts](../../src/store/profiles.ts)). The wizard is Review →
-      Writing → Done ([export/](../../src/components/export/), store
-      [exportWizard.ts](../../src/store/exportWizard.ts)): overview tiles,
-      issue cards with fixes (Find files…, Convert…, Analyse now, Leave them
-      out, Remove from playlists… with a confirm, Keep as it is / Keep all),
-      the history guard with Discard behind More, the settings in use with
-      "Change…", technical details collapsed; the button counts left-out
-      tracks ("Export 412 of 424 tracks"). A fix in another dialog hides the
-      review and plans again when it closes. Options moved to Settings ›
-      Export ([ExportSettings.tsx](../../src/components/settings/ExportSettings.tsx)).
-      Checked in the browser with the mock backend.
+      "Sync <name>" with one known stick plugged in, opening the Sticks view
+      on it; [AppHeader.tsx](../../src/components/AppHeader.tsx),
+      [useStickWatch.ts](../../src/components/useStickWatch.ts)). One dialog,
+      [SticksDialog.tsx](../../src/components/SticksDialog.tsx), hosts the
+      Sticks view ([DevicesDialog.tsx](../../src/components/DevicesDialog.tsx):
+      one list of sticks, the picked one expanded with "Plays on" and status,
+      its ticks in [PlaylistTicks.tsx](../../src/components/PlaylistTicks.tsx),
+      saved as they change, [profiles.ts](../../src/store/profiles.ts)) and
+      the export, Review → Writing → Done ([export/](../../src/components/export/),
+      store [exportWizard.ts](../../src/store/exportWizard.ts)): overview
+      tiles, issue cards with fixes (Find files…, Convert…, Analyse now, Leave
+      them out, Remove from playlists… with a confirm, Keep as it is / Keep
+      all), the history guard with Discard behind More, the settings in use
+      with "Change…"; the button counts left-out tracks ("Export 412 of 424
+      tracks"). A fix in another dialog hides the export and plans again when
+      it closes. Options moved to Settings › Export
+      ([ExportSettings.tsx](../../src/components/settings/ExportSettings.tsx)).
+      Checked in the browser with the mock backend and on the maintainer's
+      stick (NI_O, 2026-11-06: export, read-back, Sticks status in sync).
     - [x] Wizard through the dry run:
       [ExportWizard.tsx](../../src/components/ExportWizard.tsx), opened from
       the header and the USB devices dialog. Steps: stick (`DeviceList`),

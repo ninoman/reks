@@ -1,9 +1,9 @@
 /**
  * USB export (phase 2 task 10, D42): review → writing → done, for one known
- * stick. The stick's playlists (its profile, D27) and "Plays on" are set in
- * the Sticks view; the other options come from Settings › Export
- * (`export_default_options`). Opening plans at once (`export_plan`); a newer
- * plan drops older answers. Export writes exactly the plan the review shows
+ * stick, opened from the Sticks view (where the stick's playlists, its
+ * profile, D27, and "Plays on" are set). The other options come from
+ * Settings › Export (`export_default_options`). Opening plans
+ * (`export_plan`); a newer plan drops older answers. Export writes exactly the plan the review shows
  * (`export_apply` with its `planId`) and records the sync in the stick's
  * profile; the dialog can't be closed while it runs.
  *
@@ -78,7 +78,7 @@ interface ExportWizardState {
   eject: EjectState;
   error: string | null;
 
-  /** Opens the review for the known stick at `mountPoint`. */
+  /** Opens the review for the known stick at `mountPoint` and plans. */
   open(mountPoint: string): Promise<void>;
   close(): void;
   /** Plans again with the current options (after a fix). */
@@ -129,6 +129,17 @@ const idle = {
 
 let generation = 0;
 
+/** `options` without the choices made in a review (history guard, OneLibrary removal). */
+function withdrawChoices(options: ExportOptions): ExportOptions {
+  return {
+    ...options,
+    history: options.history === "import" ? "backUp" : options.history,
+    historyChosen: false,
+    discardHistoryConfirmed: false,
+    onelibraryRemovalConfirmed: false,
+  };
+}
+
 /** The known stick plugged in at `mountPoint`, if identified. */
 function knownAt(mountPoint: string): Device | null {
   const match = useProfiles.getState().mounted[mountPoint]?.match;
@@ -171,10 +182,7 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
       if (mine !== generation) return;
       set({ selection, options });
       if (selection.playlists.length === 0) {
-        set({
-          planning: false,
-          error: `No playlists are ticked for ${device.name}. Tick some in Sticks.`,
-        });
+        set({ planning: false, error: `No playlists are ticked for ${device.name}.` });
         return;
       }
       await get().replan();
@@ -340,12 +348,7 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
       error: null,
       kept: idle.kept,
       // The guard's and the OneLibrary choices were for the run just made.
-      options: options && {
-        ...options,
-        history: options.history === "import" ? "backUp" : options.history,
-        historyChosen: false,
-        onelibraryRemovalConfirmed: false,
-      },
+      options: options && withdrawChoices(options),
     });
     await get().replan();
   },
@@ -366,7 +369,7 @@ export const useExportWizard = create<ExportWizardState>((set, get) => ({
   },
 }));
 
-/** Opens the review for the known stick at `mountPoint` (closing the Sticks view). */
+/** Opens the export for the known stick at `mountPoint` (closing the Sticks view). */
 export function openExportWizard(mountPoint: string) {
   useDevices.getState().setDialogOpen(false);
   void useExportWizard.getState().open(mountPoint);

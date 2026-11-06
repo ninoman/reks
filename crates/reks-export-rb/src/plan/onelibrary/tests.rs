@@ -355,10 +355,7 @@ fn on_with_a_key_lists_the_database_and_the_files_it_removes() {
     let view = d.onelibrary.unwrap();
     assert_eq!(view.write.path, DB_PATH);
     assert_eq!(view.removes.count, 2);
-    assert!(d
-        .warnings
-        .iter()
-        .any(|g| g.kind == "oneLibraryExperimental"));
+    assert!(d.notes.iter().any(|g| g.kind == "oneLibraryExperimental"));
 
     // Planning again replaces, not adds.
     let once = p.clone();

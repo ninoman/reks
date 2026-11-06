@@ -257,21 +257,21 @@ impl<'a> Page<'a> {
         if raw.len() < HEAP {
             return None;
         }
-        let small = u16::from(*raw.get(0x18)?);
-        let large = u16_at(raw, 0x22)?;
+        // 0x18..0x1B is one 24-bit field: low 13 bits `num_row_offsets`
+        // (row slots ever allocated, each with a present bit), high 11 bits
+        // `num_rows` (research raw-4 §3.2). Rows are read by slot, so the
+        // slot count is what matters; a page with more than 255 rows lost
+        // its last ones when only the low byte was read.
+        let packed = u32::from(*raw.get(0x18)?)
+            | u32::from(*raw.get(0x19)?) << 8
+            | u32::from(*raw.get(0x1A)?) << 16;
         Some(Self {
             raw,
             index: u32_at(raw, 0x04)?,
             page_type: u32_at(raw, 0x08)?,
             next_page: u32_at(raw, 0x0C)?,
             flags: *raw.get(0x1B)?,
-            // crate-digger `num_rows`: the large count when it is bigger and
-            // not the 0x1FFF marker.
-            num_rows: if large > small && large != 0x1FFF {
-                large
-            } else {
-                small
-            },
+            num_rows: (packed & 0x1FFF) as u16,
         })
     }
 

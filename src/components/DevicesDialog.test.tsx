@@ -34,7 +34,7 @@ const { useProfiles } = await import("../store/profiles");
 const { useExportWizard } = await import("../store/exportWizard");
 const { useAdopt } = await import("../store/adopt");
 const { usePlaylists } = await import("../store/playlists");
-const { DevicesDialog } = await import("./DevicesDialog");
+const { SticksDialog } = await import("./SticksDialog");
 
 const stick = (over: Partial<DeviceInfo> = {}): DeviceInfo => ({
   mountPoint: "/Volumes/REKS",
@@ -196,7 +196,7 @@ describe("DevicesDialog", () => {
       stick({ mountPoint: "/Volumes/GIGS", label: "GIGS", fs: { kind: "exFat" } }),
       stick({ mountPoint: "/Volumes/Untitled", label: "", fs: { kind: "other", name: "apfs" } }),
     ]);
-    render(<DevicesDialog />);
+    render(<SticksDialog />);
     expect(await screen.findByText("REKS")).toBeTruthy();
     expect(screen.getAllByText("FAT32 · 18 GB free of 32 GB")).toHaveLength(1);
     expect(screen.getByText(/exFAT: newer players only/)).toBeTruthy();
@@ -207,14 +207,14 @@ describe("DevicesDialog", () => {
 
   it("says when nothing is plugged in", async () => {
     devicesList.mockResolvedValue([]);
-    render(<DevicesDialog />);
-    expect(await screen.findByText(/No USB drive found/)).toBeTruthy();
+    render(<SticksDialog />);
+    expect(await screen.findByText(/No sticks yet/)).toBeTruthy();
   });
 
   it("ejects a drive and refreshes the list", async () => {
     devicesList.mockResolvedValueOnce([stick()]).mockResolvedValue([]);
     deviceEject.mockResolvedValue();
-    render(<DevicesDialog />);
+    render(<SticksDialog />);
     fireEvent.click(await screen.findByRole("button", { name: "Eject REKS" }));
     await waitFor(() => expect(deviceEject).toHaveBeenCalledWith("/Volumes/REKS"));
     expect(await screen.findByText("REKS ejected. You can remove it.")).toBeTruthy();
@@ -224,7 +224,7 @@ describe("DevicesDialog", () => {
   it("shows why an eject failed and keeps the drive", async () => {
     devicesList.mockResolvedValue([stick()]);
     deviceEject.mockRejectedValue("diskutil eject failed: busy");
-    render(<DevicesDialog />);
+    render(<SticksDialog />);
     fireEvent.click(await screen.findByRole("button", { name: "Eject REKS" }));
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Could not eject REKS: diskutil eject failed: busy",
@@ -236,7 +236,7 @@ describe("DevicesDialog", () => {
     vi.useFakeTimers();
     try {
       devicesList.mockResolvedValueOnce([]).mockResolvedValue([stick()]);
-      render(<DevicesDialog />);
+      render(<SticksDialog />);
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2000);
       });
@@ -252,9 +252,12 @@ describe("stick profiles", () => {
     devicesList.mockResolvedValue([stick()]);
     profilesList.mockResolvedValue([device()]);
     profileIdentify.mockResolvedValue({ type: "known", device: device() });
-    render(<DevicesDialog />);
-    expect(await screen.findByText("Stick: Main")).toBeTruthy();
-    expect(await screen.findByText("Main: 1 changed, 1 to remove")).toBeTruthy();
+    render(<SticksDialog />);
+    // One list: the plugged-in stick is picked and expanded.
+    const main = (await screen.findByRole("radio", { name: "Main" })) as HTMLInputElement;
+    await waitFor(() => expect(main.checked).toBe(true));
+    expect(screen.getByText(/^FAT32 · .+ free of .+$/)).toBeTruthy();
+    expect(await screen.findByText("1 changed, 1 to remove")).toBeTruthy();
     expect(profileStatus).toHaveBeenLastCalledWith(1, "/Volumes/REKS");
     expect(screen.getByText("Read from the stick")).toBeTruthy();
     expect(screen.getByText("120.4 MB of 32.0 GB")).toBeTruthy();
@@ -262,14 +265,14 @@ describe("stick profiles", () => {
     const rows = within(screen.getByRole("list", { name: "Playlist status" }));
     expect(rows.getByText("1 track added")).toBeTruthy();
     expect(rows.getByText("Removed from the stick at the next sync")).toBeTruthy();
-    expect(screen.getByText("Plugged in")).toBeTruthy();
 
-    // Sync opens the review on this stick.
-    // On the plugged-in drive's row and on the stick's profile.
-    const syncs = screen.getAllByRole("button", { name: "Sync Main" });
-    expect(syncs).toHaveLength(2);
-    fireEvent.click(syncs[0] as HTMLElement);
+    // Sync, in the footer, opens the review on this stick in the same dialog,
+    // so it resizes instead of closing and opening.
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Sync Main" }));
     expect(useExportWizard.getState().step).toBe("review");
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(screen.getByText("Sync Main")).toBeTruthy();
     expect(useExportWizard.getState().mountPoint).toBe("/Volumes/REKS");
     expect(useDevices.getState().dialogOpen).toBe(false);
   });
@@ -278,7 +281,7 @@ describe("stick profiles", () => {
     devicesList.mockResolvedValue([stick()]);
     profilesList.mockResolvedValue([device()]);
     profileIdentify.mockResolvedValue({ type: "known", device: device() });
-    render(<DevicesDialog />);
+    render(<SticksDialog />);
     const ticks = within(await screen.findByRole("group", { name: "Playlists on this stick" }));
     // The ticked folder covers (and locks) what's under it, and shows what unticking frees.
     const peak = ticks.getByRole("checkbox", { name: /Peak/ }) as HTMLInputElement;
@@ -304,7 +307,7 @@ describe("stick profiles", () => {
         capacityText: "40.0 GB planned, more than the stick's 32.0 GB",
       }),
     );
-    render(<DevicesDialog />);
+    render(<SticksDialog />);
     expect(await screen.findByText("As of the last sync, 2026-10-19 14:03 UTC")).toBeTruthy();
     expect(profileStatus).toHaveBeenLastCalledWith(1, null);
     expect(screen.getByText(/more than the stick's/).className).toContain("text-danger");
@@ -315,9 +318,8 @@ describe("stick profiles", () => {
   it("names a new stick", async () => {
     devicesList.mockResolvedValue([stick()]);
     profileCreate.mockResolvedValue(device({ name: "Club" }));
-    render(<DevicesDialog />);
+    render(<SticksDialog />);
     expect(await screen.findByText("This stick is new to reks.")).toBeTruthy();
-    expect(screen.getByText(/No sticks saved yet/)).toBeTruthy();
     const name = screen.getByRole("textbox", { name: "Stick name" }) as HTMLInputElement;
     expect(name.value).toBe("REKS");
     fireEvent.change(name, { target: { value: "Club" } });
@@ -326,8 +328,10 @@ describe("stick profiles", () => {
     await waitFor(() =>
       expect(profileCreate).toHaveBeenCalledWith(stick(), "AAAA-0001", "Club", "Generic"),
     );
-    expect(await screen.findByText("Stick: Club")).toBeTruthy();
-    expect(await screen.findByRole("radio", { name: "Club" })).toBeTruthy();
+    // The new stick joins the list, picked, and the prompt goes.
+    const club = (await screen.findByRole("radio", { name: "Club" })) as HTMLInputElement;
+    await waitFor(() => expect(club.checked).toBe(true));
+    expect(screen.queryByText("This stick is new to reks.")).toBeNull();
   });
 
   it("offers Adopt for a foreign stick: saves it, then opens the adopt dry run", async () => {
@@ -340,7 +344,7 @@ describe("stick profiles", () => {
       note: "It holds a rekordbox library that reks did not write.",
     });
     profileCreate.mockResolvedValue(device({ id: 4, name: "GIGS", label: "GIGS" }));
-    render(<DevicesDialog />);
+    render(<SticksDialog />);
     fireEvent.click(await screen.findByRole("button", { name: "Adopt…" }));
     await waitFor(() => expect(useAdopt.getState().target?.deviceId).toBe(4));
     expect(profileCreate).toHaveBeenCalledWith(
@@ -356,7 +360,7 @@ describe("stick profiles", () => {
 
   it("a new stick that is not foreign has no Adopt", async () => {
     devicesList.mockResolvedValue([stick()]);
-    render(<DevicesDialog />);
+    render(<SticksDialog />);
     expect(await screen.findByRole("button", { name: "New stick" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Adopt…" })).toBeNull();
   });
@@ -373,11 +377,11 @@ describe("stick profiles", () => {
       note: "Its volume ID is new to reks, but its label and size match.",
     });
     profileLink.mockResolvedValue(device({ volumeSerial: "BBBB-0002" }));
-    render(<DevicesDialog />);
+    render(<SticksDialog />);
     expect(await screen.findByText("Is this 'Main'?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Yes" }));
     await waitFor(() => expect(profileLink).toHaveBeenCalledWith(1, stick(), "BBBB-0002"));
-    expect(await screen.findByText("Stick: Main")).toBeTruthy();
+    expect(await screen.findByRole("radio", { name: "Main" })).toBeTruthy();
   });
 
   it("No on the relink prompt offers a new stick", async () => {
@@ -390,7 +394,7 @@ describe("stick profiles", () => {
       prompt: "Is this 'Main'?",
       note: "This computer does not report the stick's volume ID.",
     });
-    render(<DevicesDialog />);
+    render(<SticksDialog />);
     fireEvent.click(await screen.findByRole("button", { name: "No, it's another stick" }));
     expect(screen.getByRole("textbox", { name: "Stick name" })).toBeTruthy();
     expect(profileLink).not.toHaveBeenCalled();

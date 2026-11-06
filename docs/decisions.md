@@ -1764,6 +1764,26 @@ Date of decisions: 2026-10-18.
     gone; `--active-loops` and `--onelibrary` turn them on.
   - The report repeats left-out tracks (`ReportView::left_out`) without the
     fix buttons; fixing from the report is left for later.
+  - Revised after the maintainer's runs on a real stick (2026-11-06):
+    - Every Sync goes through the Sticks view: the header's "Sync <name>"
+      opens it on that stick (no ▾ menu), its playlists sit in the right
+      column, and Sync is in the footer. The Sticks view and the export share
+      one dialog (`SticksDialog`), so Sync resizes it instead of swapping
+      dialogs.
+    - The review shows less: no technical details; play history is one plain
+      sentence (`HistoryView::summary`); "Good to know" keeps only file
+      system, empty playlist and missing-OneLibrary-key warnings (the rest is
+      `DryRun::notes`, not shown); the convert offer for exported tracks
+      appears only when the stick plays on any player, where "older players"
+      is the user's concern.
+    - The Sticks view is one list (plugged-in sticks, new drives, the rest);
+      the picked one expands to its details.
+    - The stick reader read a page's row count from the wrong bytes (the
+      24-bit field at 0x18, research raw-4 §3.2), so a page with more than
+      255 rows lost its last ones: a false read-back problem, which then
+      skipped the export manifest and made the Sticks view count every entry
+      as removed and added. Fixed; without a manifest the status now shows
+      the last recorded sync with a note.
 - Open: keep Discard for history at all; OneLibrary global or per stick;
   whether to keep "Start the first loop automatically" in the UI; fixes in
   the report.

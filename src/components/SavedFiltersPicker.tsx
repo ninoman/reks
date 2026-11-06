@@ -133,7 +133,7 @@ export function SavedFiltersPicker() {
         )}
         <ul
           aria-label="Saved filters"
-          className="m-0 flex max-h-72 list-none flex-col overflow-y-auto p-0"
+          className="scroll-pane m-0 flex max-h-72 list-none flex-col py-0 pl-0"
         >
           {shown.map((p) => {
             const index = presets.indexOf(p);

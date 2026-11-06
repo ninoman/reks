@@ -43,7 +43,7 @@ const { useSettings } = await import("../store/settings");
 const { useExportWizard } = await import("../store/exportWizard");
 const { usePlaylists } = await import("../store/playlists");
 const { useProfiles } = await import("../store/profiles");
-const { ExportWizard } = await import("./ExportWizard");
+const { SticksDialog } = await import("./SticksDialog");
 
 const stick: DeviceInfo = {
   mountPoint: "/Volumes/REKS",
@@ -169,6 +169,7 @@ function dryRun(over: Partial<DryRun> = {}): DryRun {
     },
     history: {
       atRisk: false,
+      summary: "",
       policy: "backUp",
       title: "No play history on this stick",
       text: "Players have not logged any sessions here, so the export loses nothing.",
@@ -178,6 +179,7 @@ function dryRun(over: Partial<DryRun> = {}): DryRun {
     },
     problems: [],
     warnings: [],
+    notes: [],
     convertible: [],
     convertText: null,
     onelibrary: null,
@@ -272,6 +274,7 @@ beforeEach(() => {
   });
   vi.mocked(ipc.playlistsGet).mockReset().mockResolvedValue({ nodes: NODES });
   useProfiles.setState({
+    ticks: null,
     known: [DEVICE],
     mounted: {
       [stick.mountPoint]: { info: stick, match: { type: "known", device: DEVICE }, error: null },
@@ -291,7 +294,7 @@ const button = (name: string) => screen.getByRole("button", { name }) as HTMLBut
 /** Opens the review for the REKS stick and waits for the plan. */
 async function toReview(plan: DryRun = dryRun()) {
   exportPlan.mockResolvedValue(plan);
-  render(<ExportWizard />);
+  render(<SticksDialog />);
   await act(() => useExportWizard.getState().open(stick.mountPoint));
   await screen.findByText(plan.overview.headline);
 }
@@ -313,17 +316,18 @@ describe("ExportWizard", () => {
     expect(within(summary).getByText("18.4 GB free after export")).toBeTruthy();
     const chips = screen.getByLabelText("Writing with");
     expect(within(chips).getByText("Cleans up unused files")).toBeTruthy();
-    expect(screen.getByText("No play history on this stick.")).toBeTruthy();
-    // Technical details are collapsed but there.
-    expect(screen.getByText(/Technical details/)).toBeTruthy();
+    // Nothing to say about play history on a stick without any.
+    expect(screen.queryByText(/play history/)).toBeNull();
+    // No technical details in the review.
+    expect(screen.queryByText(/Technical details/)).toBeNull();
     expect(button("Export").disabled).toBe(false);
   });
 
   it("says when the stick has no playlists ticked", async () => {
     profileSelection.mockResolvedValue({ playlists: [] });
-    render(<ExportWizard />);
+    render(<SticksDialog />);
     await act(() => useExportWizard.getState().open(stick.mountPoint));
-    expect(await screen.findByText(/No playlists are ticked for Main/)).toBeTruthy();
+    expect(await screen.findByText("No playlists are ticked for Main.")).toBeTruthy();
     expect(exportPlan).not.toHaveBeenCalled();
     expect(button("Export").disabled).toBe(true);
   });
@@ -482,7 +486,7 @@ describe("ExportWizard", () => {
 
   it("shows a planning error with a retry", async () => {
     exportPlan.mockRejectedValueOnce("stick gone");
-    render(<ExportWizard />);
+    render(<SticksDialog />);
     await act(() => useExportWizard.getState().open(stick.mountPoint));
     expect(await screen.findByText(/Could not plan: stick gone/)).toBeTruthy();
     exportPlan.mockResolvedValue(dryRun());
@@ -550,7 +554,7 @@ describe("ExportWizard", () => {
     expect(screen.getByText("Step 1 of 3: Review")).toBeTruthy();
   });
 
-  it("Back to Sticks closes the review and opens the Sticks view", async () => {
+  it("Back to Sticks closes the export and opens the Sticks view", async () => {
     const { useDevices } = await import("../store/devices");
     await toReview();
     fireEvent.click(button("Back to Sticks"));

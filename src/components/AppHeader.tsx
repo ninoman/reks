@@ -6,31 +6,22 @@
  * it. "Import rekordbox XML…" opens the import wizard (`ImportWizard`), which
  * says how to export the XML and picks the file. USB export has one entry
  * point (D42): "Sticks" opens the Sticks view, with a count of plugged-in
- * drives; with exactly one known stick plugged in it becomes "Sync <name>"
- * (straight to the review) with a menu for its playlists, Eject and all
- * sticks. While the converter's dialog is hidden, a button shows its
+ * drives; with exactly one known stick plugged in it reads "Sync <name>"
+ * and opens the view on that stick. While the converter's dialog is hidden, a button shows its
  * progress and reopens it.
  */
 
 import { pickFolder } from "../lib/ipc";
 import { useConverter } from "../store/converter";
 import { deviceName, useDevices } from "../store/devices";
-import { openExportWizard } from "../store/exportWizard";
 import { useImportWizard } from "../store/importWizard";
 import { useProfiles } from "../store/profiles";
 import { useReport } from "../store/report";
 import { useScan } from "../store/scan";
 import { useSettings } from "../store/settings";
-import { ChevronDownIcon, FeedbackIcon, GearIcon, UsbIcon } from "./icons";
+import { FeedbackIcon, GearIcon, UsbIcon } from "./icons";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/DropdownMenu";
 import { IconButton } from "./ui/IconButton";
 import { Tooltip } from "./ui/Tooltip";
 import { useStickWatch } from "./useStickWatch";
@@ -123,39 +114,10 @@ function SticksButton({ disabled }: { disabled: boolean }) {
   const { devices, only, onlyKnown } = useStickWatch();
   if (only !== null && onlyKnown !== null) {
     return (
-      <span className="flex items-center">
-        <Button
-          size="sm"
-          disabled={disabled}
-          className="rounded-r-none"
-          onClick={() => openExportWizard(only.mountPoint)}
-        >
-          <UsbIcon />
-          Sync {onlyKnown.name}
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="sm"
-              disabled={disabled}
-              className="rounded-l-none border-l-0 px-1"
-              aria-label={`More for ${onlyKnown.name}`}
-            >
-              <ChevronDownIcon />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => openSticks(onlyKnown.id)}>
-              Edit playlists…
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void useDevices.getState().eject(only.mountPoint)}>
-              Eject
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => openSticks()}>All sticks…</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </span>
+      <Button size="sm" disabled={disabled} onClick={() => openSticks(onlyKnown.id)}>
+        <UsbIcon />
+        Sync {onlyKnown.name}
+      </Button>
     );
   }
   return (

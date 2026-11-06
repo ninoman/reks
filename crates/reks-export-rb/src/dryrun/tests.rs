@@ -333,8 +333,9 @@ fn warnings_are_grouped_and_unknown_tracks_get_their_id() {
     let dry = DryRun::new(&plan, &labels());
 
     assert!(dry.ready);
-    assert_eq!(kinds(&dry.warnings), ["noVolumeSerial", "emptyPlaylist"]);
-    let serial = &dry.warnings[0];
+    assert_eq!(kinds(&dry.warnings), ["emptyPlaylist"]);
+    assert_eq!(kinds(&dry.notes), ["noVolumeSerial"]);
+    let serial = &dry.notes[0];
     assert!(serial.items.is_empty());
     assert!(
         serial.title.starts_with("The OS gave no volume serial"),
@@ -361,10 +362,10 @@ fn warnings_are_grouped_and_unknown_tracks_get_their_id() {
     );
     assert_eq!(dry.overview.export_label, "Export 1 of 3 tracks");
     assert_eq!(
-        dry.warnings[1].title,
+        dry.warnings[0].title,
         "1 playlist ends up empty after leaving tracks out"
     );
-    assert_eq!(dry.warnings[1].items, ["Saturday"]);
+    assert_eq!(dry.warnings[0].items, ["Saturday"]);
     assert_eq!(
         fact(&dry.summary, "Tracks"),
         "1: 1 to copy, 0 already on the stick"
@@ -437,11 +438,16 @@ fn played_stick_shows_history_and_backups() {
         ]
     );
     // The history warning is shown in `history`, not twice; rekordbox's own
-    // stick marker is still a warning.
+    // stick marker is a technical note, not a warning.
     assert!(!kinds(&dry.warnings).contains(&"stickHistory"));
-    assert_eq!(kinds(&dry.warnings), ["rekordboxStick"]);
+    assert!(dry.warnings.is_empty());
+    assert_eq!(kinds(&dry.notes), ["rekordboxStick"]);
     assert_eq!(
-        dry.warnings[0].title,
+        dry.history.summary,
+        "Your stick's play history is saved to your library before anything is written."
+    );
+    assert_eq!(
+        dry.notes[0].title,
         "rekordbox wrote this stick (/PIONEER/rekordbox/exportLibrary.db). reks rewrites its \
          Device Library completely, and rekordbox will show its \"out of matching\" caution \
          afterwards."
@@ -583,7 +589,7 @@ fn track_labels_come_from_the_library() {
 
     let dry = DryRun::build(&lib, &plan);
     // Left-out tracks are issues, not warnings.
-    assert_eq!(dry.warnings[0].items, ["track 999: y"]);
+    assert_eq!(dry.notes[0].items, ["track 999: y"]);
     assert_eq!(dry.issues[0].kind, IssueKind::Unsupported);
     assert_eq!(dry.issues[0].tracks[0].label, "Кино – Звезда");
     assert_eq!(dry.issues[0].tracks[0].detail, "x");
@@ -598,7 +604,12 @@ fn track_labels_come_from_the_library() {
     assert!(dry
         .convert_text
         .as_deref()
-        .is_some_and(|t| t.starts_with("1 track can be converted")));
+        .is_some_and(|t| t.starts_with("1 track may not play on older players")));
+    // A stick for newer players only gets no "older players" offer.
+    plan.options.target = TargetProfile::Cdj2000Nxs2;
+    let dry = DryRun::build(&lib, &plan);
+    assert_eq!(dry.convert_text, None);
+    assert_eq!(dry.convertible, [second]);
     assert_eq!(
         dry.issues[0].actions,
         [

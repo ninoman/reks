@@ -94,9 +94,14 @@ pub struct DryRun {
     pub history: HistoryView,
     /// Blockers, grouped by kind in order of first appearance.
     pub problems: Vec<NoticeGroup>,
-    /// Everything else to know, grouped the same way. The history warning is
-    /// in [`Self::history`] instead, left-out tracks in [`Self::issues`].
+    /// What the user should know before exporting (file system, empty
+    /// playlists, OneLibrary not written), grouped the same way. The history
+    /// warning is in [`Self::history`], left-out tracks in [`Self::issues`].
     pub warnings: Vec<NoticeGroup>,
+    /// The rest (rekordbox wrote the stick, audio notes, smart playlists
+    /// fixed, ...), for the technical details.
+    #[serde(default)]
+    pub notes: Vec<NoticeGroup>,
     /// Exported tracks whose audio warning the converter's Older players
     /// preset fixes ([`ExportPlan::convertible`]); the view offers
     /// "Convert…". Left-out ones are in their issue's action.
@@ -227,6 +232,9 @@ pub struct SpaceView {
 pub struct HistoryView {
     /// The stick holds, or may hold, history this export erases.
     pub at_risk: bool,
+    /// One plain sentence for the review; empty when there is nothing to say.
+    #[serde(default)]
+    pub summary: String,
     pub policy: HistoryPolicy,
     pub title: String,
     pub text: String,
@@ -361,6 +369,7 @@ impl DryRun {
             problems.push(problem_kind(p), problem_item(p, &track));
         }
         let mut warnings = Groups::default();
+        let mut notes = Groups::default();
         for w in &plan.warnings {
             if let Warning::StickHistory { .. }
             | Warning::OneLibraryRemoved { .. }
@@ -368,7 +377,12 @@ impl DryRun {
             {
                 continue;
             }
-            warnings.push(warning_kind(w), warning_item(w, &track, &playlist));
+            let to = if user_facing(w) {
+                &mut warnings
+            } else {
+                &mut notes
+            };
+            to.push(warning_kind(w), warning_item(w, &track, &playlist));
         }
 
         let ready = !plan.is_blocked();
@@ -407,15 +421,21 @@ impl DryRun {
             history: history_view(plan),
             problems: problems.finish(problem_title),
             warnings: warnings.finish(warning_title),
+            notes: notes.finish(warning_title),
             onelibrary: onelibrary_view(plan),
             onelibrary_removal: onelibrary_removal_view(plan),
-            convert_text: (!convertible.is_empty()).then(|| {
-                format!(
-                    "{} can be converted to a format older players load (AIFF, up to \
-                     24-bit / 48 kHz). The library track keeps its cues, grid and playlists.",
-                    count(convertible.len(), "track", "tracks")
-                )
-            }),
+            // Exported tracks only carry warnings for the target; "older
+            // players" is only the user's concern when the stick must play on
+            // any player.
+            convert_text: (!convertible.is_empty()
+                && plan.options.target == TargetProfile::Generic)
+                .then(|| {
+                    format!(
+                        "{} may not play on older players. Converting makes a copy they can \
+                     play; cues, grid and playlists stay.",
+                        count(convertible.len(), "track", "tracks")
+                    )
+                }),
             convertible,
         }
     }
@@ -731,6 +751,7 @@ fn history_view(plan: &ExportPlan) -> HistoryView {
     if !h.may_hold_history() {
         return HistoryView {
             at_risk: false,
+            summary: String::new(),
             policy,
             title: "No play history on this stick".to_owned(),
             text: "Players have not logged any sessions here, so the export loses nothing."
@@ -788,8 +809,22 @@ fn history_view(plan: &ExportPlan) -> HistoryView {
         }
         HistoryPolicy::Discard => "Discarding it needs your confirmation.".to_owned(),
     };
+    let summary = match policy {
+        HistoryPolicy::Import if !guard.sessions.is_empty() => {
+            "Your stick's play history is added to your library before anything is written."
+        }
+        HistoryPolicy::Import | HistoryPolicy::BackUp => {
+            "Your stick's play history is saved to your library before anything is written."
+        }
+        HistoryPolicy::Discard if confirmed => {
+            "Your stick's play history will be erased, as you chose."
+        }
+        HistoryPolicy::Discard => "Discarding your stick's play history needs your confirmation.",
+    }
+    .to_owned();
     HistoryView {
         at_risk: true,
+        summary,
         policy,
         title: "This stick holds play history".to_owned(),
         text,
@@ -922,6 +957,17 @@ fn warning_track(w: &Warning) -> Option<TrackId> {
         Warning::Audio { track_id, .. } | Warning::Skipped { track_id, .. } => Some(*track_id),
         _ => None,
     }
+}
+
+/// Warnings the review shows; the others go to the technical details.
+fn user_facing(w: &Warning) -> bool {
+    matches!(
+        w,
+        Warning::ExFat { .. }
+            | Warning::Hfs
+            | Warning::EmptyPlaylist { .. }
+            | Warning::OneLibraryNoKey
+    )
 }
 
 fn skipped_track(w: &Warning) -> Option<TrackId> {

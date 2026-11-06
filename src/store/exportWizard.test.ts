@@ -100,6 +100,11 @@ const report = (over: Partial<ExportReportView> = {}): ExportReportView =>
 
 const w = useExportWizard.getState;
 
+/** Opens the export's review on /Volumes/REKS (it plans with the profile). */
+async function review() {
+  await w().open("/Volumes/REKS");
+}
+
 beforeEach(() => {
   exportDefaultOptions.mockReset().mockResolvedValue(DEFAULTS);
   exportPlan.mockReset().mockResolvedValue(ready(7));
@@ -154,8 +159,15 @@ describe("useExportWizard", () => {
     expect(w().error).toBe("Could not read the stick's settings: db locked");
   });
 
-  it("keeps only the newest plan and reports failures", async () => {
+  it("says when the stick has no playlists ticked, without planning", async () => {
+    profileSelection.mockResolvedValue({ playlists: [] });
     await w().open("/Volumes/REKS");
+    expect(w().error).toBe("No playlists are ticked for Main.");
+    expect(exportPlan).not.toHaveBeenCalled();
+  });
+
+  it("keeps only the newest plan and reports failures", async () => {
+    await review();
     let first: (d: DryRun) => void = () => {};
     exportPlan.mockReturnValueOnce(new Promise((r) => (first = r)));
     const a = w().replan();
@@ -171,7 +183,7 @@ describe("useExportWizard", () => {
   });
 
   it("Leave them out plans this run without the unanalysed tracks", async () => {
-    await w().open("/Volumes/REKS");
+    await review();
     await w().leaveOutUnanalysed();
     expect(exportPlan).toHaveBeenLastCalledWith(
       "/Volumes/REKS",
@@ -186,7 +198,7 @@ describe("useExportWizard", () => {
       ...ready(7),
       issues: [{ kind: "missing" }, { kind: "unsupported" }],
     } as DryRun);
-    await w().open("/Volumes/REKS");
+    await review();
     w().keep("missing");
     expect([...w().kept]).toEqual(["missing"]);
     w().keep(null);
@@ -196,7 +208,7 @@ describe("useExportWizard", () => {
   it("Analyse now waits for the analysis, then plans again", async () => {
     vi.mocked(ipc.analysisReanalyse).mockResolvedValue({} as never);
     useAnalysis.setState({ status: { queued: 1, running: 1 } as never, error: null });
-    await w().open("/Volumes/REKS");
+    await review();
     const fix = w().runFix("analyse", [40]);
     await vi.waitFor(() => expect(w().away).toBe("analyse"));
     expect(exportPlan).toHaveBeenCalledTimes(1);
@@ -207,7 +219,7 @@ describe("useExportWizard", () => {
   });
 
   it("the history guard's choice plans again", async () => {
-    await w().open("/Volumes/REKS");
+    await review();
     await w().chooseHistory("import");
     expect(exportPlan).toHaveBeenLastCalledWith(
       "/Volumes/REKS",
@@ -218,7 +230,7 @@ describe("useExportWizard", () => {
   });
 
   it("exports the shown plan, streams progress and lands on done", async () => {
-    await w().open("/Volumes/REKS");
+    await review();
     let send: (p: ExportProgress) => void = () => {};
     let finish: (r: ExportReportView) => void = () => {};
     exportApply.mockImplementation((_id, on) => {
@@ -239,7 +251,7 @@ describe("useExportWizard", () => {
   });
 
   it("cancels once, and not after the database is being written", async () => {
-    await w().open("/Volumes/REKS");
+    await review();
     exportApply.mockImplementation(() => new Promise(() => {}));
     void w().startExport();
     await w().cancelExport();
@@ -251,7 +263,7 @@ describe("useExportWizard", () => {
   });
 
   it("back to review withdraws the run's choices and plans again", async () => {
-    await w().open("/Volumes/REKS");
+    await review();
     await w().chooseHistory("import");
     exportApply.mockResolvedValue(report({ outcome: "problems" }));
     await w().startExport();
@@ -266,7 +278,7 @@ describe("useExportWizard", () => {
   });
 
   it("ejects the reported stick", async () => {
-    await w().open("/Volumes/REKS");
+    await review();
     exportApply.mockResolvedValue(report());
     await w().startExport();
     deviceEject.mockResolvedValue();
