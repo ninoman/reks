@@ -56,8 +56,8 @@ pub use playlist::{
 };
 pub use preview::PreviewAudio;
 pub use query::{
-    DividerRow, Facets, Filter, KeyInfo, PlaylistId, PlaylistNode, Sort, SortColumn, TrackPage,
-    TrackPageRows, TrackQuery, TrackRow,
+    DividerRow, Facets, Filter, HotCueMark, KeyInfo, PlaylistId, PlaylistNode, Sort, SortColumn,
+    TrackPage, TrackPageRows, TrackQuery, TrackRow,
 };
 pub use rule::{Match, RuleNode, MAX_RULE_DEPTH, MAX_RULE_NODES};
 pub use scan::{scan, CancelToken, ScanEvent, ScanReport, TrackId};

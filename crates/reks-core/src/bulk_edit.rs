@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::backup::BackupReason;
 use crate::db::Library;
 use crate::error::{Error, Result};
-use crate::query::{fill_tags, track_row, TrackRow, ROW_COLUMNS};
+use crate::query::{fill_lists, track_row, TrackRow, ROW_COLUMNS};
 use crate::scan::TrackId;
 use crate::tag::{self, TagId};
 use crate::timefmt::now_utc;
@@ -190,7 +190,7 @@ impl Library {
                 rows.push(stmt.query_row([id], track_row)?);
             }
         }
-        fill_tags(&tx, &mut rows)?;
+        fill_lists(&tx, &mut rows)?;
         tx.commit()?;
         Ok(BulkOutcome {
             rows,

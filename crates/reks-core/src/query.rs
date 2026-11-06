@@ -158,6 +158,20 @@ pub struct TrackRow {
     pub entry_position: Option<i64>,
     /// My Tags, in display order (category, then tag).
     pub tags: Vec<TagId>,
+    /// Hot cues by slot, for the waveform thumbnail.
+    pub hot_cues: Vec<HotCueMark>,
+}
+
+/// A hot cue as the track list marks it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HotCueMark {
+    /// 0..=7 = A..H.
+    pub slot: u8,
+    /// Rounded: a mark, not a position to play from.
+    pub position_ms: i64,
+    /// 0xRRGGBB, `None` for the default colour.
+    pub color_rgb: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -321,7 +335,7 @@ impl Library {
                 Ok(row)
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        fill_tags(&conn, &mut rows)?;
+        fill_lists(&conn, &mut rows)?;
 
         let view = sel.view;
         let divider_view = view.is_some_and(|id| q.shows_dividers(id));
@@ -394,7 +408,7 @@ impl Library {
             }
         }
         for p in &mut out {
-            fill_tags(&conn, &mut p.rows)?;
+            fill_lists(&conn, &mut p.rows)?;
         }
         Ok(out)
     }
@@ -427,17 +441,47 @@ impl Library {
     }
 }
 
-/// Sets `tags` on every row (one query for the page).
-pub(crate) fn fill_tags(conn: &Connection, rows: &mut [TrackRow]) -> Result<()> {
+/// Sets `tags` and `hot_cues` on every row (one query each for the page).
+pub(crate) fn fill_lists(conn: &Connection, rows: &mut [TrackRow]) -> Result<()> {
     let ids: Vec<TrackId> = rows.iter().map(|r| r.id).collect();
-    let mut by_track: HashMap<TrackId, Vec<TagId>> = HashMap::new();
+    let mut tags: HashMap<TrackId, Vec<TagId>> = HashMap::new();
     for (track, tag) in tags_of(conn, &ids)? {
-        by_track.entry(track).or_default().push(tag);
+        tags.entry(track).or_default().push(tag);
+    }
+    let mut cues: HashMap<TrackId, Vec<HotCueMark>> = HashMap::new();
+    for (track, cue) in hot_cues_of(conn, &ids)? {
+        cues.entry(track).or_default().push(cue);
     }
     for row in rows {
-        row.tags = by_track.get(&row.id).cloned().unwrap_or_default();
+        row.tags = tags.remove(&row.id).unwrap_or_default();
+        row.hot_cues = cues.remove(&row.id).unwrap_or_default();
     }
     Ok(())
+}
+
+fn hot_cues_of(c: &Connection, track_ids: &[TrackId]) -> Result<Vec<(TrackId, HotCueMark)>> {
+    if track_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let sql = format!(
+        "SELECT track_id, slot, start_ms, color_rgb FROM cue
+         WHERE slot IS NOT NULL AND track_id IN ({})
+         ORDER BY track_id, slot",
+        vec!["?"; track_ids.len()].join(", ")
+    );
+    let mut stmt = c.prepare(&sql)?;
+    let rows = stmt.query_map(params_from_iter(track_ids), |r| {
+        let start: f64 = r.get(2)?;
+        Ok((
+            r.get(0)?,
+            HotCueMark {
+                slot: r.get(1)?,
+                position_ms: start.round() as i64,
+                color_rgb: r.get(3)?,
+            },
+        ))
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 pub(crate) fn track_row(r: &Row<'_>) -> rusqlite::Result<TrackRow> {
@@ -466,6 +510,7 @@ pub(crate) fn track_row(r: &Row<'_>) -> rusqlite::Result<TrackRow> {
         artwork_id: r.get(21)?,
         entry_position: None,
         tags: Vec::new(),
+        hot_cues: Vec::new(),
     })
 }
 
