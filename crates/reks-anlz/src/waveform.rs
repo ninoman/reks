@@ -289,6 +289,24 @@ impl Encoder<'_> {
     }
 }
 
+/// The PWV4 colour preview alone (what [`Waveforms::encode`] writes as
+/// `pwv4`), for the track list's thumbnails; `None` for inconsistent columns.
+pub fn color_preview(
+    columns: &WaveformColumns,
+    cal: &WaveformCalibration,
+) -> Option<[[u8; 6]; COLOR_PREVIEW_COLUMNS]> {
+    if !columns.is_consistent() {
+        return None;
+    }
+    // PWV4 does not use the per-track gains.
+    let e = Encoder {
+        c: columns,
+        cal,
+        gain: [1.0; 3],
+    };
+    Some(e.pwv4())
+}
+
 impl Waveforms {
     /// Encode all forms from 150/s columns.
     pub fn encode(

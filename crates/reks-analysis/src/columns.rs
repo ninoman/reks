@@ -12,10 +12,8 @@
 use std::path::{Path, PathBuf};
 
 use reks_audio::{decode_f32, Layout};
-use reks_core::analysis::file_content_hash;
 use reks_core::{Library, TrackId};
 
-use crate::cache::{self, RekordboxEntry};
 use crate::waveform::{WaveformAnalyzer, WaveformColumns, WaveformError};
 
 const MAGIC: &[u8; 4] = b"RKWC";
@@ -131,71 +129,6 @@ pub fn track_columns(lib: &Library, id: TrackId) -> Result<Vec<u8>, ColumnsError
     Ok(columns.to_interleaved().unwrap_or_default())
 }
 
-/// Track `id`'s columns from what already holds them, without decoding:
-/// the columns cache, else reks's analysis cache (`bands.bin`), else
-/// `rekordbox` applied to the track's mapped rekordbox analysis (D10).
-/// `None` when none of them has the track's current file.
-pub fn stored_columns(
-    lib: &Library,
-    id: TrackId,
-    rekordbox: impl FnOnce(&RekordboxEntry) -> Option<WaveformColumns>,
-) -> Result<Option<Vec<u8>>, ColumnsError> {
-    let (path, key) = lib.track_file_key(id)?;
-    let cache_dir = lib.cache_dir();
-    if let Ok(file) = std::fs::read(columns_path(&cache_dir, id)) {
-        if let Some(payload) = decode_columns(&key, &file) {
-            return Ok(Some(payload.to_vec()));
-        }
-    }
-    // The analysis caches are keyed by content: a few KB read from the file's edges.
-    let Ok(hash) = file_content_hash(&path) else {
-        return Ok(None);
-    };
-    let columns = cache::load_columns(&cache_dir, id, &hash)
-        .or_else(|| cache::load_rekordbox(&cache_dir, id, &hash).and_then(|e| rekordbox(&e)));
-    Ok(columns.and_then(|c| c.to_interleaved()))
-}
-
-/// Track `id`'s columns squeezed to at most `width` columns (each the peak of
-/// its share), for a track-list thumbnail: a few KB instead of the whole
-/// payload. From [`stored_columns`]; on a miss, decoded as in
-/// [`track_columns`] when `decode`, else empty.
-pub fn track_overview(
-    lib: &Library,
-    id: TrackId,
-    width: usize,
-    decode: bool,
-    rekordbox: impl FnOnce(&RekordboxEntry) -> Option<WaveformColumns>,
-) -> Result<Vec<u8>, ColumnsError> {
-    let payload = match stored_columns(lib, id, rekordbox)? {
-        Some(payload) => payload,
-        None if decode => track_columns(lib, id)?,
-        None => return Ok(Vec::new()),
-    };
-    Ok(downsample(&payload, width))
-}
-
-/// Interleaved `payload` reduced to at most `width` columns by taking each
-/// band's peak over consecutive runs; shorter payloads are returned as is.
-pub fn downsample(payload: &[u8], width: usize) -> Vec<u8> {
-    let cols = payload.as_chunks::<4>().0;
-    if width == 0 || cols.len() <= width {
-        return cols.as_flattened().to_vec();
-    }
-    let mut out = Vec::with_capacity(width * 4);
-    for x in 0..width {
-        let run = &cols[x * cols.len() / width..(x + 1) * cols.len() / width];
-        let mut peak = [0u8; 4];
-        for col in run {
-            for k in 0..4 {
-                peak[k] = peak[k].max(col[k]);
-            }
-        }
-        out.extend_from_slice(&peak);
-    }
-    out
-}
-
 /// Columns of the audio file at `path` (decoded whole, mono, at its own rate;
 /// blocking). No cache.
 pub fn file_columns(path: &Path) -> Result<WaveformColumns, ColumnsError> {
@@ -242,17 +175,6 @@ mod tests {
         let mut bad = cols();
         bad.mono.pop();
         assert!(bad.to_interleaved().is_none());
-    }
-
-    #[test]
-    fn downsample_takes_run_peaks() {
-        let payload: Vec<u8> = (0..6u8).flat_map(|i| [i, 10 - i, i % 2, 1]).collect();
-        assert_eq!(
-            downsample(&payload, 3),
-            [1, 10, 1, 1, 3, 8, 1, 1, 5, 6, 1, 1]
-        );
-        assert_eq!(downsample(&payload, 10), payload);
-        assert_eq!(downsample(&payload, 0), payload);
     }
 
     #[test]

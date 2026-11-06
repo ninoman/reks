@@ -5,7 +5,8 @@
 //! ([`waveform::Waveforms`]); [`write`] frames the sections; [`validate`]
 //! checks files; [`read`] decodes them (export validation, Phase 2 task 8);
 //! [`compare`] measures our files against rekordbox's; [`deckwave`] turns a
-//! stick's waveforms back into deck columns. Formats:
+//! stick's waveforms back into deck columns; [`preview`] gives the track
+//! list's colour previews. Formats:
 //! `docs/research.md` §3.3 and the D9 finding in `docs/decisions.md`.
 
 pub mod build;
@@ -13,6 +14,7 @@ pub mod compare;
 pub mod cue;
 pub mod deckwave;
 pub mod grid;
+pub mod preview;
 pub mod rbwave;
 pub mod read;
 pub mod validate;

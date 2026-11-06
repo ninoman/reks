@@ -105,6 +105,16 @@ colour (≈ 0.15; rekordbox shows more green on mid-heavy material, see
 `ambient.png`) and PWV4 mid. Those are the places to look if a player
 side-by-side looks off.
 
+2026-11-06, PWV4 against rekordbox on 152 tracks of the maintainer's library
+(reks's decoded columns vs rekordbox's own PWV4): refitting the curves
+barely moves them (mid gain 0.38 / gamma 0.66 vs 0.44 / 0.72 here; mean
+abs error 0.087 vs 0.088 of full scale), and neither the mean, RMS or 90th
+percentile of a preview column nor a mix of our three bands as the input does
+better than its peak. Our mid reads 9 % low on average and up to about a
+third low on some tracks (they show pinker in the track list); that spread
+comes from the band split (our 600 Hz / 4 kHz crossovers against
+rekordbox's), not the curves.
+
 ## Pictures
 
 One per genre bucket (its loudest track), rekordbox above reks in each

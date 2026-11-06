@@ -57,7 +57,13 @@ export const COLUMNS: ColumnSpec[] = [
     header: "Waveform",
     width: 120,
     sort: null,
-    cell: (r) => <TrackWaveform trackId={r.missing ? null : r.id} durationMs={r.durationMs} />,
+    cell: (r) => (
+      <TrackWaveform
+        trackId={r.missing ? null : r.id}
+        durationMs={r.durationMs}
+        hotCues={r.hotCues}
+      />
+    ),
   },
   {
     id: "title",

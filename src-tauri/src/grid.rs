@@ -76,28 +76,18 @@ pub async fn waveform_columns(state: State<'_, AppState>, id: TrackId) -> CmdRes
     .map(Response::new)
 }
 
-/// Most columns a `waveform_overview` request may ask for.
-const MAX_OVERVIEW_WIDTH: usize = 2048;
-
-/// Track `id`'s columns reduced to at most `width` (the track list's
-/// waveform thumbnails), in the `waveform_columns` layout. Without `decode`,
-/// only from caches and analyses already on disk: empty when none has them.
+/// Track `id`'s colour preview for the track list's waveform thumbnail
+/// (`reks_anlz::preview`: 1200 columns of `[height, low, mid, high]`).
+/// Without `decode`, only from analyses and caches already on disk: empty
+/// when none has them.
 #[tauri::command]
 pub async fn waveform_overview(
     state: State<'_, AppState>,
     id: TrackId,
-    width: usize,
     decode: bool,
 ) -> CmdResult<Response> {
-    let width = width.min(MAX_OVERVIEW_WIDTH);
     blocking(&state, move |lib| {
-        reks_analysis::columns::track_overview(
-            lib,
-            id,
-            width,
-            decode,
-            reks_anlz::deckwave::entry_columns,
-        )
+        reks_anlz::preview::track_preview(lib, id, decode)
     })
     .await
     .map(Response::new)

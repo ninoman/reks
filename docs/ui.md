@@ -164,6 +164,7 @@ menu items `--menu-item-h`.
 | `Sheet` + `SheetHeader` | right-hand slide-over (non-modal, inside its parent) | Web Animations |
 | `ScrollArea` | themed scrollbars; not for the virtualised table | Radix ScrollArea |
 | `scroll-pane` (utility, `index.css`) | a native vertical scroller that keeps `--scrollbar-space` free at its end, so macOS overlay scrollbars never cover content; use it on anything that scrolls on its own (not the track table) | — |
+| `CueFlag` | a hot cue's letter on its colour, positioned at `left` in its parent (track-list waveforms); default colour `deck-hotcue` | own |
 | `ResizeHandle` | drag-to-resize edge of its (positioned) parent: `edge`: right, left; `rest`: hidden (default), line (hairline at rest); `min`, `max`, `value`; arrow keys step 16 px, double-click resets; reports widths, the caller stores them | own (`role="separator"`) |
 | `Separator` | `orientation` (decorative) | – |
 | `Field` | `orientation`: vertical, horizontal, inline; `active`; `hint`, `error` | – |
@@ -200,15 +201,18 @@ there, with a playhead, on the engine's preview deck (`PREVIEW_DECK`,
 the headphone cue when the output routes one (the cue level and CUE/MASTER
 mix apply), else on the master with the mix faded out over `DUCK_MS`
 (300 ms) and back in when it pauses. The **Waveform** column draws each
-visible track's whole waveform in the decks' style from `waveform_overview`
-(columns squeezed to 400 in Rust, a few KB a row), newest rows first
-([`overviews.ts`](../src/store/overviews.ts)), in two lanes: up to four
-requests at a time read columns already on disk (`decode: false`: the
-columns cache, else reks's analysis `bands.bin`, else the track's mapped
-rekordbox `PWV7`/`PWV3` via `reks_anlz::deckwave::entry_columns`;
-[`columns::stored_columns`](../crates/reks-analysis/src/columns.rs)), and one
-at a time decodes a track that has none, so an unanalysed track never holds
-up the rest.
+visible track's whole waveform as rekordbox draws its colour preview, from
+`waveform_overview`: 1200 columns of `[height, low, mid, high]`
+([`reks_anlz::preview`](../crates/reks-anlz/src/preview.rs), 4.8 KB a row),
+always reks's own columns (its analysis, else the columns cache) through the
+PWV4 encoder, never a mapped rekordbox analysis. [`previewDraw.ts`](../src/lib/previewDraw.ts) mixes low, mid
+and high as pure red, green and blue (`waveform-preview-*` tokens) and
+darkens from the centre line out, as rekordbox does; it ignores the deck waveform style. Hot cues (`TrackRow.hotCues`) are
+flagged above it in their colour (`CueFlag`). Rows are served newest first
+([`overviews.ts`](../src/store/overviews.ts)) in two lanes: up to four
+requests at a time read what is on disk (`decode: false`), and one at a time
+decodes a track that has nothing, so an unanalysed track never holds up the
+rest. A cue edited on a deck shows on the row after the next list refresh.
 
 A header click sorts by that column ascending, the next descending, the third
 back to the view's own order (playlist position, else date added; `nextSort`

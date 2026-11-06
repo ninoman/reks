@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.mocked(ipc.waveformOverview)
     .mockReset()
     .mockImplementation(
-      (id, _width, decode) =>
+      (id, decode) =>
         new Promise((resolve) => {
           const call = {
             id,

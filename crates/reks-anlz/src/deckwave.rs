@@ -11,7 +11,6 @@
 //! (no `.2EX`, rekordbox before 6) give an error; callers fall back to the
 //! audio.
 
-use reks_analysis::cache::RekordboxEntry;
 use reks_analysis::calib::Curve;
 use reks_analysis::waveform::{WaveformColumns, MONO_MAX};
 
@@ -51,14 +50,6 @@ pub fn columns(
         });
     }
     Ok(c)
-}
-
-/// Columns of a library track's mapped rekordbox analysis (D10), for the
-/// track list's thumbnails; `None` without `PWV7` or when it does not decode.
-pub fn entry_columns(entry: &RekordboxEntry) -> Option<WaveformColumns> {
-    columns(&entry.ext, &entry.ex2, &WaveformCalibration::default())
-        .ok()
-        .filter(|c| !c.is_empty())
 }
 
 /// A `PWV7` band byte back to a column band peak (0..=255).

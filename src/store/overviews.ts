@@ -8,8 +8,6 @@
  */
 import { waveformOverview } from "../lib/ipc";
 
-/** Columns per thumbnail; the canvas resamples them to its width. */
-export const OVERVIEW_WIDTH = 400;
 const CACHE_MAX = 2000;
 const FAST_LANES = 4;
 
@@ -76,7 +74,7 @@ async function load(id: number, decode: boolean) {
   inFlight.add(id);
   if (decode) decoding = true;
   else fastRunning++;
-  const columns = await waveformOverview(id, OVERVIEW_WIDTH, decode).then(
+  const columns = await waveformOverview(id, decode).then(
     (b) => new Uint8Array(b),
     () => null,
   );
