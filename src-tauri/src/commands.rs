@@ -531,11 +531,23 @@ pub struct PlannedExport {
     dry_run: DryRun,
 }
 
-/// `ExportOptions::default()`, so the export wizard opens with the planner's
-/// defaults instead of a copy of them.
+/// The options an export of a stick with `target` starts from: Settings ›
+/// Export and the analysis source (D42), built in Rust so the UI never
+/// copies the planner's defaults.
 #[tauri::command]
-pub fn export_default_options() -> ExportOptions {
-    ExportOptions::default()
+pub async fn export_default_options(
+    state: State<'_, AppState>,
+    target: Option<TargetProfile>,
+) -> CmdResult<ExportOptions> {
+    blocking(&state, move |lib| {
+        let s = lib.settings()?;
+        Ok::<_, reks_core::Error>(ExportOptions::from_settings(
+            &s.export,
+            s.anlz_preference,
+            target.unwrap_or(TargetProfile::Generic),
+        ))
+    })
+    .await
 }
 
 /// Dry run of exporting `selection` to the stick mounted at `mount_point`

@@ -159,9 +159,9 @@ fn is_onelibrary(p: &Problem) -> bool {
 }
 
 #[test]
-fn on_by_default_and_off_on_a_clean_stick_only_marks_the_plan() {
+fn off_by_default_and_off_on_a_clean_stick_only_marks_the_plan() {
     let d = ExportOptions::default();
-    assert!(d.onelibrary && d.dividers && d.active_loops);
+    assert!(!d.onelibrary && d.dividers && !d.active_loops);
     assert!(!d.onelibrary_removal_confirmed);
     let w = World::new();
     let mut p = planned(&w, &options(false));
@@ -237,7 +237,8 @@ fn no_key_and_a_database_on_the_stick_lists_its_deletion_and_needs_a_confirmatio
     assert!(view.text.contains("no OneLibrary key"));
     // Shown once, in its own view, and among the deletes.
     assert!(!d.warnings.iter().any(|g| g.kind == "oneLibraryRemoved"));
-    assert!(d.deletes.files.iter().any(|f| f.path == DB_PATH));
+    assert!(view.files.files.iter().any(|f| f.path == DB_PATH));
+    assert!(p.deletes.iter().any(|f| f.dst_rel == DB_PATH));
     assert!(d
         .problems
         .iter()
@@ -350,15 +351,12 @@ fn on_with_a_key_lists_the_database_and_the_files_it_removes() {
         1
     );
 
-    // The dry run shows the file and the removals.
+    // The plan writes the file and the removals; the review lists neither.
+    let step = p.onelibrary.as_ref().unwrap();
+    assert_eq!(step.write.dst_rel, DB_PATH);
+    assert_eq!(step.removes.len(), 2);
     let d = DryRun::new(&p, &TrackLabels::new());
-    let view = d.onelibrary.unwrap();
-    assert_eq!(view.write.path, DB_PATH);
-    assert_eq!(view.removes.count, 2);
-    assert!(d
-        .warnings
-        .iter()
-        .any(|g| g.kind == "oneLibraryExperimental"));
+    assert!(d.warnings.is_empty(), "{:?}", d.warnings);
 
     // Planning again replaces, not adds.
     let once = p.clone();

@@ -18,6 +18,9 @@
 //!   `/PIONEER/USBANLZ` and `/PIONEER/Artwork` are deleted unless
 //!   [`ExportOptions::keep_stale`]. Nothing else on the stick is touched.
 //! - [`ExportPlan::errors`] block the export; [`ExportPlan::warnings`] don't.
+//!   Track problems (missing, unreadable or unsupported audio, no analysis
+//!   under [`MissingAnalysis::Skip`]) never block: the track is left out
+//!   with a [`Warning::Skipped`] and the rest is written (D42).
 //! - History safeguard (D23, task 12): the plan carries what players left on
 //!   the stick ([`ExportPlan::history`]) and the database files `apply` backs
 //!   up before its first write ([`ExportPlan::backups`], see
@@ -64,6 +67,7 @@ use reks_anlz::cue::CueCounts;
 use reks_audio::{Kind, Probe};
 use reks_core::fsname;
 use reks_core::history::HistoryImportPlan;
+use reks_core::settings::ExportSettings;
 use reks_core::{AnlzPreference, Library, PlaylistId, TrackId};
 use serde::{Deserialize, Serialize};
 
@@ -90,19 +94,7 @@ pub struct Selection {
     pub playlists: Vec<PlaylistId>,
 }
 
-/// What to do with a track that has no analysis: none in rekordbox's cache
-/// and none of reks's own (or [`AnlzPreference::RekordboxOnly`]).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum MissingAnalysis {
-    /// Leave the track out, with a warning (phase 2 default).
-    #[default]
-    Skip,
-    /// Let the writer generate approximate ANLZ from the audio (baken).
-    Generate,
-    /// Export without ANLZ: plays, but no waveform, beatgrid or cues.
-    ExportWithout,
-}
+pub use reks_core::settings::MissingAnalysis;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -116,9 +108,6 @@ pub struct ExportOptions {
     /// numbers pictures while writing), so the plan lists no deletes there;
     /// when off, everything in it is stale.
     pub artwork: bool,
-    /// Leave out tracks with blocking problems (unsupported audio, missing
-    /// source) instead of blocking the whole export.
-    pub skip_unsupported: bool,
     /// What to do with the play history on the stick (D23).
     pub history: HistoryPolicy,
     /// The user explicitly confirmed [`HistoryPolicy::Discard`]; without it a
@@ -140,8 +129,9 @@ pub struct ExportOptions {
     /// (D7, accepted 2026-10-30).
     pub anlz_preference: AnlzPreference,
     /// Also write `exportLibrary.db` for OneLibrary players
-    /// ([`plan_onelibrary`]), as rekordbox 6.8.1+ always does. On by default
-    /// (D14, 2026-10-30); experimental and UNVERIFIED on players until a
+    /// ([`plan_onelibrary`]), as rekordbox 6.8.1+ always does. Off by
+    /// default (D42, 2026-11-05; libraries from before keep it on through
+    /// the export settings); experimental and UNVERIFIED on players until a
     /// Phase 4 hardware test passes. Needs a key ([`crate::onelibrary::resolve_key`]).
     pub onelibrary: bool,
     /// The user confirmed that the stick's `exportLibrary.db` is deleted
@@ -152,9 +142,9 @@ pub struct ExportOptions {
     /// The `export.active_loops` flag: the earliest memory loop marked
     /// active in the library (task 17) goes to the stick as the track's
     /// active loop (`PCPT` status 4, through baken's XML marker,
-    /// [`reks_core::rbxml::ActiveLoops::BakenMarker`]). On by default (D14
-    /// and D22's rule, 2026-10-30) and UNVERIFIED until a player enters it
-    /// in a hardware test.
+    /// [`reks_core::rbxml::ActiveLoops::BakenMarker`]). Off by default (D42,
+    /// 2026-11-05: a loop the player enters by itself surprises mid-set) and
+    /// UNVERIFIED until a player enters it in a hardware test.
     pub active_loops: bool,
 }
 
@@ -163,17 +153,39 @@ impl Default for ExportOptions {
         Self {
             target: TargetProfile::Generic,
             keep_stale: false,
-            missing_analysis: MissingAnalysis::Skip,
+            missing_analysis: MissingAnalysis::Generate,
             artwork: false,
-            skip_unsupported: false,
             history: HistoryPolicy::BackUp,
             discard_history_confirmed: false,
             history_chosen: false,
             dividers: true,
             anlz_preference: AnlzPreference::RekordboxFirst,
-            onelibrary: true,
+            onelibrary: false,
             onelibrary_removal_confirmed: false,
-            active_loops: true,
+            active_loops: false,
+        }
+    }
+}
+
+impl ExportOptions {
+    /// The options an export starts from (D42): the app's export settings
+    /// and analysis source, and the stick's target player. The run's own
+    /// choices (history guard, confirmations) start unset.
+    pub fn from_settings(
+        export: &ExportSettings,
+        anlz_preference: AnlzPreference,
+        target: TargetProfile,
+    ) -> Self {
+        Self {
+            target,
+            keep_stale: !export.clean_up,
+            missing_analysis: export.missing_analysis,
+            artwork: export.artwork,
+            dividers: export.dividers,
+            anlz_preference,
+            onelibrary: export.onelibrary,
+            active_loops: export.active_loops,
+            ..Self::default()
         }
     }
 }
@@ -380,6 +392,11 @@ pub struct PlannedPlaylist {
     /// it won't update on the stick.
     #[serde(default)]
     pub smart: bool,
+    /// Entries dropped because their track is left out ([`Warning::Skipped`]),
+    /// once each, so the dry run can say which playlists a left-out track
+    /// is missing from.
+    #[serde(default)]
+    pub left_out: Vec<TrackId>,
 }
 
 /// One file to copy or delete.
@@ -461,8 +478,13 @@ pub enum Warning {
     RekordboxStick { found: Vec<String> },
     /// An audio check that does not block the track.
     Audio { track_id: TrackId, message: String },
-    /// The track is left out of the export.
-    Skipped { track_id: TrackId, reason: String },
+    /// The track is left out of the export; `detail` says why in words
+    /// (the path for a missing file, the check that failed, ...).
+    Skipped {
+        track_id: TrackId,
+        reason: SkipReason,
+        detail: String,
+    },
     /// Stale files left in place because of `keep_stale`.
     StaleKept { files: usize, bytes: u64 },
     /// A playlist ended up empty after tracks were left out.
@@ -503,6 +525,21 @@ pub enum Warning {
     },
 }
 
+/// Why a track is left out ([`Warning::Skipped`]). None of them blocks the
+/// export (D42).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SkipReason {
+    /// The source file is gone or moved.
+    Missing,
+    /// The source could not be probed or its header checked.
+    Unreadable,
+    /// An audio check the target player fails on.
+    Unsupported,
+    /// No analysis and [`MissingAnalysis::Skip`].
+    NoAnalysis,
+}
+
 /// Players that read only `exportLibrary.db`, not `export.pdb` (R§2,
 /// `docs/research.md`; UNVERIFIED per player).
 pub const ONELIBRARY_ONLY_PLAYERS: &[&str] = crate::check::LibraryFormat::OneLibrary.players();
@@ -522,21 +559,6 @@ pub enum Problem {
     /// Players cannot read this file system.
     UnsupportedFilesystem {
         fs_name: String,
-    },
-    SourceMissing {
-        track_id: TrackId,
-        path: PathBuf,
-    },
-    /// The source could not be probed or its header checked.
-    SourceUnreadable {
-        track_id: TrackId,
-        path: PathBuf,
-        message: String,
-    },
-    /// An audio check that the target player fails on.
-    Unsupported {
-        track_id: TrackId,
-        message: String,
     },
     /// The planned stick path breaks a FAT32/player rule.
     BadPath {
@@ -679,20 +701,19 @@ pub fn plan_sources(
     }
     let (history, backups) = plan_history(root, volume_serial, opts, &mut warnings, &mut errors)?;
 
-    // Per-track checks; tracks that fail are left out (with a warning) or block.
+    // Per-track checks; tracks that fail are left out with a warning (D42).
     let mut ok: Vec<(SourceTrack, Probe, u64, std::time::SystemTime, AnlzSource)> = Vec::new();
     let mut convertible = Vec::new();
     for t in sources.tracks {
         match check_track(&t, opts, anlz, reks, &mut warnings, &mut convertible) {
-            Ok(Some((probe, size, mtime, anlz_source))) => {
+            Ok((probe, size, mtime, anlz_source)) => {
                 ok.push((t, probe, size, mtime, anlz_source));
             }
-            Ok(None) => {}
-            Err(problem) if opts.skip_unsupported => warnings.push(Warning::Skipped {
+            Err((reason, detail)) => warnings.push(Warning::Skipped {
                 track_id: t.track_id,
-                reason: problem_text(&problem),
+                reason,
+                detail,
             }),
-            Err(problem) => errors.push(problem),
         }
     }
 
@@ -786,6 +807,11 @@ pub fn plan_sources(
     let mut playlists = sources.playlists;
     for p in &mut playlists {
         let before = p.track_ids.len();
+        for id in &p.track_ids {
+            if !exported.contains(id) && !p.left_out.contains(id) {
+                p.left_out.push(*id);
+            }
+        }
         p.track_ids.retain(|id| exported.contains(id));
         if !p.is_folder && before > 0 && p.track_ids.is_empty() {
             warnings.push(Warning::EmptyPlaylist { id: p.id });
@@ -901,8 +927,7 @@ fn plan_history(
     Ok((history, backups))
 }
 
-/// Probes and checks one track. `Ok(None)`: left out with a warning already
-/// recorded. `Err`: a problem that blocks it.
+/// Probes and checks one track. `Err`: why it is left out, in words.
 fn check_track(
     t: &SourceTrack,
     opts: &ExportOptions,
@@ -910,20 +935,18 @@ fn check_track(
     reks: &dyn ReksLocator,
     warnings: &mut Vec<Warning>,
     convertible: &mut Vec<TrackId>,
-) -> Result<Option<(Probe, u64, std::time::SystemTime, AnlzSource)>, Problem> {
+) -> Result<(Probe, u64, std::time::SystemTime, AnlzSource), (SkipReason, String)> {
     let target = opts.target;
-    let missing = || Problem::SourceMissing {
-        track_id: t.track_id,
-        path: t.src.clone(),
-    };
+    let missing = || (SkipReason::Missing, t.src.display().to_string());
     let meta = std::fs::metadata(&t.src).map_err(|_| missing())?;
     if !meta.is_file() {
         return Err(missing());
     }
-    let unreadable = |message: String| Problem::SourceUnreadable {
-        track_id: t.track_id,
-        path: t.src.clone(),
-        message,
+    let unreadable = |message: String| {
+        (
+            SkipReason::Unreadable,
+            format!("{}: {message}", t.src.display()),
+        )
     };
     let mtime = meta.modified().map_err(|e| unreadable(e.to_string()))?;
     let probe = match &t.probe {
@@ -940,10 +963,7 @@ fn check_track(
         .iter()
         .find(|i| i.severity(target) == Severity::Error)
     {
-        return Err(Problem::Unsupported {
-            track_id: t.track_id,
-            message: issue.to_string(),
-        });
+        return Err((SkipReason::Unsupported, issue.to_string()));
     }
     for issue in &issues {
         warnings.push(Warning::Audio {
@@ -954,7 +974,7 @@ fn check_track(
 
     // A divider's analysis is always generated (D22): rekordbox never saw it.
     if t.divider.is_some() {
-        return Ok(Some((probe, meta.len(), mtime, AnlzSource::Generated)));
+        return Ok((probe, meta.len(), mtime, AnlzSource::Generated));
     }
     let found = choose_anlz(t, opts.anlz_preference, anlz, reks);
     let anlz_source = match found {
@@ -965,17 +985,13 @@ fn check_track(
                 if opts.anlz_preference != AnlzPreference::RekordboxOnly {
                     reason = format!("{reason}; {}", reks.why_missing(t));
                 }
-                warnings.push(Warning::Skipped {
-                    track_id: t.track_id,
-                    reason,
-                });
-                return Ok(None);
+                return Err((SkipReason::NoAnalysis, reason));
             }
             MissingAnalysis::Generate => AnlzSource::Generated,
             MissingAnalysis::ExportWithout => AnlzSource::None,
         },
     };
-    Ok(Some((probe, meta.len(), mtime, anlz_source)))
+    Ok((probe, meta.len(), mtime, anlz_source))
 }
 
 /// The track's analysis under `pref`; `None` when neither source has it.
@@ -1023,16 +1039,6 @@ fn natural_path(t: &SourceTrack) -> String {
         t.album.as_deref().unwrap_or(""),
         &file,
     )
-}
-
-fn problem_text(p: &Problem) -> String {
-    match p {
-        Problem::SourceMissing { path, .. } => format!("file not found: {}", path.display()),
-        Problem::SourceUnreadable { message, .. } | Problem::Unsupported { message, .. } => {
-            message.clone()
-        }
-        other => other.to_string(),
-    }
 }
 
 fn to_i64(n: u64) -> i64 {

@@ -1,7 +1,9 @@
 /**
  * Stick profiles (phase 2 task 15, D27): the sticks this library knows, what
  * each mounted volume is to it (`profile_identify`: known, or a prompt), and
- * the status of the stick the Devices panel shows. Identity, status and all
+ * the status of the stick the Sticks view shows, with its playlist ticks
+ * and "Plays on" (D42: the profile is edited here, not in the export).
+ * Ticks and the target are saved as they change. Identity, status and all
  * wording come from Rust; this keeps the answers and refetches them when a
  * stick comes or goes.
  */
@@ -11,10 +13,15 @@ import {
   type Device,
   type DeviceInfo,
   type DeviceMatch,
+  type ExportSelection,
+  type PlaylistNode,
   type ProfileStatus,
   profileCreate,
   profileIdentify,
   profileLink,
+  profileSelection,
+  profileSetSelection,
+  profileSetTarget,
   profileStatus,
   profilesList,
   type TargetProfile,
@@ -36,6 +43,8 @@ export interface ProfilesState {
   selectedId: number | null;
   status: ProfileStatus | null;
   statusLoading: boolean;
+  /** The selected stick's ticked playlists and folders; null while loading. */
+  ticks: ReadonlySet<number> | null;
   error: string | null;
 
   refreshKnown(): Promise<void>;
@@ -47,6 +56,30 @@ export interface ProfilesState {
   link(mountPoint: string, id: number): Promise<Device | null>;
   select(id: number | null): void;
   loadStatus(): Promise<void>;
+  /** Ticks or unticks a playlist or folder of the selected stick and saves the profile. */
+  toggleTick(id: number, nodes: PlaylistNode[]): Promise<void>;
+  /** Saves the selected stick's "Plays on". */
+  setTarget(target: TargetProfile): Promise<void>;
+}
+
+/** Ids that a ticked folder above them already covers. */
+export function coveredIds(nodes: PlaylistNode[], checked: ReadonlySet<number>): Set<number> {
+  const covered = new Set<number>();
+  // Depth first: a parent comes before its children.
+  for (const n of nodes) {
+    if (n.parentId !== null && (checked.has(n.parentId) || covered.has(n.parentId))) {
+      covered.add(n.id);
+    }
+  }
+  return covered;
+}
+
+/** The ticked nodes no ticked folder covers, in tree order: the `Selection`. */
+export function selectionOf(nodes: PlaylistNode[], checked: ReadonlySet<number>): ExportSelection {
+  const covered = coveredIds(nodes, checked);
+  return {
+    playlists: nodes.filter((n) => checked.has(n.id) && !covered.has(n.id)).map((n) => n.id),
+  };
 }
 
 /** Same stick at the same mount point: no need to identify again. */
@@ -73,6 +106,7 @@ function volumeSerialOf(match: DeviceMatch | null): string | null {
 }
 
 let statusSeq = 0;
+let ticksSeq = 0;
 
 export const useProfiles = create<ProfilesState>()((set, get) => ({
   known: [],
@@ -80,6 +114,7 @@ export const useProfiles = create<ProfilesState>()((set, get) => ({
   selectedId: null,
   status: null,
   statusLoading: false,
+  ticks: null,
   error: null,
 
   async refreshKnown() {
@@ -163,8 +198,50 @@ export const useProfiles = create<ProfilesState>()((set, get) => ({
   },
 
   select(id) {
-    set({ selectedId: id, status: null, error: null });
-    if (id !== null) void get().loadStatus();
+    const mine = ++ticksSeq;
+    set({ selectedId: id, status: null, ticks: null, error: null });
+    if (id === null) return;
+    void get().loadStatus();
+    void (async () => {
+      try {
+        const sel = await profileSelection(id);
+        if (mine === ticksSeq) set({ ticks: new Set(sel.playlists) });
+      } catch (e) {
+        if (mine === ticksSeq) set({ error: `Could not read the stick's playlists: ${String(e)}` });
+      }
+    })();
+  },
+
+  async toggleTick(nodeId, nodes) {
+    const { selectedId: id, ticks } = get();
+    if (id === null || ticks === null) return;
+    const next = new Set(ticks);
+    if (!next.delete(nodeId)) next.add(nodeId);
+    set({ ticks: next });
+    try {
+      await profileSetSelection(id, selectionOf(nodes, next).playlists);
+      await get().loadStatus();
+    } catch (e) {
+      set({ ticks, error: `Could not save the stick's playlists: ${String(e)}` });
+    }
+  },
+
+  async setTarget(target) {
+    const id = get().selectedId;
+    if (id === null) return;
+    try {
+      const device = await profileSetTarget(id, target);
+      set({ known: get().known.map((d) => (d.id === id ? device : d)) });
+      // A known stick's identity carries its device; keep the mounted copy in step.
+      const mount = mountOf(get().mounted, id);
+      const m = mount === null ? undefined : get().mounted[mount];
+      if (mount !== null && m !== undefined) {
+        set({ mounted: { ...get().mounted, [mount]: { ...m, match: { type: "known", device } } } });
+      }
+      await get().loadStatus();
+    } catch (e) {
+      set({ error: `Could not save "Plays on": ${String(e)}` });
+    }
   },
 
   async loadStatus() {

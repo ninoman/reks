@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simpler USB Export</title>
+<meta name="description" content="Wireframes: the USB export cut from six steps to three, with the technical options moved to Settings › Export and to each stick.">
+<style>
+/*
+ * Wireframe: the export wizard asks two things (which stick, which playlists),
+ * shows one review, and writes. Every other option becomes a setting with a
+ * conservative default. Low-fidelity greys; blue = new, red = removed,
+ * amber = needs a decision.
+ */
+:root {
+  --paper: #f4f4f7; --sheet: #ffffff; --ink: #1c1c24; --ink-2: #5d5d6c; --ink-3: #8a8a99; --line: #c7c7d2;
+  --box: #ffffff; --box-2: #f0f0f4;
+  --new: #4247c9; --new-bg: #e9eafb; --gone: #b4383d; --gone-bg: #f8e4e5;
+  --later: #9a6a00; --later-bg: #fbf1d9; --ok: #1d7651; --ok-bg: #e2f3ea;
+  --shadow: 0 8px 24px rgb(20 20 40 / 16%);
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #131318; --sheet: #1a1a21; --ink: #e8e8ef; --ink-2: #a3a3b3; --ink-3: #737384; --line: #3b3b48;
+  --box: #1f1f27; --box-2: #23232c;
+  --new: #a3a6ff; --new-bg: #26274a; --gone: #ff8a8f; --gone-bg: #4a2326;
+  --later: #f1c45c; --later-bg: #3d3216; --ok: #62c290; --ok-bg: #1d3a2b;
+  --shadow: 0 8px 24px rgb(0 0 0 / 50%); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #131318; --sheet: #1a1a21; --ink: #e8e8ef; --ink-2: #a3a3b3; --ink-3: #737384; --line: #3b3b48;
+  --box: #1f1f27; --box-2: #23232c;
+  --new: #a3a6ff; --new-bg: #26274a; --gone: #ff8a8f; --gone-bg: #4a2326;
+  --later: #f1c45c; --later-bg: #3d3216; --ok: #62c290; --ok-bg: #1d3a2b;
+  --shadow: 0 8px 24px rgb(0 0 0 / 50%); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 24px 16px 64px; display: flex; flex-direction: column; gap: 40px; }
+h1 { font-size: 26px; line-height: 1.2; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 19px; margin: 0; }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 0; max-width: 80ch; }
+ul, ol { margin: 0; padding-left: 20px; }
+li + li { margin-top: 4px; }
+.lede { color: var(--ink-2); font-size: 15px; }
+code { font-family: var(--font-mono); font-size: 0.88em; }
+section.block { display: flex; flex-direction: column; gap: 14px; }
+.muted { color: var(--ink-2); }
+.small { font-size: 12px; }
+
+/* tags */
+.tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .02em; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.t-new { background: var(--new-bg); color: var(--new); }
+.t-gone { background: var(--gone-bg); color: var(--gone); }
+.t-later { background: var(--later-bg); color: var(--later); }
+.t-ok { background: var(--ok-bg); color: var(--ok); }
+.t-mute { background: var(--box-2); color: var(--ink-2); border: 1px solid var(--line); }
+
+/* flow strip */
+.flow { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.flowrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.flowrow .lbl { width: 70px; font-weight: 600; color: var(--ink-2); font-size: 12px; text-transform: uppercase; }
+.pill { border: 1px solid var(--line); background: var(--sheet); border-radius: 6px; padding: 4px 10px; font-size: 13px; }
+.pill.gone { border-color: var(--gone); color: var(--gone); text-decoration: line-through; background: var(--gone-bg); }
+.pill.new { border-color: var(--new); color: var(--new); background: var(--new-bg); }
+.arrow { color: var(--ink-3); }
+
+/* table */
+.tbl { width: 100%; border-collapse: collapse; background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: 13px; }
+.tbl th, .tbl td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl th { background: var(--box-2); font-size: 12px; color: var(--ink-2); font-weight: 600; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tblwrap { overflow-x: auto; }
+
+/* frame + notes */
+.screen { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 960px) { .screen { grid-template-columns: 1fr; } }
+.frame { background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+.fhead { padding: 16px 18px 10px; display: flex; flex-direction: column; gap: 4px; }
+.fhead .title { font-weight: 600; font-size: 16px; }
+.steps { display: flex; gap: 6px; margin-top: 8px; }
+.steps span { flex: 1; border-top: 2px solid var(--line); padding-top: 4px; font-size: 12px; color: var(--ink-3); }
+.steps span.on { border-color: var(--ink); color: var(--ink); }
+.steps span.done { border-color: var(--ink-3); }
+.fbody { padding: 6px 18px 16px; display: flex; flex-direction: column; gap: 12px; }
+.ffoot { border-top: 1px solid var(--line); padding: 12px 18px; display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+.ffoot .left { margin-right: auto; font-size: 12px; color: var(--ink-2); }
+.btn { border: 1px solid var(--line); background: var(--box); border-radius: 6px; padding: 5px 12px; font-size: 13px; color: var(--ink); white-space: nowrap; }
+.btn.pri { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+.btn.dis { opacity: .4; }
+.btn.sm { padding: 2px 9px; font-size: 12px; }
+.btn.link { border: 0; background: none; padding: 0; text-decoration: underline; color: var(--ink-2); font-size: 12px; }
+.card { border: 1px solid var(--line); border-radius: 8px; background: var(--box); }
+.card > .r { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
+.card > .r:last-child { border-bottom: 0; }
+.r .grow { flex: 1; min-width: 0; }
+.r .t { font-weight: 600; font-size: 13px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.r .h { font-size: 12px; color: var(--ink-2); }
+.cb { width: 14px; height: 14px; border: 1.5px solid var(--ink-2); border-radius: 3px; flex-shrink: 0; }
+.cb.on { background: var(--ink); border-color: var(--ink); }
+.cb.part { background: linear-gradient(var(--ink), var(--ink)) center/8px 2px no-repeat; }
+.sw { width: 30px; height: 17px; border-radius: 999px; background: var(--line); position: relative; flex-shrink: 0; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--sheet); }
+.sw.on { background: var(--ink); }
+.sw.on::after { left: 15px; }
+.sel { border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; font-size: 13px; background: var(--box); display: flex; justify-content: space-between; gap: 12px; min-width: 200px; }
+.sel::after { content: "⌄"; color: var(--ink-3); }
+.bar { height: 8px; border-radius: 999px; background: var(--box-2); border: 1px solid var(--line); overflow: hidden; display: flex; }
+.bar i { display: block; background: var(--ink-3); }
+.bar i.n { background: var(--new); }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--box); }
+.tile b { display: block; font-size: 18px; }
+.tile span { font-size: 12px; color: var(--ink-2); }
+.split { display: grid; grid-template-columns: 190px 1fr; gap: 12px; }
+@media (max-width: 560px) { .split { grid-template-columns: 1fr; } .tiles { grid-template-columns: 1fr; } }
+.stick { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--box); display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.stick.on { border: 2px solid var(--ink); padding: 7px 9px; }
+.stick b { font-size: 13px; }
+.tree .r { padding: 6px 10px; }
+.status { font-weight: 600; font-size: 15px; }
+.status.ok { color: var(--ok); }
+.status.warn { color: var(--later); }
+.issue { border: 1px solid var(--later); background: var(--later-bg); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.issue .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.issue.done { border-color: var(--line); background: var(--box); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--ink-2); }
+.chips .c { border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; background: var(--box-2); color: var(--ink); }
+.disc { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--ink-2); }
+.grp { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); margin: 4px 0 -4px; display: flex; gap: 8px; align-items: center; }
+.sidebar { display: flex; }
+.sidebar .nav { width: 120px; border-right: 1px solid var(--line); padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; flex-shrink: 0; }
+.sidebar .nav span { padding: 4px 8px; border-radius: 5px; color: var(--ink-2); }
+.sidebar .nav span.on { background: var(--box-2); color: var(--ink); font-weight: 600; }
+.sidebar .nav span.new { color: var(--new); }
+.sidebar .main { flex: 1; min-width: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+.mk { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--new); color: var(--sheet); font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.notes { display: flex; flex-direction: column; gap: 10px; }
+.note { display: flex; gap: 10px; align-items: flex-start; }
+.note p { font-size: 13px; }
+.callout { border-left: 3px solid var(--new); background: var(--new-bg); padding: 10px 14px; border-radius: 0 8px 8px 0; }
+.callout.warn { border-color: var(--later); background: var(--later-bg); }
+.twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 760px) { .twocol { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="block" style="display:flex;flex-direction:column;gap:10px">
+  <h1>Simpler USB export</h1>
+  <p class="lede">Today there are three ways into an export and it asks ten technical questions on every run.
+  The proposal: <b>one “Sticks” button</b> in the header. It opens one view where you pick a stick and tick its
+  playlists; <b>Sync</b> shows <b>one review</b> in plain language, then writes. Everything else becomes a setting
+  with a safe default: <b>Settings › Export</b> for how reks writes sticks, and <b>the stick itself</b> for which
+  players it must work on. Track problems (missing or unplayable files) never block: those tracks are left out,
+  counted, and fixable from the review.</p>
+  <p class="small muted">Status: proposal, 2026-11-05. Replaces the export wizard’s Stick, Playlists and Options
+  steps (<code>src/components/ExportWizard.tsx</code>, Phase 2 task 10) and merges the header’s Export button into
+  the Devices view (<code>AppHeader.tsx</code>, <code>DevicesDialog.tsx</code>). Decision: D42 in <code>docs/decisions.md</code> (proposed).</p>
+</header>
+
+<!-- 1. Flow -->
+<section class="block">
+  <h2>1. Three ways in become one; six steps become three</h2>
+  <div class="flow">
+    <div class="flowrow"><span class="lbl">Now</span>
+      <span class="pill gone">Header “Export to USB…”</span><span class="pill gone">USB icon → Devices → “Export to USB…”</span><span class="pill gone">Devices → “Edit and sync…”</span>
+    </div>
+    <div class="flowrow"><span class="lbl"></span>
+      <span class="pill">Stick</span><span class="arrow">→</span>
+      <span class="pill">Playlists</span><span class="arrow">→</span>
+      <span class="pill gone">Options (10 controls)</span><span class="arrow">→</span>
+      <span class="pill">Dry run</span><span class="arrow">→</span>
+      <span class="pill">Writing</span><span class="arrow">→</span>
+      <span class="pill">Report</span>
+    </div>
+    <div class="flowrow"><span class="lbl">New</span>
+      <span class="pill new">Header “Sticks” → Sticks view: pick stick, tick playlists</span><span class="arrow">→</span>
+      <span class="pill new">Sync</span><span class="arrow">→</span>
+      <span class="pill new">1 · Review</span><span class="arrow">→</span>
+      <span class="pill new">2 · Writing</span><span class="arrow">→</span>
+      <span class="pill new">3 · Done / Eject</span>
+    </div>
+    <div class="flowrow"><span class="lbl">Quick</span>
+      <span class="pill">One known stick plugged in</span><span class="arrow">→</span>
+      <span class="pill new">Header shows only “Sync Club stick”</span><span class="arrow">→</span>
+      <span class="pill new">Review</span><span class="arrow">→</span>
+      <span class="pill new">Export</span>
+    </div>
+  </div>
+  <p class="muted small">The playlist ticks <i>are</i> the stick profile (D27), so they live in the Sticks view and the
+  wizard no longer repeats them. The dry run keeps its job (nothing is written before the user presses Export) but is
+  renamed <b>Review</b>; “dry run” is developer language.</p>
+</section>
+
+<!-- 2. Where each option goes -->
+<section class="block">
+  <h2>2. Where each option goes</h2>
+  <div class="tblwrap">
+  <table class="tbl">
+    <thead><tr><th>Today in the Options step</th><th>New home</th><th>Default</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Oldest player the stick must work on</td>
+          <td><span class="tag t-new">Per stick</span> Sticks view › stick › “Plays on”. Asked once, when a stick is first set up.</td>
+          <td>Any player (safest)</td>
+          <td>It describes the stick, not the run. Already stored per device (<code>device.target</code>); only the UI moves.</td></tr>
+      <tr><td>Analysis to write</td>
+          <td><span class="tag t-new">Settings › Export</span></td>
+          <td>Current saved value</td>
+          <td>Already “saved for later exports”; it is a library-wide preference.</td></tr>
+      <tr><td>Tracks without analysis</td>
+          <td><span class="tag t-new">Settings › Export</span> + inline in Review when it happens</td>
+          <td>Export them with approximate analysis</td>
+          <td>A track on the stick beats a missing one. The review says how many got approximate analysis and offers <i>Analyse now</i> / <i>Leave them out</i> / <i>Keep as it is</i>.</td></tr>
+      <tr><td>Leave out unsupported files</td>
+          <td><span class="tag t-gone">Removed</span>: missing, unreadable and unsupported files never block</td>
+          <td>Left out, counted</td>
+          <td>One bad file must not stop a stick. Review lists them with <i>Find files…</i> / <i>Convert…</i> / <i>Remove from playlists…</i>. Changes the rule in <code>phase-2.md</code> (task 10).</td></tr>
+      <tr><td>Keep stale files</td>
+          <td><span class="tag t-new">Settings › Export</span>, as “Clean up files the stick no longer uses”</td>
+          <td>Clean up (on)</td>
+          <td>Phrased positively; review shows what is deleted and how much it frees.</td></tr>
+      <tr><td>Artwork</td>
+          <td><span class="tag t-new">Settings › Export</span></td>
+          <td>On</td>
+          <td>Set once.</td></tr>
+      <tr><td>Playlist dividers <span class="tag t-mute">UNVERIFIED</span></td>
+          <td><span class="tag t-new">Settings › Export › Experimental</span></td>
+          <td>On</td>
+          <td>Maintainer’s call: dividers are part of how playlists are organised. Still badged until a hardware test is logged.</td></tr>
+      <tr><td>Active loops <span class="tag t-mute">UNVERIFIED</span></td>
+          <td><span class="tag t-new">Settings › Export › Experimental</span>, renamed “Start the first loop automatically”</td>
+          <td>Off</td>
+          <td>A loop the player locks into by itself when the playhead reaches it, without pressing LOOP (rekordbox’s “active loop”). Surprising mid-set if unexpected, so opt-in.</td></tr>
+      <tr><td>OneLibrary <span class="tag t-mute">UNVERIFIED</span></td>
+          <td><span class="tag t-new">Settings › Export › Experimental</span></td>
+          <td>Off on new installs</td>
+          <td>Deleting a stick’s <code>exportLibrary.db</code> when off stays a confirmed item in Review (unchanged).</td></tr>
+      <tr><td>Play history: Back up first / Discard</td>
+          <td><span class="tag t-gone">Removed</span>: always backed up. Review shows one line.</td>
+          <td>Back up</td>
+          <td>D23: no export loses player history. The un-imported-sessions guard stays in Review; Discard moves behind “More”.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- 3. Sticks view -->
+<section class="block">
+  <h2>3. The Sticks view (header button → pick a stick → tick playlists)</h2>
+  <div class="screen">
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="frame" aria-label="Wireframe: header button">
+        <div class="fbody" style="padding:10px 14px;flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="small muted" style="margin-right:auto">reks · header</span>
+          <span class="btn">⚙</span>
+          <span class="small muted">0 or 2+ sticks:</span>
+          <span class="btn">🔌 Sticks <span class="tag t-new">2</span> <span class="mk" style="width:15px;height:15px;font-size:9px">1</span></span>
+          <span class="small muted">1 stick:</span>
+          <span class="btn pri">🔌 Sync Club stick ▾ <span class="mk" style="width:15px;height:15px;font-size:9px">2</span></span>
+          <span class="btn" style="text-decoration:line-through;color:var(--gone);border-color:var(--gone)">Export to USB…</span>
+        </div>
+      </div>
+      <div class="frame" aria-label="Wireframe: sticks view">
+        <div class="fhead"><span class="title">Sticks</span></div>
+        <div class="fbody">
+          <div class="split">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div class="grp">Plugged in</div>
+              <div class="stick on"><b>Club stick <span class="mk" style="width:15px;height:15px;font-size:9px">3</span></b>
+                <div class="bar"><i style="width:56%"></i></div>
+                <span class="muted">14.2 of 32 GB free</span>
+                <span class="tag t-later" style="align-self:flex-start">3 playlists changed</span>
+                <div style="display:flex;gap:4px;margin-top:4px"><span class="btn sm pri">Sync</span><span class="btn sm">Eject</span></div></div>
+              <div class="stick" style="border-style:dashed"><b>USB DISK <span class="mk" style="width:15px;height:15px;font-size:9px">4</span></b><span class="muted">Not set up yet</span>
+                <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap"><span class="btn sm">New stick</span><span class="btn sm">Adopt…</span></div></div>
+              <div class="grp">Known</div>
+              <div class="stick" style="opacity:.7"><b>Backup stick</b><span class="muted">Not plugged in · synced 2 Nov</span></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="card">
+                <div class="r"><div class="grow"><div class="t">Plays on <span class="mk" style="width:15px;height:15px;font-size:9px">5</span></div></div><span class="sel" style="min-width:150px">CDJ‑2000NXS2 and newer</span></div>
+              </div>
+              <div class="card tree">
+                <div class="r"><span class="cb on"></span><span class="grow">Saturday set</span><span class="tag t-new">New</span><span class="small muted">48</span></div>
+                <div class="r"><span class="cb part"></span><span class="grow">📁 Techno</span><span class="small muted">folder</span></div>
+                <div class="r" style="padding-left:30px"><span class="cb on"></span><span class="grow">Peak time</span><span class="tag t-later">+6 −2</span><span class="small muted">112</span></div>
+                <div class="r" style="padding-left:30px"><span class="cb"></span><span class="grow">Warm-up</span><span class="tag t-gone">Removes</span><span class="small muted">frees 640 MB</span></div>
+                <div class="r"><span class="cb on"></span><span class="grow">Classics</span><span class="tag t-ok">In sync</span><span class="small muted">230</span></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <div class="bar"><i style="width:48%"></i><i class="n" style="width:7%"></i></div>
+                <span class="small muted">After sync: 15.9 of 32 GB used <span class="mk" style="width:15px;height:15px;font-size:9px">6</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ffoot"><span class="left">Ticks are saved as you go. Nothing is written until you press Export in the review.</span><span class="btn">Close</span><span class="btn pri">Sync Club stick</span></div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="mk">1</span><p><b>One header button: USB icon + “Sticks”</b>, with a count when sticks are plugged in. The separate “Export to USB…” button goes, and so does the second one in the Devices footer.</p></div>
+      <div class="note"><span class="mk">2</span><p><b>One stick plugged in: just the button.</b> The header shows only “Sync &lt;name&gt;”, one click to the review; the Sticks button is not shown. Its ▾ holds <i>Edit playlists…</i> (this view), <i>Eject</i> and <i>All sticks…</i>. An unknown single stick shows “Set up &lt;label&gt;” instead.</p></div>
+      <div class="note"><span class="mk">3</span><p><b>Stick cards</b>: plugged in first, then known ones. Name, capacity bar, sync status (In sync / 3 playlists changed, computed in Rust today), Eject, and a primary <i>Sync</i>.</p></div>
+      <div class="note"><span class="mk">4</span><p><b>Unknown stick</b>: the identify prompt stays inline as today (“Is this ‘Club stick’?” / New stick / Adopt…). New stick asks for a name and “Plays on” once.</p></div>
+      <div class="note"><span class="mk">5</span><p><b>“Plays on”</b> (was “Oldest player…” in Options) belongs to the stick. Labels say what the user knows: “Any player (safest)”, “CDJ‑2000NXS and newer”, “CDJ‑2000NXS2 and newer”, “CDJ‑3000 and newer”, “XDJ‑XZ”. Same <code>TargetProfile</code>, stored on <code>device</code> as today.</p></div>
+      <div class="note"><span class="mk">6</span><p><b>Playlist ticks with live status</b> (New, +added −removed, In sync, Removes) and a capacity bar (grey stays, blue is new audio). These replace the wizard’s Stick and Playlists steps; the folder hint becomes a tooltip.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. Review, ready -->
+<section class="block">
+  <h2>4. Step 1 · Review, when everything is fine</h2>
+  <div class="screen">
+    <div class="frame" aria-label="Wireframe: review ready">
+      <div class="fhead">
+        <span class="title">Sync Club stick</span>
+        <div class="steps"><span class="on">Review</span><span>Writing</span><span>Done</span></div>
+      </div>
+      <div class="fbody">
+        <p class="status ok">Ready to export to Club stick <span class="mk">1</span></p>
+        <div class="tiles">
+          <div class="tile"><b>3 playlists</b><span>1 new · 1 changed · 1 removed</span></div>
+          <div class="tile"><b>54 tracks to copy</b><span>1.2 GB · about 2 min</span></div>
+          <div class="tile"><b>16.1 GB free</b><span>after export · frees 640 MB</span></div>
+        </div>
+        <div class="card">
+          <div class="r"><span class="tag t-new">New</span><span class="grow">Saturday set</span><span class="small muted">48 tracks</span></div>
+          <div class="r"><span class="tag t-later">Changed</span><span class="grow">Techno / Peak time</span><span class="small muted">+6 −2</span></div>
+          <div class="r"><span class="tag t-gone">Removed</span><span class="grow">Techno / Warm-up</span><span class="small muted">frees 640 MB</span></div>
+        </div>
+        <div class="chips"><span class="mk">2</span><span>Writing with:</span><span class="c">Any player</span><span class="c">reks analysis, then rekordbox</span><span class="c">Artwork</span><button class="btn link">Change…</button></div>
+        <p class="small muted"><span class="mk" style="width:15px;height:15px;font-size:9px">3</span> Play history on the stick (2 sessions) is backed up to your library first.</p>
+        <div class="disc">▸ Technical details: files to copy and delete, paths, file system <span class="mk" style="width:15px;height:15px;font-size:9px">4</span></div>
+      </div>
+      <div class="ffoot"><span class="btn">Back to Sticks</span><span class="btn pri">Export</span></div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="mk">1</span><p><b>One headline, three numbers.</b> What changes, how much is copied, space after. The Rust <code>DryRun</code> already has these facts; it gets a short summary shape for the tiles.</p></div>
+      <div class="note"><span class="mk">2</span><p><b>Settings in use, read-only.</b> A one-line chip row says how the stick is written. “Change…” opens Settings › Export (or the stick’s “Plays on”) and replans on return. Transparency without asking every time.</p></div>
+      <div class="note"><span class="mk">3</span><p><b>History is one line</b> when nothing needs a decision. Backup is always on.</p></div>
+      <div class="note"><span class="mk">4</span><p><b>Everything technical is collapsed</b>: copy/delete file lists, PDB/ANLZ paths, FAT32 details, OneLibrary file writes. Still there for checking; out of the way for exporting.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. Review, needs attention -->
+<section class="block">
+  <h2>5. Step 1 · Review, when tracks are left out</h2>
+  <div class="screen">
+    <div class="frame" aria-label="Wireframe: review with issues">
+      <div class="fhead">
+        <span class="title">Sync Club stick</span>
+        <div class="steps"><span class="on">Review</span><span>Writing</span><span>Done</span></div>
+      </div>
+      <div class="fbody">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap"><p class="status warn">Ready to export · 12 tracks will be left out <span class="mk">1</span></p><span class="btn sm">Keep all as they are <span class="mk" style="width:15px;height:15px;font-size:9px">10</span></span></div>
+        <div class="issue">
+          <span style="font-weight:600">12 tracks are missing <span class="mk">2</span></span>
+          <span class="small muted">Their files are gone or moved. They are left out of this export and stay in your playlists.</span>
+          <div class="card" style="background:var(--sheet)">
+            <div class="r"><span class="cb on"></span><div class="grow"><div class="t">Artist A – Track A</div><div class="h">In: Techno / Peak time, Saturday set · <code>~/Music/Promo/track-a.aiff</code></div></div></div>
+            <div class="r"><span class="cb on"></span><div class="grow"><div class="t">Artist B – Track B</div><div class="h">In: Saturday set · <code>/Volumes/Ext/DJ/track-b.mp3</code></div></div></div>
+            <div class="r"><span class="cb" style="opacity:.3"></span><div class="grow"><div class="t">Artist C – Track C <span class="mk">3</span></div><div class="h">In a smart playlist (Classics): left out · <code>~/Music/old/track-c.wav</code></div></div></div>
+            <div class="r small muted" style="justify-content:center">…and 9 more</div>
+          </div>
+          <div class="acts"><span class="btn sm">Find files…</span><span class="btn sm">Remove from playlists… <span class="mk" style="width:15px;height:15px;font-size:9px">4</span></span><span class="btn sm pri">Keep as it is</span></div>
+        </div>
+        <div class="disc" style="border-style:solid;background:var(--box)">
+          <b>Remove 11 tracks from 3 playlists?</b>
+          <span class="small"> The tracks stay in your library and in your other playlists.</span>
+          <div class="acts" style="display:flex;gap:6px;margin-top:6px"><span class="btn sm">Cancel</span><span class="btn sm pri">Remove</span></div>
+        </div>
+        <div class="issue">
+          <span style="font-weight:600">5 tracks won’t play on older players <span class="mk">5</span></span>
+          <span class="small muted">24-bit AIFF; Club stick plays on CDJ‑2000NXS2 and newer. Left out of this export.</span>
+          <div class="acts"><span class="btn sm">Convert…</span><span class="btn sm">Remove from playlists…</span><span class="btn sm pri">Keep as it is</span></div>
+        </div>
+        <div class="issue">
+          <span style="font-weight:600">9 tracks get approximate analysis <span class="mk">7</span></span>
+          <span class="small muted">Neither reks nor rekordbox has analysed them; a quick waveform and beatgrid are generated.</span>
+          <div class="acts"><span class="btn sm">Analyse now</span><span class="btn sm">Leave them out</span><span class="btn sm pri">Keep as it is</span></div>
+        </div>
+        <div class="issue done">
+          <span style="font-weight:600">✓ 2 play-history sessions imported <span class="mk">8</span></span>
+          <span class="small muted">They were on the stick and not yet in your library.</span>
+        </div>
+        <div class="tiles" style="opacity:.55"><div class="tile"><b>3 playlists</b><span>…</span></div><div class="tile"><b>54 tracks</b><span>…</span></div><div class="tile"><b>16.1 GB free</b><span>…</span></div></div>
+      </div>
+      <div class="ffoot"><span class="left">12 left out</span><span class="btn">Back to Sticks</span><span class="btn pri">Export 412 of 424 tracks <span class="mk" style="width:15px;height:15px;font-size:9px">6</span></span></div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="mk">1</span><p><b>Track problems never block.</b> A missing, unreadable or unsupported file only leaves that track out; the rest is written. Replaces “Must be fixed first” + “Warnings” + the separate “Convert for older players” section. Each fix replans automatically; no “Plan again” button. Still blocking (whole stick can’t be written): unsupported file system, not enough space, a bad stick path (a reks bug).</p></div>
+      <div class="note"><span class="mk">2</span><p><b>Missing tracks, one row each</b>: Artist – Title, the playlists on <i>this stick</i> that contain it, and the last known path. <i>Find files…</i> is the existing find-missing-files flow; afterwards the plan is rebuilt and found tracks go back in. <i>Keep as it is</i> (leave them out this time, keep them in the playlists) is the default.</p></div>
+      <div class="note"><span class="mk">3</span><p><b>Smart playlists</b>: the row says “in a smart playlist: left out” and has no checkbox, because the track matches the playlist’s rule; removing it would not stick.</p></div>
+      <div class="note"><span class="mk">4</span><p><b>Remove from playlists</b> removes the ticked tracks only from the library playlists ticked for this stick, never from others or the library. Confirm first (“Remove 11 tracks from 3 playlists? The tracks stay in your library.”), then the plan is rebuilt.</p></div>
+      <div class="note"><span class="mk">5</span><p><b>Unsupported formats</b>: the same card with <i>Convert…</i> in place of <i>Find files…</i>.</p></div>
+      <div class="note"><span class="mk">6</span><p><b>Nothing is left out silently.</b> The primary button counts it (“Export 412 of 424 tracks”), and the report repeats it.</p></div>
+      <div class="note"><span class="mk">7</span><p><b>Missing analysis</b> follows Settings › Export, default “Export with approximate analysis”: the tracks go on the stick with a generated waveform and beatgrid. The card says so; <i>Analyse now</i> runs the full analysis first.</p></div>
+      <div class="note"><span class="mk">8</span><p><b>History guard (D23), same rules, fewer words.</b> Un-imported sessions show <i>Import now</i> (primary) / <i>Back up and continue</i> / <i>More ▾ → Discard…</i> with the existing confirm. After choosing, it collapses to a ✓ line.</p></div>
+      <div class="note"><span class="mk">10</span><p><b>Keep as it is</b> on every warning card, and <i>Keep all as they are</i> at the top. It changes nothing: the card collapses to a ✓ line (“12 missing tracks left out, still in your playlists”). Export is never blocked by these cards, so the button is acknowledgement and tidying, not a gate.</p></div>
+      <div class="note"><span class="mk">9</span><p><b>OneLibrary removal</b> (setting turned off, stick has <code>exportLibrary.db</code>) is one more card here with its existing checkbox confirm; unchanged behaviour.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 6. Export + done -->
+<section class="block">
+  <h2>6. Steps 2–3 · Writing, then done</h2>
+  <div class="twocol">
+    <div class="frame" aria-label="Wireframe: writing">
+      <div class="fhead"><span class="title">Sync Club stick</span>
+        <div class="steps"><span class="done">Review</span><span class="on">Writing</span><span>Done</span></div></div>
+      <div class="fbody">
+        <p style="font-weight:600">Copying music · 31 of 54</p>
+        <div class="bar"><i class="n" style="width:57%"></i></div>
+        <p class="small muted">Backed up history ✓ · Copying music · Writing library · Checking the stick</p>
+      </div>
+      <div class="ffoot"><span class="btn">Cancel export</span></div>
+    </div>
+    <div class="frame" aria-label="Wireframe: done">
+      <div class="fhead"><span class="title">Sync Club stick</span>
+        <div class="steps"><span class="done">Review</span><span class="done">Writing</span><span class="on">Done</span></div></div>
+      <div class="fbody">
+        <p class="status ok">Done. Club stick is ready.</p>
+        <p class="small muted">3 playlists · 412 of 424 tracks · 54 copied · checked after writing · 16.1 GB free</p>
+        <div class="issue">
+          <span style="font-weight:600">12 tracks left out (missing)</span>
+          <span class="small muted">Still in your playlists; skipped on this stick.</span>
+          <div class="acts"><span class="btn sm">Find files…</span><span class="btn sm">Remove from playlists…</span></div>
+        </div>
+        <div class="disc">▸ Full report (files, checks, history backup folder)</div>
+      </div>
+      <div class="ffoot"><span class="btn">Close</span><span class="btn pri">Eject</span></div>
+    </div>
+  </div>
+  <ul class="small muted">
+    <li>Writing and Report merge into one step; the dialog title stays, only the body changes.</li>
+    <li>The four phases (history backup → copy → library → validate) show as a checklist line, so the user knows the stick is checked.</li>
+    <li><b>Eject is the primary button</b> when the export succeeded: that is the next thing every DJ does. On problems, the primary is “Back to review”.</li>
+    <li><b>Left-out tracks are repeated in the report</b> with the same <i>Find files…</i> / <i>Remove from playlists…</i> actions, so nothing is skipped silently. Fixing them here marks the stick “changed” for the next sync.</li>
+  </ul>
+</section>
+
+<!-- 7. Settings › Export -->
+<section class="block">
+  <h2>7. Settings › Export (new tab)</h2>
+  <div class="screen">
+    <div class="frame" aria-label="Wireframe: settings export tab">
+      <div class="fhead"><span class="title">Settings</span></div>
+      <div class="sidebar" style="border-top:1px solid var(--line)">
+        <div class="nav"><span>Library</span><span>Playback</span><span>Display</span><span>Decks</span><span>Mixer</span><span class="on new">Export</span></div>
+        <div class="main">
+          <div class="grp">Analysis <span class="mk">1</span></div>
+          <div class="card">
+            <div class="r"><div class="grow"><div class="t">Analysis to write</div><div class="h">When both reks and rekordbox analysed a track. Edited or locked beatgrids always use reks’s.</div></div><span class="sel">reks’s, then rekordbox’s</span></div>
+            <div class="r"><div class="grow"><div class="t">Tracks without analysis</div><div class="h">Neither has analysed them.</div></div><span class="sel">Export with approximate analysis</span></div>
+          </div>
+          <div class="grp">On the stick</div>
+          <div class="card">
+            <div class="r"><div class="grow"><div class="t">Artwork</div><div class="h">Cover art for the players to show.</div></div><span class="sw on"></span></div>
+            <div class="r"><div class="grow"><div class="t">Clean up unused files <span class="mk">2</span></div><div class="h">Remove music and analysis the stick no longer needs. The review lists them first.</div></div><span class="sw on"></span></div>
+            <div class="r"><div class="grow"><div class="t">Play history <span class="mk">3</span></div><div class="h">Always backed up to your library before an export. Backups: Library › Backups.</div></div></div>
+          </div>
+          <div class="grp">Experimental <span class="tag t-mute">Not tested on players</span> <span class="mk">4</span></div>
+          <div class="card">
+            <div class="r"><div class="grow"><div class="t">Playlist dividers</div><div class="h">Each divider as a few seconds of silence titled with its label.</div></div><span class="sw on"></span></div>
+            <div class="r"><div class="grow"><div class="t">Start the first loop automatically</div><div class="h">The player locks into the track’s first auto loop when it reaches it, without pressing LOOP.</div></div><span class="sw"></span></div>
+            <div class="r"><div class="grow"><div class="t">OneLibrary</div><div class="h">Also write exportLibrary.db for newer players. Not supported by AlphaTheta.</div></div><span class="sw"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ffoot"><span class="btn pri">Close</span></div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="mk">1</span><p><b>Grouped by meaning</b>, using the same <code>SettingItem</code> rows as the other tabs. Hints are one sentence each.</p></div>
+      <div class="note"><span class="mk">2</span><p><b>“Keep stale files” flipped and renamed.</b> Same flag inverted; default unchanged (clean up).</p></div>
+      <div class="note"><span class="mk">3</span><p><b>No history switch.</b> Backup is always on (D23). Shown as information so the user knows where backups live.</p></div>
+      <div class="note"><span class="mk">4</span><p><b>One UNVERIFIED badge on the group</b> instead of three. The group intro says “Not yet tested on a CDJ or XDJ”. Dividers on by default; auto-start loops and OneLibrary off.</p></div>
+      <div class="note"><span class="mk">5</span><p><b>Missing OneLibrary key</b> (dev builds): the OneLibrary row is disabled with the hint “Needs a release build”, instead of a long sentence in the export.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 8. Implementation -->
+<section class="block">
+  <h2>8. What changes in the code</h2>
+  <div class="twocol">
+    <div class="callout">
+      <h3>Rust (business logic stays there)</h3>
+      <ul class="small">
+        <li><code>reks-core</code> settings: export keys for analysis source, missing analysis (<code>generate | skip</code>, default <code>generate</code>), artwork, clean-up, dividers, active loops, OneLibrary. Migration seeds them from the current defaults; experimental ones off for a fresh library.</li>
+        <li><code>export_default_options</code> builds <code>ExportOptions</code> from settings + the device’s target. <code>history</code> is always <code>backUp</code> unless the guard picks otherwise.</li>
+        <li><code>skip_unsupported</code> is removed. Per-track problems (<code>SourceMissing</code>, <code>SourceUnreadable</code>, <code>Unsupported</code>; <code>plan/mod.rs</code> ~686) always become one grouped <code>Warning::Skipped</code> with track ids, per reason. Still blocking: file system, space, <code>BadPath</code>.</li>
+        <li>New command: remove a list of track ids from a list of playlist ids, reusing the existing <code>removeEntries</code> playlist edit. Smart playlists are refused (the rule would bring the track back).</li>
+        <li><code>DryRun</code> gains a summary (playlists changed, tracks/bytes to copy, free after) and issues as <code>{ kind, title, detail, actions: [...] }</code>, a discriminated union worded in Rust.</li>
+      </ul>
+    </div>
+    <div class="callout">
+      <h3>UI</h3>
+      <ul class="small">
+        <li><code>AppHeader</code>: the “Export to USB…” button goes; the USB icon becomes “Sticks” with a plugged-in count, replaced by a single “Sync &lt;name&gt;” button (with ▾) when exactly one known stick is plugged in.</li>
+        <li><code>DevicesDialog</code> becomes the Sticks view: stick cards (status, Eject, Sync), and the picked stick’s “Plays on” and playlist ticks. Its footer “Export to USB…” and “Edit and sync…” go.</li>
+        <li><code>EXPORT_STEPS</code>: <code>review → writing → done</code>. <code>DeviceStep</code>, <code>PlaylistsStep</code> and <code>OptionsStep</code> are deleted; <code>openExportWizard(mountPoint)</code> always opens at Review.</li>
+        <li>New <code>settings/ExportSettings.tsx</code> tab.</li>
+        <li>Review: <code>IssueCard</code> (rows with checkboxes, actions), <code>SummaryTiles</code>, settings chip row; file lists behind <code>Disclosure</code>. Primary button counts tracks (“Export 412 of 424 tracks”).</li>
+        <li>Docs: new decision (proposed), <code>phase-2.md</code> task 10 rule on blocking problems, <code>docs/ui.md</code>, <code>stick-profiles.md</code>. Tests: <code>ExportWizard.test.tsx</code>, <code>DevicesDialog.test.tsx</code>, <code>SettingsDialog.test.tsx</code>.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout warn">
+    <h3>Open questions</h3>
+    <ol class="small">
+      <li>Keep “Discard” for play history at all (behind More in the guard), or drop it?</li>
+      <li>OneLibrary global (proposed) or per stick, since only newer players read it?</li>
+      <li>Should “Remove from playlists” also be offered for the whole library (all playlists), or only this stick’s playlists as proposed?</li>
+    </ol>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

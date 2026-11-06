@@ -624,6 +624,35 @@ fn removing_one_copy_keeps_the_others() {
 }
 
 #[test]
+fn remove_tracks_drops_every_copy_from_the_given_playlists_only() {
+    let env = Env::new();
+    let t = env.tracks(3);
+    let a = env.create(None, "A", false);
+    let b = env.create(None, "B", false);
+    let other = env.create(None, "Other", false);
+    let f = env.create(None, "F", true);
+    for p in [a, b, other] {
+        env.add(p, &[t[0], t[1], t[0], t[2]], DuplicateMode::Allow);
+    }
+    env.mutate(PlaylistOp::RemoveTracks {
+        playlist_ids: vec![a, b],
+        track_ids: vec![t[0], t[2]],
+    });
+    assert_eq!(env.entries(a), vec![t[1]]);
+    assert_eq!(env.entries(b), vec![t[1]]);
+    assert_eq!(env.entries(other), vec![t[0], t[1], t[0], t[2]]);
+    // A folder in the list refuses the whole edit.
+    env.rejects(
+        PlaylistOp::RemoveTracks {
+            playlist_ids: vec![other, f],
+            track_ids: vec![t[1]],
+        },
+        |e| matches!(e, Error::NotAPlaylist(_)),
+    );
+    assert_eq!(env.entries(other), vec![t[0], t[1], t[0], t[2]]);
+}
+
+#[test]
 fn remove_and_reorder_rejections() {
     let env = Env::new();
     let t = env.tracks(2);

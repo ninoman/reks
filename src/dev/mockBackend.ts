@@ -31,10 +31,12 @@ import type {
   PlaylistOp,
   PlaylistStatus,
   ProfileStatus,
+  ReviewIssue,
   Settings,
   SettingsPatch,
   SortColumn,
   TagOp,
+  TargetProfile,
   TrackDetail,
   TrackQuery,
   TrackRow,
@@ -240,6 +242,13 @@ function mutate(op: PlaylistOp) {
   const handled = smart.mutate(op);
   if (handled !== undefined) return handled;
   const done = { type: "done", createdId: null, added: 0, skipped: 0 } as const;
+  if (op.type === "removeTracks") {
+    const drop = new Set(op.trackIds);
+    for (const id of op.playlistIds) {
+      PLAYLISTS[id] = (PLAYLISTS[id] ?? []).filter((e) => typeof e !== "number" || !drop.has(e));
+    }
+    return done;
+  }
   if (!("playlistId" in op)) return done;
   const list = PLAYLISTS[op.playlistId] ?? [];
   switch (op.type) {
@@ -290,6 +299,14 @@ let settings: Settings = {
   mixerFilters: "show",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
+  export: {
+    missingAnalysis: "generate",
+    artwork: false,
+    cleanUp: true,
+    dividers: true,
+    activeLoops: false,
+    onelibrary: false,
+  },
   backupKeep: 10,
   tagsInComments: false,
   // Like a release build.
@@ -695,8 +712,13 @@ function profileStatus(id: number, mountPoint: string | null): ProfileStatus {
 }
 
 let planId = 0;
-let lastPlan: { mountPoint: string; label: string; played: boolean; opts: ExportOptions } | null =
-  null;
+let lastPlan: {
+  mountPoint: string;
+  label: string;
+  played: boolean;
+  opts: ExportOptions;
+  issues: ReviewIssue[];
+} | null = null;
 let cancelled = false;
 
 /** Writes "12 tracks" in steps, then reports like `report::ReportView`. */
@@ -762,7 +784,13 @@ async function exportApply(onEvent: Channel<ExportProgress>): Promise<ExportRepo
           folder: null,
           files: [],
         };
-  const base = { mountPoint: plan.mountPoint, deviceName: plan.label, history, warnings: [] };
+  const base = {
+    mountPoint: plan.mountPoint,
+    deviceName: plan.label,
+    history,
+    warnings: [],
+    leftOut: plan.issues,
+  };
   if (cancelled) {
     return {
       ...base,
@@ -817,22 +845,52 @@ async function exportApply(onEvent: Channel<ExportProgress>): Promise<ExportRepo
 }
 
 /** A dry run in the shape `dryrun::DryRun` gives: GIGS holds play history, Backup is blocked. */
-/** `ExportOptions::default()` in Rust (the mock's stand-in for `export_default_options`). */
-const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
-  target: "Generic",
-  keepStale: false,
-  missingAnalysis: "skip",
-  artwork: false,
-  skipUnsupported: false,
-  history: "backUp",
-  discardHistoryConfirmed: false,
-  historyChosen: false,
-  dividers: true,
-  activeLoops: true,
-  anlzPreference: "rekordboxFirst",
-  onelibrary: true,
-  onelibraryRemovalConfirmed: false,
-};
+/** `ExportOptions::from_settings` in Rust (the mock's `export_default_options`). */
+function defaultExportOptions(target: TargetProfile | null): ExportOptions {
+  const e = settings.export;
+  return {
+    target: target ?? "Generic",
+    keepStale: !e.cleanUp,
+    missingAnalysis: e.missingAnalysis,
+    artwork: e.artwork,
+    history: "backUp",
+    discardHistoryConfirmed: false,
+    historyChosen: false,
+    dividers: e.dividers,
+    activeLoops: e.activeLoops,
+    anlzPreference: settings.anlzPreference,
+    onelibrary: e.onelibrary,
+    onelibraryRemovalConfirmed: false,
+  };
+}
+
+/** The mock's missing file: the first ticked playlist's first track, while a ticked playlist holds it. */
+let missingId: number | null = null;
+function missingIssue(lists: PlaylistNode[]): ReviewIssue | null {
+  missingId ??= lists.map((p) => tracksIn(p.id)[0]).find((id) => id !== undefined) ?? null;
+  const t = TRACKS.find((r) => r.id === missingId);
+  if (t === undefined) return null;
+  const holding = lists.filter((p) => !p.smart && (PLAYLISTS[p.id] ?? []).includes(t.id));
+  if (holding.length === 0) return null;
+  return {
+    kind: "missing",
+    title: "1 track is missing",
+    detail:
+      "Their files are gone or moved. They are left out of this export and stay in your playlists.",
+    keptText: "1 track left out, still in your playlists",
+    trackIds: [t.id],
+    tracks: [
+      {
+        trackId: t.id,
+        label: `${t.artist ?? ""} – ${t.title ?? ""}`,
+        detail: `/Volumes/Ext/DJ/${t.title}.mp3`,
+        playlists: holding.map((p) => p.id),
+        inText: `In: ${holding.map((p) => p.name).join(", ")}`,
+      },
+    ],
+    actions: [{ type: "findFiles" }, { type: "removeFromPlaylists" }],
+  };
+}
 
 function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): DryRun {
   const dev = devices.find((d) => d.mountPoint === mountPoint) ?? (devices[0] as DeviceInfo);
@@ -879,79 +937,50 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
       items: [],
     });
   }
-  const none = { count: 0, bytes: 0, totalText: "None", files: [] };
   const write = copies.length * 9_400_000;
-  lastPlan = { mountPoint: dev.mountPoint, label: dev.label, played, opts };
+  const missing = missingIssue(lists);
+  const issues = missing === null ? [] : [missing];
+  const exported = copies.length;
+  const total = exported + (missing === null ? 0 : 1);
+  lastPlan = { mountPoint: dev.mountPoint, label: dev.label, played, opts, issues };
   return {
     planId: ++planId,
     ready: problems.length === 0,
-    status:
-      problems.length === 0
-        ? "Ready to export. Nothing has been written to the stick yet."
-        : `Blocked by ${problems.length} problem${problems.length === 1 ? "" : "s"}. Fix ${problems.length === 1 ? "it" : "them"} or change the options; nothing has been written.`,
-    device: {
-      mountPoint: dev.mountPoint,
-      name: dev.label,
-      fsText: `${dev.fs.kind === "fat32" ? "FAT32" : dev.fsName} (${dev.fsName})`,
-      spaceText: `${(dev.freeBytes / 1e9).toFixed(1)} GB free of ${(dev.totalBytes / 1e9).toFixed(1)} GB`,
-      volumeSerial: "4993-1CFB",
+    overview: {
+      headline:
+        problems.length > 0
+          ? `Can't export to ${dev.label} yet`
+          : missing !== null
+            ? "Ready to export · 1 track will be left out"
+            : `Ready to export to ${dev.label}`,
+      playlistsText: `${lists.length} ${lists.length === 1 ? "playlist" : "playlists"}`,
+      copyText: `${copies.length} tracks to copy`,
+      copyDetail: `${(write / 1e6).toFixed(1)} MB`,
+      spaceText: `${((dev.freeBytes - write) / 1e9).toFixed(1)} GB free after export`,
+      fits: write <= dev.freeBytes,
+      spaceDetail: "",
+      tracksExported: exported,
+      tracksTotal: total,
+      exportLabel: missing !== null ? `Export ${exported} of ${total} tracks` : "Export",
     },
-    target: opts.target === "Generic" ? "Any player" : opts.target,
-    summary: [
-      {
-        label: "Tracks",
-        value: `${copies.length}: ${copies.length} to copy, 0 already on the stick`,
-      },
-      ...(opts.dividers
-        ? [
-            {
-              label: "Dividers",
-              value:
-                "2 dividers, 1.4 MB: silent tracks titled with the label, analysis generated (UNVERIFIED on players)",
-            },
-          ]
-        : []),
-      { label: "Playlists", value: String(lists.length) },
-      { label: "Analysis", value: `${copies.length - 1} from rekordbox (1.2 MB)` },
-      { label: "Copy", value: `${copies.length} files, ${(write / 1e6).toFixed(1)} MB` },
-      { label: "Delete", value: "None" },
+    issues,
+    settings: [
+      opts.target === "Generic" ? "Any player" : opts.target,
+      "rekordbox analysis, then reks",
+      opts.missingAnalysis === "skip"
+        ? "Unanalysed tracks left out"
+        : "Unanalysed tracks approximated",
+      ...(opts.artwork ? ["Artwork"] : []),
+      opts.keepStale ? "Keeps unused files" : "Cleans up unused files",
+      ...(opts.dividers ? ["Dividers"] : []),
+      ...(opts.activeLoops ? ["First loop starts by itself"] : []),
+      ...(opts.onelibrary ? ["OneLibrary"] : []),
     ],
-    playlists: lists.map((p) => ({
-      id: p.id,
-      name: p.name,
-      depth: 0,
-      isFolder: p.isFolder,
-      smart: p.smart,
-      detail: p.isFolder ? "" : `${p.entries} tracks`,
-    })),
-    copies: {
-      count: copies.length,
-      bytes: write,
-      totalText: `${copies.length} files, ${(write / 1e6).toFixed(1)} MB`,
-      files: copies,
-    },
-    deletes: none,
-    space: {
-      fits: true,
-      totalBytes: dev.totalBytes,
-      freeBytes: dev.freeBytes,
-      writeBytes: write,
-      deleteBytes: 0,
-      freeAfterBytes: dev.freeBytes - write,
-      usedAfterBytes: dev.totalBytes - dev.freeBytes + write,
-      facts: [
-        { label: "Free now", value: `${(dev.freeBytes / 1e9).toFixed(1)} GB` },
-        { label: "Writes", value: `${(write / 1e6).toFixed(1)} MB` },
-        { label: "Deletes free", value: "0 B" },
-        { label: "Free after", value: `${((dev.freeBytes - write) / 1e9).toFixed(1)} GB` },
-      ],
-    },
     history: played
       ? {
           atRisk: true,
+          summary: "Your stick's play history is saved to your library before anything is written.",
           policy: opts.history,
-          title: "This stick holds play history",
-          text: "The stick's export.pdb holds 2 history sessions with 31 played tracks. Exporting rebuilds the stick's database, which erases it.",
           guard: {
             title: "2 sessions on this stick are not in your library",
             text: "Exporting erases them from the stick. Import now adds them to your library's history before writing; Back up and continue keeps a copy you can import later; Continue and discard erases them. Imported sessions count in play counts; you can mark any of them as practice in History later.",
@@ -959,66 +988,15 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
             chosen: opts.historyChosen,
             canImport: true,
           },
-          actionText:
-            opts.history === "import"
-              ? "Before writing anything, reks imports 2 sessions (31 plays) into your library, then reks copies 1 database file (412.0 KB) to its data folder and checks the copies; if the backup fails, nothing is written. The report after the export shows where the copies are."
-              : opts.history === "backUp"
-                ? "Before writing anything, reks copies 1 database file (412.0 KB) to its data folder and checks the copies; if the backup fails, nothing is written. The report after the export shows where the copies are."
-                : opts.discardHistoryConfirmed
-                  ? "You chose to discard it: no backup is made."
-                  : "Discarding it needs your confirmation in the options.",
-          backups:
-            opts.history !== "discard"
-              ? {
-                  count: 1,
-                  bytes: 412_000,
-                  totalText: "1 file, 412.0 KB",
-                  files: [
-                    { path: "/PIONEER/rekordbox/export.pdb", from: null, sizeText: "412.0 KB" },
-                  ],
-                }
-              : none,
         }
       : {
           atRisk: false,
+          summary: "",
           policy: opts.history,
-          title: "No play history on this stick",
-          text: "Players have not logged any sessions here, so the export loses nothing.",
-          actionText: null,
-          backups: none,
           guard: null,
         },
     problems,
-    warnings: [
-      ...(lists.some((p) => p.smart)
-        ? [
-            {
-              kind: "smartPlaylistFixed",
-              title: `${lists.filter((p) => p.smart).length === 1 ? "1 smart playlist is" : `${lists.filter((p) => p.smart).length} smart playlists are`} written with the tracks matched now. Players have no smart playlists, so the stick won't update by itself.`,
-              items: lists.filter((p) => p.smart).map((p) => p.name),
-            },
-          ]
-        : []),
-      ...(copies.length > 0
-        ? [
-            {
-              kind: "skipped",
-              title: "1 track left out",
-              items: [`${copies[0]?.path ?? ""}: never analysed by rekordbox`],
-            },
-          ]
-        : []),
-      ...(opts.onelibrary
-        ? [
-            {
-              kind: "oneLibraryExperimental",
-              title:
-                "OneLibrary (exportLibrary.db) is experimental: no player has been tested with reks's file, and AlphaTheta does not support third-party OneLibrary exports.",
-              items: [],
-            },
-          ]
-        : []),
-    ],
+    warnings: [],
     onelibraryRemoval: removesOneLibrary
       ? {
           title: "The stick's OneLibrary library is deleted",
@@ -1028,8 +1006,8 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
             bytes: 2_400_000,
             totalText: "2 files, 2.4 MB",
             files: [
-              { path: "/PIONEER/rekordbox/exportLibrary.db", from: null, sizeText: "2.3 MB" },
-              { path: "/PIONEER/rekordbox/exportExt.pdb", from: null, sizeText: "98.3 KB" },
+              { path: "/PIONEER/rekordbox/exportLibrary.db", sizeText: "2.3 MB" },
+              { path: "/PIONEER/rekordbox/exportExt.pdb", sizeText: "98.3 KB" },
             ],
           },
           confirmText:
@@ -1037,30 +1015,10 @@ function dryRun(mountPoint: string, sel: ExportSelection, opts: ExportOptions): 
           confirmed: opts.onelibraryRemovalConfirmed,
         }
       : null,
-    onelibrary: writesOneLibrary
-      ? {
-          title: "OneLibrary (experimental)",
-          text: "Also writes exportLibrary.db for players that read OneLibrary, next to the Device Library. No player has been tested with it, and AlphaTheta does not support it. It replaces the exportLibrary.db already on the stick.",
-          write: {
-            path: "/PIONEER/rekordbox/exportLibrary.db",
-            from: null,
-            sizeText: "size not known yet",
-          },
-          removes: {
-            count: 2,
-            bytes: 1_200_000,
-            totalText: "2 files, 1.2 MB",
-            files: [
-              { path: "/PIONEER/rekordbox/exportLibrary.db-wal", from: null, sizeText: "1.1 MB" },
-              { path: "/PIONEER/rekordbox/exportExt.pdb", from: null, sizeText: "98.3 KB" },
-            ],
-          },
-        }
-      : null,
     convertible: copies.length > 0 ? TRACKS.slice(0, 2).map((t) => t.id) : [],
     convertText:
-      copies.length > 0
-        ? "2 tracks can be converted to a format older players load (AIFF, up to 24-bit / 48 kHz). The library track keeps its cues, grid and playlists."
+      copies.length > 0 && opts.target === "Generic"
+        ? "2 tracks may not play on older players. Converting makes a copy they can play; cues, grid and playlists stay."
         : null,
   };
 }
@@ -1262,7 +1220,7 @@ mockIPC((cmd, payload) => {
     case "profile_status":
       return profileStatus(args.id as number, args.mountPoint as string | null);
     case "export_default_options":
-      return DEFAULT_EXPORT_OPTIONS;
+      return defaultExportOptions((args.target as TargetProfile | null) ?? null);
     case "export_plan":
       return new Promise((resolve) =>
         setTimeout(

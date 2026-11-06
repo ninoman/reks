@@ -193,12 +193,7 @@ export function FieldChooser({
           }}
           onKeyDown={onKeyDown}
         />
-        <div
-          id={listId}
-          role="listbox"
-          aria-label="Filters to add"
-          className="min-h-0 overflow-y-auto"
-        >
+        <div id={listId} role="listbox" aria-label="Filters to add" className="scroll-pane min-h-0">
           {sections.map((s) => (
             // biome-ignore lint/a11y/useSemanticElements: a listbox groups options with role="group"
             <div key={s.label} role="group" aria-label={s.label}>

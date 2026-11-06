@@ -142,20 +142,28 @@ pub fn synthetic_pdb(tables: &[(u32, Vec<Vec<Vec<u8>>>)]) -> Vec<u8> {
             put_u32(&mut buf, base + 4, index as u32);
             put_u32(&mut buf, base + 8, *page_type);
             put_u32(&mut buf, base + 12, next_page as u32);
-            buf[base + 24] = rows.len() as u8; // num_rows_small
+            // 24-bit packed field: low 13 bits num_row_offsets, high 11 bits
+            // num_rows (research raw-4 §3.2); every slot holds a row here.
+            let n = rows.len() as u32;
+            let packed = n | (n << 13);
+            buf[base + 24..base + 27].copy_from_slice(&packed.to_le_bytes()[..3]);
             buf[base + 27] = 0x34; // page flags: has data
             put_u16(&mut buf, base + 38, 1); // unknown7: 1 on history pages
             let heap = base + 0x28;
             let mut used = 0usize;
-            let mut present = 0u16;
+            // Row groups of 16 from the page end: offsets, then the present flags.
+            let mut present = vec![0u16; rows.len().div_ceil(16)];
             for (i, row) in rows.iter().enumerate() {
                 buf[heap + used..heap + used + row.len()].copy_from_slice(row);
-                put_u16(&mut buf, base + PAGE - 4 - 2 * (i + 1), used as u16);
-                present |= 1 << i;
+                let group_end = base + PAGE - (i / 16) * 36;
+                put_u16(&mut buf, group_end - 4 - 2 * (i % 16 + 1), used as u16);
+                present[i / 16] |= 1 << (i % 16);
                 used += row.len().next_multiple_of(4);
             }
             put_u16(&mut buf, base + 30, used as u16); // used_size
-            put_u16(&mut buf, base + PAGE - 4, present);
+            for (g, flags) in present.iter().enumerate() {
+                put_u16(&mut buf, base + PAGE - g * 36 - 4, *flags);
+            }
         }
         next += pages.len();
     }

@@ -608,6 +608,17 @@ fn stick_contents(
         .into_iter()
         .map(|m| (m.stick_path, (m.item_kind, m.track_id)))
         .collect();
+    // Without a manifest no stick track maps to the library, and every
+    // entry would count as removed and added again.
+    if manifest.is_empty() && !report.tracks.is_empty() {
+        notes.push(
+            "reks has no record of which library tracks are on this stick (the last sync had \
+             problems or was made elsewhere); showing the last recorded sync. Sync again to \
+             compare with the stick itself."
+                .to_owned(),
+        );
+        return Ok(fallback(recorded));
+    }
     let mut have = stick_playlists(&report, |t| match manifest.get(&t.file_path) {
         Some((ManifestItemKind::Divider, _)) => None,
         Some((_, id)) => Some(*id),

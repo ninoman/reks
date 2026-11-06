@@ -43,6 +43,14 @@ const settings: Settings = {
   mixerFilters: "show",
   cacheDir: "/Users/dj/Library/Caches/reks",
   anlzPreference: "rekordboxFirst",
+  export: {
+    missingAnalysis: "generate",
+    artwork: false,
+    cleanUp: true,
+    dividers: true,
+    activeLoops: false,
+    onelibrary: false,
+  },
   backupKeep: 10,
   tagsInComments: false,
   onelibraryKeyBuiltin: false,
@@ -133,7 +141,7 @@ describe("SettingsDialog", () => {
   it("groups settings in tabs, opening on the library folders", async () => {
     await openDialog();
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(tabs).toEqual(["Library", "Playback", "Display", "Decks", "Mixer"]);
+    expect(tabs).toEqual(["Library", "Playback", "Display", "Decks", "Mixer", "Export"]);
     const library = screen.getByRole("tabpanel", { name: "Library" });
     expect(library.textContent).toContain("/Music/House");
     expect(library.textContent).toContain("/Users/dj/Library/Caches/reks");

@@ -7,6 +7,14 @@
 @import "./base.css" layer(base);
 @import "./splash.css" layer(components);
 
+/* A vertical scroll pane that keeps its content clear of the scrollbar, on
+   every platform (overlay scrollbars included). Use it for any element that
+   scrolls on its own. */
+@utility scroll-pane {
+  overflow-y: auto;
+  padding-inline-end: var(--scrollbar-space);
+}
+
 /* Space plays and pauses wherever focus is (App.tsx), so it must not ring the
    control clicked last. Unlayered, to beat the focus-visible utilities. */
 :root[data-space-key] :focus-visible {

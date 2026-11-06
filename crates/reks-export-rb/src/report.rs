@@ -20,7 +20,8 @@ use crate::apply::{
 };
 use crate::devices::{self, DeviceId, DevicesError};
 use crate::dryrun::{
-    capitalise, count, device_name, track_label, Fact, Groups, NoticeGroup, TrackLabels,
+    capitalise, count, device_name, issues, track_label, Fact, Groups, Issue, IssueKind,
+    NoticeGroup, TrackLabels,
 };
 use crate::history::HistoryPolicy;
 use crate::plan::{human_bytes, ExportPlan, Selection};
@@ -234,6 +235,9 @@ pub struct ReportView {
     /// Failed tracks, read-back findings and errors, grouped by kind.
     pub problems: Vec<NoticeGroup>,
     pub warnings: Vec<NoticeGroup>,
+    /// Tracks the plan left out, as the review showed them (D42): nothing is
+    /// left out silently.
+    pub left_out: Vec<Issue>,
 }
 
 /// What happened to the stick's play history (D23).
@@ -265,6 +269,10 @@ impl ReportView {
             history: history_outcome(plan, result),
             problems: Vec::new(),
             warnings: Vec::new(),
+            left_out: issues(plan, labels)
+                .into_iter()
+                .filter(|i| i.kind != IssueKind::ApproximateAnalysis)
+                .collect(),
         };
         let r = match result {
             Ok(r) => r,

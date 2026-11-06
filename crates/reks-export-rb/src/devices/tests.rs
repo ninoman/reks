@@ -556,6 +556,25 @@ fn record_sync_refuses_what_it_cannot_trust() {
     assert_eq!(record_sync(&w.lib, dev.id, &plan, &problems).unwrap(), 1);
 }
 
+/// A sync that recorded no manifest (it had problems, D42's false read-back)
+/// can't map the stick's tracks to the library: the status shows the last
+/// recorded sync with a note, not every entry removed and added again.
+#[test]
+fn mounted_stick_without_a_manifest_uses_the_record() {
+    let w = World::new();
+    let dev = w.device();
+    set_selection(&w.lib, dev.id, &[w.playlist("Set")]).unwrap();
+    let (plan, report) = w.sync(dev.id);
+    record_sync(&w.lib, dev.id, &plan, &report).unwrap();
+    w.lib.replace_manifest(Some(SERIAL), &[]).unwrap();
+
+    let s = w.status(dev.id, true);
+    assert_eq!(s.source, StatusSource::LastSync);
+    assert_eq!(s.summary, "In sync", "{s:#?}");
+    assert_eq!(s.notes.len(), 1);
+    assert!(s.notes[0].contains("Sync again"), "{:?}", s.notes);
+}
+
 #[test]
 fn mounted_stick_without_a_volume_id_uses_the_record() {
     let w = World::new();

@@ -124,6 +124,14 @@ pub enum PlaylistOp {
         playlist_id: PlaylistId,
         positions: Vec<u32>,
     },
+    /// Removes every entry of these tracks from each of these playlists, in
+    /// one transaction (the export review's "Remove from playlists", D42).
+    /// A smart playlist or folder refuses the whole edit: its rule would
+    /// bring the track back.
+    RemoveTracks {
+        playlist_ids: Vec<PlaylistId>,
+        track_ids: Vec<TrackId>,
+    },
     /// Moves these entries, as a block, to before the entry at `before`.
     ReorderEntries {
         playlist_id: PlaylistId,
@@ -313,6 +321,10 @@ impl Library {
                 playlist_id,
                 positions,
             } => remove_entries(&tx, playlist_id, &positions, &now)?,
+            PlaylistOp::RemoveTracks {
+                playlist_ids,
+                track_ids,
+            } => remove_tracks(&tx, &playlist_ids, &track_ids, &now)?,
             PlaylistOp::ReorderEntries {
                 playlist_id,
                 positions,
@@ -568,6 +580,28 @@ fn remove_entries(
         .map(|(_, e)| e.clone())
         .collect();
     write_entries(c, playlist, &current, &new, now)?;
+    Ok(PlaylistOutcome::done())
+}
+
+fn remove_tracks(
+    c: &Connection,
+    playlists: &[PlaylistId],
+    tracks: &[TrackId],
+    now: &str,
+) -> Result<PlaylistOutcome> {
+    let tracks: HashSet<TrackId> = tracks.iter().copied().collect();
+    for &playlist in playlists {
+        require_static(c, playlist)?;
+        let positions: Vec<u32> = entries(c, playlist)?
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.track().is_some_and(|t| tracks.contains(&t)))
+            .map(|(i, _)| to_u32(i))
+            .collect();
+        if !positions.is_empty() {
+            remove_entries(c, playlist, &positions, now)?;
+        }
+    }
     Ok(PlaylistOutcome::done())
 }
 

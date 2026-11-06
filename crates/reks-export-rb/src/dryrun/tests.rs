@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use reks_core::{CancelToken, TrackPatch};
 
 use super::*;
-use crate::plan::{plan_sources, MissingAnalysis, NoAnlz, PlannedPlaylist, SourceTrack, Sources};
+use crate::plan::{
+    plan_sources, MissingAnalysis, NoAnlz, PlannedPlaylist, SkipReason, SourceTrack, Sources,
+};
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/audio");
 
@@ -51,7 +53,7 @@ impl World {
     fn dev(&self) -> DeviceInfo {
         DeviceInfo {
             mount_point: self.stick.clone(),
-            fs: FsKind::Fat32,
+            fs: crate::device::FsKind::Fat32,
             fs_name: "msdos".into(),
             removable: true,
             total_bytes: 32_000_000_000,
@@ -105,6 +107,7 @@ fn sources(tracks: Vec<SourceTrack>) -> Sources {
                 is_folder: true,
                 track_ids: vec![],
                 smart: false,
+                left_out: Vec::new(),
             },
             PlannedPlaylist {
                 id: 11,
@@ -113,6 +116,7 @@ fn sources(tracks: Vec<SourceTrack>) -> Sources {
                 is_folder: false,
                 track_ids: tracks.iter().map(|t| t.track_id).collect(),
                 smart: false,
+                left_out: Vec::new(),
             },
         ],
         tracks,
@@ -127,10 +131,6 @@ fn labels() -> TrackLabels {
         (2, "Alpha – Second".to_owned()),
     ]
     .into()
-}
-
-fn fact<'a>(facts: &'a [Fact], label: &str) -> &'a str {
-    &facts.iter().find(|f| f.label == label).unwrap().value
 }
 
 fn kinds(groups: &[NoticeGroup]) -> Vec<&str> {
@@ -151,80 +151,51 @@ fn ready_plan_on_an_empty_stick() {
     let dry = DryRun::new(&plan, &labels());
 
     assert!(dry.ready);
+    let o = &dry.overview;
+    assert_eq!(o.headline, "Ready to export to REKS");
+    assert_eq!(o.playlists_text, "1 playlist in 1 folder");
+    assert_eq!(o.copy_text, "2 tracks to copy");
+    assert_eq!(o.copy_detail, human_bytes(audio));
+    assert!(o.fits);
+    let free_after = (1u64 << 30) - (audio + 2000);
     assert_eq!(
-        dry.status,
-        "Ready to export. Nothing has been written to the stick yet."
+        o.space_text,
+        format!("{} free after export", human_bytes(free_after))
     );
-    assert_eq!(dry.device.name, "REKS");
-    assert_eq!(dry.device.fs_text, "FAT32 (msdos)");
-    assert_eq!(dry.device.space_text, "1.1 GB free of 32.0 GB");
-    assert_eq!(dry.device.volume_serial.as_deref(), Some("4993-1CFB"));
-    assert_eq!(dry.target, "Any player");
-
+    assert_eq!(o.space_detail, "");
+    assert_eq!((o.tracks_exported, o.tracks_total), (2, 2));
+    assert_eq!(o.export_label, "Export");
+    assert!(dry.issues.is_empty());
     assert_eq!(
-        fact(&dry.summary, "Tracks"),
-        "2: 2 to copy, 0 already on the stick"
+        dry.settings,
+        [
+            "Any player",
+            "rekordbox analysis, then reks",
+            "Unanalysed tracks approximated",
+            "Cleans up unused files",
+            "Dividers"
+        ]
     );
-    assert_eq!(fact(&dry.summary, "Playlists"), "1 in 1 folder");
-    assert_eq!(fact(&dry.summary, "Analysis"), "2 from rekordbox (2.0 KB)");
-    assert_eq!(
-        fact(&dry.summary, "Copy"),
-        format!("2 files, {}", human_bytes(audio))
-    );
-    assert_eq!(fact(&dry.summary, "Delete"), "None");
-
-    let rows: Vec<(&str, usize, &str)> = dry
-        .playlists
-        .iter()
-        .map(|p| (p.name.as_str(), p.depth, p.detail.as_str()))
-        .collect();
-    assert_eq!(rows, [("Gigs", 0, ""), ("Friday", 1, "2 tracks")]);
-
-    assert_eq!(dry.copies.count, 2);
-    assert_eq!(dry.copies.bytes, audio);
-    assert_eq!(dry.copies.files[0].path, "/Contents/Alpha/One/a.wav");
-    assert_eq!(
-        dry.copies.files[0].from.as_deref(),
-        Some(w.music.join("a.wav").display().to_string().as_str())
-    );
-    assert_eq!(dry.deletes.count, 0);
-
-    assert!(dry.space.fits);
-    assert_eq!(dry.space.write_bytes, audio + 2000);
-    assert_eq!(
-        dry.space.free_after_bytes,
-        (1i64 << 30) - (audio + 2000) as i64
-    );
-    assert_eq!(
-        dry.space.used_after_bytes,
-        32_000_000_000 - dry.space.free_after_bytes as u64
-    );
-    assert_eq!(fact(&dry.space.facts, "Free now"), "1.1 GB");
 
     assert!(!dry.history.at_risk);
-    assert_eq!(dry.history.title, "No play history on this stick");
-    assert!(dry.history.action_text.is_none());
+    assert_eq!(dry.history.summary, "");
     assert!(dry.problems.is_empty());
     assert!(dry.warnings.is_empty(), "{:?}", dry.warnings);
 }
 
 #[test]
-fn stale_files_are_listed_as_deletes() {
+fn stale_files_free_space() {
     let w = World::new();
     w.stick_file("/Contents/Old/Gone/old.mp3", &[0u8; 2500]);
     let a = w.add("sine-click-128.wav", "a.wav");
     let plan = w.plan(sources(vec![track(1, a)]), &ExportOptions::default(), &[1]);
     let dry = DryRun::new(&plan, &labels());
 
-    assert_eq!(dry.deletes.count, 1);
-    assert_eq!(dry.deletes.total_text, "1 file, 2.5 KB");
-    assert_eq!(dry.deletes.files[0].path, "/Contents/Old/Gone/old.mp3");
-    assert_eq!(dry.deletes.files[0].from, None);
-    assert_eq!(fact(&dry.space.facts, "Deletes free"), "2.5 KB");
+    assert_eq!(dry.overview.space_detail, "frees 2.5 KB");
 }
 
 #[test]
-fn blocked_plan_groups_problems_with_track_names() {
+fn missing_tracks_are_issues_and_space_still_blocks() {
     let mut w = World::new();
     w.free_bytes = 10;
     let a = w.add("sine-click-128.wav", "a.wav");
@@ -241,21 +212,37 @@ fn blocked_plan_groups_problems_with_track_names() {
     let dry = DryRun::new(&plan, &labels());
 
     assert!(!dry.ready);
+    assert_eq!(kinds(&dry.problems), ["notEnoughSpace"]);
+    let missing = &dry.issues[0];
+    assert_eq!(missing.kind, IssueKind::Missing);
+    assert_eq!(missing.title, "2 tracks are missing");
+    assert_eq!(missing.track_ids, [1, 2]);
     assert_eq!(
-        dry.status,
-        "Blocked by 3 problems. Fix them or change the options; nothing has been written."
+        missing.actions,
+        [IssueAction::FindFiles, IssueAction::RemoveFromPlaylists]
     );
-    assert_eq!(kinds(&dry.problems), ["sourceMissing", "notEnoughSpace"]);
-    let missing = &dry.problems[0];
-    assert_eq!(missing.title, "2 tracks: file not found");
+    let rows: Vec<(String, String)> = missing
+        .tracks
+        .iter()
+        .map(|t| (t.label.clone(), t.detail.clone()))
+        .collect();
     assert_eq!(
-        missing.items,
+        rows,
         [
-            format!("Alpha – First: {}", w.music.join("gone-1.mp3").display()),
-            format!("Alpha – Second: {}", w.music.join("gone-2.mp3").display()),
+            (
+                "Alpha – First".to_owned(),
+                w.music.join("gone-1.mp3").display().to_string()
+            ),
+            (
+                "Alpha – Second".to_owned(),
+                w.music.join("gone-2.mp3").display().to_string()
+            ),
         ]
     );
-    let space = &dry.problems[1];
+    assert_eq!(missing.tracks[0].playlists, [11]);
+    assert_eq!(dry.overview.export_label, "Export 1 of 3 tracks");
+    assert_eq!(dry.overview.headline, "Can't export to REKS yet");
+    let space = &dry.problems[0];
     assert!(space.items.is_empty());
     assert!(
         space
@@ -266,10 +253,12 @@ fn blocked_plan_groups_problems_with_track_names() {
     );
     assert!(space.title.ends_with("the stick has 10 B free."));
 
-    assert!(!dry.space.fits);
-    assert!(dry.space.free_after_bytes < 0);
-    assert_eq!(dry.space.used_after_bytes, 0);
-    assert!(fact(&dry.space.facts, "Free after").ends_with(" short"));
+    assert!(!dry.overview.fits);
+    assert!(
+        dry.overview.space_text.ends_with(" short"),
+        "{}",
+        dry.overview.space_text
+    );
 }
 
 #[test]
@@ -287,12 +276,16 @@ fn warnings_are_grouped_and_unknown_tracks_get_their_id() {
         is_folder: false,
         track_ids: vec![7],
         smart: false,
+        left_out: Vec::new(),
     });
     let plan = plan_sources(
         src,
         &w.dev(),
         None,
-        &ExportOptions::default(),
+        &ExportOptions {
+            missing_analysis: MissingAnalysis::Skip,
+            ..ExportOptions::default()
+        },
         &|t: &SourceTrack| {
             (t.track_id == 1).then(|| {
                 fs::write(w.cache.join("1.DAT"), [1u8; 10]).unwrap();
@@ -305,41 +298,37 @@ fn warnings_are_grouped_and_unknown_tracks_get_their_id() {
     let dry = DryRun::new(&plan, &labels());
 
     assert!(dry.ready);
-    assert_eq!(
-        kinds(&dry.warnings),
-        ["noVolumeSerial", "skipped", "emptyPlaylist"]
-    );
-    let serial = &dry.warnings[0];
-    assert!(serial.items.is_empty());
-    assert!(
-        serial.title.starts_with("The OS gave no volume serial"),
-        "{}",
-        serial.title
-    );
-    assert!(serial.title.ends_with('.'));
+    // No volume serial is a technical note: not in the review.
+    assert!(plan.warnings.contains(&Warning::NoVolumeSerial));
+    assert_eq!(kinds(&dry.warnings), ["emptyPlaylist"]);
 
-    let skipped = &dry.warnings[1];
-    assert_eq!(skipped.title, "2 tracks left out");
+    let skipped = &dry.issues[0];
+    assert_eq!(skipped.kind, IssueKind::NoAnalysis);
+    assert_eq!(skipped.title, "2 tracks have no analysis");
+    let rows: Vec<(&str, &str, &str)> = skipped
+        .tracks
+        .iter()
+        .map(|t| (t.label.as_str(), t.detail.as_str(), t.in_text.as_str()))
+        .collect();
+    let why = "no rekordbox analysis found; reks has not analysed it yet";
     assert_eq!(
-        skipped.items,
+        rows,
         [
-            "Alpha – Second: no rekordbox analysis found; reks has not analysed it yet",
-            "track 7: no rekordbox analysis found; reks has not analysed it yet",
+            ("Alpha – Second", why, "In: Friday"),
+            ("track 7", why, "In: Friday, Saturday"),
         ]
     );
+    assert_eq!(dry.overview.export_label, "Export 1 of 3 tracks");
     assert_eq!(
-        dry.warnings[2].title,
+        dry.warnings[0].title,
         "1 playlist ends up empty after leaving tracks out"
     );
-    assert_eq!(dry.warnings[2].items, ["Saturday"]);
-    assert_eq!(
-        fact(&dry.summary, "Tracks"),
-        "1: 1 to copy, 0 already on the stick"
-    );
+    assert_eq!(dry.warnings[0].items, ["Saturday"]);
+    assert_eq!(dry.overview.copy_text, "1 track to copy");
 }
 
 #[test]
-fn generated_and_missing_analysis_are_counted() {
+fn generated_analysis_is_an_issue() {
     let w = World::new();
     let a = w.add("sine-click-128.wav", "a.wav");
     let plan = w.plan(
@@ -351,14 +340,16 @@ fn generated_and_missing_analysis_are_counted() {
         &[],
     );
     let dry = DryRun::new(&plan, &labels());
-    assert_eq!(
-        fact(&dry.summary, "Analysis"),
-        "0 from rekordbox (0 B), 1 generated (approximate)"
-    );
+    let issue = &dry.issues[0];
+    assert_eq!(issue.kind, IssueKind::ApproximateAnalysis);
+    assert_eq!(issue.title, "1 track gets approximate analysis");
+    assert_eq!(issue.actions, [IssueAction::Analyse, IssueAction::LeaveOut]);
+    // Approximate analysis leaves nothing out.
+    assert_eq!(dry.overview.export_label, "Export");
 }
 
 #[test]
-fn played_stick_shows_history_and_backups() {
+fn played_stick_says_history_is_saved_first() {
     let w = World::new();
     w.stick_file(
         "/PIONEER/rekordbox/export.pdb",
@@ -373,46 +364,19 @@ fn played_stick_shows_history_and_backups() {
     let h = &dry.history;
     assert!(h.at_risk);
     assert_eq!(h.policy, HistoryPolicy::BackUp);
-    assert_eq!(h.title, "This stick holds play history");
-    assert_eq!(
-        h.text,
-        "The stick's export.pdb holds 2 history sessions with 3 played tracks; an \
-         exportLibrary.db (OneLibrary) is present and players may have logged plays there. \
-         Exporting rebuilds the stick's database, which erases it."
-    );
-    let pdb = fs::metadata(w.stick.join("PIONEER/rekordbox/export.pdb"))
-        .unwrap()
-        .len();
-    assert_eq!(
-        h.action_text.as_deref(),
-        Some(
-            format!(
-                "Before writing anything, reks copies 2 database files ({}) to its data \
-                 folder and checks the copies; if the backup fails, nothing is written. The \
-                 report after the export shows where the copies are.",
-                human_bytes(pdb + 6)
-            )
-            .as_str()
-        )
-    );
-    let backed_up: Vec<&str> = h.backups.files.iter().map(|f| f.path.as_str()).collect();
-    assert_eq!(
-        backed_up,
-        [
-            "/PIONEER/rekordbox/export.pdb",
-            "/PIONEER/rekordbox/exportLibrary.db"
-        ]
-    );
     // The history warning is shown in `history`, not twice; rekordbox's own
-    // stick marker is still a warning.
-    assert!(!kinds(&dry.warnings).contains(&"stickHistory"));
-    assert_eq!(kinds(&dry.warnings), ["rekordboxStick"]);
+    // stick marker is a technical note, not in the review.
+    assert!(plan
+        .warnings
+        .iter()
+        .any(|w| matches!(w, Warning::RekordboxStick { .. })));
+    assert!(dry.warnings.is_empty());
     assert_eq!(
-        dry.warnings[0].title,
-        "rekordbox wrote this stick (/PIONEER/rekordbox/exportLibrary.db). reks rewrites its \
-         Device Library completely, and rekordbox will show its \"out of matching\" caution \
-         afterwards."
+        h.summary,
+        "Your stick's play history is saved to your library before anything is written."
     );
+    // Backups are still planned (in the plan, not the review).
+    assert_eq!(plan.backups.len(), 2);
 }
 
 #[test]
@@ -434,12 +398,12 @@ fn discard_needs_confirmation_before_the_plan_is_ready() {
     assert_eq!(kinds(&dry.problems), ["discardNotConfirmed"]);
     assert!(dry.problems[0]
         .title
-        .contains("tick the box in the options"));
+        .contains("confirmation under the play history"));
     assert_eq!(
-        dry.history.action_text.as_deref(),
-        Some("Discarding it needs your confirmation in the options.")
+        dry.history.summary,
+        "Discarding your stick's play history needs your confirmation."
     );
-    assert_eq!(dry.history.backups.count, 0);
+    assert!(plan.backups.is_empty());
 
     let confirmed = ExportOptions {
         discard_history_confirmed: true,
@@ -449,10 +413,10 @@ fn discard_needs_confirmation_before_the_plan_is_ready() {
     let dry = DryRun::new(&plan, &labels());
     assert!(dry.ready);
     assert_eq!(
-        dry.history.action_text.as_deref(),
-        Some("You chose to discard it: it is erased without a backup.")
+        dry.history.summary,
+        "Your stick's play history will be erased, as you chose."
     );
-    assert_eq!(dry.history.backups.count, 0);
+    assert!(plan.backups.is_empty());
 }
 
 #[test]
@@ -464,25 +428,19 @@ fn json_is_camel_case() {
     let json = serde_json::to_value(&dry).unwrap();
     for key in [
         "ready",
-        "status",
-        "device",
-        "target",
-        "summary",
-        "playlists",
-        "copies",
-        "deletes",
-        "space",
+        "overview",
+        "issues",
+        "settings",
         "history",
         "problems",
         "warnings",
+        "convertible",
     ] {
         assert!(json.get(key).is_some(), "{key}");
     }
-    assert!(json["space"]["freeAfterBytes"].is_i64());
-    assert!(json["copies"]["totalText"].is_string());
-    assert!(json["device"]["mountPoint"].is_string());
+    assert!(json["overview"]["exportLabel"].is_string());
+    assert!(json["overview"]["tracksExported"].is_u64());
     assert_eq!(json["history"]["policy"], "backUp");
-    assert_eq!(json["playlists"][1]["isFolder"], false);
     let back: DryRun = serde_json::from_value(json).unwrap();
     assert_eq!(back, dry);
 }
@@ -530,15 +488,17 @@ fn track_labels_come_from_the_library() {
     plan.warnings = vec![
         Warning::Skipped {
             track_id: first,
-            reason: "x".into(),
+            reason: SkipReason::Unsupported,
+            detail: "x".into(),
         },
         Warning::Audio {
             track_id: 999,
             message: "y".into(),
         },
     ];
-    plan.errors = vec![Problem::Unsupported {
+    plan.errors = vec![Problem::BadPath {
         track_id: second,
+        path: "/p".into(),
         message: "z".into(),
     }];
     let labels = track_labels(&lib, &plan);
@@ -547,19 +507,37 @@ fn track_labels_come_from_the_library() {
     assert_eq!(labels[&second], second_file);
 
     let dry = DryRun::build(&lib, &plan);
-    assert_eq!(dry.warnings[0].items, ["Кино – Звезда: x"]);
-    assert_eq!(dry.warnings[1].items, ["track 999: y"]);
-    assert_eq!(dry.problems[0].items, [format!("{second_file}: z")]);
+    // Left-out tracks are issues; audio notes are not in the review.
+    assert!(dry.warnings.is_empty(), "{:?}", dry.warnings);
+    assert_eq!(dry.issues[0].kind, IssueKind::Unsupported);
+    assert_eq!(dry.issues[0].tracks[0].label, "Кино – Звезда");
+    assert_eq!(dry.issues[0].tracks[0].detail, "x");
+    assert_eq!(dry.problems[0].items, [format!("{second_file}: /p: z")]);
     assert!(dry.convertible.is_empty());
     assert_eq!(dry.convert_text, None);
 
+    // A left-out track's Convert is on its issue, not in the general offer.
     plan.convertible = vec![first, second];
     let dry = DryRun::build(&lib, &plan);
-    assert_eq!(dry.convertible, [first, second]);
+    assert_eq!(dry.convertible, [second]);
     assert!(dry
         .convert_text
         .as_deref()
-        .is_some_and(|t| t.starts_with("2 tracks can be converted")));
+        .is_some_and(|t| t.starts_with("1 track may not play on older players")));
+    // A stick for newer players only gets no "older players" offer.
+    plan.options.target = TargetProfile::Cdj2000Nxs2;
+    let dry = DryRun::build(&lib, &plan);
+    assert_eq!(dry.convert_text, None);
+    assert_eq!(dry.convertible, [second]);
+    assert_eq!(
+        dry.issues[0].actions,
+        [
+            IssueAction::Convert {
+                track_ids: vec![first]
+            },
+            IssueAction::RemoveFromPlaylists
+        ]
+    );
 }
 
 #[test]
@@ -606,8 +584,8 @@ fn live_plan_at_a_mounted_stick() {
     )
     .unwrap();
     let dry = DryRun::build(&lib, &plan);
-    assert_eq!(dry.device.mount_point, stick);
-    assert!(dry.device.volume_serial.is_some(), "{:?}", dry.device);
+    assert_eq!(plan.device.mount_point, stick);
+    assert!(plan.history.volume_serial.is_some(), "{:?}", plan.device);
     assert!(!dry.ready);
     assert_eq!(kinds(&dry.problems), ["nothingSelected"]);
     assert_eq!(dry.problems[0].title, "No playlist selected.");
@@ -650,22 +628,15 @@ fn dividers_are_their_own_group() {
         .collect();
     assert_eq!(order, [None, Some("PEAK"), None, Some("END")]);
 
+    // Dividers are not tracks in the overview, nor approximate-analysis issues.
     let dry = DryRun::new(&plan, &labels());
+    assert_eq!(dry.overview.copy_text, "2 tracks to copy");
     assert_eq!(
-        fact(&dry.summary, "Tracks"),
-        "2: 2 to copy, 0 already on the stick"
+        (dry.overview.tracks_exported, dry.overview.tracks_total),
+        (2, 2)
     );
-    let size = human_bytes(2 * divider::wav_bytes().len() as u64);
-    assert_eq!(
-        fact(&dry.summary, "Dividers"),
-        format!(
-            "2 dividers, {size}: silent tracks titled with the label, analysis generated \
-             (UNVERIFIED on players)"
-        )
-    );
-    assert_eq!(fact(&dry.summary, "Analysis"), "2 from rekordbox (2.0 KB)");
-    assert_eq!(dry.playlists[1].detail, "2 tracks, 2 dividers");
-    assert_eq!(dry.copies.count, 4);
+    assert!(dry.issues.is_empty(), "{:?}", dry.issues);
+    assert_eq!(plan.copies.len(), 4);
 
     let labels: TrackLabels = divider_labels(&plan).collect();
     let d = plan.tracks.iter().find(|t| t.is_divider()).unwrap();
@@ -684,7 +655,7 @@ fn file_group_lists_the_first_rows_but_counts_all() {
             reason: crate::plan::OpReason::NotOnStick,
         })
         .collect();
-    let g = file_group(&ops, false);
+    let g = file_group(&ops);
     assert_eq!(g.files.len(), FILE_LIST_CAP);
     assert_eq!(g.files[0].path, "/Contents/0.mp3");
     assert_eq!(g.count, n);

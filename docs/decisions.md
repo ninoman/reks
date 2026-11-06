@@ -1683,6 +1683,112 @@ Date of decisions: 2026-10-18.
   Merge commits are skipped, so work merged without a Conventional subject
   on its commits is missing from the changelog.
 
+## D42. Simpler USB export: one Sticks entry point, settings out of the wizard, track problems never block
+
+- Date: 2026-11-05. Status: accepted and implemented (2026-11-05). Wireframe:
+  [`wireframes/export-simplified.html`](wireframes/export-simplified.html).
+  Changes Phase 2 task 4's blocking rule and task 10's wizard, and the UI
+  side of D27 (Devices view). D23 (history) and the plan/apply split are
+  unchanged.
+- Decision:
+  - **One entry point.** The header's "Export to USB…" button and the USB
+    icon merge into one "Sticks" button with a plugged-in count. With
+    exactly one known stick plugged in, the header shows only
+    "Sync <name>" (one click to the review; its menu holds Edit
+    playlists…, Eject, All sticks…).
+  - **Sticks view** (today's Devices dialog) holds stick cards (capacity,
+    sync status, Eject, Sync), the picked stick's "Plays on" and its
+    playlist ticks with live status. The ticks are the D27 profile, so the
+    wizard's Stick and Playlists steps go. The wizard is Review → Writing →
+    Done; "dry run" is renamed Review.
+  - **Options leave the wizard.** "Oldest player" becomes the stick's
+    "Plays on" (already stored per device). A new Settings › Export tab
+    holds analysis source, tracks without analysis (default: export with
+    approximate analysis), artwork, "Clean up unused files" (today's
+    `keep_stale`, inverted, default on), and an Experimental group with one
+    UNVERIFIED badge: playlist dividers (default on), "Start the first loop
+    automatically" (today's active loops, default off), OneLibrary
+    (default off). The review shows the settings in use as one read-only
+    line with "Change…".
+  - **Play history is always backed up.** The Back up / Discard switch goes;
+    the un-imported-sessions guard stays in the review, Discard behind
+    "More" with its confirm.
+  - **Track problems never block.** `SourceMissing`, `SourceUnreadable` and
+    `Unsupported` leave that track out and the rest is written;
+    `skip_unsupported` is removed. Still blocking: unsupported file
+    system, not enough space, `BadPath`. Left-out tracks are grouped per
+    reason (`Warning::Skipped` with track ids), counted on the primary
+    button ("Export 412 of 424 tracks") and repeated in the report.
+  - **Fix in place.** Each warning card has its fixes (Find files…,
+    Convert…, Analyse now, Remove from playlists…) and "Keep as it is";
+    the review has "Keep all as they are". Each fix replans. "Remove from
+    playlists" removes the ticked tracks only from this stick's ticked
+    library playlists, after a confirm, through a new command reusing the
+    `removeEntries` playlist edit; smart-playlist rows have no checkbox.
+- Rationale: the wizard asked ten technical questions on every run, most of
+  which describe the library or the stick, not the export. Three entry
+  points did the same thing. A user can't decide "leave out unsupported
+  files" before seeing which files; one missing file must not stop a stick
+  being written before a gig.
+- Rejected: keeping an "Advanced" disclosure in the wizard (still asked
+  every run); per-stick copies of every option (only the player target
+  differs per stick); silently leaving tracks out (violates "a stick that
+  fails on stage"; the count and report keep it visible).
+- Risks: dividers default on while UNVERIFIED goes against conservative
+  defaults (maintainer's call; badge stays until a logged hardware test);
+  a stick written with left-out tracks may surprise if the user skims the
+  review (mitigated by the button count and report); the settings migration
+  must keep existing users' current option values.
+- Implementation (2026-11-05):
+  - Settings live in one row, `export.settings` (`reks_core::settings::ExportSettings`);
+    `ExportOptions::from_settings` and `export_default_options(target)` build an
+    export's options from it, the analysis source and the stick's target.
+    `MissingAnalysis` moved to `reks-core` beside `AnlzPreference`.
+  - Defaults for a fresh library: tracks without analysis get approximate
+    analysis (`Generate`), OneLibrary and active loops off, dividers on,
+    clean-up on, artwork off (unchanged). This changes D14's and D22's "on by
+    default" for OneLibrary and active loops. Migration 16 seeds the row with
+    both on for a library that already has tracks or sticks, so existing
+    users' exports keep what they had.
+  - `Warning::Skipped { track_id, reason: SkipReason, detail }`, one per
+    track; the dry run groups them per reason into `DryRun::issues`
+    (`Issue { kind, title, detail, kept_text, track_ids, tracks, actions }`,
+    `IssueAction` a tagged union), with `PlannedPlaylist::left_out` saying
+    which playlists each left-out track is missing from. `Problem::SourceMissing`,
+    `SourceUnreadable` and `Unsupported` are gone. Tracks with generated
+    analysis are an `approximateAnalysis` issue (Analyse now / Leave them out).
+  - "Remove from playlists" is a new playlist edit, `PlaylistOp::RemoveTracks`,
+    on the existing `playlists_mutate` command; a smart playlist or folder
+    refuses the whole edit.
+  - CLI: `--skip-unsupported`, `--no-active-loops` and `--no-onelibrary` are
+    gone; `--active-loops` and `--onelibrary` turn them on.
+  - The report repeats left-out tracks (`ReportView::left_out`) without the
+    fix buttons; fixing from the report is left for later.
+  - Revised after the maintainer's runs on a real stick (2026-11-06):
+    - Every Sync goes through the Sticks view: the header's "Sync <name>"
+      opens it on that stick (no ▾ menu), its playlists sit in the right
+      column, and Sync is in the footer. The Sticks view and the export share
+      one dialog (`SticksDialog`), so Sync resizes it instead of swapping
+      dialogs.
+    - The review shows less: no technical details; play history is one plain
+      sentence (`HistoryView::summary`); "Good to know" keeps only file
+      system, empty playlist and missing-OneLibrary-key warnings; the convert offer for exported tracks
+      appears only when the stick plays on any player, where "older players"
+      is the user's concern. `DryRun` carries only what the review shows
+      (file lists, paths and technical notes stay in the plan and
+      `reks rb plan`).
+    - The Sticks view is one list (plugged-in sticks, new drives, the rest);
+      the picked one expands to its details.
+    - The stick reader read a page's row count from the wrong bytes (the
+      24-bit field at 0x18, research raw-4 §3.2), so a page with more than
+      255 rows lost its last ones: a false read-back problem, which then
+      skipped the export manifest and made the Sticks view count every entry
+      as removed and added. Fixed; without a manifest the status now shows
+      the last recorded sync with a note.
+- Open: keep Discard for history at all; OneLibrary global or per stick;
+  whether to keep "Start the first loop automatically" in the UI; fixes in
+  the report.
+
 ## Open risks (cross-cutting)
 
 1. **Hardware acceptance is the only real test.** Every writer decision above

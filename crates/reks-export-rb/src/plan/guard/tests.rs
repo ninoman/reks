@@ -152,10 +152,9 @@ fn import_now_imports_backs_up_then_writes() {
     let plan = plan_guarded(&w, &options(HistoryPolicy::Import, true));
     assert!(!plan.is_blocked(), "{:?}", plan.errors);
     let d = DryRun::new(&plan, &TrackLabels::new());
-    let action = d.history.action_text.unwrap();
-    assert!(
-        action.starts_with("Before writing anything, reks imports 2 sessions (3 plays)"),
-        "{action}"
+    assert_eq!(
+        d.history.summary,
+        "Your stick's play history is added to your library before anything is written."
     );
 
     let (result, stages) = run(&w, &plan);

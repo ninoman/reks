@@ -183,6 +183,7 @@ impl World {
         let opts = ExportOptions {
             anlz_preference: pref,
             onelibrary: false,
+            missing_analysis: plan::MissingAnalysis::Skip,
             ..ExportOptions::default()
         };
         let sources = plan::load(&self.lib, &self.sel).unwrap();
@@ -259,7 +260,7 @@ fn preference_picks_the_source() {
         .warnings
         .iter()
         .find_map(|w| match w {
-            Warning::Skipped { reason, .. } => Some(reason.clone()),
+            Warning::Skipped { detail, .. } => Some(detail.clone()),
             _ => None,
         })
         .unwrap();
@@ -384,11 +385,16 @@ fn export_with_reks_anlz_validates() {
         .iter()
         .all(|t| t.anlz_source == AnlzSource::Reks));
     let dry = DryRun::build(&w.lib, &plan);
-    let analysis = dry.summary.iter().find(|f| f.label == "Analysis").unwrap();
-    assert_eq!(
-        analysis.value,
-        "0 from rekordbox (0 B), 3 from reks's analysis (UNVERIFIED on players)"
-    );
+    // d.aiff has neither analysis and is left out (`plan_with` skips those).
+    let kinds: Vec<_> = dry
+        .issues
+        .iter()
+        .map(|i| (i.kind, i.track_ids.len()))
+        .collect();
+    assert_eq!(kinds, [(reks_export_rb::dryrun::IssueKind::NoAnalysis, 1)]);
+    assert!(dry
+        .settings
+        .contains(&"reks analysis, then rekordbox".to_owned()));
 
     let work = w.tmp.path().join("work");
     let writer = BakenWriter::prepare(&w.lib, &w.sel, &plan, &work).unwrap();

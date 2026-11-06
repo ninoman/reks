@@ -2,13 +2,17 @@
  * Modal dialog (Radix): backdrop and focus trap; Escape goes to
  * `onOpenChange(false)`, and so does a click on the backdrop when
  * `closeOnOutsideClick` is set. Compose Header / Title / Body / Footer
- * inside `DialogContent`.
+ * inside `DialogContent`. A dialog is as tall as its content, up to its cap
+ * (`height`), and animates when its size changes (`useAnimatedSize`); it fades in and
+ * out (`useDialogMotion`).
  */
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cva, type VariantProps } from "class-variance-authority";
-import type { ComponentProps } from "react";
+import { type ComponentProps, useCallback } from "react";
 
 import { cn } from "../../lib/cn";
+import { useAnimatedSize } from "./useAnimatedSize";
+import { useDialogMotion } from "./useDialogMotion";
 
 export const dialogContentVariants = cva(
   [
@@ -18,8 +22,14 @@ export const dialogContentVariants = cva(
   {
     variants: {
       size: { sm: "max-w-[360px]", md: "max-w-[560px]", lg: "max-w-[640px]", xl: "max-w-[960px]" },
+      /** The tallest the dialog gets before its body scrolls (always within the window). */
+      height: {
+        auto: "",
+        md: "max-h-[min(648px,calc(100vh-64px))]",
+        lg: "max-h-[min(720px,calc(100vh-64px))]",
+      },
     },
-    defaultVariants: { size: "sm" },
+    defaultVariants: { size: "sm", height: "auto" },
   },
 );
 
@@ -27,6 +37,7 @@ export const Dialog = DialogPrimitive.Root;
 
 export function DialogContent({
   size,
+  height,
   closeOnOutsideClick = false,
   className,
   children,
@@ -34,12 +45,22 @@ export function DialogContent({
   ...props
 }: ComponentProps<typeof DialogPrimitive.Content> &
   VariantProps<typeof dialogContentVariants> & { closeOnOutsideClick?: boolean }) {
+  const sizeRef = useAnimatedSize();
+  const motionRef = useDialogMotion();
+  const ref = useCallback(
+    (el: HTMLDivElement | null) => {
+      sizeRef(el);
+      motionRef(el);
+    },
+    [sizeRef, motionRef],
+  );
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-(--z-dialog) bg-overlay" />
       <DialogPrimitive.Content
+        ref={ref}
         aria-describedby={undefined}
-        className={cn(dialogContentVariants({ size }), className)}
+        className={cn(dialogContentVariants({ size, height }), className)}
         onPointerDownOutside={(e) => {
           if (!closeOnOutsideClick) e.preventDefault();
           onPointerDownOutside?.(e);

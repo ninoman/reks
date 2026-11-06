@@ -76,8 +76,8 @@ files, mirroring what rekordbox 7.2.11+ does on every export.
   built-in key opens the reference `exportLibrary.db`
   (`builtin_key_opens_the_reference`), and checks that no app binary contains
   the plain key.
-- The export wizard marks the option experimental and unsupported by
-  AlphaTheta, and says when a build has no key.
+- Settings › Export marks the option experimental and unsupported by
+  AlphaTheta (off by default since D42), and says when a build has no key.
 - Note: the Phase 2 dependency `baken-export` contains its own obfuscated copy
   of the key in its `onelibrary` module. We do not call that module and we do
   not enable `Options::onelibrary`. Revisit if the maintainers object.

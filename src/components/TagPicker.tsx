@@ -80,7 +80,7 @@ export function TagPicker({ coverageOf, onToggle, onCreate }: TagPickerProps) {
           }
         }}
       />
-      <div className="flex max-h-72 flex-col gap-1.5 overflow-auto">
+      <div className="scroll-pane flex max-h-72 flex-col gap-1.5">
         {shown.length === 0 && name === "" && (
           <p className="m-0 px-1 text-sm text-fg-muted">No tags yet. Type a name to create one.</p>
         )}

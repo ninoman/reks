@@ -158,7 +158,7 @@ export function ListPicker<T, M extends string>({
             onChange={(e) => setQuery(e.target.value)}
           />
         )}
-        <ul className="m-0 flex max-h-64 list-none flex-col overflow-y-auto p-0">
+        <ul className="scroll-pane m-0 flex max-h-64 list-none flex-col py-0 pl-0">
           {shown.map((o) => (
             <li key={String(o.value)}>
               <label className="flex h-(--menu-item-h) items-center gap-2 rounded-xs px-1.5 text-sm hover:bg-hover">

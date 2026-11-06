@@ -116,11 +116,38 @@ fn page_chain_damage_is_an_error() {
     );
 }
 
+/// A page with more than 255 rows: the row count is the low 13 bits of the
+/// 24-bit field at 0x18, not its first byte nor the old `num_rows_large`
+/// at 0x22 (which baken leaves one short). Reading 255 lost the last
+/// entries and showed a false read-back problem after an export.
+#[test]
+fn pages_with_more_than_255_rows_read_every_row() {
+    let entries: Vec<Vec<u8>> = (1..=284).map(|i| playlist_entry(i, 7, 2)).collect();
+    let mut b = synthetic_pdb(&[
+        (
+            T_TRACKS,
+            vec![vec![track_row(7, 3, 125, "One", "/Contents/A/one.mp3")]],
+        ),
+        (
+            T_PLAYLIST_TREE,
+            vec![vec![playlist_node(2, 0, 0, false, "List")]],
+        ),
+        (T_PLAYLIST_ENTRIES, vec![entries]),
+    ]);
+    let entries_page = 3 * PAGE;
+    put_u16(&mut b, entries_page + 0x22, 283);
+    let pdb = Pdb::parse(&b).unwrap();
+    assert_eq!(pdb.rows_of(Table::PlaylistEntries).unwrap().len(), 284);
+    let lib = read_pdb(&b).unwrap();
+    assert_eq!(lib.playlists[0].entries.len(), 284);
+}
+
 #[test]
 fn row_slots_and_used_size_past_the_page_are_skipped() {
     let mut b = sample();
-    // num_rows_large: 0x1000 rows on one page, used size past the heap.
-    put_u16(&mut b, PAGE + 0x22, 0x1000);
+    // 0x1FFF row slots on one page, used size past the heap.
+    let packed: u32 = 0x1FFF | (0x7FF << 13);
+    b[PAGE + 0x18..PAGE + 0x1B].copy_from_slice(&packed.to_le_bytes()[..3]);
     put_u16(&mut b, PAGE + 0x1E, 0xFFFF);
     let pdb = Pdb::parse(&b).unwrap();
     let rows = pdb.rows_of(Table::Tracks).unwrap();

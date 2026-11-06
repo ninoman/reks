@@ -4,7 +4,13 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { ROW_HEIGHT, ROW_HEIGHTS } from "../components/trackTableModel";
-import { SLIDE_IN_DEFAULT, SLIDE_OUT_DEFAULT } from "../lib/motion";
+import {
+  DIALOG_IN_DEFAULT,
+  DIALOG_OUT_DEFAULT,
+  RESIZE_DEFAULT,
+  SLIDE_IN_DEFAULT,
+  SLIDE_OUT_DEFAULT,
+} from "../lib/motion";
 
 function token(name: string): string {
   const m = css.match(new RegExp(`${name}:\\s*([^;]+);`));
@@ -26,6 +32,15 @@ describe("tokens.css mirrors", () => {
     expect(token("--duration-slide-out")).toBe(`${SLIDE_OUT_DEFAULT.duration}ms`);
     expect(token("--ease-out-quint")).toBe(SLIDE_IN_DEFAULT.easing);
     expect(token("--ease-snap")).toBe(SLIDE_OUT_DEFAULT.easing);
+  });
+
+  it("dialog timings", () => {
+    expect(token("--duration-resize")).toBe(`${RESIZE_DEFAULT.duration}ms`);
+    expect(token("--duration-dialog-in")).toBe(`${DIALOG_IN_DEFAULT.duration}ms`);
+    expect(token("--duration-dialog-out")).toBe(`${DIALOG_OUT_DEFAULT.duration}ms`);
+    expect(RESIZE_DEFAULT.easing).toBe(token("--ease-out-quint"));
+    expect(DIALOG_IN_DEFAULT.easing).toBe(token("--ease-out-quint"));
+    expect(DIALOG_OUT_DEFAULT.easing).toBe(token("--ease-snap"));
   });
 
   it("sizes the decks and the panel from the mixer and the library", () => {

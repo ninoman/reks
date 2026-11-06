@@ -144,6 +144,14 @@ fn track(id: TrackId, src: PathBuf, artist: &str, album: &str) -> SourceTrack {
     }
 }
 
+/// The defaults, but tracks without analysis are left out.
+fn skip_unanalysed() -> ExportOptions {
+    ExportOptions {
+        missing_analysis: MissingAnalysis::Skip,
+        ..ExportOptions::default()
+    }
+}
+
 fn sources(tracks: Vec<SourceTrack>) -> Sources {
     Sources {
         playlists: vec![PlannedPlaylist {
@@ -153,6 +161,7 @@ fn sources(tracks: Vec<SourceTrack>) -> Sources {
             is_folder: false,
             track_ids: tracks.iter().map(|t| t.track_id).collect(),
             smart: false,
+            left_out: Vec::new(),
         }],
         tracks,
         problems: vec![],
@@ -427,7 +436,7 @@ fn missing_analysis_skips_or_generates() {
         src.clone(),
         &w.dev(),
         serial(),
-        &ExportOptions::default(),
+        &skip_unanalysed(),
         &NoAnlz,
         &NoAnlz,
     )
@@ -462,32 +471,20 @@ fn missing_analysis_skips_or_generates() {
 }
 
 #[test]
-fn missing_source_blocks_unless_skipped() {
+fn missing_source_is_left_out_without_blocking() {
     let w = World::new();
     let mut src = three(&w);
     src.tracks[1].src = w.music.join("nope.mp3");
     let plan = w.plan(&src, &ExportOptions::default());
-    assert!(plan.is_blocked());
-    assert_eq!(
-        plan.errors,
-        [Problem::SourceMissing {
-            track_id: 2,
-            path: w.music.join("nope.mp3")
-        }]
-    );
-
-    let opts = ExportOptions {
-        skip_unsupported: true,
-        ..ExportOptions::default()
-    };
-    let plan = w.plan(&src, &opts);
     assert!(!plan.is_blocked());
     assert_eq!(plan.tracks.len(), 2);
     assert_eq!(plan.playlists[0].track_ids, [1, 3]);
-    assert!(plan
-        .warnings
-        .iter()
-        .any(|w| matches!(w, Warning::Skipped { track_id: 2, .. })));
+    assert_eq!(plan.playlists[0].left_out, [2]);
+    assert!(plan.warnings.contains(&Warning::Skipped {
+        track_id: 2,
+        reason: SkipReason::Missing,
+        detail: w.music.join("nope.mp3").display().to_string(),
+    }));
 }
 
 #[test]
@@ -504,9 +501,17 @@ fn codec_severity_follows_the_target() {
         ..ExportOptions::default()
     };
     let plan = w.plan(&src, &nxs);
+    assert!(!plan.is_blocked());
     assert!(matches!(
-        plan.errors.as_slice(),
-        [Problem::Unsupported { track_id: 1, .. }]
+        plan.warnings.as_slice(),
+        [
+            Warning::Skipped {
+                track_id: 1,
+                reason: SkipReason::Unsupported,
+                ..
+            },
+            ..
+        ]
     ));
     assert!(plan.copies.is_empty());
     assert_eq!(plan.convertible, [1]);
@@ -737,19 +742,7 @@ fn smart_playlist_is_planned_as_a_fixed_list() {
         .warnings
         .contains(&Warning::SmartPlaylistFixed { id: smart }));
 
-    let view = crate::dryrun::DryRun::new(&plan, &Default::default());
-    assert!(view.playlists[0].smart);
-    let note = view
-        .warnings
-        .iter()
-        .find(|g| g.kind == "smartPlaylistFixed")
-        .unwrap();
-    assert_eq!(note.items, ["Smart"]);
-    assert!(
-        note.title.starts_with("1 smart playlist is written"),
-        "{}",
-        note.title
-    );
+    assert!(plan.playlists[0].smart);
 
     // The static list next to it is not flagged.
     let plain = plan_sources(
@@ -847,7 +840,7 @@ fn rekordbox_cache_locator_finds_or_explains() {
         sources,
         &w.dev(),
         serial(),
-        &ExportOptions::default(),
+        &skip_unanalysed(),
         &locator,
         &NoAnlz,
     )
@@ -874,7 +867,8 @@ fn rekordbox_cache_locator_finds_or_explains() {
     );
     assert!(plan.warnings.contains(&Warning::Skipped {
         track_id: b,
-        reason: format!("{}; reks has not analysed it yet", Missing::Mismatch),
+        reason: SkipReason::NoAnalysis,
+        detail: format!("{}; reks has not analysed it yet", Missing::Mismatch),
     }));
     assert_eq!(plan.errors, [Problem::PlaylistNotFound { id: 999 }]);
 
@@ -885,7 +879,7 @@ fn rekordbox_cache_locator_finds_or_explains() {
         load(&lib, &sel).unwrap(),
         &w.dev(),
         serial(),
-        &ExportOptions::default(),
+        &skip_unanalysed(),
         &locator,
         &NoAnlz,
     )
@@ -893,7 +887,8 @@ fn rekordbox_cache_locator_finds_or_explains() {
     assert!(plan.tracks.is_empty());
     assert!(plan.warnings.contains(&Warning::Skipped {
         track_id: a,
-        reason: format!("{}; reks has not analysed it yet", Missing::NoRoots),
+        reason: SkipReason::NoAnalysis,
+        detail: format!("{}; reks has not analysed it yet", Missing::NoRoots),
     }));
 
     // An empty selection gives an empty locator, not an error.
@@ -1104,6 +1099,7 @@ mod reference {
                 is_folder: n.is_folder,
                 track_ids,
                 smart: n.smart && inside.contains(&n.id),
+                left_out: Vec::new(),
             });
         }
         Ok((tracks, playlists, all_dividers))

@@ -34,6 +34,7 @@ const MIGRATION_LIST: &[M<'static>] = &[
     up(include_str!("../migrations/0013_grid_base.sql")),
     up(include_str!("../migrations/0014_drop_mixed_grids.sql")),
     up(include_str!("../migrations/0015_one_hot_cue_per_slot.sql")),
+    up(include_str!("../migrations/0016_export_settings.sql")),
 ];
 const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_LIST);
 
@@ -160,6 +161,7 @@ pub(crate) fn create_dir(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::OptionalExtension;
 
     fn open_temp() -> (tempfile::TempDir, Library) {
         let dir = tempfile::tempdir().unwrap();
@@ -755,6 +757,30 @@ mod tests {
             [t],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn migration_16_keeps_experimental_export_options_for_existing_libraries() {
+        let stored = |c: &Connection| -> Option<String> {
+            c.query_row(
+                "SELECT value FROM setting WHERE key = 'export.settings'",
+                [],
+                |r| r.get(0),
+            )
+            .optional()
+            .unwrap()
+        };
+        let mut fresh = Connection::open_in_memory().unwrap();
+        MIGRATIONS.to_version(&mut fresh, 16).unwrap();
+        assert_eq!(stored(&fresh), None);
+
+        let mut old = Connection::open_in_memory().unwrap();
+        MIGRATIONS.to_version(&mut old, 15).unwrap();
+        insert_track(&old, "/music/a.wav", "Alpha");
+        MIGRATIONS.to_version(&mut old, 16).unwrap();
+        let value = stored(&old).unwrap();
+        let s: crate::settings::ExportSettings = serde_json::from_str(&value).unwrap();
+        assert!(s.onelibrary && s.active_loops && s.dividers && s.clean_up);
     }
 
     /// The migrations plus `extra`, as a later release would ship them.

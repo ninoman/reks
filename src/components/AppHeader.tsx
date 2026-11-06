@@ -1,26 +1,30 @@
 /**
  * App header: the top bar across the whole window for library-wide actions
- * (scan, import, export to USB, USB devices, report a problem, settings), with the scan status
+ * (scan, import, sticks, report a problem, settings), with the scan status
  * line under it.
  * "Scan folder…" adds the folder to the library folders (Settings) and scans
  * it. "Import rekordbox XML…" opens the import wizard (`ImportWizard`), which
- * says how to export the XML and picks the file. "Export to USB…" opens the export wizard (`ExportWizard`)
- * with the playlist selected in the sidebar ticked. While the converter's
- * dialog is hidden, a button shows its progress and reopens it.
+ * says how to export the XML and picks the file. USB export has one entry
+ * point (D42): "Sticks" opens the Sticks view, with a count of plugged-in
+ * drives; with exactly one known stick plugged in it reads "Sync <name>"
+ * and opens the view on that stick. While the converter's dialog is hidden, a button shows its
+ * progress and reopens it.
  */
 
 import { pickFolder } from "../lib/ipc";
 import { useConverter } from "../store/converter";
-import { useDevices } from "../store/devices";
-import { openExportWizard } from "../store/exportWizard";
+import { deviceName, useDevices } from "../store/devices";
 import { useImportWizard } from "../store/importWizard";
+import { useProfiles } from "../store/profiles";
 import { useReport } from "../store/report";
 import { useScan } from "../store/scan";
 import { useSettings } from "../store/settings";
 import { FeedbackIcon, GearIcon, UsbIcon } from "./icons";
+import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { IconButton } from "./ui/IconButton";
 import { Tooltip } from "./ui/Tooltip";
+import { useStickWatch } from "./useStickWatch";
 
 export function AppHeader() {
   const status = useScan((s) => s.status);
@@ -68,18 +72,7 @@ export function AppHeader() {
         >
           Import rekordbox XML…
         </Button>
-        <Button size="sm" disabled={importing} onClick={() => openExportWizard()}>
-          Export to USB…
-        </Button>
-        <Tooltip content="USB devices">
-          <IconButton
-            size="sm"
-            aria-label="USB devices"
-            onClick={() => useDevices.getState().setDialogOpen(true)}
-          >
-            <UsbIcon />
-          </IconButton>
-        </Tooltip>
+        <SticksButton disabled={importing} />
         <Tooltip content="Report a problem or idea">
           <IconButton
             size="sm"
@@ -108,5 +101,39 @@ export function AppHeader() {
         </div>
       )}
     </header>
+  );
+}
+
+function openSticks(selectId?: number) {
+  if (selectId !== undefined) useProfiles.getState().select(selectId);
+  useDevices.getState().setDialogOpen(true);
+}
+
+/** The one way into USB export: "Sticks", or "Sync <name>" with one known stick plugged in. */
+function SticksButton({ disabled }: { disabled: boolean }) {
+  const { devices, only, onlyKnown } = useStickWatch();
+  if (only !== null && onlyKnown !== null) {
+    return (
+      <Button size="sm" disabled={disabled} onClick={() => openSticks(onlyKnown.id)}>
+        <UsbIcon />
+        Sync {onlyKnown.name}
+      </Button>
+    );
+  }
+  return (
+    <Button
+      size="sm"
+      disabled={disabled}
+      aria-label={devices.length > 1 ? `Sticks, ${devices.length} plugged in` : undefined}
+      onClick={() => openSticks()}
+    >
+      <UsbIcon />
+      {only !== null ? `Set up ${deviceName(only)}` : "Sticks"}
+      {devices.length > 1 && (
+        <Badge variant="accent" aria-hidden="true">
+          {devices.length}
+        </Badge>
+      )}
+    </Button>
   );
 }

@@ -603,10 +603,19 @@
   --duration-splash-sweep: 1800ms;
   --duration-splash-out: 240ms;
 
+  /* Room kept free for the scrollbar at a scroll pane's end: macOS overlay
+     scrollbars float over content and take no space of their own. */
+  --scrollbar-space: 12px;
+
   /* Motion (TS mirror: src/lib/motion.ts). */
   --duration-fast: 100ms;
   --duration-slide-in: 240ms;
   --duration-slide-out: 160ms;
+  /* A dialog growing or shrinking to its content. */
+  --duration-resize: 180ms;
+  /* A dialog opening and closing. */
+  --duration-dialog-in: 160ms;
+  --duration-dialog-out: 120ms;
 }
 
 /* SYNC lights in the synced colour, like the BPM it holds (`data-lit="synced"`). */

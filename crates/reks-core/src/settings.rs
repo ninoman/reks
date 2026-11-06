@@ -6,7 +6,7 @@
 //! the app. Keys: [`AUDIO_DEVICE`], [`AUDIO_SAMPLE_RATE`],
 //! [`AUDIO_BUFFER_FRAMES`], [`AUDIO_CUE`], [`KEY_NOTATION`], [`DECK_WAVEFORM`], [`THEME`],
 //! [`MIXER_VIEW`], [`MIXER_FILTERS`], [`MIXER_EQ`], [`CACHE_DIR`], [`UI_STATE`], [`ANLZ_PREFERENCE`],
-//! [`TAGS_IN_COMMENTS`].
+//! [`EXPORT_SETTINGS`], [`TAGS_IN_COMMENTS`].
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -48,6 +48,8 @@ pub const CACHE_DIR: &str = "storage.cache_dir";
 pub const UI_STATE: &str = "ui.state";
 /// [`AnlzPreference`]: where USB exports take a track's analysis from.
 pub const ANLZ_PREFERENCE: &str = "export.anlz_preference";
+/// [`ExportSettings`]: how USB exports write sticks (Settings › Export, D42).
+pub const EXPORT_SETTINGS: &str = "export.settings";
 /// How many recent library backups to keep (`backup` module).
 pub const BACKUP_KEEP: &str = "backup.keep";
 /// `bool`: keep each track's My Tags in its comment as rekordbox's
@@ -71,6 +73,58 @@ pub enum AnlzPreference {
     ReksFirst,
     /// rekordbox's analysis only; reks's is never written (Phase 2 behaviour).
     RekordboxOnly,
+}
+
+/// What a USB export does with a track that has no analysis: none in
+/// rekordbox's cache and none of reks's own (or rekordbox's only).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MissingAnalysis {
+    /// Leave the track out, with a warning.
+    Skip,
+    /// Let the writer generate approximate ANLZ from the audio (baken). The
+    /// default (D42): a track on the stick beats a missing one.
+    #[default]
+    Generate,
+    /// Export without ANLZ: plays, but no waveform, beatgrid or cues.
+    ExportWithout,
+}
+
+/// How USB exports write sticks, set once in Settings › Export instead of on
+/// every export (D42). The analysis source is [`AnlzPreference`]; the
+/// target player belongs to each stick. A missing field takes its default,
+/// so a stored row survives fields added later. Migration 16 seeds the row
+/// for libraries from before D42 with the experimental options on, as
+/// those exports had them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ExportSettings {
+    pub missing_analysis: MissingAnalysis,
+    /// Write cover art.
+    pub artwork: bool,
+    /// Delete music and analysis the stick no longer uses (the planner's
+    /// `keep_stale`, inverted).
+    pub clean_up: bool,
+    /// Playlist dividers as silent tracks (UNVERIFIED on players).
+    pub dividers: bool,
+    /// The earliest active memory loop as the track's active loop
+    /// (UNVERIFIED on players).
+    pub active_loops: bool,
+    /// Also write `exportLibrary.db` (experimental, UNVERIFIED on players).
+    pub onelibrary: bool,
+}
+
+impl Default for ExportSettings {
+    fn default() -> Self {
+        Self {
+            missing_analysis: MissingAnalysis::Generate,
+            artwork: false,
+            clean_up: true,
+            dividers: true,
+            active_loops: false,
+            onelibrary: false,
+        }
+    }
 }
 
 /// How the decks (the player deck and the Mix view's) draw their waveforms
@@ -183,6 +237,7 @@ pub struct Settings {
     pub cache_dir: PathBuf,
     pub ui: UiState,
     pub anlz_preference: AnlzPreference,
+    pub export: ExportSettings,
     /// Recent library backups kept; one per week for 8 weeks stays besides.
     pub backup_keep: u32,
     /// Tag edits rewrite the track's comment tag block ([`TAGS_IN_COMMENTS`]).
@@ -280,6 +335,8 @@ pub struct SettingsPatch {
     pub mixer_eq: Option<MixerEq>,
     pub ui: Option<UiState>,
     pub anlz_preference: Option<AnlzPreference>,
+    /// Replaces all export settings.
+    pub export: Option<ExportSettings>,
     /// Clamped to [`crate::backup::KEEP_RANGE`].
     pub backup_keep: Option<u32>,
     /// Turning it on rewrites nothing by itself; see
@@ -324,6 +381,7 @@ impl Library {
             cache_dir: self.cache_dir(),
             ui: get(&conn, UI_STATE)?.unwrap_or_default(),
             anlz_preference: get(&conn, ANLZ_PREFERENCE)?.unwrap_or_default(),
+            export: get(&conn, EXPORT_SETTINGS)?.unwrap_or_default(),
             backup_keep: backup_keep(&conn),
             tags_in_comments: tags_in_comments(&conn)?,
             onelibrary_key_builtin: crate::secret::builtin::present(),
@@ -371,6 +429,9 @@ impl Library {
             }
             if let Some(p) = patch.anlz_preference {
                 put(&tx, ANLZ_PREFERENCE, Some(&p))?;
+            }
+            if let Some(e) = patch.export {
+                put(&tx, EXPORT_SETTINGS, Some(&e))?;
             }
             if let Some(n) = patch.backup_keep {
                 let keep = n.clamp(*KEEP_RANGE.start(), *KEEP_RANGE.end());
@@ -739,6 +800,11 @@ mod tests {
             mixer_eq: Some(MixerEq::ThreeBand),
             ui: Some(ui.clone()),
             anlz_preference: Some(AnlzPreference::ReksFirst),
+            export: Some(ExportSettings {
+                missing_analysis: MissingAnalysis::Skip,
+                clean_up: false,
+                ..ExportSettings::default()
+            }),
             backup_keep: Some(20),
             tags_in_comments: Some(true),
         })
@@ -767,6 +833,8 @@ mod tests {
         assert_eq!(s.mixer_eq, MixerEq::ThreeBand);
         assert_eq!(s.ui, ui);
         assert_eq!(s.anlz_preference, AnlzPreference::ReksFirst);
+        assert_eq!(s.export.missing_analysis, MissingAnalysis::Skip);
+        assert!(!s.export.clean_up);
         assert_eq!(s.backup_keep, 20);
         assert!(s.tags_in_comments);
         assert_eq!(lib.settings().unwrap(), s);
