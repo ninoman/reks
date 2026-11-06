@@ -1840,7 +1840,6 @@ export interface Fact {
 
 export interface DryRunFileRow {
   path: string;
-  from: string | null;
   sizeText: string;
 }
 
@@ -1879,6 +1878,8 @@ export interface ReviewOverview {
   spaceText: string;
   /** `frees 640 MB`; empty when nothing is deleted. */
   spaceDetail: string;
+  /** The new files fit in today's free space. */
+  fits: boolean;
   tracksExported: number;
   tracksTotal: number;
   /** `Export`, or `Export 412 of 424 tracks`. */
@@ -1933,60 +1934,21 @@ export interface DryRun {
   issues: ReviewIssue[];
   /** The settings in use, one short phrase each. */
   settings: string[];
-  status: string;
-  device: {
-    mountPoint: string;
-    name: string;
-    fsText: string;
-    spaceText: string;
-    volumeSerial: string | null;
-  };
-  target: string;
-  summary: Fact[];
-  playlists: {
-    id: number;
-    name: string;
-    depth: number;
-    isFolder: boolean;
-    /** Written as a fixed list of the tracks it matches now (D29). */
-    smart: boolean;
-    detail: string;
-  }[];
-  copies: DryRunFileGroup;
-  deletes: DryRunFileGroup;
-  space: {
-    fits: boolean;
-    totalBytes: number;
-    freeBytes: number;
-    writeBytes: number;
-    deleteBytes: number;
-    freeAfterBytes: number;
-    usedAfterBytes: number;
-    facts: Fact[];
-  };
   history: {
     atRisk: boolean;
     /** One plain sentence for the review; empty when there is nothing to say. */
     summary: string;
     policy: HistoryPolicy;
-    title: string;
-    text: string;
-    actionText: string | null;
-    backups: DryRunFileGroup;
     /** The export guard (`dryrun::GuardView`): sessions not imported yet; null when none. */
     guard: HistoryGuardView | null;
   };
   problems: NoticeGroup[];
-  /** What to know before exporting; the rest is in `notes`. */
+  /** What affects the export (file system, empty playlists, OneLibrary not written). */
   warnings: NoticeGroup[];
-  /** Technical notices, for the details. */
-  notes: NoticeGroup[];
   /** Exported tracks whose audio warning the converter's Older players preset fixes (phase 2.6). */
   convertible: number[];
   /** One sentence on them; null when there are none. */
   convertText: string | null;
-  /** The experimental OneLibrary step (`dryrun::OneLibraryView`); null when off or unplanned. */
-  onelibrary: OneLibraryView | null;
   /** The stick's `exportLibrary.db` is deleted (`dryrun::OneLibraryRemovalView`); null when not. */
   onelibraryRemoval: OneLibraryRemovalView | null;
 }
@@ -1998,14 +1960,6 @@ export interface OneLibraryRemovalView {
   files: DryRunFileGroup;
   confirmText: string;
   confirmed: boolean;
-}
-
-/** What the OneLibrary step writes (`exportLibrary.db`) and removes beside it. */
-export interface OneLibraryView {
-  title: string;
-  text: string;
-  write: DryRunFileRow;
-  removes: DryRunFileGroup;
 }
 
 /** The options an export to a stick with `target` starts from: Settings › Export + the analysis source. */

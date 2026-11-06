@@ -1772,10 +1772,11 @@ Date of decisions: 2026-10-18.
       dialogs.
     - The review shows less: no technical details; play history is one plain
       sentence (`HistoryView::summary`); "Good to know" keeps only file
-      system, empty playlist and missing-OneLibrary-key warnings (the rest is
-      `DryRun::notes`, not shown); the convert offer for exported tracks
+      system, empty playlist and missing-OneLibrary-key warnings; the convert offer for exported tracks
       appears only when the stick plays on any player, where "older players"
-      is the user's concern.
+      is the user's concern. `DryRun` carries only what the review shows
+      (file lists, paths and technical notes stay in the plan and
+      `reks rb plan`).
     - The Sticks view is one list (plugged-in sticks, new drives, the rest);
       the picked one expands to its details.
     - The stick reader read a page's row count from the wrong bytes (the

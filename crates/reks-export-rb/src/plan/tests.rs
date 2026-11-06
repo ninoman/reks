@@ -742,19 +742,7 @@ fn smart_playlist_is_planned_as_a_fixed_list() {
         .warnings
         .contains(&Warning::SmartPlaylistFixed { id: smart }));
 
-    let view = crate::dryrun::DryRun::new(&plan, &Default::default());
-    assert!(view.playlists[0].smart);
-    let note = view
-        .notes
-        .iter()
-        .find(|g| g.kind == "smartPlaylistFixed")
-        .unwrap();
-    assert_eq!(note.items, ["Smart"]);
-    assert!(
-        note.title.starts_with("1 smart playlist is written"),
-        "{}",
-        note.title
-    );
+    assert!(plan.playlists[0].smart);
 
     // The static list next to it is not flagged.
     let plain = plan_sources(

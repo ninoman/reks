@@ -78,7 +78,7 @@ export function Files({ label, group }: { label: string; group: DryRunFileGroup 
       </summary>
       <ul className={cn(list, "font-mono")}>
         {group.files.map((f) => (
-          <li key={f.path} title={f.from ?? undefined}>
+          <li key={f.path}>
             {f.path} <span className="text-fg-muted">({f.sizeText})</span>
           </li>
         ))}

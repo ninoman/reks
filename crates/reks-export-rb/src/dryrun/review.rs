@@ -27,6 +27,9 @@ pub struct Overview {
     pub space_text: String,
     /// `frees 640 MB`, empty when nothing is deleted.
     pub space_detail: String,
+    /// The new files fit in today's free space (stale files are deleted
+    /// only after writing).
+    pub fits: bool,
     /// Library tracks the export writes (dividers not counted).
     pub tracks_exported: usize,
     /// Those plus the tracks left out.
@@ -358,6 +361,7 @@ pub fn overview(plan: &ExportPlan, device_name: &str) -> Overview {
         } else {
             String::new()
         },
+        fits: plan.bytes_to_write <= plan.device.free_bytes,
         tracks_exported: exported,
         tracks_total: total,
         export_label: if left_out > 0 {

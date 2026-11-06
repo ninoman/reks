@@ -61,11 +61,7 @@ function ReviewView({ dryRun: d, planning }: { dryRun: DryRun; planning: boolean
       <section className="grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="Summary">
         <Tile value={o.playlistsText} detail={`${o.tracksExported} tracks`} />
         <Tile value={o.copyText} detail={o.copyDetail} />
-        <Tile
-          value={o.spaceText}
-          detail={o.spaceDetail}
-          tone={d.space.fits ? undefined : "danger"}
-        />
+        <Tile value={o.spaceText} detail={o.spaceDetail} tone={o.fits ? undefined : "danger"} />
       </section>
 
       {d.problems.length > 0 && (
