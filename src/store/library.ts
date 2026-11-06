@@ -36,6 +36,17 @@ export const PAGE_SIZE = 200;
 
 export const defaultSort: Sort = { column: "dateAdded", descending: true };
 
+/**
+ * The sort after a header click on `column`: another column sorts ascending,
+ * then descending, then the view goes back to its own order (`viewSort`).
+ * The view's own column just flips.
+ */
+export function nextSort(sort: Sort, column: Sort["column"], viewSort: Sort): Sort {
+  if (sort.column !== column) return { column, descending: false };
+  if (sort.descending && column !== viewSort.column) return viewSort;
+  return { column, descending: !sort.descending };
+}
+
 /** Upper BPM bound when only a minimum is set (×100). */
 export const BPM_X100_MAX = 1_000_00;
 
@@ -102,7 +113,9 @@ export interface LibraryState extends QueryInputs {
    * with `null`, the whole collection.
    */
   showPlaylist(id: number | null, isFolder: boolean): void;
-  /** Header click: same column flips direction, another column sorts ascending. */
+  /** The shown view's own order: position in a playlist, else `defaultSort`. */
+  viewSort: Sort;
+  /** Header click: ascending, descending, then the view's own order ([`nextSort`]). */
   toggleSort(column: Sort["column"]): void;
   setColumnVisibility(v: Record<string, boolean>): void;
   /** `null`: back to the column's default width. */
@@ -206,6 +219,7 @@ export function createLibraryStore(): LibraryStore {
       filtersEnabled: true,
       rule: null,
       sort: defaultSort,
+      viewSort: defaultSort,
       columnVisibility: {},
       columnWidths: {},
       total: 0,
@@ -236,17 +250,19 @@ export function createLibraryStore(): LibraryStore {
       },
       showPlaylist(id, isFolder) {
         set((s) => {
+          const viewSort: Sort =
+            id !== null && !isFolder
+              ? { column: "playlistPosition", descending: false }
+              : defaultSort;
           let sort = s.sort;
-          if (id !== null && !isFolder) sort = { column: "playlistPosition", descending: false };
+          if (viewSort.column === "playlistPosition") sort = viewSort;
           else if (sort.column === "playlistPosition") sort = defaultSort;
-          return { playlistId: id, sort };
+          return { playlistId: id, sort, viewSort };
         });
         get().refresh();
       },
       toggleSort(column) {
-        set((s) => ({
-          sort: { column, descending: s.sort.column === column ? !s.sort.descending : false },
-        }));
+        set((s) => ({ sort: nextSort(s.sort, column, s.viewSort) }));
         get().refresh();
       },
       setColumnVisibility(columnVisibility) {
